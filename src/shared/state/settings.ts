@@ -146,7 +146,7 @@ export interface SettingsState {
   autoApprovePermissions: boolean
   /** Optional project-specific guidance appended to the auto-approver's
    *  policy prompt (after the hardcoded safety preamble). Useful for
-   *  per-project carve-outs like "approve `npm install` on this repo"
+   *  per-project carve-outs like "approve `pnpm install` on this repo"
    *  or "be especially strict about Bash that writes outside src/".
    *  Empty by default — the base policy is what runs. Has no effect
    *  unless autoApprovePermissions is on. */

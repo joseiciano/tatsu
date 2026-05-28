@@ -36,11 +36,11 @@ describe('suggestPermissionPatterns', () => {
 
   it('Bash with extra whitespace tokenizes correctly', () => {
     const out = suggestPermissionPatterns('Bash', {
-      command: '  npm   test  '
+      command: '  pnpm   test  '
     })
     expect(out.map((s) => s.rule)).toEqual([
-      { toolName: 'Bash', ruleContent: 'npm test:*' },
-      { toolName: 'Bash', ruleContent: 'npm:*' },
+      { toolName: 'Bash', ruleContent: 'pnpm test:*' },
+      { toolName: 'Bash', ruleContent: 'pnpm:*' },
       { toolName: 'Bash' }
     ])
   })

@@ -20,11 +20,9 @@ See the [Setup, building, and running locally](README.md#setup-building-and-runn
 ```sh
 git clone https://github.com/frenchie4111/harness.git
 cd harness
-npm install --legacy-peer-deps
-npm run dev
+pnpm install
+pnpm dev
 ```
-
-The `--legacy-peer-deps` flag is required because of an `electron-vite@5` peer range.
 
 ## How to edit code in this codebase
 

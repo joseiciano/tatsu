@@ -414,10 +414,10 @@ describe('settingsReducer', () => {
     expect(initialSettings.autoApproveSteerInstructions).toBe('')
     const next = apply(initialSettings, {
       type: 'settings/autoApproveSteerInstructionsChanged',
-      payload: 'approve npm install for this project'
+      payload: 'approve pnpm install for this project'
     })
     expect(next.autoApproveSteerInstructions).toBe(
-      'approve npm install for this project'
+      'approve pnpm install for this project'
     )
     const cleared = apply(next, {
       type: 'settings/autoApproveSteerInstructionsChanged',

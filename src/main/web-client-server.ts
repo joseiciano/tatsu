@@ -108,7 +108,7 @@ export function createWebClientServer(opts: WebClientServerOptions): HttpServer 
       if (!content) {
         if (pathname === '/index.html') {
           res.statusCode = 404
-          res.end('web-client bundle not found — run `npm run build` first')
+          res.end('web-client bundle not found — run `pnpm build` first')
           return
         }
         // Asset miss: return 404 rather than falling back to index.html —

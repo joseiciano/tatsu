@@ -251,7 +251,7 @@ export function JsonClaudeApprovalCard({
           <textarea
             value={guidanceDraft}
             onChange={(e) => setGuidanceDraft(e.target.value)}
-            placeholder="e.g. Approve npm install. Deny any Bash that touches /etc."
+            placeholder="e.g. Approve pnpm install. Deny any Bash that touches /etc."
             spellCheck={false}
             className="w-full bg-panel border border-border rounded p-2 text-xs font-mono outline-none focus:border-accent min-h-[80px] resize-y"
           />

@@ -70,7 +70,7 @@ function truncateLog(log: string, approxBudget: number): string {
   const sliced = log.slice(log.length - approxBudget)
   const firstNewline = sliced.indexOf('\n')
   const clean = firstNewline >= 0 ? sliced.slice(firstNewline + 1) : sliced
-  return `... log truncated, run \`npm run log\` to see the full log\n${clean}`
+  return `... log truncated, run \`pnpm log\` to see the full log\n${clean}`
 }
 
 const REPORT_ISSUE_EVENT = 'harness:open-report-issue'

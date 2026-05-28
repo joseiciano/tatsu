@@ -300,11 +300,11 @@ Prefer these over blind curl/fetch — or shelling out to \`open <url>\`, which 
 Harness also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, \`tail -f\`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):
 
 - create_shell: spawn a shell tab, optionally with a command to run (\`zsh -ilc <command>\`). Returns an id — keep it for later reads.
-- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second \`npm run dev\` if one is already running.
+- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second \`pnpm dev\` if one is already running.
 - read_shell_output: read a shell's output, optionally with a \`match\` regex + \`context\` lines to scan a long log for errors/warnings without pulling back megabytes.
 - kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.
 
-Prefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Harness shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Harness UI. Short one-shots (\`npm test\`, \`tsc --noEmit\`, \`git status\`) still belong on Bash.`
+Prefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Harness shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Harness UI. Short one-shots (\`pnpm test\`, \`tsc --noEmit\`, \`git status\`) still belong on Bash.`
 
 export const DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN = `You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable.`
 

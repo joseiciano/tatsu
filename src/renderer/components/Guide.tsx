@@ -121,7 +121,7 @@ export function Guide({ onClose }: GuideProps): JSX.Element {
           <Section icon={Workflow} title="The raw flow — and where it breaks down">
             <CodeBlock>{`git worktree add ../myrepo-bug-123 -b bug-123
 cd ../myrepo-bug-123
-npm install
+pnpm install
 claude`}</CodeBlock>
             <p>
               Repeat in a new terminal for every task. This works — for about two tasks.

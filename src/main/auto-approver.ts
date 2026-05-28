@@ -28,7 +28,7 @@ interface AutoReviewOpts {
   claudeCommand: string
   timeoutMs?: number
   /** Optional project-specific guidance appended after the hardcoded
-   *  policy preamble. Lets the user steer Haiku ("approve `npm install`",
+   *  policy preamble. Lets the user steer Haiku ("approve `pnpm install`",
    *  "be strict about Bash that writes outside src/") without losing the
    *  baked-in safety bullets. Empty string == no addendum. */
   steerInstructions?: string

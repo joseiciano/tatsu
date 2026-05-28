@@ -2390,7 +2390,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 placeholder={
                   scopeRepoRoot && setupScript
                     ? `Inherits from global: ${setupScript}`
-                    : 'e.g. npm install --legacy-peer-deps'
+                    : 'e.g. pnpm install'
                 }
                 rows={3}
                 className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
@@ -3179,12 +3179,12 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       Project-specific guidance <span className="text-faint font-normal">(optional)</span>
                     </label>
                     <p className="text-xs text-dim mb-2">
-                      Free-text instructions appended to the reviewer's policy prompt. Use to add carve-outs (e.g. <em>&quot;approve <code className="bg-panel px-1 rounded text-xs">npm install</code> for this project&quot;</em>) or extra strictness (e.g. <em>&quot;deny any Bash that writes outside src/&quot;</em>). The hardcoded safety bullets always run first; this is purely additive guidance. You can also edit + re-review from any rejected approval card.
+                      Free-text instructions appended to the reviewer's policy prompt. Use to add carve-outs (e.g. <em>&quot;approve <code className="bg-panel px-1 rounded text-xs">pnpm install</code> for this project&quot;</em>) or extra strictness (e.g. <em>&quot;deny any Bash that writes outside src/&quot;</em>). The hardcoded safety bullets always run first; this is purely additive guidance. You can also edit + re-review from any rejected approval card.
                     </p>
                     <textarea
                       value={autoApproveSteerDraft}
                       onChange={(e) => setAutoApproveSteerDraft(e.target.value)}
-                      placeholder="e.g. Approve npm install. Deny any Bash command that touches /etc."
+                      placeholder="e.g. Approve pnpm install. Deny any Bash command that touches /etc."
                       spellCheck={false}
                       className="w-full bg-panel border border-border-strong rounded p-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono min-h-[80px] resize-y"
                     />

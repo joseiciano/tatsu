@@ -301,13 +301,13 @@ Two log files in `userData`:
 - **`debug.log`** — categorical events. **Append-only across sessions**
   (same persistence model as `perf.log`) so crash forensics from before
   the most recent restart are still inspectable. Rotated at 10MB into
-  `debug.log.1` (one archive only). Tail with `npm run log` (uses
-  `tail -F` so it survives rotation). Manual clear via `npm run log:clear`
+  `debug.log.1` (one archive only). Tail with `pnpm log` (uses
+  `tail -F` so it survives rotation). Manual clear via `pnpm log:clear`
   (removes both `debug.log` and `debug.log.1`).
 - **`perf.log`** — perf trace. **Append-only across sessions** so lag
   that happened earlier (possibly before the most recent restart) is
-  still inspectable. Tail with `npm run log:perf`. Clear before a fresh
-  repro with `npm run log:perf:clear`.
+  still inspectable. Tail with `pnpm log:perf`. Clear before a fresh
+  repro with `pnpm log:perf:clear`.
 
 What gets written to `perf.log` (and where the threshold lives):
 
@@ -338,7 +338,7 @@ per-event detail the HUD can't display. They're complementary —
 `PerfMonitor` aggregates for the HUD, `perfLog` writes discrete
 slow-event lines.
 
-For AI agents debugging perf: ask the user to `npm run log:perf:clear`,
+For AI agents debugging perf: ask the user to `pnpm log:perf:clear`,
 reproduce, then tail `perf.log` and look for the slow-* lines around the
 reported timestamp.
 
@@ -361,14 +361,12 @@ hard dependency on `gh`.
 
 - **Worktree dep installs** — fresh git worktrees under
   `claude-harness-worktrees/` start with no `node_modules`. Run
-  `npm install --legacy-peer-deps` once before building (the `--legacy-peer-deps`
-  flag is required because `electron-vite@5` declares a peer range that
-  npm's strict resolver rejects against the installed `vite@7`).
+  `pnpm install` once before building.
 - **node-pty rebuild** — `node-pty` is a native module compiled against a
-  specific Electron version. After running `npm run pack` or `npm run dist*`,
+  specific Electron version. After running `pnpm pack` or `pnpm dist*`,
   the postdist hook runs `electron-rebuild -f -w node-pty` so dev mode keeps
   working. If dev mode ever errors with `posix_spawnp failed`, run
-  `npm run rebuild:dev` manually.
+  `pnpm rebuild:dev` manually.
 - **Hooks consent** — first time a user activates a worktree, we show a
   banner asking permission to install the hooks. We never write to user
   files without that consent.
@@ -384,7 +382,7 @@ hard dependency on `gh`.
   (`ssh host 'harness-server'` / systemd / launchd run non-interactive
   non-login = same stripped PATH). Merge order: existing entries that aren't
   already in captured come first, then the full captured list — preserves
-  launcher-prepended entries like npm's `node_modules/.bin` in `npm run dev`
+  launcher-prepended entries like pnpm's `node_modules/.bin` in `pnpm dev`
   while still appending Homebrew/nvm. The probe uses sentinel-wrapped output
   so rc-file noise (starship init, nvm welcome) is discarded cleanly. Gated
   to macOS only; linux can be added if anyone reports the same problem.
@@ -461,7 +459,7 @@ These are how the user wants Claude to behave when working on this repo:
    piling up locally.
 
 3. **Verify before committing.** After any TS/TSX change, run both:
-   - `npm run typecheck` — catches type errors across main + renderer via
+   - `pnpm typecheck` — catches type errors across main + renderer via
      project references. `electron-vite build` does NOT run `tsc`, so the
      build alone will miss type errors.
    - `npx electron-vite build` — catches missing imports, asset resolution,
@@ -630,10 +628,10 @@ These are how the user wants Claude to behave when working on this repo:
 
 ## Releasing
 
-End-to-end release is automated via `npm run release <version>`:
+End-to-end release is automated via `pnpm release <version>`:
 
 ```
-npm run release 1.0.1
+pnpm release 1.0.1
 ```
 
 The script handles preflight checks, version bump, README link updates,
@@ -656,7 +654,7 @@ reach) and WS validation to `scripts/ws-smoke.mjs` (upgrade +
 snapshot round-trip), then SIGTERMs and confirms clean shutdown.
 Catches tarball-layout / module-resolution / boot-time regressions
 before they ride a tag push to release. Run locally:
-`npm run build:headless && bash scripts/smoke-headless.sh`.
+`pnpm build:headless && bash scripts/smoke-headless.sh`.
 
 ### Headless tarballs
 
@@ -664,7 +662,7 @@ The `Headless Release` workflow (`.github/workflows/headless-release.yml`)
 fires on the same tag push and runs a three-platform matrix
 (`darwin-arm64`, `linux-x64`, `linux-arm64` — Intel Mac is omitted
 because the macos-13 runner queue is too unreliable). Each runner
-calls `npm run pack:headless`, which downloads a pinned Node binary
+calls `pnpm pack:headless`, which downloads a pinned Node binary
 (`NODE_VERSION` in `scripts/pack-headless.mjs`), rebuilds `node-pty`
 against that ABI, and assembles a self-contained tarball at
 `release/headless/harness-server-<version>-<platform>.tar.gz` plus
@@ -676,13 +674,13 @@ matching the `actions/setup-node` step in the workflow.
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Launch in dev mode (electron-vite) |
-| `npm run log` | Tail the debug log file |
-| `npm run log:clear` | Clear the debug log |
-| `npm run log:perf` | Tail the perf trace log (append-only across sessions) |
-| `npm run log:perf:clear` | Clear the perf trace log (use before a fresh repro) |
-| `npm run build` | Build all three (main, preload, renderer) to `out/` |
-| `npm run pack` | Build + package without distribution (no signing) |
-| `npm run dist:mac` | Full signed + notarized macOS build |
-| `npm run rebuild:dev` | Rebuild node-pty for dev Electron |
-| `npm run release <ver>` | Full end-to-end release |
+| `pnpm dev` | Launch in dev mode (electron-vite) |
+| `pnpm log` | Tail the debug log file |
+| `pnpm log:clear` | Clear the debug log |
+| `pnpm log:perf` | Tail the perf trace log (append-only across sessions) |
+| `pnpm log:perf:clear` | Clear the perf trace log (use before a fresh repro) |
+| `pnpm build` | Build all three (main, preload, renderer) to `out/` |
+| `pnpm pack` | Build + package without distribution (no signing) |
+| `pnpm dist:mac` | Full signed + notarized macOS build |
+| `pnpm rebuild:dev` | Rebuild node-pty for dev Electron |
+| `pnpm release <ver>` | Full end-to-end release |

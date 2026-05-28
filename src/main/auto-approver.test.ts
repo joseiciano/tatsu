@@ -99,9 +99,9 @@ describe('checkDenyList', () => {
     expect(checkDenyList('Bash', { command: 'ls /tmp/foo' })).toBeNull()
   })
 
-  it('allows benign Bash like git status / npm test', () => {
+  it('allows benign Bash like git status / pnpm test', () => {
     expect(checkDenyList('Bash', { command: 'git status' })).toBeNull()
-    expect(checkDenyList('Bash', { command: 'npm test' })).toBeNull()
+    expect(checkDenyList('Bash', { command: 'pnpm test' })).toBeNull()
     expect(checkDenyList('Bash', { command: 'ls -la' })).toBeNull()
   })
 })
@@ -163,11 +163,11 @@ describe('buildPrompt', () => {
   it('appends a steer block when steerInstructions is non-empty', () => {
     const p = buildPrompt(
       'Bash',
-      { command: 'npm install foo' },
-      'approve npm install for this project'
+      { command: 'pnpm install foo' },
+      'approve pnpm install for this project'
     )
     expect(p).toContain('Project-specific guidance')
-    expect(p).toContain('approve npm install for this project')
+    expect(p).toContain('approve pnpm install for this project')
   })
 
   it('omits the steer block when steerInstructions is empty/whitespace', () => {
