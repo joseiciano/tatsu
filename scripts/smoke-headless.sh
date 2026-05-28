@@ -7,7 +7,7 @@
 # validation. Finally SIGTERMs the server and confirms it exits within
 # 5s (no zombies).
 #
-# Run locally:  npm run build:headless && bash scripts/smoke-headless.sh
+# Run locally:  pnpm run build:headless && bash scripts/smoke-headless.sh
 # Run in CI:    same — invoked from .github/workflows/ci.yml.
 #
 # Exit codes: 0 = all checks passed; non-zero = a check failed (the

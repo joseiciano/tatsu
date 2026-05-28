@@ -6,7 +6,7 @@ on:
     paths:
       - 'site/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-site.yml'
   workflow_dispatch:
 
@@ -25,18 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
-      # electron-vite@5's peer range rejects vite@7/8 under strict resolver;
-      # --legacy-peer-deps mirrors the local dev install.
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: pnpm install
 
       - name: Build site
-        run: npm run build:site
+        run: pnpm run build:site
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

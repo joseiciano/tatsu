@@ -107,13 +107,13 @@ function rebuildNodePtyForTargetNode() {
     CFLAGS: `${process.env.CFLAGS ?? ''} -std=gnu99`.trim()
   }
   console.log(`[pack-headless] rebuilding node-pty against Node ${NODE_VERSION}`)
-  const result = spawnSync('npm', ['rebuild', 'node-pty', '--build-from-source'], {
+  const result = spawnSync('pnpm', ['rebuild', 'node-pty'], {
     cwd: repoRoot,
     env,
     stdio: 'inherit'
   })
   if (result.status !== 0) {
-    throw new Error(`npm rebuild node-pty failed with status ${result.status}`)
+    throw new Error(`pnpm rebuild node-pty failed with status ${result.status}`)
   }
 }
 
@@ -124,7 +124,7 @@ async function copyClaudeBinary(platform, libDir) {
   const pkgJsonPath = r.resolve(`${pkgName}/package.json`)
   const srcPkgDir = dirname(pkgJsonPath)
   if (!existsSync(join(srcPkgDir, 'claude'))) {
-    throw new Error(`claude binary not found at ${join(srcPkgDir, 'claude')}. Run npm install first.`)
+    throw new Error(`claude binary not found at ${join(srcPkgDir, 'claude')}. Run pnpm install first.`)
   }
   const destPkgDir = join(libDir, 'node_modules', pkgName)
   await mkdir(dirname(destPkgDir), { recursive: true })
@@ -179,10 +179,10 @@ async function main() {
   console.log(`[pack-headless] platform=${platform} version=${version}`)
 
   if (!existsSync(join(repoRoot, 'dist-headless', 'main', 'index.js'))) {
-    throw new Error(`dist-headless/main/index.js missing — run "npm run build:headless" first`)
+    throw new Error(`dist-headless/main/index.js missing — run "pnpm run build:headless" first`)
   }
   if (!existsSync(join(repoRoot, 'dist-headless', 'web-client'))) {
-    throw new Error(`dist-headless/web-client missing — run "npm run build:headless" first`)
+    throw new Error(`dist-headless/web-client missing — run "pnpm run build:headless" first`)
   }
 
   await rm(stageDir, { recursive: true, force: true })

@@ -77,43 +77,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
-      # electron-vite@5's peer range rejects vite@7/8 under strict
-      # resolver; --legacy-peer-deps mirrors the local dev install.
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      # Bundled @anthropic-ai/claude-code ships per-arch native binaries
-      # via optionalDependencies. `npm install` only pulls the host-arch
-      # one, so without this step the x64 dmg would ship without a
-      # claude binary (this runner is arm64). --no-save keeps the lock
-      # file clean. electron-builder doesn't filter by the subpackage's
-      # os/cpu, so both binaries land in both dmgs — accepted as bloat.
-      - name: Install cross-arch claude binary (darwin-x64)
-        run: |
-          CLAUDE_VERSION=$(node -e "console.log(require('./package.json').dependencies['@anthropic-ai/claude-code'])")
-          npm install --no-save --ignore-scripts --legacy-peer-deps --force \
-            "@anthropic-ai/claude-code-darwin-x64@${CLAUDE_VERSION}"
+        run: pnpm install --config.supportedArchitectures='{"os":["darwin"],"cpu":["x64","arm64"]}'
 
       - name: Build renderer + main
-        run: npm run build
+        run: pnpm run build
 
-      # We bypass `npm run dist:mac` because the npm script wraps
-      # electron-builder in `dotenv -e .env --`, which requires a .env
-      # file on disk. CI injects every var via the env block instead.
-      # --publish=never matches dist:linux and prevents electron-builder
-      # from auto-publishing if it sees a tag + token in env (the upload
-      # step below does the publish via gh CLI).
-      #
-      # CSC_LINK accepts a base64-encoded .p12 string directly;
-      # electron-builder decodes it into a temp keychain, signs with the
-      # identity already pinned in package.json
-      # ("Michael Lyons (M7Y6TPCQ63)"), then notarizes via the APPLE_*
-      # env vars and staples the ticket.
       - name: Package, sign, and notarize
         env:
           CSC_LINK: ${{ secrets.MAC_CERTS_P12_BASE64 }}
@@ -121,7 +97,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --mac --publish=never
+        run: pnpm exec electron-builder --mac --publish=never
 
       - name: Attach to GitHub release
         env:
@@ -144,14 +120,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
-      # libnss3/libgbm1 keep Electron's sandbox happy if anything tries
-      # to launch it during the build; fakeroot/rpm are needed by
-      # electron-builder's AppImage/deb assembly.
       - name: Install build deps
         run: |
           sudo apt-get update
@@ -163,10 +138,10 @@ jobs:
             rpm
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: pnpm install
 
       - name: Build Linux packages
-        run: npm run dist:linux
+        run: pnpm run dist:linux
 
       - name: Attach to GitHub release
         env:
@@ -202,31 +177,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Node version here MUST match NODE_VERSION in
-      # scripts/pack-headless.mjs — the embedded Node binary in the
-      # tarball is downloaded for that version, and node-pty's pty.node
-      # is rebuilt against its ABI. Bumping one without the other gives
-      # a broken tarball at runtime.
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22.12.0'
+          cache: 'pnpm'
 
-      # npm has a long-running bug (#4828) where optional native deps
-      # (rolldown's per-platform .node binding here) aren't always
-      # installed off a cross-platform package-lock.json with
-      # --legacy-peer-deps. Wiping both forces clean re-resolution per
-      # runner. We can't use the npm cache for the same reason, so
-      # setup-node above intentionally has no `cache: 'npm'`.
       - name: Install dependencies
         run: |
-          rm -rf node_modules package-lock.json
-          npm install --legacy-peer-deps
+          rm -rf node_modules
+          pnpm install
 
       - name: Build headless bundle
-        run: npm run build:headless
+        run: pnpm run build:headless
 
       - name: Pack tarball
-        run: npm run pack:headless
+        run: pnpm run pack:headless
 
       - name: Attach to GitHub release
         env:

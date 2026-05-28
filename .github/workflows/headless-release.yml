@@ -29,31 +29,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Node version here MUST match NODE_VERSION in
-      # scripts/pack-headless.mjs — the embedded Node binary in the
-      # tarball is downloaded for that version, and node-pty's pty.node
-      # is rebuilt against its ABI. Bumping one without the other gives
-      # a broken tarball at runtime.
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22.12.0'
+          cache: 'pnpm'
 
-      # npm has a long-running bug (#4828) where optional native deps
-      # (rolldown's per-platform .node binding here) aren't always
-      # installed off a cross-platform package-lock.json with
-      # --legacy-peer-deps. Wiping both forces clean re-resolution per
-      # runner. We can't use the npm cache for the same reason, so
-      # setup-node above intentionally has no `cache: 'npm'`.
       - name: Install dependencies
         run: |
-          rm -rf node_modules package-lock.json
-          npm install --legacy-peer-deps
+          rm -rf node_modules
+          pnpm install
 
       - name: Build headless bundle
-        run: npm run build:headless
+        run: pnpm run build:headless
 
       - name: Pack tarball
-        run: npm run pack:headless
+        run: pnpm run pack:headless
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

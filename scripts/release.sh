@@ -7,7 +7,7 @@
 #
 # Steps (all local — no build, no publish):
 #   1. Preflight (clean tree, on main, gh authed, claude CLI present)
-#   2. Bump package.json + package-lock.json
+#   2. Bump package.json + pnpm-lock.yaml
 #   3. Rewrite README download links
 #   4. Generate site/public/releases.html entry via Claude
 #   5. Write release-notes/v<ver>.md (read by the CI workflows)
@@ -113,7 +113,7 @@ ok "gh default repo is set"
 
 # claude CLI must be available (used for release notes generation)
 if ! command -v claude >/dev/null 2>&1; then
-  fail "claude CLI is not installed. Install with: npm install -g @anthropic-ai/claude-code"
+  fail "claude CLI is not installed. Install with: pnpm add -g @anthropic-ai/claude-code"
 fi
 ok "claude CLI is available"
 
@@ -147,7 +147,7 @@ fi
 # pushed, see the recovery procedure in the header comment.
 COMMITTED=0
 RELEASE_NOTES_FILE="release-notes/${TAG}.md"
-RELEASE_TOUCHED_FILES=(package.json package-lock.json README.md site/public/releases.html)
+RELEASE_TOUCHED_FILES=(package.json pnpm-lock.yaml README.md site/public/releases.html)
 restore_release_files() {
   local exit_code=$?
   if [ "$COMMITTED" = "0" ] && [ "$exit_code" != "0" ]; then
@@ -160,21 +160,15 @@ restore_release_files() {
 trap restore_release_files EXIT
 
 # ---- Bump version ----
-step "Bumping package.json and package-lock.json to ${VERSION}"
+step "Bumping package.json to ${VERSION}"
 node -e "
 const fs = require('fs');
 const v = '${VERSION}';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
 pkg.version = v;
 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-if (fs.existsSync('package-lock.json')) {
-  const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf-8'));
-  lock.version = v;
-  if (lock.packages && lock.packages['']) lock.packages[''].version = v;
-  fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
-}
 "
-ok "package.json and package-lock.json updated"
+ok "package.json updated"
 
 # ---- Update README download links ----
 # The marketing-site Install page reads version from package.json at build
@@ -310,7 +304,7 @@ ok "Release notes written to ${RELEASE_NOTES_FILE}"
 
 # ---- Commit version bump + release notes ----
 step "Committing release prep"
-git add package.json package-lock.json README.md site/public/releases.html "$RELEASE_NOTES_FILE"
+git add package.json pnpm-lock.yaml README.md site/public/releases.html "$RELEASE_NOTES_FILE"
 git commit -m "Release v${VERSION}"
 COMMITTED=1
 ok "Committed version bump, download links, releases.html entry, and release-notes file"
