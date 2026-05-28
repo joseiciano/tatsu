@@ -162,7 +162,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       branchName: string,
       initialPrompt: string,
       teleportSessionId?: string,
-      agentKind?: 'claude' | 'codex',
+      agentKind?: 'claude' | 'codex' | 'opencode',
       model?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`
@@ -196,7 +196,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       repoRoot: string,
       prNumber: number,
       initialPrompt: string,
-      agentKind?: 'claude' | 'codex',
+      agentKind?: 'claude' | 'codex' | 'opencode',
       model?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`

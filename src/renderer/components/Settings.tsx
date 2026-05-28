@@ -32,6 +32,7 @@ type SubSectionId =
   | 'agent-general'
   | 'agent-claude'
   | 'agent-codex'
+  | 'agent-opencode'
   | 'hotkeys-navigation'
   | 'hotkeys-backends'
   | 'hotkeys-worktree-mgmt'
@@ -66,7 +67,8 @@ const SECTIONS: Section[] = [
   { id: 'agent', label: 'Agent', icon: TerminalIcon, children: [
     { id: 'agent-general', label: 'General' },
     { id: 'agent-claude', label: 'Claude' },
-    { id: 'agent-codex', label: 'Codex' }
+    { id: 'agent-codex', label: 'Codex' },
+    { id: 'agent-opencode', label: 'Opencode' }
   ]},
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
   { id: 'editor', label: 'Editor', icon: Code2 },
@@ -150,6 +152,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     'agent-general': null,
     'agent-claude': null,
     'agent-codex': null,
+    'agent-opencode': null,
     'hotkeys-navigation': null,
     'hotkeys-backends': null,
     'hotkeys-worktree-mgmt': null,
@@ -311,12 +314,15 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     defaultAgent,
     claudeCommand,
     codexCommand,
+    opencodeCommand,
     harnessMcpEnabled,
     claudeEnvVars,
     codexEnvVars,
+    opencodeEnvVars,
     nameClaudeSessions,
     claudeModel,
     codexModel,
+    opencodeModel,
     terminalFontFamily,
     terminalFontSize,
     editor: editorId,
@@ -391,6 +397,15 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   )
   const [codexEnvSaveResult, setCodexEnvSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [codexRevealedEnvRows, setCodexRevealedEnvRows] = useState<Set<number>>(new Set())
+
+  const [opencodeCommandDraft, setOpencodeCommandDraft] = useState<string>(opencodeCommand)
+  useEffect(() => { setOpencodeCommandDraft(opencodeCommand) }, [opencodeCommand])
+  const [opencodeSaveResult, setOpencodeSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [opencodeEnvRows, setOpencodeEnvRows] = useState<{ key: string; value: string }[]>(() =>
+    Object.entries(opencodeEnvVars).map(([key, value]) => ({ key, value }))
+  )
+  const [opencodeEnvSaveResult, setOpencodeEnvSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [opencodeRevealedEnvRows, setOpencodeRevealedEnvRows] = useState<Set<number>>(new Set())
 
   const [systemPromptDraft, setSystemPromptDraft] = useState<string>(harnessSystemPrompt)
   useEffect(() => { setSystemPromptDraft(harnessSystemPrompt) }, [harnessSystemPrompt])
@@ -1024,6 +1039,37 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     await backend.setCodexEnvVars(vars)
     setCodexEnvSaveResult({ ok: true, message: 'Saved · new Codex tabs will see these' })
   }, [codexEnvRows])
+
+  const handleSaveOpencodeCommand = useCallback(async () => {
+    setOpencodeSaveResult(null)
+    await backend.setOpencodeCommand(opencodeCommandDraft)
+    setOpencodeSaveResult({ ok: true, message: 'Saved · new tabs will use this command' })
+  }, [opencodeCommandDraft])
+
+  const handleResetOpencodeCommand = useCallback(async () => {
+    setOpencodeCommandDraft('opencode')
+    await backend.setOpencodeCommand('opencode')
+    setOpencodeSaveResult({ ok: true, message: 'Reset to default' })
+  }, [])
+
+  const handleSaveOpencodeEnvVars = useCallback(async () => {
+    const vars: Record<string, string> = {}
+    const seen = new Set<string>()
+    const invalidNames: string[] = []
+    const duplicates: string[] = []
+    for (const { key, value } of opencodeEnvRows) {
+      const k = key.trim()
+      if (!k) continue
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) { invalidNames.push(k); continue }
+      if (seen.has(k)) { duplicates.push(k); continue }
+      seen.add(k)
+      vars[k] = value
+    }
+    if (invalidNames.length > 0) { setOpencodeEnvSaveResult({ ok: false, message: `Invalid name(s): ${invalidNames.join(', ')}` }); return }
+    if (duplicates.length > 0) { setOpencodeEnvSaveResult({ ok: false, message: `Duplicate name(s): ${duplicates.join(', ')}` }); return }
+    await backend.setOpencodeEnvVars(vars)
+    setOpencodeEnvSaveResult({ ok: true, message: 'Saved · new Opencode tabs will see these' })
+  }, [opencodeEnvRows])
 
   const isOverridden = (action: Action): boolean => {
     if (!hotkeyOverrides || !(action in hotkeyOverrides)) return false
@@ -1676,8 +1722,9 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div className="bg-panel-raised border border-border rounded-lg p-4">
                 <p className="text-xs text-dim mb-3">
                   Harness installs a small hook at{' '}
-                  <code className="bg-panel px-1 rounded">~/.claude/settings.json</code> and{' '}
-                  <code className="bg-panel px-1 rounded">~/.codex/hooks.json</code> so it can
+                  <code className="bg-panel px-1 rounded">~/.claude/settings.json</code>,{' '}
+                  <code className="bg-panel px-1 rounded">~/.codex/hooks.json</code>, and{' '}
+                  <code className="bg-panel px-1 rounded">~/.config/opencode/plugins/</code> so it can
                   detect when each agent tab is processing, waiting, or awaiting approval.
                   The hook only emits when <code className="bg-panel px-1 rounded">$HARNESS_TERMINAL_ID</code>{' '}
                   is set — sessions you launch outside Harness are untouched.
@@ -2121,6 +2168,98 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 {codexEnvSaveResult && (
                   <div className={`mt-3 text-xs flex items-center gap-1.5 ${codexEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
                     {codexEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{codexEnvSaveResult.message}
+                  </div>
+                )}
+              </div>
+              </div>
+
+              {/* ── Opencode subsection ── */}
+              <div ref={(el) => { subSectionRefs.current['agent-opencode'] = el }} id="agent-opencode" className="mt-8">
+              <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
+                Opencode
+                {defaultAgent === 'opencode' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+              </h3>
+
+              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
+                <label className="block text-sm font-medium text-fg mb-1">Model</label>
+                <p className="text-xs text-dim mb-2">
+                  Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Enter a provider/model string (e.g. <code className="bg-panel px-1 rounded">openai/gpt-4</code>). Leave empty to let the CLI choose.
+                </p>
+                <input
+                  type="text"
+                  value={opencodeModel || ''}
+                  onChange={(e) => { void backend.setOpencodeModel(e.target.value || null) }}
+                  placeholder="provider/model"
+                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg font-mono"
+                />
+              </div>
+
+              <div className="bg-panel-raised border border-border rounded-lg p-4">
+                <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
+                <p className="text-xs text-dim mb-2">
+                  The Opencode CLI command. Harness manages session resume automatically.
+                </p>
+                <textarea
+                  value={opencodeCommandDraft}
+                  onChange={(e) => setOpencodeCommandDraft(e.target.value)}
+                  rows={2}
+                  spellCheck={false}
+                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
+                  placeholder="opencode"
+                />
+                <div className="flex items-center gap-2 mt-3">
+                  <button onClick={handleSaveOpencodeCommand} disabled={!opencodeCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                  {opencodeCommandDraft !== 'opencode' && (
+                    <button onClick={handleResetOpencodeCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                  )}
+                </div>
+                {opencodeSaveResult && (
+                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${opencodeSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                    {opencodeSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{opencodeSaveResult.message}
+                  </div>
+                )}
+                {(() => {
+                  const effectiveOpencodeCommand = opencodeCommandDraft.trim() || 'opencode'
+                  const opencodeModelPart = opencodeModel && !effectiveOpencodeCommand.includes('--model') && !effectiveOpencodeCommand.includes('-m ') ? ` --model ${opencodeModel}` : ''
+                  const opencodePreviewInner = `${effectiveOpencodeCommand}${opencodeModelPart}`
+                  return (
+                    <div className="mt-4 pt-3 border-t border-border">
+                      <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
+                      <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{`<shell> -ilc "${opencodePreviewInner}"`}</div>
+                      <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
+                <p className="text-xs text-dim mb-3">
+                  Injected into Opencode tabs.
+                </p>
+                {opencodeEnvRows.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {opencodeEnvRows.map((row, index) => {
+                      const revealed = opencodeRevealedEnvRows.has(index)
+                      return (
+                        <div key={index} className="flex items-center gap-2">
+                          <input type="text" value={row.key} onChange={(e) => { setOpencodeEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, key: e.target.value } : r))); setOpencodeEnvSaveResult(null) }} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                          <span className="text-dim text-xs">=</span>
+                          <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setOpencodeEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setOpencodeEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                          <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setOpencodeRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
+                          <Tooltip label="Remove"><button onClick={() => { setOpencodeEnvRows((prev) => prev.filter((_, i) => i !== index)); setOpencodeEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setOpencodeEnvRows((prev) => [...prev, { key: '', value: '' }]); setOpencodeEnvSaveResult(null) }} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
+                  <button onClick={handleSaveOpencodeEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                </div>
+                {opencodeEnvSaveResult && (
+                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${opencodeEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                    {opencodeEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{opencodeEnvSaveResult.message}
                   </div>
                 )}
               </div>

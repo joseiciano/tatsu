@@ -8,7 +8,7 @@ import {
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import type { WorkspacePane, TerminalTab, PtyStatus, AgentKind } from '../types'
-import { AGENT_REGISTRY, agentDisplayName } from '../../shared/agent-registry'
+import { AGENT_REGISTRY, agentDisplayName, cycleAltAgent } from '../../shared/agent-registry'
 import { Tooltip } from './Tooltip'
 import { repoNameColor } from './RepoIcon'
 import { getClientId, useTerminalProgress, useTerminalSession } from '../store'
@@ -422,6 +422,13 @@ export function TerminalPanel({
   const backend = useBackend()
   const { setNodeRef: setPaneDropRef } = useDroppable({ id: pane.id })
   const slotHostRef = useRef<HTMLDivElement | null>(null)
+  const [altClickCount, setAltClickCount] = useState(0)
+
+  // Reset alt-click cycle when the global default agent changes so the
+  // user doesn't get surprised by a shifted cycle order.
+  useEffect(() => {
+    setAltClickCount(0)
+  }, [defaultAgent])
 
   // Register this pane's slot host with WorkspaceView. WorkspaceView owns a
   // stable slot DOM element per pane.id and appends it into whichever host
@@ -508,9 +515,10 @@ export function TerminalPanel({
               const plain = chatIsDefault
                 ? 'New Chat tab'
                 : `New ${agentDisplayName(defaultAgent)} tab`
+              const altAgents = AGENT_REGISTRY.filter((a) => a.kind !== defaultAgent)
               const altPart =
-                AGENT_REGISTRY.length > 1
-                  ? ` · ⌥-click for ${agentDisplayName(AGENT_REGISTRY.find((a) => a.kind !== defaultAgent)?.kind)}`
+                altAgents.length > 0
+                  ? ` · ⌥-click for ${altAgents.map((a) => agentDisplayName(a.kind)).join(' / ')}`
                   : ''
               const shiftPart = onAddJsonClaudeTab
                 ? chatIsDefault
@@ -523,16 +531,15 @@ export function TerminalPanel({
             <button
               onClick={(e) => {
                 // Modifier precedence:
-                //   alt → other registered agent (Codex when default is
-                //         Claude, vice versa) — independent of Chat/Terminal.
+                //   alt → cycle to next registered agent — independent of Chat/Terminal.
                 //   shift → "the other Claude interface" relative to the
                 //         user's defaultClaudeTabType setting.
-                //   plain → the default Claude interface.
+                //   plain → the default agent interface.
                 const chatIsDefault =
                   !!onAddJsonClaudeTab && defaultClaudeTabType === 'json'
                 if (e.altKey && AGENT_REGISTRY.length > 1) {
-                  const other = AGENT_REGISTRY.find((a) => a.kind !== defaultAgent)
-                  onAddAgentTab(other?.kind)
+                  onAddAgentTab(cycleAltAgent(defaultAgent, altClickCount))
+                  setAltClickCount((c) => c + 1)
                   return
                 }
                 if (e.shiftKey && onAddJsonClaudeTab) {

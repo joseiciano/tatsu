@@ -101,7 +101,7 @@ export function buildBackend(
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex'
+      agentKind?: 'claude' | 'codex' | 'opencode'
       model?: string
     }) => req('worktrees:runPending', params),
     runPendingPRWorktree: (params: {
@@ -109,7 +109,7 @@ export function buildBackend(
       repoRoot: string
       prNumber: number
       initialPrompt?: string
-      agentKind?: 'claude' | 'codex'
+      agentKind?: 'claude' | 'codex' | 'opencode'
       model?: string
     }) => req('worktrees:runPendingPR', params),
     retryPendingWorktree: (id: string) => req('worktrees:retryPending', id),
@@ -225,6 +225,9 @@ export function buildBackend(
     setClaudeModel: (model: string | null) => req('config:setClaudeModel', model),
     setCodexModel: (model: string | null) => req('config:setCodexModel', model),
     setCodexEnvVars: (vars: Record<string, string>) => req('config:setCodexEnvVars', vars),
+    setOpencodeCommand: (command: string) => req('config:setOpencodeCommand', command),
+    setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
+    setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
     setAutoApprovePermissions: (enabled: boolean) =>
       req('config:setAutoApprovePermissions', enabled),

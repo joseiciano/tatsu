@@ -62,7 +62,7 @@ interface WorktreesFSMOptions {
     createdPath: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex'
+    agentKind?: 'claude' | 'codex' | 'opencode'
     model?: string
   }) => void
 }
@@ -113,7 +113,7 @@ export class WorktreesFSM {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex'
+    agentKind?: 'claude' | 'codex' | 'opencode'
     model?: string
   }): Promise<PendingOutcome> {
     const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model } = params
@@ -161,7 +161,7 @@ export class WorktreesFSM {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex'
+    agentKind?: 'claude' | 'codex' | 'opencode'
     model?: string
   }): Promise<PendingOutcome> {
     const { id, repoRoot, prNumber, initialPrompt, agentKind, model } = params
@@ -221,7 +221,7 @@ export class WorktreesFSM {
     created: WorktreeInfo
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex'
+    agentKind?: 'claude' | 'codex' | 'opencode'
     model?: string
   }): Promise<PendingOutcome> {
     const { id, repoRoot, created, initialPrompt, teleportSessionId, agentKind, model } = args

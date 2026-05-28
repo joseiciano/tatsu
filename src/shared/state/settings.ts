@@ -9,7 +9,7 @@ export type MergeStrategy = 'squash' | 'merge-commit' | 'fast-forward'
 export type WorktreeBase = 'remote' | 'local'
 export type WorktreeDetail = 'diff' | 'age' | 'pr' | 'none'
 
-export type AgentKindSetting = 'claude' | 'codex'
+export type AgentKindSetting = 'claude' | 'codex' | 'opencode'
 
 export type BrowserToolsMode = 'view' | 'full'
 
@@ -97,9 +97,11 @@ export interface SettingsState {
   defaultAgent: AgentKindSetting
   claudeCommand: string
   codexCommand: string
+  opencodeCommand: string
   worktreeScripts: WorktreeScripts
   claudeEnvVars: Record<string, string>
   codexEnvVars: Record<string, string>
+  opencodeEnvVars: Record<string, string>
   harnessMcpEnabled: boolean
   nameClaudeSessions: boolean
   terminalFontFamily: string
@@ -111,6 +113,7 @@ export interface SettingsState {
   shareClaudeSettings: boolean
   claudeModel: string | null
   codexModel: string | null
+  opencodeModel: string | null
   hasGithubToken: boolean
   githubAuthSource: 'pat' | 'gh-cli' | null
   /** GitHub login of the user whose token is configured. Resolved at
@@ -210,9 +213,11 @@ export type SettingsEvent =
   | { type: 'settings/defaultAgentChanged'; payload: AgentKindSetting }
   | { type: 'settings/claudeCommandChanged'; payload: string }
   | { type: 'settings/codexCommandChanged'; payload: string }
+  | { type: 'settings/opencodeCommandChanged'; payload: string }
   | { type: 'settings/worktreeScriptsChanged'; payload: WorktreeScripts }
   | { type: 'settings/claudeEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/codexEnvVarsChanged'; payload: Record<string, string> }
+  | { type: 'settings/opencodeEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/harnessMcpEnabledChanged'; payload: boolean }
   | { type: 'settings/nameClaudeSessionsChanged'; payload: boolean }
   | { type: 'settings/terminalFontFamilyChanged'; payload: string }
@@ -228,6 +233,7 @@ export type SettingsEvent =
   | { type: 'settings/harnessStarredChanged'; payload: boolean | null }
   | { type: 'settings/claudeModelChanged'; payload: string | null }
   | { type: 'settings/codexModelChanged'; payload: string | null }
+  | { type: 'settings/opencodeModelChanged'; payload: string | null }
   | { type: 'settings/autoUpdateEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptChanged'; payload: string }
@@ -268,9 +274,11 @@ export const initialSettings: SettingsState = {
   defaultAgent: 'claude',
   claudeCommand: '',
   codexCommand: '',
+  opencodeCommand: '',
   worktreeScripts: { setup: '', teardown: '' },
   claudeEnvVars: {},
   codexEnvVars: {},
+  opencodeEnvVars: {},
   harnessMcpEnabled: true,
   nameClaudeSessions: false,
   terminalFontFamily: '',
@@ -282,6 +290,7 @@ export const initialSettings: SettingsState = {
   shareClaudeSettings: true,
   claudeModel: null,
   codexModel: null,
+  opencodeModel: null,
   hasGithubToken: false,
   githubAuthSource: null,
   viewerLogin: null,
@@ -331,12 +340,16 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, claudeCommand: event.payload }
     case 'settings/codexCommandChanged':
       return { ...state, codexCommand: event.payload }
+    case 'settings/opencodeCommandChanged':
+      return { ...state, opencodeCommand: event.payload }
     case 'settings/worktreeScriptsChanged':
       return { ...state, worktreeScripts: event.payload }
     case 'settings/claudeEnvVarsChanged':
       return { ...state, claudeEnvVars: event.payload }
     case 'settings/codexEnvVarsChanged':
       return { ...state, codexEnvVars: event.payload }
+    case 'settings/opencodeEnvVarsChanged':
+      return { ...state, opencodeEnvVars: event.payload }
     case 'settings/harnessMcpEnabledChanged':
       return { ...state, harnessMcpEnabled: event.payload }
     case 'settings/nameClaudeSessionsChanged':
@@ -367,6 +380,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, claudeModel: event.payload }
     case 'settings/codexModelChanged':
       return { ...state, codexModel: event.payload }
+    case 'settings/opencodeModelChanged':
+      return { ...state, opencodeModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
     case 'settings/harnessSystemPromptEnabledChanged':

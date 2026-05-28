@@ -14,14 +14,14 @@ interface NewWorktreeScreenProps {
     branchName: string,
     initialPrompt: string,
     teleportSessionId?: string,
-    agentKind?: 'claude' | 'codex',
+    agentKind?: 'claude' | 'codex' | 'opencode',
     model?: string
   ) => Promise<void>
   onPRSubmit: (
     repoRoot: string,
     prNumber: number,
     initialPrompt: string,
-    agentKind?: 'claude' | 'codex',
+    agentKind?: 'claude' | 'codex' | 'opencode',
     model?: string
   ) => Promise<void>
   onCancel: () => void
@@ -98,8 +98,8 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
   // settings; model defaults to empty (= use settings.claudeModel/codexModel
   // at spawn time). Teleport mode pins to Claude — codex has no equivalent
   // "resume by id" flow today.
-  const [agentKindOverride, setAgentKindOverride] = useState<'claude' | 'codex'>(
-    settings.defaultAgent === 'codex' ? 'codex' : 'claude'
+  const [agentKindOverride, setAgentKindOverride] = useState<'claude' | 'codex' | 'opencode'>(
+    settings.defaultAgent === 'codex' ? 'codex' : settings.defaultAgent === 'opencode' ? 'opencode' : 'claude'
   )
   const [modelOverride, setModelOverride] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -194,7 +194,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
     try {
       // Teleport mode always Claude — codex has no resume-by-session-id
       // analog today.
-      const effectiveAgent: 'claude' | 'codex' =
+      const effectiveAgent: 'claude' | 'codex' | 'opencode' =
         mode === 'teleport' ? 'claude' : agentKindOverride
       await onSubmit(
         selectedRepo,
@@ -469,6 +469,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
                   setModel={setModelOverride}
                   defaultClaudeModel={settings.claudeModel}
                   defaultCodexModel={settings.codexModel}
+                  defaultOpencodeModel={settings.opencodeModel}
                   disabled={prClickPending !== null}
                 />
                 <PRPickerList
@@ -491,6 +492,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
                 setModel={setModelOverride}
                 defaultClaudeModel={settings.claudeModel}
                 defaultCodexModel={settings.codexModel}
+                defaultOpencodeModel={settings.opencodeModel}
                 disabled={submitting}
               />
             )}
@@ -665,12 +667,13 @@ function PRPickerList({ prs, loading, error, disabled, pendingNumber, onPick }: 
 
 interface AgentModelRowProps {
   mode: 'fresh' | 'teleport' | 'pr'
-  agentKind: 'claude' | 'codex'
-  setAgentKind: (k: 'claude' | 'codex') => void
+  agentKind: 'claude' | 'codex' | 'opencode'
+  setAgentKind: (k: 'claude' | 'codex' | 'opencode') => void
   model: string
   setModel: (m: string) => void
   defaultClaudeModel: string | null
   defaultCodexModel: string | null
+  defaultOpencodeModel: string | null
   disabled: boolean
 }
 
@@ -682,18 +685,20 @@ function AgentModelRow({
   setModel,
   defaultClaudeModel,
   defaultCodexModel,
+  defaultOpencodeModel,
   disabled
 }: AgentModelRowProps): JSX.Element {
-  // Teleport mode pins to Claude — codex has no equivalent
-  // "resume by session id" today. Lock the selector so users don't
+  // Teleport mode pins to Claude — codex/opencode have no equivalent
+  // "resume by session id" flow today. Lock the selector so users don't
   // think they can flip it.
   const locked = mode === 'teleport'
   const effectiveAgent = locked ? 'claude' : agentKind
-  const modelOptions = effectiveAgent === 'codex' ? CODEX_MODELS : CLAUDE_MODELS
+  const modelOptions = effectiveAgent === 'codex' ? CODEX_MODELS : effectiveAgent === 'claude' ? CLAUDE_MODELS : null
   const fallbackModel =
-    effectiveAgent === 'codex' ? defaultCodexModel : defaultClaudeModel
-  const fallbackDisplay =
-    modelOptions.find((m) => m.id === fallbackModel)?.displayName || fallbackModel
+    effectiveAgent === 'codex' ? defaultCodexModel : effectiveAgent === 'opencode' ? defaultOpencodeModel : defaultClaudeModel
+  const fallbackDisplay = modelOptions
+    ? (modelOptions.find((m) => m.id === fallbackModel)?.displayName || fallbackModel)
+    : fallbackModel
   const defaultLabel = fallbackDisplay
     ? `(Default — settings: ${fallbackDisplay})`
     : '(Default — let CLI choose)'
@@ -706,14 +711,14 @@ function AgentModelRow({
   const hasNonDefault = (!locked && agentKind !== 'claude') || model.trim().length > 0
   const open = openOverride || hasNonDefault
 
-  const handleAgentChange = (next: 'claude' | 'codex'): void => {
-    // Reset the model when switching agents — otherwise a stale Claude
-    // model id would be sent as Codex's --model flag (or vice versa).
+  const handleAgentChange = (next: 'claude' | 'codex' | 'opencode'): void => {
+    // Reset the model when switching agents — otherwise a stale model id
+    // would be sent as the wrong agent's --model flag.
     if (next !== agentKind) setModel('')
     setAgentKind(next)
   }
 
-  const modelDisplay = modelOptions.find((m) => m.id === model)?.displayName || model
+  const modelDisplay = modelOptions?.find((m) => m.id === model)?.displayName || model
 
   return (
     <div className="mt-5">
@@ -726,7 +731,7 @@ function AgentModelRow({
         Advanced
         {!open && hasNonDefault && (
           <span className="ml-1 normal-case font-normal tracking-normal text-faint">
-            ({effectiveAgent === 'codex' ? 'Codex' : 'Claude'}
+            ({effectiveAgent === 'codex' ? 'Codex' : effectiveAgent === 'opencode' ? 'Opencode' : 'Claude'}
             {model.trim() ? ` · ${modelDisplay}` : ''})
           </span>
         )}
@@ -739,37 +744,49 @@ function AgentModelRow({
             </span>
             <select
               value={effectiveAgent}
-              onChange={(e) => handleAgentChange(e.target.value === 'codex' ? 'codex' : 'claude')}
+              onChange={(e) => handleAgentChange(e.target.value as 'claude' | 'codex' | 'opencode')}
               disabled={disabled || locked}
               title={locked ? 'Teleport sessions require Claude' : undefined}
               className="bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
             >
               <option value="claude">Claude</option>
               <option value="codex">Codex</option>
+              <option value="opencode">Opencode</option>
             </select>
           </div>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-dim shrink-0">
               Model
             </span>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={disabled}
-              className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
-            >
-              <option value="">{defaultLabel}</option>
-              <optgroup label="Current">
-                {modelOptions.filter((m) => m.tier === 'current').map((m) => (
-                  <option key={m.id} value={m.id}>{m.displayName}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Legacy">
-                {modelOptions.filter((m) => m.tier === 'legacy').map((m) => (
-                  <option key={m.id} value={m.id}>{m.displayName}</option>
-                ))}
-              </optgroup>
-            </select>
+            {effectiveAgent === 'opencode' ? (
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={disabled}
+                placeholder={defaultLabel}
+                className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50"
+              />
+            ) : (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={disabled}
+                className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
+              >
+                <option value="">{defaultLabel}</option>
+                <optgroup label="Current">
+                  {modelOptions!.filter((m) => m.tier === 'current').map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Legacy">
+                  {modelOptions!.filter((m) => m.tier === 'legacy').map((m) => (
+                    <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </optgroup>
+              </select>
+            )}
           </div>
         </div>
       )}

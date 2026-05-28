@@ -12,7 +12,8 @@ export interface AgentInfo {
 
 export const AGENT_REGISTRY: AgentInfo[] = [
   { kind: 'claude', displayName: 'Claude Code', vendor: 'Anthropic', assignsSessionId: true },
-  { kind: 'codex', displayName: 'Codex', vendor: 'OpenAI', assignsSessionId: false }
+  { kind: 'codex', displayName: 'Codex', vendor: 'OpenAI', assignsSessionId: false },
+  { kind: 'opencode', displayName: 'Opencode', vendor: 'Opencode', assignsSessionId: false }
 ]
 
 export interface ModelOption {
@@ -59,4 +60,16 @@ export function getAgentInfo(kind: AgentKind): AgentInfo {
 export function agentDisplayName(kind: AgentKind | undefined): string {
   if (!kind) return AGENT_REGISTRY[0].displayName
   return getAgentInfo(kind).displayName
+}
+
+export function getNextAgentKind(defaultAgent: AgentKind): AgentKind {
+  const idx = AGENT_REGISTRY.findIndex((a) => a.kind === defaultAgent)
+  const nextIdx = (idx + 1) % AGENT_REGISTRY.length
+  return AGENT_REGISTRY[nextIdx].kind
+}
+
+export function cycleAltAgent(defaultAgent: AgentKind, clickCount: number): AgentKind {
+  const altAgents = AGENT_REGISTRY.filter((a) => a.kind !== defaultAgent)
+  if (altAgents.length === 0) return defaultAgent
+  return altAgents[clickCount % altAgents.length].kind
 }

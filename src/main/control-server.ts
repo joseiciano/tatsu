@@ -2,6 +2,17 @@ import { createServer, IncomingMessage, ServerResponse } from 'http'
 import { randomBytes, randomUUID } from 'crypto'
 import { addWorktree, listWorktrees, defaultWorktreeDir, WorktreeInfo } from './worktree'
 import { log } from './debug'
+import type { AgentKind } from '../shared/state/terminals'
+
+export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
+  if (raw === undefined || raw === null || raw === '') return { kind: undefined }
+  if (typeof raw !== 'string') return { error: 'agentKind must be a string' }
+  const lowered = raw.trim().toLowerCase()
+  if (lowered === 'claude' || lowered === 'codex' || lowered === 'opencode') {
+    return { kind: lowered }
+  }
+  return { error: 'agentKind must be "claude", "codex", or "opencode"' }
+}
 
 export interface BrowserTabSummary {
   id: string
@@ -103,7 +114,7 @@ export interface ControlServerDeps {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex'
+    agentKind?: 'claude' | 'codex' | 'opencode'
     model?: string
   }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
   /** Returns the caller's current scope, or null if the terminal is not
@@ -251,14 +262,11 @@ async function handleRequest(
     const branchName = String(body.branchName || '').trim()
     const initialPrompt = typeof body.initialPrompt === 'string' ? body.initialPrompt : undefined
 
-    const rawAgent = typeof body.agentKind === 'string' ? body.agentKind.trim().toLowerCase() : ''
-    let agentKind: 'claude' | 'codex' | undefined
-    if (rawAgent) {
-      if (rawAgent !== 'claude' && rawAgent !== 'codex') {
-        return sendJson(res, 400, { error: 'agentKind must be "claude" or "codex"' })
-      }
-      agentKind = rawAgent
+    const agentResult = parseAgentKind(body.agentKind)
+    if (agentResult.error) {
+      return sendJson(res, 400, { error: agentResult.error })
     }
+    const agentKind = agentResult.kind
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined
 
     if (prNumber !== undefined) {

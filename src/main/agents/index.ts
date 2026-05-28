@@ -1,6 +1,7 @@
 import type { AgentKind } from '../../shared/state/terminals'
 import * as claude from './claude'
 import * as codex from './codex'
+import * as opencode from './opencode'
 
 export type { AgentKind }
 
@@ -25,7 +26,8 @@ export interface AgentModule {
    * assigns its own ID and Harness discovers it from the first hook event. */
   assignsSessionId: boolean
   /** Install status hooks at the agent's user-scope settings file
-   *  (~/.claude/settings.json for Claude, ~/.codex/hooks.json for Codex).
+   *  (~/.claude/settings.json for Claude, ~/.codex/hooks.json for Codex,
+   *   ~/.config/opencode/plugins/ for Opencode).
    *  The hook command is gated on $HARNESS_TERMINAL_ID so sessions spawned
    *  outside Harness are untouched. */
   installHooks(): void
@@ -41,7 +43,7 @@ export interface AgentModule {
   buildSpawnArgs(opts: AgentSpawnOpts): string
 }
 
-const agents: Record<AgentKind, AgentModule> = { claude, codex }
+const agents: Record<AgentKind, AgentModule> = { claude, codex, opencode }
 
 export function getAgent(kind: AgentKind): AgentModule {
   return agents[kind]

@@ -273,6 +273,50 @@ describe('settingsReducer', () => {
     expect(cleared.codexModel).toBeNull()
   })
 
+  it('opencodeCommandChanged sets the command string', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/opencodeCommandChanged',
+      payload: 'opencode --verbose'
+    })
+    expect(next.opencodeCommand).toBe('opencode --verbose')
+  })
+
+  it('opencodeModelChanged sets the model', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/opencodeModelChanged',
+      payload: 'openai/gpt-4'
+    })
+    expect(next.opencodeModel).toBe('openai/gpt-4')
+  })
+
+  it('opencodeModelChanged clears with null', () => {
+    const withModel = apply(initialSettings, {
+      type: 'settings/opencodeModelChanged',
+      payload: 'openai/gpt-4'
+    })
+    const cleared = apply(withModel, {
+      type: 'settings/opencodeModelChanged',
+      payload: null
+    })
+    expect(cleared.opencodeModel).toBeNull()
+  })
+
+  it('opencodeEnvVarsChanged replaces the full map', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/opencodeEnvVarsChanged',
+      payload: { FOO: 'bar', BAZ: 'qux' }
+    })
+    expect(next.opencodeEnvVars).toEqual({ FOO: 'bar', BAZ: 'qux' })
+  })
+
+  it('defaultAgentChanged accepts opencode', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/defaultAgentChanged',
+      payload: 'opencode'
+    })
+    expect(next.defaultAgent).toBe('opencode')
+  })
+
   it('harnessSystemPromptEnabledChanged toggles flag', () => {
     const off = apply(initialSettings, {
       type: 'settings/harnessSystemPromptEnabledChanged',

@@ -82,12 +82,14 @@ export function buildInitialAppState(
       defaultAgent: config.defaultAgent || 'claude',
       claudeCommand: config.claudeCommand || DEFAULT_CLAUDE_COMMAND,
       codexCommand: config.codexCommand || 'codex',
+      opencodeCommand: config.opencodeCommand || 'opencode',
       worktreeScripts: {
         setup: config.worktreeSetupCommand || '',
         teardown: config.worktreeTeardownCommand || ''
       },
       claudeEnvVars: config.claudeEnvVars || {},
       codexEnvVars: config.codexEnvVars || {},
+      opencodeEnvVars: config.opencodeEnvVars || {},
       harnessMcpEnabled: config.harnessMcpEnabled !== false,
       nameClaudeSessions: config.nameClaudeSessions ?? false,
       terminalFontFamily: config.terminalFontFamily || DEFAULT_TERMINAL_FONT_FAMILY,
@@ -98,6 +100,7 @@ export function buildInitialAppState(
       worktreeDetail: config.worktreeDetail || DEFAULT_WORKTREE_DETAIL,
       claudeModel: config.claudeModel || null,
       codexModel: config.codexModel || null,
+      opencodeModel: config.opencodeModel || null,
       hasGithubToken: opts.hasGithubToken,
       autoUpdateEnabled: config.autoUpdateEnabled !== false,
       shareClaudeSettings: config.shareClaudeSettings !== false,
