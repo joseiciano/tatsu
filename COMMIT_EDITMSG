@@ -1,1 +1,1 @@
-Add terminals/providerSessionIdDiscovered reducer for ACP session persistence
+Add TDD tests for ACP client and opencode chat adapter

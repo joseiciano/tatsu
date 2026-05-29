@@ -38,7 +38,7 @@ interface WorkspaceViewProps {
   defaultAgent: AgentKind
   onAddAgentTab: (worktreePath: string, agentKind?: AgentKind, paneId?: string) => void
   onAddBrowserTab: (worktreePath: string, paneId?: string) => void
-  onAddJsonClaudeTab?: (worktreePath: string, paneId?: string) => void
+  onAddJsonClaudeTab?: (worktreePath: string, paneId?: string, provider?: 'claude' | 'opencode') => void
   /** Convert a Claude tab between Terminal and Chat in place. */
   onConvertTabType?: (worktreePath: string, tabId: string, newType: 'agent' | 'json-claude') => void
   /** Drives whether the Sparkles button's plain click spawns Terminal
@@ -181,7 +181,7 @@ function SplitRenderer({
   defaultAgent: AgentKind
   onAddAgentTab: (kind: AgentKind | undefined, paneId: string) => void
   onAddBrowserTab: (paneId: string) => void
-  onAddJsonClaudeTab?: (paneId: string) => void
+  onAddJsonClaudeTab?: (paneId: string, provider?: 'claude' | 'opencode') => void
   defaultClaudeTabType?: 'xterm' | 'json'
   onConvertTabType?: (tabId: string, newType: 'agent' | 'json-claude') => void
   onSleepTab: (tabId: string) => void
@@ -214,7 +214,7 @@ function SplitRenderer({
           onAddAgentTab={(kind) => onAddAgentTab(kind, node.id)}
           onAddBrowserTab={() => onAddBrowserTab(node.id)}
           onAddJsonClaudeTab={
-            onAddJsonClaudeTab ? () => onAddJsonClaudeTab(node.id) : undefined
+            onAddJsonClaudeTab ? (provider) => onAddJsonClaudeTab(node.id, provider) : undefined
           }
           defaultClaudeTabType={defaultClaudeTabType}
           onConvertTabType={onConvertTabType}
@@ -526,7 +526,7 @@ export function WorkspaceView({
           onAddBrowserTab={(paneId) => onAddBrowserTab(worktreePath, paneId)}
           onAddJsonClaudeTab={
             onAddJsonClaudeTab
-              ? (paneId) => onAddJsonClaudeTab(worktreePath, paneId)
+              ? (paneId, provider) => onAddJsonClaudeTab(worktreePath, paneId, provider)
               : undefined
           }
           onConvertTabType={

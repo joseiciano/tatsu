@@ -69,8 +69,9 @@ interface TerminalPanelProps {
   onAddAgentTab: (agentKind?: AgentKind) => void
   onAddBrowserTab: () => void
   /** Shift-clicking the Sparkles button opens the non-default Claude
-   *  interface (Terminal if Chat is the default, Chat if Terminal is). */
-  onAddJsonClaudeTab?: () => void
+   *  interface (Terminal if Chat is the default, Chat if Terminal is).
+   *  Ctrl/Cmd-click opens Opencode Chat. */
+  onAddJsonClaudeTab?: (provider?: 'claude' | 'opencode') => void
   /** Controls which Claude interface plain-click on Sparkles spawns vs.
    *  what shift-click flips to. Values are unchanged internal identifiers
    *  — UI labels them "Terminal" and "Chat". */
@@ -525,13 +526,17 @@ export function TerminalPanel({
                   ? ` · ⇧-click for Terminal mode`
                   : ' · ⇧-click for Chat mode'
                 : ''
-              return plain + altPart + shiftPart
+              const ctrlPart = onAddJsonClaudeTab
+                ? ' · ⌘-click for Opencode Chat'
+                : ''
+              return plain + altPart + shiftPart + ctrlPart
             })()}
           >
             <button
               onClick={(e) => {
                 // Modifier precedence:
                 //   alt → cycle to next registered agent — independent of Chat/Terminal.
+                //   ctrl/cmd → Opencode Chat.
                 //   shift → "the other Claude interface" relative to the
                 //         user's defaultClaudeTabType setting.
                 //   plain → the default agent interface.
@@ -542,12 +547,16 @@ export function TerminalPanel({
                   setAltClickCount((c) => c + 1)
                   return
                 }
-                if (e.shiftKey && onAddJsonClaudeTab) {
-                  if (chatIsDefault) onAddAgentTab('claude')
-                  else onAddJsonClaudeTab()
+                if ((e.ctrlKey || e.metaKey) && onAddJsonClaudeTab) {
+                  onAddJsonClaudeTab('opencode')
                   return
                 }
-                if (chatIsDefault) onAddJsonClaudeTab!()
+                if (e.shiftKey && onAddJsonClaudeTab) {
+                  if (chatIsDefault) onAddAgentTab('claude')
+                  else onAddJsonClaudeTab('claude')
+                  return
+                }
+                if (chatIsDefault) onAddJsonClaudeTab!('claude')
                 else onAddAgentTab(defaultAgent)
               }}
               className="no-drag shrink-0 px-2 h-full text-faint hover:text-fg text-sm transition-colors cursor-pointer"
