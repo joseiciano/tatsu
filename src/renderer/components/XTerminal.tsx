@@ -229,7 +229,7 @@ function buildTerminalTheme(): NonNullable<ConstructorParameters<typeof Terminal
 }
 
 import type { AgentKind } from '../../shared/state/terminals'
-import { agentDisplayName } from '../../shared/agent-registry'
+import { agentDisplayName, agentSupportsChatMode } from '../../shared/agent-registry'
 
 interface XTerminalProps {
   terminalId: string
@@ -249,7 +249,7 @@ interface XTerminalProps {
    * `cwd` (the worktree root); absolute paths are used as-is. */
   shellCwd?: string
   onRestartAgent?: () => void
-  /** When provided AND this is a Claude agent tab, an overlay chip in
+  /** When provided AND this is a chat-capable agent tab, an overlay chip in
    *  the top-left invites the user to switch to the Chat interface. */
   onSwitchToChat?: () => void
 }
@@ -867,7 +867,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           </button>
         </div>
       )}
-      {!loading && !exited && onSwitchToChat && type === 'agent' && agentKind === 'claude' && !chatPromotionDismissed && (
+      {!loading && !exited && onSwitchToChat && type === 'agent' && agentSupportsChatMode(agentKind) && !chatPromotionDismissed && (
         <div className="absolute top-2 left-2 flex items-center gap-1 pointer-events-auto">
           <Tooltip label="You can always switch modes by right-clicking the tab.">
             <button

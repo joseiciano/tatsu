@@ -9,6 +9,7 @@ import { MobileTerminal } from './MobileTerminal'
 import { MobileRightPanel } from './MobileRightPanel'
 import { JsonModeChat } from './JsonModeChat'
 import { AgentIcon } from './AgentIcon'
+import { agentSupportsChatMode } from '../../shared/agent-registry'
 import { HotkeysProvider } from './Tooltip'
 import { resolveHotkeys } from '../hotkeys'
 
@@ -291,7 +292,7 @@ function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, picker
         {tabs.map((tab) => {
           const convertible =
             !!onConvertTabType &&
-            ((tab.type === 'agent' && tab.agentKind === 'claude') || tab.type === 'json-claude')
+            ((tab.type === 'agent' && agentSupportsChatMode(tab.agentKind)) || tab.type === 'json-claude')
           return (
             <TabChip
               key={tab.id}
@@ -428,7 +429,7 @@ function TabIcon({ tab, shellActivity, status }: { tab: TerminalTab; shellActivi
   if (tab.type === 'json-claude') {
     return (
       <span className="inline-flex items-center gap-1">
-        <AgentIcon kind="claude" className="icon-xs" />
+        <AgentIcon kind={tab.provider ?? 'claude'} className="icon-xs" />
         <span className="w-1.5 h-1.5 rounded-full bg-accent" />
       </span>
     )

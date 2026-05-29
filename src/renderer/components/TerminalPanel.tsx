@@ -8,7 +8,7 @@ import {
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import type { WorkspacePane, TerminalTab, PtyStatus, AgentKind } from '../types'
-import { AGENT_REGISTRY, agentDisplayName, cycleAltAgent } from '../../shared/agent-registry'
+import { AGENT_REGISTRY, agentDisplayName, cycleAltAgent, agentSupportsChatMode } from '../../shared/agent-registry'
 import { Tooltip } from './Tooltip'
 import { repoNameColor } from './RepoIcon'
 import { getClientId, useTerminalProgress, useTerminalSession } from '../store'
@@ -76,7 +76,7 @@ interface TerminalPanelProps {
    *  what shift-click flips to. Values are unchanged internal identifiers
    *  — UI labels them "Terminal" and "Chat". */
   defaultClaudeTabType?: 'xterm' | 'json'
-  /** Convert a Claude tab between Terminal and Chat in place. */
+  /** Convert a chat-capable agent tab between Terminal and Chat in place. */
   onConvertTabType?: (tabId: string, newType: 'agent' | 'json-claude') => void
   defaultAgent: AgentKind
   onSleepTab: (tabId: string) => void
@@ -114,8 +114,8 @@ interface SortableTabProps {
   onSelect: () => void
   onClose: () => void
   /** When provided, right-clicking the tab opens a small menu to convert
-   *  between Terminal and Chat. Passed in only for Claude tabs (agent
-   *  with agentKind=claude, or json-claude). */
+   *  between Terminal and Chat. Passed in only for chat-capable agent tabs
+   *  (agent with a chat-capable agentKind, or json-claude). */
   onConvertTabType?: (newType: 'agent' | 'json-claude') => void
   /** Optional: when provided AND the tab is an awake json-claude tab,
    *  the right-click menu shows a "Sleep" item. Sleeping tears down
@@ -599,9 +599,9 @@ export function TerminalPanel({
         >
           <SortableContext items={pane.tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
             {pane.tabs.map((tab) => {
-              const isClaudeAgent = tab.type === 'agent' && tab.agentKind === 'claude'
+              const isChatCapableAgent = tab.type === 'agent' && agentSupportsChatMode(tab.agentKind)
               const isJsonClaude = tab.type === 'json-claude'
-              const convertible = !!onConvertTabType && (isClaudeAgent || isJsonClaude)
+              const convertible = !!onConvertTabType && (isChatCapableAgent || isJsonClaude)
               return (
                 <SortableTab
                   key={tab.id}

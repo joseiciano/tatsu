@@ -1,1 +1,22 @@
-Fix ACP correctness: sendResponse, partial entry creation, prompt promise turn boundary, history replay, field names
+fix: provider-aware chat <-> terminal tab conversion for Opencode
+
+When right-clicking an Opencode-backed json-claude chat tab and choosing
+"Switch to Terminal mode", Harness was hardcoding agentKind: 'claude'
+and using the local tab id as the terminal sessionId. This meant the
+Opencode CLI could not resume the existing session.
+
+Changes:
+- panes-fsm.ts convertTabType(): determine provider from the source tab
+  (provider field for json-claude, agentKind for agent). Pass it as
+  newProvider in the tabTypeChanged dispatch. For opencode chat tabs,
+  use providerSessionId as the terminal sessionId so the CLI resumes
+  the correct session. Relax the agent->chat refusal to allow opencode
+  agent tabs too (codex is still blocked).
+- terminals.ts tabTypeChanged reducer: use newProvider to set agentKind
+  instead of hardcoding 'claude'. When converting opencode chat ->
+  terminal, use providerSessionId as the sessionId when present.
+- Add tests in terminals.test.ts and panes-fsm.test.ts covering:
+  * opencode chat -> opencode terminal
+  * opencode terminal -> opencode chat
+  * claude chat -> claude terminal (regression)
+  * codex agent -> chat still refused

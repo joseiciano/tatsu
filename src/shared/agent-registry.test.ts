@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getNextAgentKind, cycleAltAgent } from './agent-registry'
+import { getNextAgentKind, cycleAltAgent, agentSupportsChatMode } from './agent-registry'
 
 describe('getNextAgentKind', () => {
   it('cycles claude -> codex', () => {
@@ -33,5 +33,23 @@ describe('cycleAltAgent', () => {
     expect(cycleAltAgent('opencode', 0)).toBe('claude')
     expect(cycleAltAgent('opencode', 1)).toBe('codex')
     expect(cycleAltAgent('opencode', 2)).toBe('claude')
+  })
+})
+
+describe('agentSupportsChatMode', () => {
+  it('returns true for claude', () => {
+    expect(agentSupportsChatMode('claude')).toBe(true)
+  })
+
+  it('returns true for opencode', () => {
+    expect(agentSupportsChatMode('opencode')).toBe(true)
+  })
+
+  it('returns false for codex', () => {
+    expect(agentSupportsChatMode('codex')).toBe(false)
+  })
+
+  it('returns false for undefined', () => {
+    expect(agentSupportsChatMode(undefined)).toBe(false)
   })
 })

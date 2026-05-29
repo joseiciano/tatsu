@@ -73,3 +73,7 @@ export function cycleAltAgent(defaultAgent: AgentKind, clickCount: number): Agen
   if (altAgents.length === 0) return defaultAgent
   return altAgents[clickCount % altAgents.length].kind
 }
+
+export function agentSupportsChatMode(kind: AgentKind | undefined): boolean {
+  return kind === 'claude' || kind === 'opencode'
+}

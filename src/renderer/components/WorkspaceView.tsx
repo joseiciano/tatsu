@@ -13,6 +13,7 @@ import {
 } from '@dnd-kit/core'
 import type { PaneNode, PaneLeaf, PaneSplit, PtyStatus, AgentKind } from '../types'
 import { getLeaves, findLeafByTabId } from '../../shared/state/terminals'
+import { agentSupportsChatMode } from '../../shared/agent-registry'
 import { TerminalPanel } from './TerminalPanel'
 import { XTerminal } from './XTerminal'
 import { DiffView } from './DiffView'
@@ -39,7 +40,7 @@ interface WorkspaceViewProps {
   onAddAgentTab: (worktreePath: string, agentKind?: AgentKind, paneId?: string) => void
   onAddBrowserTab: (worktreePath: string, paneId?: string) => void
   onAddJsonClaudeTab?: (worktreePath: string, paneId?: string, provider?: 'claude' | 'opencode') => void
-  /** Convert a Claude tab between Terminal and Chat in place. */
+  /** Convert a chat-capable agent tab between Terminal and Chat in place. */
   onConvertTabType?: (worktreePath: string, tabId: string, newType: 'agent' | 'json-claude') => void
   /** Drives whether the Sparkles button's plain click spawns Terminal
    *  ('xterm') or Chat ('json'), and which one the shift modifier flips
@@ -618,7 +619,7 @@ export function WorkspaceView({
                         : undefined
                     }
                     onSwitchToChat={
-                      tab.type === 'agent' && tab.agentKind === 'claude' && onConvertTabType
+                      tab.type === 'agent' && agentSupportsChatMode(tab.agentKind) && onConvertTabType
                         ? (): void => onConvertTabType(worktreePath, tab.id, 'json-claude')
                         : undefined
                     }
