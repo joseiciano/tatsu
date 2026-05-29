@@ -7,8 +7,11 @@ import { useBackend } from '../backend'
 import type { UpdaterStatus, MergeStrategy, RepoConfig, WorktreeDetail } from '../types'
 import { DEFAULT_HOTKEYS, ACTION_LABELS, ACTION_CATEGORIES, bindingToString, eventToBinding, formatBindingGlyphs, resolveHotkeys, type Action, type HotkeyBinding } from '../hotkeys'
 import { Tooltip } from './Tooltip'
-import { AGENT_REGISTRY, agentDisplayName, CLAUDE_MODELS, CODEX_MODELS } from '../../shared/agent-registry'
+import { getMergedTerminalAgents, terminalAgentDisplayName, BUILTIN_TERMINAL_AGENTS } from '../../shared/terminal-agent-registry'
+import { CLAUDE_MODELS, CODEX_MODELS } from '../../shared/builtin-terminal-agents'
+import type { TerminalAgentDefinition, UserTerminalAgentDefinition, AgentRuntimeConfig } from '../../shared/terminal-agents'
 import { AgentIcon } from './AgentIcon'
+import { AgentSettingsCard } from './AgentSettingsCard'
 import { InterfaceToggle } from './InterfaceToggle'
 import { BUILT_IN_THEMES_BY_MODE, type ThemeOption } from '../themes'
 import { SEMANTIC_KEYS } from '../theme-apply'
@@ -30,9 +33,7 @@ type SubSectionId =
   | 'appearance-ui-size'
   | 'appearance-terminal-font'
   | 'agent-general'
-  | 'agent-claude'
-  | 'agent-codex'
-  | 'agent-opencode'
+  | 'agent-custom'
   | 'hotkeys-navigation'
   | 'hotkeys-backends'
   | 'hotkeys-worktree-mgmt'
@@ -66,9 +67,7 @@ const SECTIONS: Section[] = [
   ]},
   { id: 'agent', label: 'Agent', icon: TerminalIcon, children: [
     { id: 'agent-general', label: 'General' },
-    { id: 'agent-claude', label: 'Claude' },
-    { id: 'agent-codex', label: 'Codex' },
-    { id: 'agent-opencode', label: 'Opencode' }
+    { id: 'agent-custom', label: 'Custom agents' }
   ]},
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
   { id: 'editor', label: 'Editor', icon: Code2 },
@@ -144,15 +143,13 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     support: null,
     experimental: null
   })
-  const subSectionRefs = useRef<Record<SubSectionId, HTMLElement | null>>({
+  const subSectionRefs = useRef<Record<string, HTMLElement | null>>({
     'appearance-theme': null,
     'appearance-custom-themes': null,
     'appearance-ui-size': null,
     'appearance-terminal-font': null,
     'agent-general': null,
-    'agent-claude': null,
-    'agent-codex': null,
-    'agent-opencode': null,
+    'agent-custom': null,
     'hotkeys-navigation': null,
     'hotkeys-backends': null,
     'hotkeys-worktree-mgmt': null,
@@ -311,7 +308,9 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     themeDark,
     customThemes,
     hotkeys: hotkeyOverrides,
-    defaultAgent,
+    defaultTerminalAgentId,
+    userTerminalAgents,
+    agentConfigs,
     claudeCommand,
     codexCommand,
     opencodeCommand,
@@ -406,6 +405,22 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   )
   const [opencodeEnvSaveResult, setOpencodeEnvSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [opencodeRevealedEnvRows, setOpencodeRevealedEnvRows] = useState<Set<number>>(new Set())
+
+  // Custom agent add-form state
+  const [customAgentAddOpen, setCustomAgentAddOpen] = useState(false)
+  const [customAgentIdDraft, setCustomAgentIdDraft] = useState('')
+  const [customAgentNameDraft, setCustomAgentNameDraft] = useState('')
+  const [customAgentVendorDraft, setCustomAgentVendorDraft] = useState('')
+  const [customAgentCapabilities, setCustomAgentCapabilities] = useState({
+    assignsSessionId: false,
+    supportsResume: true,
+    supportsModel: true,
+    supportsPrompt: false,
+    supportsJsonMode: false,
+    supportsHarnessMcp: false,
+    supportsHooks: false,
+  })
+  const [customAgentAddResult, setCustomAgentAddResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const [systemPromptDraft, setSystemPromptDraft] = useState<string>(harnessSystemPrompt)
   useEffect(() => { setSystemPromptDraft(harnessSystemPrompt) }, [harnessSystemPrompt])
@@ -1681,17 +1696,17 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div className="bg-panel-raised border border-border rounded-lg p-4 mb-6">
                 <label className="block text-sm font-medium text-fg mb-3">Default agent</label>
                 <div className="flex gap-2">
-                  {AGENT_REGISTRY.map((agent) => (
+                  {getMergedTerminalAgents(userTerminalAgents).map((agent) => (
                     <button
-                      key={agent.kind}
-                      onClick={() => backend.setDefaultAgent(agent.kind)}
+                      key={agent.id}
+                      onClick={() => backend.setDefaultTerminalAgentId(agent.id)}
                       className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors cursor-pointer ${
-                        defaultAgent === agent.kind
+                        defaultTerminalAgentId === agent.id
                           ? 'bg-surface text-fg-bright border border-fg'
                           : 'bg-panel border border-border text-dim hover:text-fg hover:border-border-strong'
                       }`}
                     >
-                      <AgentIcon kind={agent.kind} className="icon-sm" />
+                      <AgentIcon kind={agent.id} className="icon-sm" />
                       {agent.displayName}
                     </button>
                   ))}
@@ -1700,7 +1715,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   New agent tabs will use the selected default. Existing tabs are unaffected.
                 </p>
 
-                {defaultAgent === 'claude' && (
+                {defaultTerminalAgentId === 'claude' && (
                   <div className="mt-4 pt-4 border-t border-border pl-4 border-l-2 border-l-border ml-1">
                     <label className="block text-sm font-medium text-fg mb-2">Interface</label>
                     <p className="text-xs text-dim mb-3">
@@ -1761,7 +1776,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div ref={(el) => { subSectionRefs.current['agent-claude'] = el }} id="agent-claude" className="mt-8">
               <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
                 Claude Code
-                {defaultAgent === 'claude' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+                {defaultTerminalAgentId === 'claude' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
               </h3>
 
               <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
@@ -2075,7 +2090,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div ref={(el) => { subSectionRefs.current['agent-codex'] = el }} id="agent-codex" className="mt-8">
               <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
                 Codex
-                {defaultAgent === 'codex' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+                {defaultTerminalAgentId === 'codex' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
               </h3>
 
               <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
@@ -2177,7 +2192,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div ref={(el) => { subSectionRefs.current['agent-opencode'] = el }} id="agent-opencode" className="mt-8">
               <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
                 Opencode
-                {defaultAgent === 'opencode' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+                {defaultTerminalAgentId === 'opencode' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
               </h3>
 
               <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
@@ -2265,6 +2280,197 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               </div>
               </div>
 
+
+              {/* ── Custom agents subsection ── */}
+              <div ref={(el) => { subSectionRefs.current['agent-custom'] = el }} id="agent-custom" className="mt-8">
+                <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
+                  Custom agents
+                </h3>
+                <p className="text-xs text-dim mb-4">
+                  Add your own CLI-based coding agents. They appear alongside Claude, Codex, and Opencode in the default-agent selector and new-tab menus.
+                </p>
+
+                {userTerminalAgents.length === 0 && !customAgentAddOpen && (
+                  <div className="bg-panel-raised border border-border rounded-lg p-4 text-center">
+                    <p className="text-sm text-dim mb-3">No custom agents yet.</p>
+                    <button
+                      onClick={() => setCustomAgentAddOpen(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer mx-auto"
+                    >
+                      <Plus className="icon-xs" />Add custom agent
+                    </button>
+                  </div>
+                )}
+
+                {userTerminalAgents.map((userAgent) => {
+                  const agent: TerminalAgentDefinition = { ...userAgent, models: [] }
+                  const runtimeConfig = agentConfigs[userAgent.id]
+                  return (
+                    <div key={userAgent.id} className="mb-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="text-sm font-medium text-fg-bright">{userAgent.displayName}</h4>
+                        <code className="text-xs text-dim bg-panel px-1.5 py-0.5 rounded">{userAgent.id}</code>
+                        <button
+                          onClick={async () => {
+                            const next = userTerminalAgents.filter((a) => a.id !== userAgent.id)
+                            await backend.setUserTerminalAgents(next)
+                            if (defaultTerminalAgentId === userAgent.id) {
+                              await backend.setDefaultTerminalAgentId('claude')
+                            }
+                          }}
+                          className="ml-auto p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"
+                          title="Remove agent"
+                        >
+                          <Trash2 className="icon-sm" />
+                        </button>
+                      </div>
+                      <AgentSettingsCard
+                        agent={agent}
+                        runtimeConfig={runtimeConfig}
+                        defaultCommand={userAgent.id}
+                        isDefault={defaultTerminalAgentId === userAgent.id}
+                        onSetDefault={() => backend.setDefaultTerminalAgentId(userAgent.id)}
+                        onSaveConfig={(cfg) => backend.setAgentRuntimeConfig(userAgent.id, cfg)}
+                        onRemoveConfig={() => backend.removeAgentRuntimeConfig(userAgent.id)}
+                      />
+                    </div>
+                  )
+                })}
+
+                {customAgentAddOpen && (
+                  <div className="bg-panel-raised border border-border rounded-lg p-4 mb-6">
+                    <h4 className="text-sm font-medium text-fg-bright mb-3">Add custom agent</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-fg mb-1">ID <span className="text-faint">(unique, no spaces)</span></label>
+                        <input
+                          type="text"
+                          value={customAgentIdDraft}
+                          onChange={(e) => { setCustomAgentIdDraft(e.target.value); setCustomAgentAddResult(null) }}
+                          placeholder="my-agent"
+                          spellCheck={false}
+                          className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-fg mb-1">Display name</label>
+                        <input
+                          type="text"
+                          value={customAgentNameDraft}
+                          onChange={(e) => { setCustomAgentNameDraft(e.target.value); setCustomAgentAddResult(null) }}
+                          placeholder="My Agent"
+                          className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright placeholder-faint outline-none focus:border-fg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-fg mb-1">Vendor</label>
+                        <input
+                          type="text"
+                          value={customAgentVendorDraft}
+                          onChange={(e) => { setCustomAgentVendorDraft(e.target.value); setCustomAgentAddResult(null) }}
+                          placeholder="acme-corp"
+                          spellCheck={false}
+                          className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-fg mb-2">Capabilities</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { key: 'supportsModel', label: 'Supports --model' },
+                            { key: 'supportsResume', label: 'Session resume' },
+                            { key: 'assignsSessionId', label: 'Self-assigns session ID' },
+                            { key: 'supportsHooks', label: 'Harness status hooks' },
+                          ].map(({ key, label }) => (
+                            <label key={key} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={customAgentCapabilities[key as keyof typeof customAgentCapabilities]}
+                                onChange={(e) => {
+                                  setCustomAgentCapabilities((prev) => ({ ...prev, [key]: e.target.checked }))
+                                  setCustomAgentAddResult(null)
+                                }}
+                                className="cursor-pointer icon-base"
+                              />
+                              <span className="text-xs text-fg">{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-4">
+                      <button
+                        onClick={async () => {
+                          setCustomAgentAddResult(null)
+                          const id = customAgentIdDraft.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
+                          if (!id) {
+                            setCustomAgentAddResult({ ok: false, message: 'ID is required' })
+                            return
+                          }
+                          if (userTerminalAgents.some((a) => a.id === id) || BUILTIN_TERMINAL_AGENTS.some((a) => a.id === id)) {
+                            setCustomAgentAddResult({ ok: false, message: `Agent "${id}" already exists` })
+                            return
+                          }
+                          if (!customAgentNameDraft.trim()) {
+                            setCustomAgentAddResult({ ok: false, message: 'Display name is required' })
+                            return
+                          }
+                          const next = [
+                            ...userTerminalAgents,
+                            {
+                              id,
+                              displayName: customAgentNameDraft.trim(),
+                              vendor: customAgentVendorDraft.trim() || 'custom',
+                              capabilities: customAgentCapabilities,
+                            },
+                          ]
+                          await backend.setUserTerminalAgents(next)
+                          setCustomAgentIdDraft('')
+                          setCustomAgentNameDraft('')
+                          setCustomAgentVendorDraft('')
+                          setCustomAgentCapabilities({
+                            assignsSessionId: false,
+                            supportsResume: true,
+                            supportsModel: true,
+                            supportsPrompt: false,
+                            supportsJsonMode: false,
+                            supportsHarnessMcp: false,
+                            supportsHooks: false,
+                          })
+                          setCustomAgentAddOpen(false)
+                          setCustomAgentAddResult({ ok: true, message: `Added "${id}"` })
+                        }}
+                        className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"
+                      >
+                        Add agent
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCustomAgentAddOpen(false)
+                          setCustomAgentAddResult(null)
+                        }}
+                        className="px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {customAgentAddResult && (
+                      <div className={`mt-3 text-xs flex items-center gap-1.5 ${customAgentAddResult.ok ? 'text-success' : 'text-danger'}`}>
+                        {customAgentAddResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{customAgentAddResult.message}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!customAgentAddOpen && userTerminalAgents.length > 0 && (
+                  <button
+                    onClick={() => setCustomAgentAddOpen(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"
+                  >
+                    <Plus className="icon-xs" />Add another custom agent
+                  </button>
+                )}
+              </div>
               {/* ── System prompt subsection ── */}
               <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-3">
                 System prompt

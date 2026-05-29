@@ -80,6 +80,7 @@ export function buildInitialAppState(
       themeDark: config.themeDark || DEFAULT_DARK_THEME,
       hotkeys: config.hotkeys || null,
       defaultAgent: config.defaultAgent || 'claude',
+      defaultTerminalAgentId: config.defaultAgent || 'claude',
       claudeCommand: config.claudeCommand || DEFAULT_CLAUDE_COMMAND,
       codexCommand: config.codexCommand || 'codex',
       opencodeCommand: config.opencodeCommand || 'opencode',

@@ -5,7 +5,12 @@ import { sanitizeBranchInput, isValidBranchName } from '../branch-name'
 import { RepoIcon } from './RepoIcon'
 import { useBackend } from '../backend'
 import { useSettings } from '../store'
-import { CLAUDE_MODELS, CODEX_MODELS } from '../../shared/agent-registry'
+import {
+  getMergedTerminalAgents,
+  getTerminalAgentDefinition,
+  terminalAgentDisplayName
+} from '../../shared/terminal-agent-registry'
+import type { TerminalAgentId, UserTerminalAgentDefinition, AgentRuntimeConfig } from '../../shared/terminal-agents'
 import type { PRSummary } from '../types'
 
 interface NewWorktreeScreenProps {
@@ -14,14 +19,14 @@ interface NewWorktreeScreenProps {
     branchName: string,
     initialPrompt: string,
     teleportSessionId?: string,
-    agentKind?: 'claude' | 'codex' | 'opencode',
+    agentId?: TerminalAgentId,
     model?: string
   ) => Promise<void>
   onPRSubmit: (
     repoRoot: string,
     prNumber: number,
     initialPrompt: string,
-    agentKind?: 'claude' | 'codex' | 'opencode',
+    agentId?: TerminalAgentId,
     model?: string
   ) => Promise<void>
   onCancel: () => void
@@ -95,11 +100,11 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
   const [reviewPrompt, setReviewPrompt] = useState(settings.prReviewPrompt)
   const [teleportInput, setTeleportInput] = useState('')
   // Per-creation overrides for agent + model. Default agent comes from
-  // settings; model defaults to empty (= use settings.claudeModel/codexModel
-  // at spawn time). Teleport mode pins to Claude — codex has no equivalent
+  // settings; model defaults to empty (= use settings.agentConfigs at
+  // spawn time). Teleport mode pins to Claude — codex has no equivalent
   // "resume by id" flow today.
-  const [agentKindOverride, setAgentKindOverride] = useState<'claude' | 'codex' | 'opencode'>(
-    settings.defaultAgent === 'codex' ? 'codex' : settings.defaultAgent === 'opencode' ? 'opencode' : 'claude'
+  const [agentIdOverride, setAgentIdOverride] = useState<TerminalAgentId>(
+    settings.defaultTerminalAgentId ?? 'claude'
   )
   const [modelOverride, setModelOverride] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -172,7 +177,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
           selectedRepo,
           prNumber,
           reviewPrompt.trim(),
-          agentKindOverride,
+          agentIdOverride,
           modelOverride.trim() || undefined
         )
       } catch (err) {
@@ -180,7 +185,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
         setPrClickPending(null)
       }
     },
-    [onPRSubmit, prClickPending, selectedRepo, reviewPrompt, agentKindOverride, modelOverride]
+    [onPRSubmit, prClickPending, selectedRepo, reviewPrompt, agentIdOverride, modelOverride]
   )
 
   const handleBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,8 +199,8 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
     try {
       // Teleport mode always Claude — codex has no resume-by-session-id
       // analog today.
-      const effectiveAgent: 'claude' | 'codex' | 'opencode' =
-        mode === 'teleport' ? 'claude' : agentKindOverride
+      const effectiveAgent: TerminalAgentId =
+        mode === 'teleport' ? 'claude' : agentIdOverride
       await onSubmit(
         selectedRepo,
         effectiveBranch,
@@ -208,7 +213,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
       setError(err instanceof Error ? err.message : 'Failed to create worktree')
       setSubmitting(false)
     }
-  }, [effectiveBranch, prompt, canSubmit, onSubmit, parsedTeleport, selectedRepo, mode, agentKindOverride, modelOverride])
+  }, [effectiveBranch, prompt, canSubmit, onSubmit, parsedTeleport, selectedRepo, mode, agentIdOverride, modelOverride])
 
   const cycleRepo = useCallback((direction: 1 | -1) => {
     if (repoRoots.length <= 1) return
@@ -463,13 +468,12 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
                 </label>
                 <AgentModelRow
                   mode={mode}
-                  agentKind={agentKindOverride}
-                  setAgentKind={setAgentKindOverride}
+                  agentId={agentIdOverride}
+                  setAgentId={setAgentIdOverride}
                   model={modelOverride}
                   setModel={setModelOverride}
-                  defaultClaudeModel={settings.claudeModel}
-                  defaultCodexModel={settings.codexModel}
-                  defaultOpencodeModel={settings.opencodeModel}
+                  agentConfigs={settings.agentConfigs}
+                  userAgents={settings.userTerminalAgents}
                   disabled={prClickPending !== null}
                 />
                 <PRPickerList
@@ -486,13 +490,12 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
             {mode !== 'pr' && (
               <AgentModelRow
                 mode={mode}
-                agentKind={agentKindOverride}
-                setAgentKind={setAgentKindOverride}
+                agentId={agentIdOverride}
+                setAgentId={setAgentIdOverride}
                 model={modelOverride}
                 setModel={setModelOverride}
-                defaultClaudeModel={settings.claudeModel}
-                defaultCodexModel={settings.codexModel}
-                defaultOpencodeModel={settings.opencodeModel}
+                agentConfigs={settings.agentConfigs}
+                userAgents={settings.userTerminalAgents}
                 disabled={submitting}
               />
             )}
@@ -667,38 +670,34 @@ function PRPickerList({ prs, loading, error, disabled, pendingNumber, onPick }: 
 
 interface AgentModelRowProps {
   mode: 'fresh' | 'teleport' | 'pr'
-  agentKind: 'claude' | 'codex' | 'opencode'
-  setAgentKind: (k: 'claude' | 'codex' | 'opencode') => void
+  agentId: TerminalAgentId
+  setAgentId: (id: TerminalAgentId) => void
   model: string
   setModel: (m: string) => void
-  defaultClaudeModel: string | null
-  defaultCodexModel: string | null
-  defaultOpencodeModel: string | null
+  agentConfigs: Record<TerminalAgentId, AgentRuntimeConfig>
+  userAgents: UserTerminalAgentDefinition[]
   disabled: boolean
 }
 
 function AgentModelRow({
   mode,
-  agentKind,
-  setAgentKind,
+  agentId,
+  setAgentId,
   model,
   setModel,
-  defaultClaudeModel,
-  defaultCodexModel,
-  defaultOpencodeModel,
+  agentConfigs,
+  userAgents,
   disabled
 }: AgentModelRowProps): JSX.Element {
-  // Teleport mode pins to Claude — codex/opencode have no equivalent
-  // "resume by session id" flow today. Lock the selector so users don't
-  // think they can flip it.
+  // Teleport mode pins to Claude — only Claude has a "resume by session id"
+  // flow today. Lock the selector so users don't think they can flip it.
   const locked = mode === 'teleport'
-  const effectiveAgent = locked ? 'claude' : agentKind
-  const modelOptions = effectiveAgent === 'codex' ? CODEX_MODELS : effectiveAgent === 'claude' ? CLAUDE_MODELS : null
-  const fallbackModel =
-    effectiveAgent === 'codex' ? defaultCodexModel : effectiveAgent === 'opencode' ? defaultOpencodeModel : defaultClaudeModel
-  const fallbackDisplay = modelOptions
-    ? (modelOptions.find((m) => m.id === fallbackModel)?.displayName || fallbackModel)
-    : fallbackModel
+  const effectiveAgentId = locked ? 'claude' : agentId
+  const agents = getMergedTerminalAgents(userAgents)
+  const def = getTerminalAgentDefinition(effectiveAgentId, userAgents)
+  const modelOptions = def?.models ?? []
+  const fallbackModel = agentConfigs[effectiveAgentId]?.model
+  const fallbackDisplay = modelOptions.find((m) => m.id === fallbackModel)?.displayName || fallbackModel
   const defaultLabel = fallbackDisplay
     ? `(Default — settings: ${fallbackDisplay})`
     : '(Default — let CLI choose)'
@@ -708,17 +707,17 @@ function AgentModelRow({
   // behind a collapsed header. Plain `useState` here makes the open flag
   // sticky once the user expands; collapsing again is always a click.
   const [openOverride, setOpenOverride] = useState(false)
-  const hasNonDefault = (!locked && agentKind !== 'claude') || model.trim().length > 0
+  const hasNonDefault = (!locked && agentId !== 'claude') || model.trim().length > 0
   const open = openOverride || hasNonDefault
 
-  const handleAgentChange = (next: 'claude' | 'codex' | 'opencode'): void => {
+  const handleAgentChange = (next: TerminalAgentId): void => {
     // Reset the model when switching agents — otherwise a stale model id
     // would be sent as the wrong agent's --model flag.
-    if (next !== agentKind) setModel('')
-    setAgentKind(next)
+    if (next !== agentId) setModel('')
+    setAgentId(next)
   }
 
-  const modelDisplay = modelOptions?.find((m) => m.id === model)?.displayName || model
+  const modelDisplay = modelOptions.find((m) => m.id === model)?.displayName || model
 
   return (
     <div className="mt-5">
@@ -731,7 +730,7 @@ function AgentModelRow({
         Advanced
         {!open && hasNonDefault && (
           <span className="ml-1 normal-case font-normal tracking-normal text-faint">
-            ({effectiveAgent === 'codex' ? 'Codex' : effectiveAgent === 'opencode' ? 'Opencode' : 'Claude'}
+            ({terminalAgentDisplayName(effectiveAgentId, userAgents)}
             {model.trim() ? ` · ${modelDisplay}` : ''})
           </span>
         )}
@@ -743,22 +742,22 @@ function AgentModelRow({
               Agent
             </span>
             <select
-              value={effectiveAgent}
-              onChange={(e) => handleAgentChange(e.target.value as 'claude' | 'codex' | 'opencode')}
+              value={effectiveAgentId}
+              onChange={(e) => handleAgentChange(e.target.value)}
               disabled={disabled || locked}
               title={locked ? 'Teleport sessions require Claude' : undefined}
               className="bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
             >
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
-              <option value="opencode">Opencode</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>{a.displayName}</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-dim shrink-0">
               Model
             </span>
-            {effectiveAgent === 'opencode' ? (
+            {modelOptions.length === 0 ? (
               <input
                 type="text"
                 value={model}
@@ -776,12 +775,12 @@ function AgentModelRow({
               >
                 <option value="">{defaultLabel}</option>
                 <optgroup label="Current">
-                  {modelOptions!.filter((m) => m.tier === 'current').map((m) => (
+                  {modelOptions.filter((m) => m.tier === 'current').map((m) => (
                     <option key={m.id} value={m.id}>{m.displayName}</option>
                   ))}
                 </optgroup>
                 <optgroup label="Legacy">
-                  {modelOptions!.filter((m) => m.tier === 'legacy').map((m) => (
+                  {modelOptions.filter((m) => m.tier === 'legacy').map((m) => (
                     <option key={m.id} value={m.id}>{m.displayName}</option>
                   ))}
                 </optgroup>

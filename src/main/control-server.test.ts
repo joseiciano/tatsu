@@ -26,7 +26,8 @@ describe('parseAgentKind', () => {
 
   it('rejects unknown agents', () => {
     expect(parseAgentKind('foo')).toEqual({
-      error: 'agentKind must be "claude", "codex", or "opencode"'
+      kind: undefined,
+      error: 'agentId must be one of: claude, codex, opencode'
     })
   })
 })

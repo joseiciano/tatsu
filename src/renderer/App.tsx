@@ -27,7 +27,10 @@ import { CollapsedRightPanel } from './components/CollapsedRightPanel'
 import { Settings } from './components/Settings'
 import { WeeklyWrappedScreen } from './components/WeeklyWrappedScreen'
 import { Guide } from './components/Guide'
-import { AGENT_REGISTRY } from '../shared/agent-registry'
+import {
+  getMergedTerminalAgents,
+  terminalAgentDisplayName
+} from '../shared/terminal-agent-registry'
 import { AgentIcon } from './components/AgentIcon'
 import { InterfaceToggle } from './components/InterfaceToggle'
 import { Activity } from './components/Activity'
@@ -255,7 +258,7 @@ function DesktopApp(): JSX.Element {
   // nobody is currently looking at.
   const tailLines = useTailLineBuffer(showCommandCenter)
   const settings = useSettings()
-  const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultAgent } = settings
+  const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultTerminalAgentId } = settings
   // Apply the persisted UI scale to the root html element so every
   // rem-based size (text-xs/sm/base/lg, w-N/h-N icons, padding-*) shifts
   // in lockstep. See SCALES in shared/state/settings.ts for the table.
@@ -998,25 +1001,25 @@ const setQuestStep = useCallback((next: QuestStep) => {
                   </div>
                 </div>
                 <div className="flex gap-2 ml-8">
-                  {AGENT_REGISTRY.map((agent) => (
+                  {getMergedTerminalAgents(settings.userTerminalAgents).map((agent) => (
                     <button
-                      key={agent.kind}
+                      key={agent.id}
                       onClick={() => {
-                        backend.setDefaultAgent(agent.kind)
+                        backend.setDefaultTerminalAgentId(agent.id)
                         setAgentChosen(true)
                       }}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                        defaultAgent === agent.kind && agentChosen
+                        defaultTerminalAgentId === agent.id && agentChosen
                           ? 'bg-surface text-fg-bright border border-fg'
                           : 'bg-panel border border-border text-dim hover:text-fg hover:border-border-strong'
                       }`}
                     >
-                      <AgentIcon kind={agent.kind} className="icon-sm" />
+                      <AgentIcon kind={agent.id} className="icon-sm" />
                       {agent.displayName}
                     </button>
                   ))}
                 </div>
-                {agentChosen && defaultAgent === 'claude' && (
+                {agentChosen && defaultTerminalAgentId === 'claude' && (
                   <div className="ml-8 mt-4 pl-4 border-l-2 border-border">
                     <div className="text-xs text-dim mb-2">
                       Which interface should new Claude tabs use?
@@ -1407,8 +1410,8 @@ const setQuestStep = useCallback((next: QuestStep) => {
                   onSelectTab={handleSelectTab}
                   onFocusPane={(wtPath, paneId) => setActivePaneId((prev) => prev[wtPath] === paneId ? prev : { ...prev, [wtPath]: paneId })}
                   onAddTab={handleAddTerminalTab}
-                  defaultAgent={defaultAgent ?? 'claude'}
-                  onAddAgentTab={(wt, kind, paneId) => handleAddAgentTab(wt, kind ?? defaultAgent ?? 'claude', paneId)}
+                  defaultTerminalAgentId={defaultTerminalAgentId ?? 'claude'}
+                  onAddAgentTab={(wt, kind, paneId) => handleAddAgentTab(wt, kind ?? defaultTerminalAgentId ?? 'claude', paneId)}
                   onAddBrowserTab={handleAddBrowserTab}
                   onAddJsonClaudeTab={handleAddJsonClaudeTab}
                   onConvertTabType={handleConvertTabType}

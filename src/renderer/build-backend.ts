@@ -101,7 +101,8 @@ export function buildBackend(
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: string
+      agentId?: string
       model?: string
     }) => req('worktrees:runPending', params),
     runPendingPRWorktree: (params: {
@@ -109,7 +110,8 @@ export function buildBackend(
       repoRoot: string
       prNumber: number
       initialPrompt?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: string
+      agentId?: string
       model?: string
     }) => req('worktrees:runPendingPR', params),
     retryPendingWorktree: (id: string) => req('worktrees:retryPending', id),
@@ -228,6 +230,12 @@ export function buildBackend(
     setOpencodeCommand: (command: string) => req('config:setOpencodeCommand', command),
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
+    setDefaultTerminalAgentId: (agentId: string) => req('config:setDefaultTerminalAgentId', agentId),
+    setUserTerminalAgents: (agents: import('../shared/terminal-agents').UserTerminalAgentDefinition[]) =>
+      req('config:setUserTerminalAgents', agents),
+    setAgentRuntimeConfig: (agentId: string, cfg: import('../shared/terminal-agents').AgentRuntimeConfig) =>
+      req('config:setAgentRuntimeConfig', agentId, cfg),
+    removeAgentRuntimeConfig: (agentId: string) => req('config:removeAgentRuntimeConfig', agentId),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
     setAutoApprovePermissions: (enabled: boolean) =>
       req('config:setAutoApprovePermissions', enabled),
@@ -328,7 +336,7 @@ export function buildBackend(
     getLatestAgentSessionId: (cwd: string, agentKind?: string) =>
       req('agent:latestSessionId', cwd, agentKind),
     buildAgentSpawnArgs: (
-      agentKind: string,
+      agentId: string,
       opts: {
         terminalId: string
         cwd: string
@@ -338,7 +346,7 @@ export function buildBackend(
         sessionName?: string
         modelOverride?: string
       }
-    ) => req('agent:buildSpawnArgs', agentKind, opts),
+    ) => req('agent:buildSpawnArgs', agentId, opts),
 
     setOnboardingQuest: (quest: string) => req('config:setOnboardingQuest', quest),
     setWorktreeBase: (mode: 'remote' | 'local') => req('config:setWorktreeBase', mode),
@@ -480,10 +488,10 @@ export function buildBackend(
       cwd: string,
       cmd: string,
       args: string[],
-      agentKind?: string,
+      agentId?: string,
       cols?: number,
       rows?: number
-    ) => sig('pty:create', id, cwd, cmd, args, agentKind, cols, rows),
+    ) => sig('pty:create', id, cwd, cmd, args, agentId, cols, rows),
     writeTerminal: (id: string, data: string) => sig('pty:write', id, data),
     resizeTerminal: (id: string, cols: number, rows: number) =>
       sig('pty:resize', id, cols, rows),

@@ -1,3 +1,4 @@
+export type { TerminalAgentId } from '../terminal-agents'
 import type { TerminalAgentId } from '../terminal-agents'
 
 export type PtyStatus = 'idle' | 'processing' | 'waiting' | 'needs-approval'

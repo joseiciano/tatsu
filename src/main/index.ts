@@ -76,8 +76,18 @@ import {
   DEFAULT_PR_REVIEW_PROMPT
 } from '../shared/state/settings'
 import { watchStatusDir } from './hooks'
-import { getAgent, type AgentKind } from './agents'
+import { getAgent, getAgentById, isManagedAgent, listManagedAgents, type AgentKind } from './agents'
 import { buildClaudeLaunchSettings } from './claude-launch'
+import {
+  resolveTerminalAgentId,
+  getDefaultTerminalAgentId,
+  getAgentRuntimeConfig,
+  resolveAgentCommand,
+  resolveAgentModel,
+  resolveAgentEnvVars
+} from './terminal-agent-resolver'
+import { buildGenericSpawnArgs } from './generic-terminal-agent-spawn'
+import { getManagedAgent } from './managed-agents'
 import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
 import { CostTracker } from './cost-tracker'
@@ -748,10 +758,14 @@ const panesFSM = new PanesFSM(store, {
     return wt?.repoRoot
   },
   getLatestClaudeSessionId: async (wtPath) => {
-    const kind = store.getSnapshot().state.settings.defaultAgent ?? 'claude'
-    return getAgent(kind).latestSessionId(wtPath)
+    const settings = store.getSnapshot().state.settings
+    const agentId = getDefaultTerminalAgentId(settings)
+    const managed = getManagedAgent(agentId)
+    if (managed) return managed.latestSessionId(wtPath)
+    return getAgent(agentId as AgentKind).latestSessionId(wtPath)
   },
   getDefaultAgentKind: () => toAgentKind(store.getSnapshot().state.settings.defaultAgent),
+  getDefaultAgentId: () => getDefaultTerminalAgentId(store.getSnapshot().state.settings),
   getDefaultClaudeTabType: () => {
     const s = store.getSnapshot().state.settings
     return s.defaultClaudeTabType === 'json' ? 'json' : 'xterm'
@@ -820,9 +834,9 @@ const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
-  onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentKind, model }) => {
+  onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentId, agentKind, model }) => {
     void prPoller.refreshAll()
-    panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentKind, model })
+    panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentId: agentId ?? agentKind, model })
     if (teleportSessionId) {
       setTimeout(() => void worktreesFSM.refreshList(), 10_000)
     }
@@ -849,14 +863,16 @@ function installHooksGlobally(): void {
   // installHooks() is idempotent — it strips any existing Harness entries
   // before writing a fresh one — so calling it unconditionally also
   // collapses duplicate entries left by earlier buggy install passes.
-  for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
-    agent.installHooks()
+  for (const agentId of listManagedAgents()) {
+    const agent = getManagedAgent(agentId)
+    if (agent) agent.installHooks()
   }
 }
 
 function uninstallHooksGlobally(): void {
-  for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
-    agent.uninstallHooks()
+  for (const agentId of listManagedAgents()) {
+    const agent = getManagedAgent(agentId)
+    if (agent) agent.uninstallHooks()
   }
 }
 
@@ -1044,6 +1060,7 @@ function registerIpcHandlers(): void {
       initialPrompt?: string
       teleportSessionId?: string
       agentKind?: 'claude' | 'codex' | 'opencode'
+      agentId?: string
       model?: string
     }) => {
       return worktreesFSM.runPending(params)
@@ -1059,6 +1076,7 @@ function registerIpcHandlers(): void {
         prNumber: number
         initialPrompt?: string
         agentKind?: 'claude' | 'codex' | 'opencode'
+        agentId?: string
         model?: string
       }
     ) => {
@@ -1572,6 +1590,44 @@ function registerIpcHandlers(): void {
     }
     saveConfig(config)
     store.dispatch({ type: 'settings/opencodeEnvVarsChanged', payload: config.opencodeEnvVars || {} })
+    return true
+  })
+
+  // Generic terminal agent configuration handlers
+  transport.onRequest('config:setDefaultTerminalAgentId', (_ctx, agentId: string) => {
+    const settings = store.getSnapshot().state.settings
+    const resolved = resolveTerminalAgentId({ settings, requestedAgentId: agentId })
+    config.defaultTerminalAgentId = resolved
+    // Also update legacy field for backwards compatibility
+    if (resolved === 'claude' || resolved === 'codex' || resolved === 'opencode') {
+      config.defaultAgent = resolved
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/defaultTerminalAgentIdChanged', payload: resolved })
+    return true
+  })
+
+  transport.onRequest('config:setUserTerminalAgents', (_ctx, agents: unknown[]) => {
+    config.userTerminalAgents = agents as import('../shared/terminal-agents').UserTerminalAgentDefinition[]
+    saveConfig(config)
+    store.dispatch({ type: 'settings/userTerminalAgentsChanged', payload: config.userTerminalAgents })
+    return true
+  })
+
+  transport.onRequest('config:setAgentRuntimeConfig', (_ctx, agentId: string, runtimeConfig: import('../shared/terminal-agents').AgentRuntimeConfig) => {
+    if (!config.agentConfigs) config.agentConfigs = {}
+    config.agentConfigs[agentId] = runtimeConfig
+    saveConfig(config)
+    store.dispatch({ type: 'settings/agentRuntimeConfigChanged', payload: { agentId, config: runtimeConfig } })
+    return true
+  })
+
+  transport.onRequest('config:removeAgentRuntimeConfig', (_ctx, agentId: string) => {
+    if (config.agentConfigs && agentId in config.agentConfigs) {
+      delete config.agentConfigs[agentId]
+      saveConfig(config)
+      store.dispatch({ type: 'settings/agentRuntimeConfigRemoved', payload: agentId })
+    }
     return true
   })
 
@@ -2259,11 +2315,15 @@ function registerIpcHandlers(): void {
 
   transport.onRequest('agent:sessionFileExists', (_ctx, cwd: string, sessionId: string, agentKind?: string): boolean => {
     const kind = toAgentKind(agentKind)
+    const managed = getManagedAgent(kind)
+    if (managed) return managed.sessionFileExists(cwd, sessionId)
     return getAgent(kind).sessionFileExists(cwd, sessionId)
   })
 
   transport.onRequest('agent:latestSessionId', (_ctx, cwd: string, agentKind?: string): string | null => {
     const kind = toAgentKind(agentKind)
+    const managed = getManagedAgent(kind)
+    if (managed) return managed.latestSessionId(cwd)
     return getAgent(kind).latestSessionId(cwd)
   })
 
@@ -2275,39 +2335,39 @@ function registerIpcHandlers(): void {
       sessionName?: string;
       modelOverride?: string
     }): string => {
-      const kind = toAgentKind(agentKind)
-      const agent = getAgent(kind)
-      const command = kind === 'claude'
-        ? (config.claudeCommand || agent.defaultCommand)
-        : kind === 'codex'
-          ? (config.codexCommand || agent.defaultCommand)
-          : (config.opencodeCommand || agent.defaultCommand)
-      const mcpConfigPath = writeMcpConfigForTerminal(
-        opts.terminalId,
-        resolveCallerScope(opts.terminalId)
-      )
+      const settings = store.getSnapshot().state.settings
+      const agentId = resolveTerminalAgentId({ settings, requestedAgentId: agentKind })
+      const managed = getManagedAgent(agentId)
 
-      const override = opts.modelOverride && opts.modelOverride.trim() ? opts.modelOverride.trim() : undefined
-      let systemPrompt: string | undefined
-      let tuiFullscreen: boolean | undefined
-      let model: string | null
-      if (kind === 'claude') {
-        const launch = buildClaudeLaunchSettings({
-          cwd: opts.cwd,
-          worktrees: store.getSnapshot().state.worktrees.list,
-          config,
-          modelOverride: override
-        })
-        systemPrompt = launch.systemPrompt
-        tuiFullscreen = launch.tuiFullscreen
-        model = launch.model ?? null
-      } else if (kind === 'codex') {
-        model = override || config.codexModel || null
-      } else {
-        model = override || config.opencodeModel || null
+      if (managed) {
+        // Built-in managed agent (claude, codex, opencode)
+        const command = resolveAgentCommand(settings, agentId)
+        const mcpConfigPath = writeMcpConfigForTerminal(
+          opts.terminalId,
+          resolveCallerScope(opts.terminalId)
+        )
+        const override = opts.modelOverride && opts.modelOverride.trim() ? opts.modelOverride.trim() : undefined
+        const model = resolveAgentModel(settings, agentId, override)
+        let systemPrompt: string | undefined
+        let tuiFullscreen: boolean | undefined
+        if (agentId === 'claude') {
+          const launch = buildClaudeLaunchSettings({
+            cwd: opts.cwd,
+            worktrees: store.getSnapshot().state.worktrees.list,
+            config,
+            modelOverride: override
+          })
+          systemPrompt = launch.systemPrompt
+          tuiFullscreen = launch.tuiFullscreen
+        }
+        return managed.buildSpawnArgs({ ...opts, command, mcpConfigPath, model, systemPrompt, tuiFullscreen })
       }
 
-      return agent.buildSpawnArgs({ ...opts, command, mcpConfigPath, model, systemPrompt, tuiFullscreen })
+      // Generic / custom agent
+      const command = resolveAgentCommand(settings, agentId)
+      const model = resolveAgentModel(settings, agentId, opts.modelOverride)
+      const envVars = resolveAgentEnvVars(settings, agentId)
+      return buildGenericSpawnArgs({ command, model, initialPrompt: opts.initialPrompt })
     }
   )
 
@@ -2528,10 +2588,9 @@ function registerIpcHandlers(): void {
     'pty:create',
     (ctx, id: string, cwd: string, cmd: string, args: string[], agentKind?: string, cols?: number, rows?: number) => {
       const isAgent = !!agentKind
-      const extraEnv = agentKind === 'claude' ? config.claudeEnvVars
-        : agentKind === 'codex' ? config.codexEnvVars
-        : agentKind === 'opencode' ? config.opencodeEnvVars
-        : undefined
+      const settings = store.getSnapshot().state.settings
+      const agentId = agentKind ? resolveTerminalAgentId({ settings, requestedAgentId: agentKind }) : undefined
+      const extraEnv = agentId ? resolveAgentEnvVars(settings, agentId) : undefined
       const existed = ptyManager.hasTerminal(id)
       ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
       if (!existed) {
@@ -3243,9 +3302,7 @@ async function runBoot(): Promise<void> {
   // to a single user-scope install. Runs once per app install; migrated
   // state sticks via config.hooksMigratedToGlobal.
   void (async () => {
-    const claudeAgent = getAgent('claude')
-    const codexAgent = getAgent('codex')
-    const opencodeAgent = getAgent('opencode')
+    const managedAgents = listManagedAgents().map((id) => ({ id, agent: getManagedAgent(id)! })).filter((a) => a.agent)
 
     // 1. Decide what the user's previous consent was.
     //    - Explicit persisted value wins (including 'declined').
@@ -3254,7 +3311,8 @@ async function runBoot(): Promise<void> {
     //      legacy per-worktree markers as evidence of a prior accept.
     let consent: 'pending' | 'accepted' | 'declined' | undefined = config.hooksConsent
     if (!consent) {
-      if (claudeAgent.hooksInstalled() || codexAgent.hooksInstalled() || opencodeAgent.hooksInstalled()) {
+      const anyInstalled = managedAgents.some((a) => a.agent.hooksInstalled())
+      if (anyInstalled) {
         consent = 'accepted'
       } else {
         let foundLegacy = false
@@ -3265,9 +3323,9 @@ async function runBoot(): Promise<void> {
             // per-worktree file + its contents cheaply here by attempting
             // a strip and rolling back mentally — actually easier to just
             // run the strip and treat the "changed" bit as evidence.
-            if (claudeAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
-            if (codexAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
-            if (opencodeAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
+            for (const a of managedAgents) {
+              if (a.agent.stripHooksFromWorktree(wt.path)) foundLegacy = true
+            }
           }
         }
         consent = foundLegacy ? 'accepted' : 'pending'
@@ -3294,9 +3352,9 @@ async function runBoot(): Promise<void> {
       for (const root of config.repoRoots || []) {
         const trees = await listWorktrees(root).catch(() => [])
         for (const wt of trees) {
-          claudeAgent.stripHooksFromWorktree(wt.path)
-          codexAgent.stripHooksFromWorktree(wt.path)
-          opencodeAgent.stripHooksFromWorktree(wt.path)
+          for (const a of managedAgents) {
+            a.agent.stripHooksFromWorktree(wt.path)
+          }
         }
       }
       config.hooksMigratedToGlobal = true
@@ -3329,6 +3387,7 @@ async function runBoot(): Promise<void> {
     getRepoRoots: () => config.repoRoots,
     getWorktreeBase: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
     getPrReviewPrompt: () => config.prReviewPrompt || DEFAULT_PR_REVIEW_PROMPT,
+    getUserTerminalAgents: () => store.getSnapshot().state.settings.userTerminalAgents,
     resolveCallerScope,
     getBrowserPerms: () => ({
       enabled: config.browserToolsEnabled !== false,

@@ -1,7 +1,14 @@
 import type { AgentKind } from '../../shared/state/terminals'
+import type { TerminalAgentId } from '../../shared/terminal-agents'
 import * as claude from './claude'
 import * as codex from './codex'
 import * as opencode from './opencode'
+import {
+  getManagedAgent,
+  listManagedAgentIds,
+  isManagedAgentId
+} from '../managed-agents'
+import type { ManagedAgentIntegration } from '../managed-agents/types'
 
 export type { AgentKind }
 
@@ -45,6 +52,23 @@ export interface AgentModule {
 
 const agents: Record<AgentKind, AgentModule> = { claude, codex, opencode }
 
+/** @deprecated Use getAgentById for generic agent support. */
 export function getAgent(kind: AgentKind): AgentModule {
   return agents[kind]
+}
+
+/** Resolve any agent id (built-in or custom) to its integration module.
+ *  Returns undefined for unknown custom agents. */
+export function getAgentById(agentId: TerminalAgentId): ManagedAgentIntegration | undefined {
+  return getManagedAgent(agentId)
+}
+
+/** List all managed (built-in) agent ids. */
+export function listManagedAgents(): string[] {
+  return listManagedAgentIds()
+}
+
+/** Check if an agent id is a managed built-in. */
+export function isManagedAgent(agentId: string): boolean {
+  return isManagedAgentId(agentId)
 }

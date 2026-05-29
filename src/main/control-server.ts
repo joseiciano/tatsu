@@ -3,15 +3,29 @@ import { randomBytes, randomUUID } from 'crypto'
 import { addWorktree, listWorktrees, defaultWorktreeDir, WorktreeInfo } from './worktree'
 import { log } from './debug'
 import type { AgentKind } from '../shared/state/terminals'
+import type { TerminalAgentId, UserTerminalAgentDefinition } from '../shared/terminal-agents'
+import { getMergedTerminalAgents } from '../shared/terminal-agent-registry'
 
-export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
-  if (raw === undefined || raw === null || raw === '') return { kind: undefined }
-  if (typeof raw !== 'string') return { error: 'agentKind must be a string' }
+/** Parse and validate an agent id against the merged registry (built-in + user-defined).
+ *  Requires a settings snapshot to resolve user-defined agents. */
+export function parseTerminalAgentId(
+  raw: unknown,
+  userAgents: UserTerminalAgentDefinition[] = []
+): { agentId?: TerminalAgentId; error?: string } {
+  if (raw === undefined || raw === null || raw === '') return { agentId: undefined }
+  if (typeof raw !== 'string') return { error: 'agentId must be a string' }
   const lowered = raw.trim().toLowerCase()
-  if (lowered === 'claude' || lowered === 'codex' || lowered === 'opencode') {
-    return { kind: lowered }
+  const validIds = new Set(getMergedTerminalAgents(userAgents).map((a) => a.id))
+  if (validIds.has(lowered)) {
+    return { agentId: lowered }
   }
-  return { error: 'agentKind must be "claude", "codex", or "opencode"' }
+  return { error: `agentId must be one of: ${Array.from(validIds).join(', ')}` }
+}
+
+/** @deprecated Use parseTerminalAgentId for generic agent support. */
+export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
+  const result = parseTerminalAgentId(raw)
+  return { kind: result.agentId, error: result.error }
 }
 
 export interface BrowserTabSummary {
@@ -103,6 +117,8 @@ export interface ControlServerDeps {
    * `prNumber` but no explicit `initialPrompt`. Resolved per-request so
    * Settings edits take effect mid-session. */
   getPrReviewPrompt: () => string
+  /** User-defined terminal agents for validating custom agent ids. */
+  getUserTerminalAgents: () => UserTerminalAgentDefinition[]
   broadcast: (channel: string, ...args: unknown[]) => void
   runWorktreeSetup: (ctx: { repoRoot: string; worktreePath: string; branch: string }) => Promise<void>
   /** Drive the full PR-creation FSM (fetch PR metadata, fetch refs/pull/<n>/head,
@@ -114,7 +130,9 @@ export interface ControlServerDeps {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
+    /** @deprecated Use agentId instead. */
     agentKind?: AgentKind
+    agentId?: TerminalAgentId
     model?: string
   }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
   /** Returns the caller's current scope, or null if the terminal is not
@@ -262,11 +280,11 @@ async function handleRequest(
     const branchName = String(body.branchName || '').trim()
     const initialPrompt = typeof body.initialPrompt === 'string' ? body.initialPrompt : undefined
 
-    const agentResult = parseAgentKind(body.agentKind)
+    const agentResult = parseTerminalAgentId(body.agentKind, deps.getUserTerminalAgents())
     if (agentResult.error) {
       return sendJson(res, 400, { error: agentResult.error })
     }
-    const agentKind = agentResult.kind
+    const agentId = agentResult.agentId
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined
 
     if (prNumber !== undefined) {
@@ -282,7 +300,7 @@ async function handleRequest(
         repoRoot,
         prNumber,
         initialPrompt: promptForPR || undefined,
-        agentKind,
+        agentId,
         model
       })
       if (!result.ok) {
@@ -310,7 +328,7 @@ async function handleRequest(
       repoRoot,
       worktree: created,
       initialPrompt,
-      agentKind,
+      agentId,
       model
     })
     return sendJson(res, 200, created)

@@ -1,7 +1,12 @@
 import { useCallback } from 'react'
-import type { AgentKind, TerminalTab, PaneNode } from '../types'
+import type { TerminalAgentId, TerminalTab, PaneNode } from '../types'
 import { getLeaves, findLeaf, findLeafByTabId } from '../../shared/state/terminals'
-import { agentDisplayName, getAgentInfo } from '../../shared/agent-registry'
+import {
+  getMergedTerminalAgents,
+  terminalAgentDisplayName,
+  getTerminalAgentDefinition
+} from '../../shared/terminal-agent-registry'
+import { useSettings } from '../store'
 import { focusTerminalById, markTerminalClosing } from '../components/XTerminal'
 import { useBackend } from '../backend'
 
@@ -50,18 +55,20 @@ export function useTabHandlers({
     [appendTabToPane]
   )
 
+  const settings = useSettings()
+
   const handleAddAgentTab = useCallback(
-    (worktreePath: string, agentKind: AgentKind = 'claude', paneId?: string) => {
-      const label = agentDisplayName(agentKind)
-      const info = getAgentInfo(agentKind)
+    (worktreePath: string, agentId: TerminalAgentId = settings.defaultTerminalAgentId ?? 'claude', paneId?: string) => {
+      const label = terminalAgentDisplayName(agentId, settings.userTerminalAgents)
+      const def = getTerminalAgentDefinition(agentId, settings.userTerminalAgents)
       const id = `${makeTerminalId('agent', worktreePath)}-${Date.now()}`
       appendTabToPane(
         worktreePath,
-        { id, type: 'agent', agentKind, label, sessionId: info.assignsSessionId ? crypto.randomUUID() : undefined },
+        { id, type: 'agent', agentId, label, sessionId: def?.capabilities.assignsSessionId ? crypto.randomUUID() : undefined },
         paneId
       )
     },
-    [appendTabToPane]
+    [appendTabToPane, settings.defaultTerminalAgentId, settings.userTerminalAgents]
   )
 
   const handleAddBrowserTab = useCallback(

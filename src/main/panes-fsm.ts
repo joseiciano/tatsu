@@ -18,12 +18,17 @@ import {
 import type { PersistedPaneNode } from './persistence'
 import { agentDisplayName, getAgentInfo } from '../shared/agent-registry'
 import { log } from './debug'
+import { getDefaultTerminalAgentId } from './terminal-agent-resolver'
+import type { TerminalAgentId } from '../shared/terminal-agents'
+import { getTerminalAgentDefinition } from '../shared/terminal-agent-registry'
 
 interface PanesFSMOptions {
   persist: (panes: Record<string, PaneNode>) => void
   getRepoRootForWorktree: (worktreePath: string) => string | undefined
   getLatestClaudeSessionId: (worktreePath: string) => Promise<string | null>
+  /** @deprecated Use getDefaultAgentId instead. */
   getDefaultAgentKind?: () => AgentKind
+  getDefaultAgentId?: () => TerminalAgentId
   /** Read the default Claude interface setting. When this returns 'json',
    *  a default Claude agent tab spawns as a json-claude tab instead of
    *  an xterm-hosted one. */
@@ -209,7 +214,9 @@ export class PanesFSM {
     opts?: {
       initialPrompt?: string
       teleportSessionId?: string
+      /** @deprecated Use agentId instead. */
       agentKind?: AgentKind
+      agentId?: TerminalAgentId
       model?: string
     }
   ): PaneNode {
@@ -223,8 +230,9 @@ export class PanesFSM {
       return sleeping
     }
 
-    const agentKind = opts?.agentKind ?? this.opts.getDefaultAgentKind?.() ?? 'claude'
-    const agentInfo = getAgentInfo(agentKind)
+    const agentId = opts?.agentId ?? opts?.agentKind ?? this.opts.getDefaultAgentId?.() ?? this.opts.getDefaultAgentKind?.() ?? 'claude'
+    const agentInfo = getAgentInfo(agentId)
+    const agentDef = getTerminalAgentDefinition(agentId)
     const model = opts?.model && opts.model.trim() ? opts.model.trim() : undefined
     const shellTabId = `shell-${wtPath}-${Date.now()}`
     // Branch to a json-claude default tab when the user has opted in
@@ -234,7 +242,7 @@ export class PanesFSM {
     // json-claude side we pre-spawn the subprocess and send it as the
     // first message via startJsonClaudeWithPrompt below.
     const wantsJson =
-      agentKind === 'claude' &&
+      agentId === 'claude' &&
       this.opts.getDefaultClaudeTabType?.() === 'json' &&
       !opts?.teleportSessionId
     let agentTab: TerminalTab
@@ -255,9 +263,10 @@ export class PanesFSM {
       agentTab = {
         id: agentTabId,
         type: 'agent',
-        agentKind,
+        agentId,
+        agentKind: agentId, // legacy shim
         label: agentInfo.displayName,
-        sessionId: agentInfo.assignsSessionId ? crypto.randomUUID() : undefined,
+        sessionId: (agentDef?.capabilities.assignsSessionId ?? agentInfo.assignsSessionId) ? crypto.randomUUID() : undefined,
         initialPrompt: opts?.teleportSessionId ? undefined : opts?.initialPrompt,
         teleportSessionId: opts?.teleportSessionId,
         model

@@ -61,6 +61,7 @@ export interface FileDiffSides {
 
 import type {
   AgentKind,
+  TerminalAgentId,
   PtyStatus,
   PendingTool,
   SplitDirection,
@@ -70,13 +71,15 @@ import type {
   PaneLeaf,
   PaneSplit
 } from '../shared/state/terminals'
-export type { AgentKind, PtyStatus, PendingTool, SplitDirection, TerminalTab, WorkspacePane, PaneNode, PaneLeaf, PaneSplit }
+export type { AgentKind, TerminalAgentId, PtyStatus, PendingTool, SplitDirection, TerminalTab, WorkspacePane, PaneNode, PaneLeaf, PaneSplit }
 
 export interface PersistedTab {
   id: string
   type: 'agent' | 'shell'
   label: string
+  /** @deprecated Use agentId instead. */
   agentKind?: AgentKind
+  agentId?: TerminalAgentId
   sessionId?: string
 }
 
@@ -181,6 +184,7 @@ export interface ElectronAPI {
     initialPrompt?: string
     teleportSessionId?: string
     agentKind?: 'claude' | 'codex' | 'opencode'
+    agentId?: string
     model?: string
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }
@@ -193,6 +197,7 @@ export interface ElectronAPI {
     prNumber: number
     initialPrompt?: string
     agentKind?: 'claude' | 'codex' | 'opencode'
+    agentId?: string
     model?: string
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }
@@ -339,6 +344,10 @@ export interface ElectronAPI {
   setOpencodeCommand(command: string): Promise<boolean>
   setOpencodeModel(model: string | null): Promise<boolean>
   setOpencodeEnvVars(vars: Record<string, string>): Promise<boolean>
+  setDefaultTerminalAgentId(agentId: string): Promise<boolean>
+  setUserTerminalAgents(agents: import('../shared/terminal-agents').UserTerminalAgentDefinition[]): Promise<boolean>
+  setAgentRuntimeConfig(agentId: string, config: import('../shared/terminal-agents').AgentRuntimeConfig): Promise<boolean>
+  removeAgentRuntimeConfig(agentId: string): Promise<boolean>
   setNameClaudeSessions(enabled: boolean): Promise<boolean>
   setThemeMode(mode: 'light' | 'dark' | 'system'): Promise<boolean>
   setThemeLight(theme: string): Promise<boolean>

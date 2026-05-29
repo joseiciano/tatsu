@@ -291,7 +291,7 @@ function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, picker
         {tabs.map((tab) => {
           const convertible =
             !!onConvertTabType &&
-            ((tab.type === 'agent' && tab.agentKind === 'claude') || tab.type === 'json-claude')
+            ((tab.type === 'agent' && (tab.agentId ?? tab.agentKind) === 'claude') || tab.type === 'json-claude')
           return (
             <TabChip
               key={tab.id}
@@ -413,7 +413,7 @@ function TabIcon({ tab, shellActivity, status }: { tab: TerminalTab; shellActivi
   if (tab.type === 'agent') {
     return (
       <span className="inline-flex items-center gap-1">
-        <AgentIcon kind={tab.agentKind ?? 'claude'} className="icon-xs" />
+        <AgentIcon kind={tab.agentId ?? tab.agentKind ?? 'claude'} className="icon-xs" />
         <span className={'w-1.5 h-1.5 rounded-full ' + STATUS_DOT[status]} />
       </span>
     )

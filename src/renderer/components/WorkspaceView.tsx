@@ -11,7 +11,7 @@ import {
   type DragOverEvent,
   type CollisionDetection
 } from '@dnd-kit/core'
-import type { PaneNode, PaneLeaf, PaneSplit, PtyStatus, AgentKind } from '../types'
+import type { PaneNode, PaneLeaf, PaneSplit, PtyStatus, TerminalAgentId } from '../types'
 import { getLeaves, findLeafByTabId } from '../../shared/state/terminals'
 import { TerminalPanel } from './TerminalPanel'
 import { XTerminal } from './XTerminal'
@@ -35,8 +35,8 @@ interface WorkspaceViewProps {
   onSelectTab: (worktreePath: string, paneId: string, tabId: string) => void
   onFocusPane?: (worktreePath: string, paneId: string) => void
   onAddTab: (worktreePath: string, paneId?: string) => void
-  defaultAgent: AgentKind
-  onAddAgentTab: (worktreePath: string, agentKind?: AgentKind, paneId?: string) => void
+  defaultTerminalAgentId: TerminalAgentId
+  onAddAgentTab: (worktreePath: string, agentId?: TerminalAgentId, paneId?: string) => void
   onAddBrowserTab: (worktreePath: string, paneId?: string) => void
   onAddJsonClaudeTab?: (worktreePath: string, paneId?: string) => void
   /** Convert a Claude tab between Terminal and Chat in place. */
@@ -149,7 +149,7 @@ function SplitRenderer({
   onSelectTab,
   onFocusPane,
   onAddTab,
-  defaultAgent,
+  defaultTerminalAgentId,
   onAddAgentTab,
   onAddBrowserTab,
   onAddJsonClaudeTab,
@@ -178,8 +178,8 @@ function SplitRenderer({
   onSelectTab: (tabId: string, paneId: string) => void
   onFocusPane?: (paneId: string) => void
   onAddTab: (paneId: string) => void
-  defaultAgent: AgentKind
-  onAddAgentTab: (kind: AgentKind | undefined, paneId: string) => void
+  defaultTerminalAgentId: TerminalAgentId
+  onAddAgentTab: (agentId: TerminalAgentId | undefined, paneId: string) => void
   onAddBrowserTab: (paneId: string) => void
   onAddJsonClaudeTab?: (paneId: string) => void
   defaultClaudeTabType?: 'xterm' | 'json'
@@ -210,8 +210,8 @@ function SplitRenderer({
           registerSlot={registerSlot}
           onSelectTab={(tabId) => onSelectTab(tabId, node.id)}
           onAddTab={() => onAddTab(node.id)}
-          defaultAgent={defaultAgent}
-          onAddAgentTab={(kind) => onAddAgentTab(kind, node.id)}
+          defaultTerminalAgentId={defaultTerminalAgentId}
+          onAddAgentTab={(agentId) => onAddAgentTab(agentId, node.id)}
           onAddBrowserTab={() => onAddBrowserTab(node.id)}
           onAddJsonClaudeTab={
             onAddJsonClaudeTab ? () => onAddJsonClaudeTab(node.id) : undefined
@@ -263,7 +263,7 @@ function SplitRenderer({
           onSelectTab={onSelectTab}
           onFocusPane={onFocusPane}
           onAddTab={onAddTab}
-          defaultAgent={defaultAgent}
+          defaultTerminalAgentId={defaultTerminalAgentId}
           onAddAgentTab={onAddAgentTab}
           onAddBrowserTab={onAddBrowserTab}
           onAddJsonClaudeTab={onAddJsonClaudeTab}
@@ -304,7 +304,7 @@ function SplitRenderer({
           onSelectTab={onSelectTab}
           onFocusPane={onFocusPane}
           onAddTab={onAddTab}
-          defaultAgent={defaultAgent}
+          defaultTerminalAgentId={defaultTerminalAgentId}
           onAddAgentTab={onAddAgentTab}
           onAddBrowserTab={onAddBrowserTab}
           onAddJsonClaudeTab={onAddJsonClaudeTab}
@@ -330,7 +330,7 @@ export function WorkspaceView({
   onSelectTab,
   onFocusPane,
   onAddTab,
-  defaultAgent,
+  defaultTerminalAgentId,
   onAddAgentTab,
   onAddBrowserTab,
   onAddJsonClaudeTab,
@@ -521,8 +521,8 @@ export function WorkspaceView({
           onSelectTab={(tabId, paneId) => onSelectTab(worktreePath, paneId, tabId)}
           onFocusPane={onFocusPane ? (paneId) => onFocusPane(worktreePath, paneId) : undefined}
           onAddTab={(paneId) => onAddTab(worktreePath, paneId)}
-          defaultAgent={defaultAgent}
-          onAddAgentTab={(kind, paneId) => onAddAgentTab(worktreePath, kind, paneId)}
+          defaultTerminalAgentId={defaultTerminalAgentId}
+          onAddAgentTab={(agentId, paneId) => onAddAgentTab(worktreePath, agentId, paneId)}
           onAddBrowserTab={(paneId) => onAddBrowserTab(worktreePath, paneId)}
           onAddJsonClaudeTab={
             onAddJsonClaudeTab
@@ -603,7 +603,7 @@ export function WorkspaceView({
                     terminalId={tab.id}
                     cwd={worktreePath}
                     type={tab.type as 'agent' | 'shell'}
-                    agentKind={tab.agentKind}
+                    agentId={tab.agentId ?? tab.agentKind}
                     visible={visible && isActiveInPane}
                     sessionName={tab.type === 'agent' && nameAgentSessions ? `${repoLabel}/${branch}` : undefined}
                     sessionId={tab.sessionId}
@@ -618,7 +618,7 @@ export function WorkspaceView({
                         : undefined
                     }
                     onSwitchToChat={
-                      tab.type === 'agent' && tab.agentKind === 'claude' && onConvertTabType
+                      tab.type === 'agent' && (tab.agentId ?? tab.agentKind) === 'claude' && onConvertTabType
                         ? (): void => onConvertTabType(worktreePath, tab.id, 'json-claude')
                         : undefined
                     }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AddRepoResult, Worktree, PendingWorktree, PRStatus, TerminalTab } from '../types'
+import type { AddRepoResult, Worktree, PendingWorktree, PRStatus, TerminalTab, TerminalAgentId } from '../types'
 import { markTerminalClosing } from '../components/XTerminal'
 import { useActiveBackend } from '../store'
 import { useBackend } from '../backend'
@@ -162,7 +162,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       branchName: string,
       initialPrompt: string,
       teleportSessionId?: string,
-      agentKind?: 'claude' | 'codex' | 'opencode',
+      agentId?: TerminalAgentId,
       model?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`
@@ -177,7 +177,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
         branchName,
         initialPrompt: initialPrompt || undefined,
         teleportSessionId,
-        agentKind,
+        agentId,
         model
       })
 
@@ -196,7 +196,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       repoRoot: string,
       prNumber: number,
       initialPrompt: string,
-      agentKind?: 'claude' | 'codex' | 'opencode',
+      agentId?: TerminalAgentId,
       model?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`
@@ -208,7 +208,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
         repoRoot,
         prNumber,
         initialPrompt: initialPrompt || undefined,
-        agentKind,
+        agentId,
         model
       })
 

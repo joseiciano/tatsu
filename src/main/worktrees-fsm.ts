@@ -12,6 +12,7 @@ import { getPRMetadata } from './github'
 import { loadRepoConfig } from './repo-config'
 import { log } from './debug'
 import type { Store } from './store'
+import type { TerminalAgentId } from '../shared/terminal-agents'
 import type { AgentKind } from '../shared/state/terminals'
 import type { Worktree, PendingWorktree } from '../shared/state/worktrees'
 
@@ -63,7 +64,9 @@ interface WorktreesFSMOptions {
     createdPath: string
     initialPrompt?: string
     teleportSessionId?: string
+    /** @deprecated Use agentId instead. */
     agentKind?: AgentKind
+    agentId?: TerminalAgentId
     model?: string
   }) => void
 }
@@ -114,10 +117,13 @@ export class WorktreesFSM {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
+    /** @deprecated Use agentId instead. */
     agentKind?: AgentKind
+    agentId?: TerminalAgentId
     model?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model } = params
+    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentId, agentKind, model } = params
+    const resolvedAgentId = agentId ?? agentKind ?? 'claude'
     const pending: PendingWorktree = {
       id,
       repoRoot,
@@ -140,7 +146,7 @@ export class WorktreesFSM {
         created,
         initialPrompt,
         teleportSessionId,
-        agentKind,
+        agentId: resolvedAgentId,
         model
       })
     } catch (err) {
@@ -162,10 +168,13 @@ export class WorktreesFSM {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
+    /** @deprecated Use agentId instead. */
     agentKind?: AgentKind
+    agentId?: TerminalAgentId
     model?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, prNumber, initialPrompt, agentKind, model } = params
+    const { id, repoRoot, prNumber, initialPrompt, agentId, agentKind, model } = params
+    const resolvedAgentId = agentId ?? agentKind ?? 'claude'
     // Show *something* while we go ask GitHub for the head ref name.
     let branchName = `pr-${prNumber}`
     const pending: PendingWorktree = {
@@ -201,7 +210,7 @@ export class WorktreesFSM {
         repoRoot,
         created,
         initialPrompt,
-        agentKind,
+        agentId: resolvedAgentId,
         model
       })
     } catch (err) {
@@ -222,10 +231,10 @@ export class WorktreesFSM {
     created: WorktreeInfo
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: AgentKind
+    agentId?: TerminalAgentId
     model?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, created, initialPrompt, teleportSessionId, agentKind, model } = args
+    const { id, repoRoot, created, initialPrompt, teleportSessionId, agentId, model } = args
 
     const setupCmd = this.resolveSetupCmd(repoRoot)
     let setupFailed = false
@@ -260,7 +269,7 @@ export class WorktreesFSM {
       createdPath: created.path,
       initialPrompt,
       teleportSessionId,
-      agentKind,
+      agentId,
       model
     })
     await this.refreshList()

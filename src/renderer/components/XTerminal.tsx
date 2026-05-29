@@ -228,14 +228,14 @@ function buildTerminalTheme(): NonNullable<ConstructorParameters<typeof Terminal
   }
 }
 
-import type { AgentKind } from '../../shared/state/terminals'
-import { agentDisplayName } from '../../shared/agent-registry'
+import type { TerminalAgentId } from '../../shared/terminal-agents'
+import { terminalAgentDisplayName } from '../../shared/terminal-agent-registry'
 
 interface XTerminalProps {
   terminalId: string
   cwd: string
   type: 'agent' | 'shell'
-  agentKind?: AgentKind
+  agentId?: TerminalAgentId
   visible: boolean
   sessionName?: string
   sessionId?: string
@@ -254,7 +254,7 @@ interface XTerminalProps {
   onSwitchToChat?: () => void
 }
 
-export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, onSwitchToChat }: XTerminalProps): JSX.Element {
+export function XTerminal({ terminalId, cwd, type, agentId, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, onSwitchToChat }: XTerminalProps): JSX.Element {
   // Lazy font-cache init — fires once on first XTerminal mount. See
   // initFontCache() comment for why this is lazy rather than at module
   // top.
@@ -442,7 +442,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
     }
 
     const buildAgentArg = async (): Promise<string> => {
-      return backend.buildAgentSpawnArgs(agentKind || 'claude', {
+      return backend.buildAgentSpawnArgs(agentId || 'claude', {
         terminalId,
         cwd,
         sessionId,
@@ -498,7 +498,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
       } catch {
         // fall back to main's defaults
       }
-      backend.createTerminal(terminalId, spawnCwd, shell, args, type === 'agent' ? agentKind : undefined, spawnCols, spawnRows)
+      backend.createTerminal(terminalId, spawnCwd, shell, args, type === 'agent' ? agentId : undefined, spawnCols, spawnRows)
 
       terminal.onData((data) => {
         // Spectators silently drop input. Main also enforces this, but
@@ -843,7 +843,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           <div className="flex flex-col items-center gap-3 text-dim text-sm">
             <ClaudeLoader />
             <div className="flex items-center">
-              <span>Starting {agentDisplayName(agentKind)}</span>
+              <span>Starting {terminalAgentDisplayName(agentId)}</span>
               <span className="claude-loader-dots ml-1">
                 <span />
                 <span />
@@ -867,7 +867,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           </button>
         </div>
       )}
-      {!loading && !exited && onSwitchToChat && type === 'agent' && agentKind === 'claude' && !chatPromotionDismissed && (
+      {!loading && !exited && onSwitchToChat && type === 'agent' && agentId === 'claude' && !chatPromotionDismissed && (
         <div className="absolute top-2 left-2 flex items-center gap-1 pointer-events-auto">
           <Tooltip label="You can always switch modes by right-clicking the tab.">
             <button
@@ -892,7 +892,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
       {exited && type === 'agent' && onRestartAgent && (
         <div className="absolute inset-0 flex items-center justify-center bg-app/80">
           <div className="flex flex-col items-center gap-3 text-sm">
-            <div className="text-dim">{agentDisplayName(agentKind)} exited.</div>
+            <div className="text-dim">{terminalAgentDisplayName(agentId)} exited.</div>
             <button
               onClick={onRestartAgent}
               className="px-3 py-1.5 rounded border border-border bg-panel text-fg-bright hover:bg-border transition-colors"

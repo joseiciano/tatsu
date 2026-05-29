@@ -7,8 +7,13 @@ import {
 } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import type { WorkspacePane, TerminalTab, PtyStatus, AgentKind } from '../types'
-import { AGENT_REGISTRY, agentDisplayName, cycleAltAgent } from '../../shared/agent-registry'
+import type { WorkspacePane, TerminalTab, PtyStatus, TerminalAgentId } from '../types'
+import {
+  getMergedTerminalAgents,
+  terminalAgentDisplayName,
+  cycleAltTerminalAgent
+} from '../../shared/terminal-agent-registry'
+import { useSettings } from '../store'
 import { Tooltip } from './Tooltip'
 import { repoNameColor } from './RepoIcon'
 import { getClientId, useTerminalProgress, useTerminalSession } from '../store'
@@ -66,7 +71,7 @@ interface TerminalPanelProps {
   registerSlot: (paneId: string, el: HTMLDivElement | null) => void
   onSelectTab: (tabId: string) => void
   onAddTab: () => void
-  onAddAgentTab: (agentKind?: AgentKind) => void
+  onAddAgentTab: (agentId?: TerminalAgentId) => void
   onAddBrowserTab: () => void
   /** Shift-clicking the Sparkles button opens the non-default Claude
    *  interface (Terminal if Chat is the default, Chat if Terminal is). */
@@ -77,7 +82,7 @@ interface TerminalPanelProps {
   defaultClaudeTabType?: 'xterm' | 'json'
   /** Convert a Claude tab between Terminal and Chat in place. */
   onConvertTabType?: (tabId: string, newType: 'agent' | 'json-claude') => void
-  defaultAgent: AgentKind
+  defaultTerminalAgentId: TerminalAgentId
   onSleepTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
   /** Leading padding on the tab bar to clear the macOS traffic lights when
@@ -411,7 +416,7 @@ export function TerminalPanel({
   onAddJsonClaudeTab,
   defaultClaudeTabType,
   onConvertTabType,
-  defaultAgent,
+  defaultTerminalAgentId,
   onSleepTab,
   onCloseTab,
   topBarLeadingPx = 0,
@@ -424,11 +429,13 @@ export function TerminalPanel({
   const slotHostRef = useRef<HTMLDivElement | null>(null)
   const [altClickCount, setAltClickCount] = useState(0)
 
+  const settings = useSettings()
+
   // Reset alt-click cycle when the global default agent changes so the
   // user doesn't get surprised by a shifted cycle order.
   useEffect(() => {
     setAltClickCount(0)
-  }, [defaultAgent])
+  }, [defaultTerminalAgentId])
 
   // Register this pane's slot host with WorkspaceView. WorkspaceView owns a
   // stable slot DOM element per pane.id and appends it into whichever host
@@ -514,11 +521,12 @@ export function TerminalPanel({
               const chatIsDefault = !!onAddJsonClaudeTab && defaultClaudeTabType === 'json'
               const plain = chatIsDefault
                 ? 'New Chat tab'
-                : `New ${agentDisplayName(defaultAgent)} tab`
-              const altAgents = AGENT_REGISTRY.filter((a) => a.kind !== defaultAgent)
+                : `New ${terminalAgentDisplayName(defaultTerminalAgentId, settings.userTerminalAgents)} tab`
+              const mergedAgents = getMergedTerminalAgents(settings.userTerminalAgents)
+              const altAgents = mergedAgents.filter((a) => a.id !== defaultTerminalAgentId)
               const altPart =
                 altAgents.length > 0
-                  ? ` · ⌥-click for ${altAgents.map((a) => agentDisplayName(a.kind)).join(' / ')}`
+                  ? ` · ⌥-click for ${altAgents.map((a) => terminalAgentDisplayName(a.id, settings.userTerminalAgents)).join(' / ')}`
                   : ''
               const shiftPart = onAddJsonClaudeTab
                 ? chatIsDefault
@@ -537,8 +545,9 @@ export function TerminalPanel({
                 //   plain → the default agent interface.
                 const chatIsDefault =
                   !!onAddJsonClaudeTab && defaultClaudeTabType === 'json'
-                if (e.altKey && AGENT_REGISTRY.length > 1) {
-                  onAddAgentTab(cycleAltAgent(defaultAgent, altClickCount))
+                const mergedAgents = getMergedTerminalAgents(settings.userTerminalAgents)
+                if (e.altKey && mergedAgents.length > 1) {
+                  onAddAgentTab(cycleAltTerminalAgent(defaultTerminalAgentId, altClickCount, settings.userTerminalAgents))
                   setAltClickCount((c) => c + 1)
                   return
                 }
@@ -548,7 +557,7 @@ export function TerminalPanel({
                   return
                 }
                 if (chatIsDefault) onAddJsonClaudeTab!()
-                else onAddAgentTab(defaultAgent)
+                else onAddAgentTab(defaultTerminalAgentId)
               }}
               className="no-drag shrink-0 px-2 h-full text-faint hover:text-fg text-sm transition-colors cursor-pointer"
             >
@@ -590,7 +599,7 @@ export function TerminalPanel({
         >
           <SortableContext items={pane.tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
             {pane.tabs.map((tab) => {
-              const isClaudeAgent = tab.type === 'agent' && tab.agentKind === 'claude'
+              const isClaudeAgent = tab.type === 'agent' && tab.agentId === 'claude'
               const isJsonClaude = tab.type === 'json-claude'
               const convertible = !!onConvertTabType && (isClaudeAgent || isJsonClaude)
               return (

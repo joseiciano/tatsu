@@ -302,7 +302,7 @@ export function MobileTerminal({ worktreePath, tab }: MobileTerminalProps): JSX.
           terminalId={tab.id}
           cwd={worktreePath}
           type={tab.type}
-          agentKind={tab.agentKind}
+          agentId={tab.agentId ?? tab.agentKind}
           visible={true}
           sessionName={tab.label}
           sessionId={tab.sessionId}
