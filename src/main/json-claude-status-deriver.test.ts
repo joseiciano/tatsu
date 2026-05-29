@@ -20,6 +20,17 @@ function makeSession(
   return {
     sessionId: id,
     worktreePath: `/tmp/wt-${id}`,
+    provider: 'claude',
+    capabilities: {
+      supportsPermissionMode: true,
+      supportsRewind: true,
+      supportsSubAgentNesting: true,
+      supportsImageAttachments: true,
+      supportsSlashCommands: true,
+      supportsAutoApprover: true,
+      composerPlaceholder: 'Message Claude',
+      agentName: 'Claude'
+    },
     state: 'running',
     exitCode: null,
     exitReason: null,

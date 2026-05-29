@@ -37,6 +37,9 @@ export interface TerminalTab {
   mode?: 'awake' | 'asleep'
   /** For agent tabs: which CLI agent this tab runs. */
   agentKind?: AgentKind
+  /** For json-claude tabs: which chat provider backs this tab.
+   *  Defaults to 'claude' when absent for backward compatibility. */
+  provider?: import('./json-claude').ChatProvider
   /** For agent + json-claude tabs: override the model resolved from
    *  settings (claudeModel/codexModel). Set when a worktree was spawned
    *  with a one-shot pick (New Worktree screen "Model" field or the MCP
@@ -59,10 +62,10 @@ export interface TerminalTab {
   /** For browser tabs: the URL currently loaded (restored on reload). */
   url?: string
   /** For shell tabs: command to run via `zsh -ilc <command>` instead of
-   * spawning an interactive login shell. Set by agents via the shell MCP. */
+   *  spawning an interactive login shell. Set by agents via the shell MCP. */
   command?: string
   /** For shell tabs: directory to run in. Relative paths resolve against the
-   * worktree root; absolute paths are used as-is. */
+   *  worktree root; absolute paths are used as-is. */
   cwd?: string
 }
 
@@ -272,6 +275,9 @@ export type TerminalsEvent =
         newId: string
         newType: 'agent' | 'json-claude'
         newLabel: string
+        /** When converting to json-claude, the provider to set on the
+         *  new tab. Defaults to 'claude' when absent. */
+        newProvider?: import('./json-claude').ChatProvider
       }
     }
   | {
@@ -544,7 +550,7 @@ export function terminalsReducer(
       return changed ? { ...state, sessions: nextSessions } : state
     }
     case 'terminals/tabTypeChanged': {
-      const { worktreePath, tabId, newId, newType, newLabel } = event.payload
+      const { worktreePath, tabId, newId, newType, newLabel, newProvider } = event.payload
       const tree = state.panes[worktreePath]
       if (!tree) return state
       let changed = false
@@ -564,7 +570,8 @@ export function terminalsReducer(
               type: 'json-claude' as const,
               label: newLabel,
               sessionId,
-              mode: 'awake' as const
+              mode: 'awake' as const,
+              provider: newProvider ?? t.provider ?? 'claude'
             }
           }
           return {

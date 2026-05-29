@@ -27,6 +27,64 @@ describe('jsonClaudeReducer', () => {
     expect(next.sessions[SID].busy).toBe(false)
   })
 
+  it('sessionStarted defaults provider to claude and sets Claude capabilities', () => {
+    const next = seedSession(initialJsonClaude)
+    expect(next.sessions[SID].provider).toBe('claude')
+    expect(next.sessions[SID].capabilities.agentName).toBe('Claude')
+    expect(next.sessions[SID].capabilities.supportsPermissionMode).toBe(true)
+  })
+
+  it('sessionStarted respects explicit provider and capabilities', () => {
+    const next = jsonClaudeReducer(initialJsonClaude, {
+      type: 'jsonClaude/sessionStarted',
+      payload: {
+        sessionId: SID,
+        worktreePath: WT,
+        provider: 'opencode',
+        capabilities: {
+          supportsPermissionMode: false,
+          supportsRewind: false,
+          supportsSubAgentNesting: false,
+          supportsImageAttachments: false,
+          supportsSlashCommands: false,
+          supportsAutoApprover: false,
+          composerPlaceholder: 'Message Opencode',
+          agentName: 'Opencode'
+        }
+      }
+    })
+    expect(next.sessions[SID].provider).toBe('opencode')
+    expect(next.sessions[SID].capabilities.agentName).toBe('Opencode')
+    expect(next.sessions[SID].capabilities.supportsPermissionMode).toBe(false)
+  })
+
+  it('sessionStarted preserves existing provider and capabilities on re-attach', () => {
+    let state = jsonClaudeReducer(initialJsonClaude, {
+      type: 'jsonClaude/sessionStarted',
+      payload: {
+        sessionId: SID,
+        worktreePath: WT,
+        provider: 'opencode',
+        capabilities: {
+          supportsPermissionMode: false,
+          supportsRewind: false,
+          supportsSubAgentNesting: false,
+          supportsImageAttachments: false,
+          supportsSlashCommands: false,
+          supportsAutoApprover: false,
+          composerPlaceholder: 'Message Opencode',
+          agentName: 'Opencode'
+        }
+      }
+    })
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/sessionStarted',
+      payload: { sessionId: SID, worktreePath: WT, provider: 'claude' }
+    })
+    expect(state.sessions[SID].provider).toBe('opencode')
+    expect(state.sessions[SID].capabilities.agentName).toBe('Opencode')
+  })
+
   it('sessionStateChanged updates state + exit info', () => {
     let state = seedSession(initialJsonClaude)
     state = jsonClaudeReducer(state, {

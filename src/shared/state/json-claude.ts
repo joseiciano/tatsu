@@ -142,9 +142,51 @@ export interface JsonClaudeChatEntry {
   }
 }
 
+export type ChatProvider = 'claude' | 'opencode'
+
+export interface ChatCapabilities {
+  supportsPermissionMode: boolean
+  supportsRewind: boolean
+  supportsSubAgentNesting: boolean
+  supportsImageAttachments: boolean
+  supportsSlashCommands: boolean
+  supportsAutoApprover: boolean
+  composerPlaceholder: string
+  agentName: string
+}
+
+export const DEFAULT_CLAUDE_CAPABILITIES: ChatCapabilities = {
+  supportsPermissionMode: true,
+  supportsRewind: true,
+  supportsSubAgentNesting: true,
+  supportsImageAttachments: true,
+  supportsSlashCommands: true,
+  supportsAutoApprover: true,
+  composerPlaceholder: 'Message Claude',
+  agentName: 'Claude'
+}
+
+export const DEFAULT_OPENCODE_CAPABILITIES: ChatCapabilities = {
+  supportsPermissionMode: false,
+  supportsRewind: false,
+  supportsSubAgentNesting: false,
+  supportsImageAttachments: false,
+  supportsSlashCommands: false,
+  supportsAutoApprover: false,
+  composerPlaceholder: 'Message Opencode',
+  agentName: 'Opencode'
+}
+
 export interface JsonClaudeSession {
   sessionId: string
   worktreePath: string
+  /** Which agent backend powers this chat session. Defaults to 'claude'
+   *  for backward compatibility with sessions created before provider
+   *  tracking was added. */
+  provider: ChatProvider
+  /** Capability flags advertised by the active provider so the renderer
+   *  can gate provider-specific UI affordances. */
+  capabilities: ChatCapabilities
   state: JsonClaudeSessionState
   exitCode: number | null
   exitReason: string | null
@@ -233,6 +275,11 @@ export type JsonClaudeEvent =
       payload: {
         sessionId: string
         worktreePath: string
+        /** Which backend powers this session. Defaults to 'claude' for
+         *  backward compatibility. */
+        provider?: ChatProvider
+        /** Capability flags for the provider. Defaults to Claude caps. */
+        capabilities?: ChatCapabilities
         /** Permission mode applied only when this session id has no
          *  prior slice entry (fresh tab). When the session already
          *  exists (resume / re-attach / mode-change respawn), the
@@ -466,7 +513,7 @@ export function jsonClaudeReducer(
 ): JsonClaudeState {
   switch (event.type) {
     case 'jsonClaude/sessionStarted': {
-      const { sessionId, worktreePath } = event.payload
+      const { sessionId, worktreePath, provider, capabilities } = event.payload
       // Preserve entries + permissionMode + slashCommands +
       // sessionToolApprovals + sessionAllowedDecisions if this session
       // id already exists (re-attach on reload or mode-change respawn).
@@ -481,6 +528,14 @@ export function jsonClaudeReducer(
           [sessionId]: {
             sessionId,
             worktreePath,
+            provider:
+              existing?.provider ?? provider ?? 'claude',
+            capabilities:
+              existing?.capabilities ??
+              capabilities ??
+              (provider === 'opencode'
+                ? DEFAULT_OPENCODE_CAPABILITIES
+                : DEFAULT_CLAUDE_CAPABILITIES),
             state: 'connecting',
             exitCode: null,
             exitReason: null,

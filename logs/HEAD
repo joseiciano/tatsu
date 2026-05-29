@@ -1,3 +1,5 @@
 36cfc3f3f2a00c445bb53e6f857830d1086b3bf4 36cfc3f3f2a00c445bb53e6f857830d1086b3bf4 joseiciano <icianojn@gmail.com> 1779991824 -0500	reset: moving to HEAD
 36cfc3f3f2a00c445bb53e6f857830d1086b3bf4 1d0c0de3d66e4f675cf3df1ac91128ca62e24f94 joseiciano <icianojn@gmail.com> 1779994012 -0500	commit: docs: migrate user-facing references from npm to pnpm
 1d0c0de3d66e4f675cf3df1ac91128ca62e24f94 6ae3b0c8767bc3caaaeb3ec93f944eb4c191de27 joseiciano <icianojn@gmail.com> 1779998119 -0500	commit: Converted to PNPM
+6ae3b0c8767bc3caaaeb3ec93f944eb4c191de27 ccb0235e2af7a7fbf12147b5dda49abc314783e2 joseiciano <icianojn@gmail.com> 1780009624 -0500	commit: [feature] Add Opencode terminal-agent support
+ccb0235e2af7a7fbf12147b5dda49abc314783e2 ccb0235e2af7a7fbf12147b5dda49abc314783e2 joseiciano <icianojn@gmail.com> 1780028618 -0500	checkout: moving from main to feat/opencode-acp-chat

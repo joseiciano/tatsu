@@ -8,6 +8,17 @@ function makeSession(
   return {
     sessionId: 's1',
     worktreePath: '/tmp/wt',
+    provider: 'claude',
+    capabilities: {
+      supportsPermissionMode: true,
+      supportsRewind: true,
+      supportsSubAgentNesting: true,
+      supportsImageAttachments: true,
+      supportsSlashCommands: true,
+      supportsAutoApprover: true,
+      composerPlaceholder: 'Message Claude',
+      agentName: 'Claude'
+    },
     state: 'running',
     exitCode: null,
     exitReason: null,
