@@ -175,6 +175,131 @@ describe('PanesFSM.splitPane', () => {
   })
 })
 
+describe('PanesFSM.convertTabType', () => {
+  it('converts opencode json-claude tab to opencode agent tab using providerSessionId as sessionId', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/opencode'
+    const localTabId = 'local-chat-id'
+    const providerSessionId = 'opencode-real-session-id'
+
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: localTabId,
+          type: 'json-claude',
+          label: 'Chat',
+          sessionId: localTabId,
+          mode: 'awake',
+          provider: 'opencode',
+          providerSessionId
+        }
+      ],
+      activeTabId: localTabId
+    })
+
+    fsm.convertTabType(wtPath, localTabId, 'agent')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = tree.tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.agentKind).toBe('opencode')
+    expect(tab.sessionId).toBe(providerSessionId)
+    expect(tab.label).toBe('Opencode')
+  })
+
+  it('converts claude json-claude tab to claude agent tab preserving sessionId', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/claude'
+    const sessionId = 'claude-sess-id'
+
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: sessionId,
+          type: 'json-claude',
+          label: 'Chat',
+          sessionId,
+          mode: 'awake',
+          provider: 'claude'
+        }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = tree.tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.agentKind).toBe('claude')
+    expect(tab.sessionId).toBe(sessionId)
+    expect(tab.label).toBe('Claude Code')
+  })
+
+  it('converts opencode agent tab to opencode json-claude tab', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/opencode-agent'
+    const sessionId = 'opencode-sess-id'
+
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: 'agent-1',
+          type: 'agent',
+          label: 'Opencode',
+          agentKind: 'opencode',
+          sessionId
+        }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = tree.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.id).toBe(sessionId)
+    expect(tab.sessionId).toBe(sessionId)
+    expect(tab.provider).toBe('opencode')
+    expect(tab.mode).toBe('awake')
+  })
+
+  it('still refuses codex agent → json-claude conversion', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/codex'
+
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: 'agent-1',
+          type: 'agent',
+          label: 'Codex',
+          agentKind: 'codex',
+          sessionId: 'codex-sess'
+        }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = tree.tabs[0]
+    // Should remain unchanged
+    expect(tab.type).toBe('agent')
+    expect(tab.agentKind).toBe('codex')
+  })
+})
+
 describe('PanesFSM.restoreFromConfig', () => {
   it('hydrates persisted shell and json-claude tabs as asleep, agent tabs as awake', async () => {
     const { fsm, store } = buildFSM()

@@ -584,26 +584,33 @@ export function terminalsReducer(
         if (!leaf.tabs.some((t) => t.id === tabId)) return leaf
         const tabs = leaf.tabs.map((t) => {
           if (t.id !== tabId) return t
-          // For json-claude, the convention is tab.id == tab.sessionId.
-          // For agent, sessionId stays bound to the on-disk jsonl so
-          // --resume picks it up after the swap. Carry it across either
-          // way, generating one if the source tab somehow lacked it.
-          const sessionId = t.sessionId ?? newId
           changed = true
           if (newType === 'json-claude') {
+            const provider = newProvider ?? t.provider ?? 'claude'
+            // For json-claude, the convention is tab.id == tab.sessionId.
+            // Carry sessionId across, generating one if the source tab somehow lacked it.
+            const sessionId = t.sessionId ?? newId
             return {
               id: newId,
               type: 'json-claude' as const,
               label: newLabel,
               sessionId,
               mode: 'awake' as const,
-              provider: newProvider ?? t.provider ?? 'claude'
+              provider
             }
           }
+          // Converting to agent: preserve provider awareness.
+          const provider = newProvider ?? t.provider ?? 'claude'
+          // For opencode chat tabs, the real session id lives in providerSessionId
+          // so the CLI can resume it; fall back to the tab's sessionId otherwise.
+          const sessionId =
+            provider === 'opencode' && t.providerSessionId
+              ? t.providerSessionId
+              : (t.sessionId ?? newId)
           return {
             id: newId,
             type: 'agent' as const,
-            agentKind: 'claude' as const,
+            agentKind: provider,
             label: newLabel,
             sessionId
           }

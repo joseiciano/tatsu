@@ -433,13 +433,34 @@ export class PanesFSM {
     if (!tab) return
     if (tab.type === newType) return
     if (tab.type !== 'agent' && tab.type !== 'json-claude') return
-    if (tab.type === 'agent' && tab.agentKind && tab.agentKind !== 'claude') {
-      // Only Claude agent tabs have a json-claude counterpart; refuse
-      // to swap a Codex tab.
-      log('panes-fsm', `convertTabType refused for non-claude agent kind=${tab.agentKind}`)
+
+    // Only Claude and Opencode agent tabs have a json-claude counterpart;
+    // refuse to swap a Codex tab.
+    if (
+      tab.type === 'agent' &&
+      newType === 'json-claude' &&
+      tab.agentKind &&
+      tab.agentKind !== 'claude' &&
+      tab.agentKind !== 'opencode'
+    ) {
+      log('panes-fsm', `convertTabType refused for non-chat agent kind=${tab.agentKind}`)
       return
     }
-    const sessionId = tab.sessionId ?? crypto.randomUUID()
+
+    const provider: import('../shared/state/json-claude').ChatProvider =
+      tab.type === 'agent'
+        ? tab.agentKind === 'opencode'
+          ? 'opencode'
+          : 'claude'
+        : (tab.provider ?? 'claude')
+
+    // For opencode chat tabs, the real session id lives in providerSessionId
+    // so the CLI can resume it; fall back to the tab's sessionId otherwise.
+    const sessionId =
+      tab.type === 'json-claude' && provider === 'opencode' && tab.providerSessionId
+        ? tab.providerSessionId
+        : (tab.sessionId ?? crypto.randomUUID())
+
     if (tab.type === 'agent') {
       this.opts.killTabPty?.(tabId)
     } else {
@@ -453,10 +474,10 @@ export class PanesFSM {
       newType === 'json-claude'
         ? sessionId
         : `agent-${wtPath.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`
-    const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName('claude')
+    const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName(provider)
     this.store.dispatch({
       type: 'terminals/tabTypeChanged',
-      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel }
+      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel, newProvider: provider }
     })
     this.opts.persist(this.buildPersistPayload())
   }

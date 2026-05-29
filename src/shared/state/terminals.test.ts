@@ -602,6 +602,80 @@ describe('terminalsReducer', () => {
     expect(leaves[0].activeTabId).toBe('agent-new')
   })
 
+  it('tabTypeChanged flips opencode json-claude → opencode agent using providerSessionId as sessionId', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        {
+          id: 'local-sess-1',
+          type: 'json-claude',
+          label: 'Chat',
+          sessionId: 'local-sess-1',
+          provider: 'opencode',
+          providerSessionId: 'opencode-real-id'
+        }
+      ],
+      activeTabId: 'local-sess-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabTypeChanged',
+      payload: {
+        worktreePath: '/wt/a',
+        tabId: 'local-sess-1',
+        newId: 'agent-new',
+        newType: 'agent',
+        newLabel: 'Opencode',
+        newProvider: 'opencode'
+      }
+    })
+    const leaves = getLeaves(next.panes['/wt/a'])
+    const tab = leaves[0].tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.id).toBe('agent-new')
+    expect(tab.agentKind).toBe('opencode')
+    expect(tab.sessionId).toBe('opencode-real-id')
+    expect(leaves[0].activeTabId).toBe('agent-new')
+  })
+
+  it('tabTypeChanged flips opencode agent → opencode json-claude in place', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        {
+          id: 'agent-1',
+          type: 'agent',
+          label: 'Opencode',
+          agentKind: 'opencode',
+          sessionId: 'opencode-sess-1'
+        }
+      ],
+      activeTabId: 'agent-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabTypeChanged',
+      payload: {
+        worktreePath: '/wt/a',
+        tabId: 'agent-1',
+        newId: 'opencode-sess-1',
+        newType: 'json-claude',
+        newLabel: 'Chat',
+        newProvider: 'opencode'
+      }
+    })
+    const leaves = getLeaves(next.panes['/wt/a'])
+    const tab = leaves[0].tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.id).toBe('opencode-sess-1')
+    expect(tab.sessionId).toBe('opencode-sess-1')
+    expect(tab.provider).toBe('opencode')
+    expect(tab.mode).toBe('awake')
+    expect(leaves[0].activeTabId).toBe('opencode-sess-1')
+  })
+
   it('tabTypeChanged to json-claude initializes mode awake', () => {
     const tree: PaneNode = {
       type: 'leaf',
