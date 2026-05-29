@@ -82,7 +82,7 @@ export function useTabHandlers({
   )
 
   const handleAddJsonClaudeTab = useCallback(
-    (worktreePath: string, paneId?: string) => {
+    (worktreePath: string, paneId?: string, provider: 'claude' | 'opencode' = 'claude') => {
       // Chat (json-claude) tabs use a UUID for both tab id and session id
       // — the manager passes it to `claude --session-id` directly so the
       // session jsonl reuses the same identifier and survives a reload.
@@ -92,8 +92,9 @@ export function useTabHandlers({
         {
           id: sessionId,
           type: 'json-claude',
-          label: 'Chat',
-          sessionId
+          label: provider === 'opencode' ? 'Opencode' : 'Chat',
+          sessionId,
+          provider
         },
         paneId
       )

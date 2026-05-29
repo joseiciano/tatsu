@@ -895,9 +895,10 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       ? `${modKeySymbol}↵`
       : `${modKeySymbol}Enter`
   const sendHotkeyAria = sendOnEnter ? 'Enter' : `${modKeyWord}+Enter`
+  const capabilities = session?.capabilities
   const composerPlaceholder = sendOnEnter
-    ? 'Message Claude — Enter to send, Shift+Enter for newline'
-    : `Message Claude — ${modKeyWord}+Enter to send`
+    ? `${capabilities?.composerPlaceholder ?? 'Message Claude'} — Enter to send, Shift+Enter for newline`
+    : `${capabilities?.composerPlaceholder ?? 'Message Claude'} — ${modKeyWord}+Enter to send`
   const [draft, setDraft] = useState('')
   // Mention/popover state. `dismissed` carries the draft text at which
   // the user pressed Escape — comparing against the live draft is how we
@@ -1420,6 +1421,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
   const mentionItems = useMemo<MentionPopoverItem[]>(() => {
     if (mentionDismissed === draft) return []
     if (slashTrigger !== null) {
+      if (capabilities?.supportsSlashCommands === false) return []
       const q = slashTrigger.query.toLowerCase()
       const all = session?.slashCommands ?? []
       const ranked =
@@ -1544,7 +1546,9 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       // we pass the source path so Claude can manipulate the file.
       const abs = backend.getFilePath(f) || null
       if (f.type.startsWith('image/')) {
-        await attachImageFile(f, abs)
+        if (capabilities?.supportsImageAttachments !== false) {
+          await attachImageFile(f, abs)
+        }
         continue
       }
       if (!abs) continue
@@ -1564,6 +1568,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       (it) => it.kind === 'file' && it.type.startsWith('image/')
     )
     if (imageItems.length === 0) return
+    if (capabilities?.supportsImageAttachments === false) return
     e.preventDefault()
     for (const it of imageItems) {
       const f = it.getAsFile()
@@ -1729,7 +1734,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           </button>
         </div>
       )}
-      {isDragOver && (
+      {isDragOver && capabilities?.supportsImageAttachments !== false && (
         <div className="absolute inset-0 z-40 bg-accent/10 border-2 border-dashed border-accent rounded flex items-center justify-center pointer-events-none">
           <div className="bg-panel-raised border border-border-strong rounded px-4 py-2 text-fg-bright shadow-lg">
             Drop image to attach
@@ -1813,7 +1818,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
                 ? entries[entryIndexById.get(targetEntryId) ?? -1]
                 : undefined
               const onContextMenu =
-                targetEntryId && targetEntry?.kind === 'assistant'
+                capabilities?.supportsRewind !== false && targetEntryId && targetEntry?.kind === 'assistant'
                   ? (e: ReactMouseEvent): void => openRewindMenu(targetEntryId, e)
                   : undefined
               return g.kind === 'single' ? (
@@ -1877,7 +1882,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           </button>
         )}
       </div>
-      {session && session.sessionToolApprovals.length > 0 && (
+      {capabilities?.supportsAutoApprover !== false && session && session.sessionToolApprovals.length > 0 && (
         <div className="shrink-0 border-t border-border bg-panel/40 px-3 py-1 flex items-center gap-2 text-xs text-muted">
           <span className="opacity-70">auto-allowing:</span>
           <span className="font-mono truncate">
@@ -2040,13 +2045,15 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
               <span className={`w-1.5 h-1.5 rounded-full ${stateDot}`} />
               <span>{state}</span>
             </div>
-            <button
-              onClick={cyclePermissionMode}
-              className={`px-1.5 py-0.5 rounded border text-xs cursor-pointer hover:opacity-80 transition-opacity ${modeBadgeStyle}`}
-              title="Click to cycle permission mode. Applies mid-turn — no restart."
-            >
-              {modeBadgeLabel}
-            </button>
+            {capabilities?.supportsPermissionMode !== false && (
+              <button
+                onClick={cyclePermissionMode}
+                className={`px-1.5 py-0.5 rounded border text-xs cursor-pointer hover:opacity-80 transition-opacity ${modeBadgeStyle}`}
+                title="Click to cycle permission mode. Applies mid-turn — no restart."
+              >
+                {modeBadgeLabel}
+              </button>
+            )}
             <div className="flex-1" />
             {busy && (
               <button
