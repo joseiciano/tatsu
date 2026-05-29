@@ -64,8 +64,6 @@ interface WorktreesFSMOptions {
     createdPath: string
     initialPrompt?: string
     teleportSessionId?: string
-    /** @deprecated Use agentId instead. */
-    agentKind?: AgentKind
     agentId?: TerminalAgentId
     model?: string
   }) => void
@@ -117,13 +115,11 @@ export class WorktreesFSM {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
-    /** @deprecated Use agentId instead. */
-    agentKind?: AgentKind
     agentId?: TerminalAgentId
     model?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentId, agentKind, model } = params
-    const resolvedAgentId = agentId ?? agentKind ?? 'claude'
+    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentId, model } = params
+    const resolvedAgentId = agentId ?? 'claude'
     const pending: PendingWorktree = {
       id,
       repoRoot,
@@ -168,13 +164,11 @@ export class WorktreesFSM {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    /** @deprecated Use agentId instead. */
-    agentKind?: AgentKind
     agentId?: TerminalAgentId
     model?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, prNumber, initialPrompt, agentId, agentKind, model } = params
-    const resolvedAgentId = agentId ?? agentKind ?? 'claude'
+    const { id, repoRoot, prNumber, initialPrompt, agentId, model } = params
+    const resolvedAgentId = agentId ?? 'claude'
     // Show *something* while we go ask GitHub for the head ref name.
     let branchName = `pr-${prNumber}`
     const pending: PendingWorktree = {

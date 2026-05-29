@@ -834,9 +834,9 @@ const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
-  onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentId, agentKind, model }) => {
+  onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentId, model }) => {
     void prPoller.refreshAll()
-    panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentId: agentId ?? agentKind, model })
+    panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentId: agentId ?? 'claude', model })
     if (teleportSessionId) {
       setTimeout(() => void worktreesFSM.refreshList(), 10_000)
     }

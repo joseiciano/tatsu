@@ -77,8 +77,6 @@ export interface PersistedTab {
   id: string
   type: 'agent' | 'shell'
   label: string
-  /** @deprecated Use agentId instead. */
-  agentKind?: AgentKind
   agentId?: TerminalAgentId
   sessionId?: string
 }
@@ -183,7 +181,6 @@ export interface ElectronAPI {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
     agentId?: string
     model?: string
   }): Promise<
@@ -196,7 +193,6 @@ export interface ElectronAPI {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
     agentId?: string
     model?: string
   }): Promise<
