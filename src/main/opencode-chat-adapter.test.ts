@@ -95,6 +95,51 @@ describe('OpencodeChatAdapter', () => {
       expect(mockSendRequest).toHaveBeenNthCalledWith(2, 'session/new', expect.any(Object))
     })
 
+    it('transitions to exited when initialize fails', async () => {
+      seedSession()
+      mockSendRequest.mockResolvedValueOnce(undefined)
+
+      await adapter.start('/wt/test')
+
+      const snapshot = store.getSnapshot()
+      expect(snapshot.state.jsonClaude.sessions['sess-1']?.state).toBe('exited')
+      expect(snapshot.state.jsonClaude.sessions['sess-1']?.exitReason).toBe('initialize failed')
+    })
+
+    it('transitions to exited when session/new fails', async () => {
+      seedSession()
+      mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
+      mockSendRequest.mockResolvedValueOnce(undefined)
+
+      await adapter.start('/wt/test')
+
+      const snapshot = store.getSnapshot()
+      expect(snapshot.state.jsonClaude.sessions['sess-1']?.state).toBe('exited')
+      expect(snapshot.state.jsonClaude.sessions['sess-1']?.exitReason).toBe('session/new failed')
+    })
+
+    it('transitions to exited on process error before initialization', async () => {
+      seedSession()
+      // Make initialize hang so initialized stays false
+      mockSendRequest.mockImplementationOnce(() => new Promise(() => {}))
+
+      // Start adapter but don't await so we can inject an error mid-startup
+      const startPromise = adapter.start('/wt/test')
+
+      // Simulate process error while initialize is still pending
+      eventHandler?.({
+        jsonrpc: '2.0',
+        method: 'error',
+        params: { kind: 'process', message: 'ENOENT' }
+      })
+
+      const snapshot = store.getSnapshot()
+      expect(snapshot.state.jsonClaude.sessions['sess-1']?.state).toBe('exited')
+
+      // Clean up the hanging promise
+      await Promise.race([startPromise, new Promise((r) => setTimeout(r, 10))])
+    })
+
     it('uses session/load when providerSessionId exists and loadSession is supported', async () => {
       setupPanes('prov-existing')
       mockSendRequest.mockResolvedValueOnce({

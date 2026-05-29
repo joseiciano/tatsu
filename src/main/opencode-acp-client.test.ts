@@ -32,6 +32,11 @@ vi.mock('./debug', () => ({
   log: vi.fn()
 }))
 
+vi.mock('./user-shell', () => ({
+  resolveUserShell: vi.fn(() => '/bin/zsh'),
+  loginShellCommandArgs: vi.fn((cmd: string) => ['-ilc', cmd])
+}))
+
 import { AcpClient } from './opencode-acp-client'
 
 describe('AcpClient', () => {
@@ -45,19 +50,19 @@ describe('AcpClient', () => {
   })
 
   function makeClient(): AcpClient {
-    return new AcpClient('/wt/test', () => 'opencode')
+    return new AcpClient('/wt/test', () => 'opencode acp')
   }
 
   function lastProc(): ReturnType<typeof makeFakeProc> {
     return spawnedProcs[spawnedProcs.length - 1]
   }
 
-  it('start spawns opencode acp in the worktree directory', () => {
+  it('start spawns via login shell with full command line', () => {
     const client = makeClient()
     client.start()
     expect(spawnCalls).toHaveLength(1)
-    expect(spawnCalls[0].command).toBe('opencode')
-    expect(spawnCalls[0].args).toEqual(['acp'])
+    expect(spawnCalls[0].command).toBe('/bin/zsh')
+    expect(spawnCalls[0].args).toEqual(['-ilc', 'opencode acp'])
   })
 
   it('start is a no-op when already started', () => {
@@ -65,6 +70,13 @@ describe('AcpClient', () => {
     client.start()
     client.start()
     expect(spawnCalls).toHaveLength(1)
+  })
+
+  it('uses custom command line from getter', () => {
+    const client = new AcpClient('/wt/test', () => 'opencode acp --model gpt-4')
+    client.start()
+    expect(spawnCalls).toHaveLength(1)
+    expect(spawnCalls[0].args).toEqual(['-ilc', 'opencode acp --model gpt-4'])
   })
 
   it('sendRequest writes a JSON-RPC request with auto-incrementing id', async () => {
@@ -150,7 +162,7 @@ describe('AcpClient', () => {
   })
 
   it('emits error event when spawn throws', () => {
-    const client = new AcpClient('/wt/test', () => 'opencode')
+    const client = new AcpClient('/wt/test', () => 'opencode acp')
     vi.mocked(spawn).mockImplementationOnce(() => {
       throw new Error('ENOENT')
     })

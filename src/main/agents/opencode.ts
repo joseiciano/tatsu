@@ -5,7 +5,7 @@ import { execSync } from 'child_process'
 import { log } from '../debug'
 import type { AgentSpawnOpts } from './index'
 
-function shellQuote(s: string): string {
+export function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
 }
 

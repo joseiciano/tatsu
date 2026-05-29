@@ -4,6 +4,7 @@ import type { JsonClaudePermissionMode, JsonClaudeMessageBlock } from '../shared
 import type { ApprovalResult } from './approval-bridge'
 import { AcpClient, type AcpMessage } from './opencode-acp-client'
 import { log } from './debug'
+import { shellQuote } from './agents/opencode'
 
 const PARTIAL_TEXT_FLUSH_MS = 30
 
@@ -25,6 +26,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
   private currentPartialEntryId: string | null = null
   private currentPromptPromise: Promise<unknown> | null = null
   private isReplayingHistory = false
+  private modelOverride: string | undefined
 
   constructor(
     sessionId: string,
@@ -36,15 +38,25 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     this.worktreePath = worktreePath
     this.store = store
     this.getOpencodeCommand = getOpencodeCommand
-    this.client = new AcpClient(worktreePath, getOpencodeCommand)
+    this.client = new AcpClient(worktreePath, () => this.buildCommandLine())
     this.client.onEvent((msg) => this.handleAcpEvent(msg))
   }
 
-  async start(worktreePath: string, _opts?: {
+  private buildCommandLine(): string {
+    let cmd = this.getOpencodeCommand() || 'opencode'
+    const model = this.modelOverride || this.store.getSnapshot().state.settings.opencodeModel
+    if (model && !cmd.includes('--model') && !cmd.includes('-m ')) {
+      cmd += ` --model ${shellQuote(model)}`
+    }
+    return `${cmd} acp`
+  }
+
+  async start(worktreePath: string, opts?: {
     permissionMode?: JsonClaudePermissionMode
     modelOverride?: string
   }): Promise<void> {
     this.worktreePath = worktreePath
+    this.modelOverride = opts?.modelOverride
     this.client.start()
 
     // Step 1: Initialize
@@ -60,6 +72,10 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     if (!initResult) {
       log('opencode-adapter', `initialize failed or timed out sessionId=${this.sessionId}`)
       this.dispatchError('Failed to initialize Opencode ACP connection')
+      this.store.dispatch({
+        type: 'jsonClaude/sessionStateChanged',
+        payload: { sessionId: this.sessionId, state: 'exited', exitReason: 'initialize failed' }
+      })
       return
     }
 
@@ -97,6 +113,10 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       if (!newResult?.sessionId) {
         log('opencode-adapter', `session/new failed sessionId=${this.sessionId}`)
         this.dispatchError('Failed to create Opencode session')
+        this.store.dispatch({
+          type: 'jsonClaude/sessionStateChanged',
+          payload: { sessionId: this.sessionId, state: 'exited', exitReason: 'session/new failed' }
+        })
         return
       }
 
@@ -242,6 +262,12 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       const message = typeof params?.message === 'string' ? params.message : 'Unknown error'
       this.dispatchError(message)
       this.setBusy(false)
+      if (!this.initialized) {
+        this.store.dispatch({
+          type: 'jsonClaude/sessionStateChanged',
+          payload: { sessionId: this.sessionId, state: 'exited', exitReason: message }
+        })
+      }
       return
     }
 

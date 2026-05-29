@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { randomUUID } from 'crypto'
 import { log } from './debug'
+import { resolveUserShell, loginShellCommandArgs } from './user-shell'
 
 export interface AcpMessage {
   jsonrpc: '2.0'
@@ -63,15 +64,15 @@ export class AcpClient {
   private pendingRequests = new Map<string | number, (result: unknown) => void>()
   private eventHandler: AcpEventHandler | null = null
   private worktreePath: string
-  private getOpencodeCommand: () => string
+  private getCommandLine: () => string
   private nextId = 0
 
   constructor(
     worktreePath: string,
-    getOpencodeCommand: () => string
+    getCommandLine: () => string
   ) {
     this.worktreePath = worktreePath
-    this.getOpencodeCommand = getOpencodeCommand
+    this.getCommandLine = getCommandLine
   }
 
   onEvent(handler: AcpEventHandler): void {
@@ -80,12 +81,13 @@ export class AcpClient {
 
   start(): void {
     if (this.proc) return
-    const cmd = this.getOpencodeCommand() || 'opencode'
-    const args = ['acp']
-    log('opencode-acp', `spawn cwd=${this.worktreePath} cmd=${cmd}`)
+    const cmdLine = this.getCommandLine() || 'opencode acp'
+    const shell = resolveUserShell()
+    const args = loginShellCommandArgs(cmdLine)
+    log('opencode-acp', `spawn cwd=${this.worktreePath} shell=${shell} cmd=${cmdLine}`)
 
     try {
-      this.proc = spawn(cmd, args, {
+      this.proc = spawn(shell, args, {
         cwd: this.worktreePath,
         env: process.env as Record<string, string>,
         stdio: ['pipe', 'pipe', 'pipe']
