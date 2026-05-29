@@ -96,6 +96,19 @@ describe('AcpClient', () => {
     vi.useRealTimers()
   })
 
+  it('sendResponse writes a JSON-RPC response with the given id', () => {
+    const client = makeClient()
+    client.start()
+    client.sendResponse('req-1', { outcome: { outcome: 'selected', optionId: 'allow' } })
+    const proc = lastProc()
+    expect(proc.stdin.write).toHaveBeenCalledTimes(1)
+    const written = JSON.parse((proc.stdin.write as ReturnType<typeof vi.fn>).mock.calls[0][0])
+    expect(written.jsonrpc).toBe('2.0')
+    expect(written.id).toBe('req-1')
+    expect(written.result).toEqual({ outcome: { outcome: 'selected', optionId: 'allow' } })
+    expect(written.method).toBeUndefined()
+  })
+
   it('sendNotification writes without id', () => {
     const client = makeClient()
     client.start()

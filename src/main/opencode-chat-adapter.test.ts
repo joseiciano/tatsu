@@ -5,6 +5,7 @@ import type { AcpEventHandler } from './opencode-acp-client'
 
 const mockSendRequest = vi.fn()
 const mockSendNotification = vi.fn()
+const mockSendResponse = vi.fn()
 const mockOnEvent = vi.fn()
 const mockKill = vi.fn()
 const mockStart = vi.fn()
@@ -16,6 +17,7 @@ vi.mock('./opencode-acp-client', () => ({
       onEvent: mockOnEvent,
       sendRequest: mockSendRequest,
       sendNotification: mockSendNotification,
+      sendResponse: mockSendResponse,
       kill: mockKill
     }
   })
@@ -34,6 +36,7 @@ describe('OpencodeChatAdapter', () => {
     store = new Store()
     mockSendRequest.mockReset()
     mockSendNotification.mockReset()
+    mockSendResponse.mockReset()
     mockKill.mockReset()
     mockStart.mockReset()
     mockOnEvent.mockReset()
@@ -142,6 +145,7 @@ describe('OpencodeChatAdapter', () => {
         agentCapabilities: {}
       })
       mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
+      mockSendRequest.mockResolvedValueOnce({ stopReason: 'end_turn' })
       await adapter.start('/wt/test')
 
       adapter.send('hello')
@@ -154,6 +158,31 @@ describe('OpencodeChatAdapter', () => {
     it('ignores send before initialization', () => {
       adapter.send('hello')
       expect(mockSendRequest).not.toHaveBeenCalledWith('session/prompt', expect.anything())
+    })
+
+    it('appends user entry optimistically and clears busy on prompt result', async () => {
+      seedSession()
+      let promptResolve: (value: unknown) => void = () => {}
+      mockSendRequest.mockImplementation((method: string) => {
+        if (method === 'initialize') return Promise.resolve({ agentCapabilities: {} })
+        if (method === 'session/new') return Promise.resolve({ sessionId: 'prov-123' })
+        if (method === 'session/prompt') return new Promise((resolve) => { promptResolve = resolve })
+        return Promise.resolve(undefined)
+      })
+      await adapter.start('/wt/test')
+
+      adapter.send('hello')
+
+      const snapshot1 = store.getSnapshot()
+      const entries1 = snapshot1.state.jsonClaude.sessions['sess-1']?.entries ?? []
+      expect(entries1.some((e) => e.kind === 'user' && e.text === 'hello')).toBe(true)
+      expect(snapshot1.state.jsonClaude.sessions['sess-1']?.busy).toBe(true)
+
+      promptResolve({ stopReason: 'end_turn' })
+      await new Promise((r) => setTimeout(r, 10))
+
+      const snapshot2 = store.getSnapshot()
+      expect(snapshot2.state.jsonClaude.sessions['sess-1']?.busy).toBe(false)
     })
   })
 
@@ -189,24 +218,10 @@ describe('OpencodeChatAdapter', () => {
       seedSession()
     })
 
-    it('handles agent_message_chunk and flushes text delta', async () => {
+    it('first agent_message_chunk creates a partial entry automatically', async () => {
       mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
       mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
       await adapter.start('/wt/test')
-
-      // Pre-seed an assistant entry so the delta has a target
-      store.dispatch({
-        type: 'jsonClaude/entryAppended',
-        payload: {
-          sessionId: 'sess-1',
-          entry: {
-            entryId: 'sess-1-a-partial',
-            kind: 'assistant',
-            blocks: [{ type: 'text', text: '' }],
-            timestamp: Date.now()
-          }
-        }
-      })
 
       eventHandler?.({
         jsonrpc: '2.0',
@@ -214,8 +229,7 @@ describe('OpencodeChatAdapter', () => {
         params: {
           update: {
             sessionUpdate: 'agent_message_chunk',
-            content: { text: 'hello world' },
-            isLast: true
+            content: { text: 'hello' }
           }
         }
       })
@@ -225,8 +239,9 @@ describe('OpencodeChatAdapter', () => {
 
       const snapshot = store.getSnapshot()
       const entries = snapshot.state.jsonClaude.sessions['sess-1']?.entries ?? []
-      const partialEntry = entries.find((e) => e.entryId === 'sess-1-a-partial')
-      expect(partialEntry?.blocks?.[0]?.text).toBe('hello world')
+      const partialEntry = entries.find((e) => e.kind === 'assistant' && e.isPartial)
+      expect(partialEntry).toBeDefined()
+      expect(partialEntry?.blocks?.[0]?.text).toBe('hello')
     })
 
     it('handles permission request and dispatches approvalRequested', async () => {
@@ -265,6 +280,27 @@ describe('OpencodeChatAdapter', () => {
       const snapshot = store.getSnapshot()
       expect(snapshot.state.jsonClaude.sessions['sess-1']?.state).toBe('exited')
     })
+
+    it('reads availableCommands from available_commands_update', async () => {
+      mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
+      mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
+      await adapter.start('/wt/test')
+
+      eventHandler?.({
+        jsonrpc: '2.0',
+        method: 'session/update',
+        params: {
+          update: {
+            sessionUpdate: 'available_commands_update',
+            availableCommands: ['/compact', '/clear']
+          }
+        }
+      })
+
+      const snapshot = store.getSnapshot()
+      const commands = snapshot.state.jsonClaude.sessions['sess-1']?.slashCommands ?? []
+      expect(commands).toEqual(['/compact', '/clear'])
+    })
   })
 
   describe('resolveApproval', () => {
@@ -272,7 +308,7 @@ describe('OpencodeChatAdapter', () => {
       seedSession()
     })
 
-    it('sends request_permission response for allow', async () => {
+    it('sends response on original inbound request id for allow', async () => {
       mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
       mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
       await adapter.start('/wt/test')
@@ -280,7 +316,7 @@ describe('OpencodeChatAdapter', () => {
       // Trigger permission request
       eventHandler?.({
         jsonrpc: '2.0',
-        id: 'req-1',
+        id: 'acp-req-1',
         method: 'session/request_permission',
         params: {
           sessionId: 'prov-123',
@@ -294,10 +330,10 @@ describe('OpencodeChatAdapter', () => {
       expect(approval).toBeDefined()
       const result = adapter.resolveApproval(approval.requestId, { behavior: 'allow' })
       expect(result).toBe(true)
-      expect(mockSendRequest).toHaveBeenLastCalledWith('session/request_permission', {
-        sessionId: 'prov-123',
+      expect(mockSendResponse).toHaveBeenCalledWith('acp-req-1', {
         outcome: { outcome: 'selected', optionId: 'allow-once' }
       })
+      expect(mockSendRequest).not.toHaveBeenCalledWith('session/request_permission', expect.anything())
     })
 
     it('returns false for unknown requestId', () => {

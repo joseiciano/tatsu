@@ -177,6 +177,10 @@ export class AcpClient {
     })
   }
 
+  sendResponse(id: string | number, result: unknown): void {
+    this.write({ jsonrpc: '2.0', id, result })
+  }
+
   sendNotification(method: string, params?: unknown): void {
     this.write({ jsonrpc: '2.0', method, params })
   }

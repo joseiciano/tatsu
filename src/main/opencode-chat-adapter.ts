@@ -21,6 +21,10 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
   private busy = false
   private initialized = false
   private pendingPermissionId: string | null = null
+  private pendingPermissionAcpId: string | number | null = null
+  private currentPartialEntryId: string | null = null
+  private currentPromptPromise: Promise<unknown> | null = null
+  private isReplayingHistory = false
 
   constructor(
     sessionId: string,
@@ -68,11 +72,13 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     if (persistedProviderSessionId && caps?.loadSession) {
       // Try to load existing session (replays history via session/update)
       this.providerSessionId = persistedProviderSessionId
+      this.isReplayingHistory = true
       await this.client.sendRequest('session/load', {
         sessionId: this.providerSessionId,
         cwd: this.worktreePath,
         mcpServers: []
       })
+      this.isReplayingHistory = false
     } else if (persistedProviderSessionId && caps?.sessionCapabilities?.resume) {
       // Try to resume without replaying history
       this.providerSessionId = persistedProviderSessionId
@@ -110,13 +116,43 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       return
     }
 
-    this.client.sendRequest('session/prompt', {
+    // Append user entry optimistically for live prompts only (not history replay)
+    this.appendUserEntry(text)
+    this.setBusy(true)
+
+    this.currentPromptPromise = this.client.sendRequest('session/prompt', {
       sessionId: this.providerSessionId,
       prompt: [{ type: 'text', text }]
     })
 
-    this.appendUserEntry(text)
-    this.setBusy(true)
+    this.currentPromptPromise.then((result) => {
+      this.handlePromptResult(result)
+    }).catch(() => {
+      this.flushPartialText()
+      this.setBusy(false)
+    })
+  }
+
+  private handlePromptResult(result: unknown): void {
+    this.flushPartialText()
+    const promptResult = result as { stopReason?: string } | undefined
+    const stopReason = promptResult?.stopReason
+
+    if (stopReason === 'cancelled') {
+      // User cancelled — busy already cleared by interrupt()
+    } else if (stopReason === 'refusal') {
+      this.dispatchError('Model refused the request')
+    } else if (stopReason === 'max_tokens' || stopReason === 'max_turn_requests') {
+      // Turn ended normally but hit a limit
+    }
+
+    // Finalize the partial entry if any
+    if (this.currentPartialEntryId) {
+      this.finalizePartialEntry()
+    }
+
+    this.setBusy(false)
+    this.currentPromptPromise = null
   }
 
   cancelQueued(_entryId: string): void {
@@ -131,6 +167,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     this.client.sendNotification('session/cancel', {
       sessionId: this.providerSessionId
     })
+    this.flushPartialText()
     this.setBusy(false)
   }
 
@@ -163,7 +200,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
   }
 
   resolveApproval(requestId: string, result: ApprovalResult): boolean {
-    if (!this.providerSessionId || this.pendingPermissionId !== requestId) {
+    if (!this.providerSessionId || this.pendingPermissionId !== requestId || this.pendingPermissionAcpId === null) {
       return false
     }
 
@@ -174,12 +211,12 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       optionId = 'reject'
     }
 
-    this.client.sendRequest('session/request_permission', {
-      sessionId: this.providerSessionId,
+    this.client.sendResponse(this.pendingPermissionAcpId, {
       outcome: { outcome: 'selected', optionId }
     })
 
     this.pendingPermissionId = null
+    this.pendingPermissionAcpId = null
     return true
   }
 
@@ -239,6 +276,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
         const content = update.content as Record<string, unknown> | undefined
         const text = typeof content?.text === 'string' ? content.text : ''
         if (text) {
+          this.ensurePartialEntry()
           this.partialText += text
           this.scheduleTextFlush()
         }
@@ -248,7 +286,8 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       case 'user_message_chunk': {
         const content = update.content as Record<string, unknown> | undefined
         const text = typeof content?.text === 'string' ? content.text : ''
-        if (text) {
+        if (text && this.isReplayingHistory) {
+          // Only append user entries from history replay; live sends are optimistic
           this.appendUserEntry(text)
         }
         break
@@ -310,7 +349,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       }
 
       case 'available_commands_update': {
-        const commands = update.commands as string[] | undefined
+        const commands = update.availableCommands as string[] | undefined
         if (Array.isArray(commands)) {
           this.store.dispatch({
             type: 'jsonClaude/slashCommandsChanged',
@@ -319,12 +358,6 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
         }
         break
       }
-    }
-
-    // Check if this is the end of a turn (prompt result would have stopReason)
-    if (sessionUpdate === 'agent_message_chunk' && update.isLast === true) {
-      this.flushPartialText()
-      this.setBusy(false)
     }
   }
 
@@ -335,6 +368,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
 
     const requestId = `perm-${this.sessionId}-${Date.now()}`
     this.pendingPermissionId = requestId
+    this.pendingPermissionAcpId = msg.id
 
     this.store.dispatch({
       type: 'jsonClaude/approvalRequested',
@@ -410,6 +444,38 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     })
   }
 
+  private ensurePartialEntry(): void {
+    if (this.currentPartialEntryId) return
+    this.currentPartialEntryId = `${this.sessionId}-a-partial-${this.entryCounter++}`
+    this.store.dispatch({
+      type: 'jsonClaude/entryAppended',
+      payload: {
+        sessionId: this.sessionId,
+        entry: {
+          entryId: this.currentPartialEntryId,
+          kind: 'assistant',
+          blocks: [{ type: 'text', text: '' }],
+          timestamp: Date.now(),
+          isPartial: true
+        }
+      }
+    })
+  }
+
+  private finalizePartialEntry(): void {
+    if (!this.currentPartialEntryId) return
+    // The entry is already in the store with isPartial: true.
+    // We dispatch assistantEntryFinalized to clear isPartial.
+    this.store.dispatch({
+      type: 'jsonClaude/assistantEntryFinalized',
+      payload: {
+        sessionId: this.sessionId,
+        entryId: this.currentPartialEntryId
+      }
+    })
+    this.currentPartialEntryId = null
+  }
+
   private dispatchError(message: string): void {
     this.store.dispatch({
       type: 'jsonClaude/entryAppended',
@@ -452,13 +518,15 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     if (!this.partialText) return
     const text = this.partialText
     this.partialText = ''
-    this.store.dispatch({
-      type: 'jsonClaude/assistantTextDelta',
-      payload: {
-        sessionId: this.sessionId,
-        entryId: `${this.sessionId}-a-partial`,
-        textDelta: text
-      }
-    })
+    if (this.currentPartialEntryId) {
+      this.store.dispatch({
+        type: 'jsonClaude/assistantTextDelta',
+        payload: {
+          sessionId: this.sessionId,
+          entryId: this.currentPartialEntryId,
+          textDelta: text
+        }
+      })
+    }
   }
 }

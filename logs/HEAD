@@ -9,3 +9,4 @@ a523c385d47f834d0430b0c81a1524ce52d6227a 6c5c5a4463065a415156476d3e683cde51f40a9
 6c5c5a4463065a415156476d3e683cde51f40a99 f16e959e903fe0f7a0f0205ecdc2dd3e82c294f3 joseiciano <icianojn@gmail.com> 1780031856 -0500	commit: Persist provider and providerSessionId on json-claude tabs
 f16e959e903fe0f7a0f0205ecdc2dd3e82c294f3 0909ed137e75525edbefe8ff91a9d51a7183e0e1 joseiciano <icianojn@gmail.com> 1780032447 -0500	commit: Add terminals/providerSessionIdDiscovered reducer for ACP session persistence
 0909ed137e75525edbefe8ff91a9d51a7183e0e1 e08b8ee89e10cc283e5cfdf41f7b09c1ae8b2998 joseiciano <icianojn@gmail.com> 1780033017 -0500	commit: Add TDD tests for ACP client and opencode chat adapter
+e08b8ee89e10cc283e5cfdf41f7b09c1ae8b2998 37aaa72b4f21ee938a0bd96d41b81dcdab5ceb15 joseiciano <icianojn@gmail.com> 1780033290 -0500	commit: Add Cmd+click UI affordance to create Opencode chat tabs
