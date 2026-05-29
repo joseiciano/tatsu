@@ -325,7 +325,7 @@ export type JsonClaudeEvent =
       payload: {
         sessionId: string
         entryId: string
-        blocks: JsonClaudeMessageBlock[]
+        blocks?: JsonClaudeMessageBlock[]
       }
     }
   | {
@@ -650,7 +650,9 @@ export function jsonClaudeReducer(
       if (i === -1) return state
       const { isPartial: _drop, ...rest } = session.entries[i]
       void _drop
-      const patched = { ...rest, blocks }
+      // Preserve existing blocks when payload.blocks is undefined (e.g. streamed
+      // partial entry that only needs isPartial cleared).
+      const patched = blocks !== undefined ? { ...rest, blocks } : rest
       const nextEntries = [
         ...session.entries.slice(0, i),
         patched,

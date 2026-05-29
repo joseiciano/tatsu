@@ -162,6 +162,18 @@ describe('AcpClient', () => {
     expect((events[0] as any).params.message).toBe('ENOENT')
   })
 
+  it('emits error event on process error', () => {
+    const client = makeClient()
+    const events: unknown[] = []
+    client.onEvent((msg) => events.push(msg))
+    client.start()
+    const proc = lastProc()
+    proc.emit('error', new Error('ENOENT'))
+    expect(events).toHaveLength(1)
+    expect((events[0] as any).method).toBe('error')
+    expect((events[0] as any).params.message).toBe('ENOENT')
+  })
+
   it('emits session/exit on process exit', () => {
     const client = makeClient()
     const events: unknown[] = []

@@ -833,13 +833,13 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
       store,
       () => store.getSnapshot().state.settings.opencodeCommand || 'opencode'
     )
-    chatProvider.registerAdapter(adapter)
     chatProvider.start(sessionId, worktreePath, provider, { modelOverride })
+    chatProvider.registerAdapter(adapter)
     adapter.start(worktreePath)
   } else {
     const adapter = new ClaudeChatAdapter(sessionId, jsonClaudeManager, approvalBridge)
-    chatProvider.registerAdapter(adapter)
     chatProvider.start(sessionId, worktreePath, provider, { permissionMode: permMode, modelOverride })
+    chatProvider.registerAdapter(adapter)
     adapter.start(worktreePath, { permissionMode: permMode, modelOverride })
   }
 }

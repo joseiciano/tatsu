@@ -126,6 +126,16 @@ export class AcpClient {
         params: { code, signal }
       })
     })
+
+    this.proc.on('error', (err) => {
+      log('opencode-acp', `process error`, err.message)
+      this.proc = null
+      this.emit({
+        jsonrpc: '2.0',
+        method: 'error',
+        params: { kind: 'process', message: err.message }
+      })
+    })
   }
 
   private handleLine(line: string): void {

@@ -1,1 +1,1 @@
-Add Cmd+click UI affordance to create Opencode chat tabs
+Fix ACP correctness: sendResponse, partial entry creation, prompt promise turn boundary, history replay, field names

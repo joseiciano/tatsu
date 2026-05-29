@@ -351,9 +351,12 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
       case 'available_commands_update': {
         const commands = update.availableCommands as string[] | undefined
         if (Array.isArray(commands)) {
+          // Opencode commands include a leading '/' (e.g. '/compact'); the
+          // renderer adds its own '/' prefix, so strip it here to avoid '//'.
+          const normalized = commands.map((c) => c.replace(/^\//, ''))
           this.store.dispatch({
             type: 'jsonClaude/slashCommandsChanged',
-            payload: { sessionId: this.sessionId, slashCommands: commands }
+            payload: { sessionId: this.sessionId, slashCommands: normalized }
           })
         }
         break

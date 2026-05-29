@@ -474,6 +474,35 @@ describe('jsonClaudeReducer', () => {
     expect(next).toBe(state)
   })
 
+  it('assistantEntryFinalized preserves existing blocks when blocks is omitted', () => {
+    let state = seedSession(initialJsonClaude)
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/entryAppended',
+      payload: {
+        sessionId: SID,
+        entry: {
+          entryId: 'a1',
+          kind: 'assistant',
+          blocks: [{ type: 'text', text: 'streamed content' }],
+          timestamp: 1,
+          isPartial: true
+        }
+      }
+    })
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/assistantEntryFinalized',
+      payload: {
+        sessionId: SID,
+        entryId: 'a1'
+        // blocks intentionally omitted
+      }
+    })
+    const finalized = state.sessions[SID].entries[0]
+    expect(finalized.isPartial).toBeUndefined()
+    expect(finalized.blocks).toHaveLength(1)
+    expect(finalized.blocks?.[0].text).toBe('streamed content')
+  })
+
   it('assistantEntryFinalized preserves reference identity for untouched entries', () => {
     let state = seedSession(initialJsonClaude)
     const e1: JsonClaudeChatEntry = {

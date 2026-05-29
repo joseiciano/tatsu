@@ -281,7 +281,7 @@ describe('OpencodeChatAdapter', () => {
       expect(snapshot.state.jsonClaude.sessions['sess-1']?.state).toBe('exited')
     })
 
-    it('reads availableCommands from available_commands_update', async () => {
+    it('reads availableCommands from available_commands_update and strips leading slash', async () => {
       mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
       mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
       await adapter.start('/wt/test')
@@ -299,7 +299,7 @@ describe('OpencodeChatAdapter', () => {
 
       const snapshot = store.getSnapshot()
       const commands = snapshot.state.jsonClaude.sessions['sess-1']?.slashCommands ?? []
-      expect(commands).toEqual(['/compact', '/clear'])
+      expect(commands).toEqual(['compact', 'clear'])
     })
   })
 
