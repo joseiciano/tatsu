@@ -101,7 +101,6 @@ export function buildBackend(
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: string
       agentId?: string
       model?: string
     }) => req('worktrees:runPending', params),
@@ -110,7 +109,6 @@ export function buildBackend(
       repoRoot: string
       prNumber: number
       initialPrompt?: string
-      agentKind?: string
       agentId?: string
       model?: string
     }) => req('worktrees:runPendingPR', params),

@@ -130,8 +130,6 @@ export interface ControlServerDeps {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    /** @deprecated Use agentId instead. */
-    agentKind?: AgentKind
     agentId?: TerminalAgentId
     model?: string
   }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
