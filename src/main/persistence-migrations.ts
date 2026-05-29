@@ -31,6 +31,11 @@ export interface PersistedTab {
   /** For agent + json-claude tabs: per-tab model pin. Wins over the
    *  global claudeModel/codexModel setting at spawn time. */
   model?: string
+  /** For json-claude tabs: which chat provider backs this tab. */
+  provider?: 'claude' | 'opencode'
+  /** For json-claude tabs: the provider's own session id, distinct from
+   *  the local tab id. Used to resume ACP sessions across reloads. */
+  providerSessionId?: string
   /** User-defined label override. Empty/undefined falls back to `label`. */
   customLabel?: string
 }
@@ -194,7 +199,28 @@ export const migrations: Migration[] = [
       c.themeDark = legacy
     }
     delete c.theme
-  }
+  },
+
+  // v7 → v8: add `provider` and `providerSessionId` to persisted json-claude tabs.
+  // Existing tabs without a provider default to 'claude' for backward compatibility.
+  (c) => {
+    const panes = c.panes as Record<string, Record<string, { tabs: { type: string; provider?: string; providerSessionId?: string }[] }[]>> | undefined
+    if (!panes || typeof panes !== 'object') return
+    for (const byWt of Object.values(panes)) {
+      if (!byWt || typeof byWt !== 'object') continue
+      for (const paneList of Object.values(byWt)) {
+        if (!Array.isArray(paneList)) continue
+        for (const pane of paneList) {
+          if (!pane?.tabs || !Array.isArray(pane.tabs)) continue
+          for (const tab of pane.tabs) {
+            if (tab.type === 'json-claude' && !tab.provider) {
+              tab.provider = 'claude'
+            }
+          }
+        }
+      }
+    }
+  },
 ]
 
 function flatPanesToTree(panes: PersistedPane[]): PersistedPaneNode {

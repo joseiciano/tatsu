@@ -179,6 +179,8 @@ export class PanesFSM {
         command: t.command,
         cwd: t.cwd,
         model: t.model,
+        provider: t.provider,
+        providerSessionId: t.providerSessionId,
         ...(t.customLabel ? { customLabel: t.customLabel } : {})
       }
       // Persisted json-claude and shell tabs hydrate as 'asleep' so app

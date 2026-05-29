@@ -40,6 +40,9 @@ export interface TerminalTab {
   /** For json-claude tabs: which chat provider backs this tab.
    *  Defaults to 'claude' when absent for backward compatibility. */
   provider?: import('./json-claude').ChatProvider
+  /** For json-claude tabs: the provider's own session id, distinct from
+   *  the local tab id. Used to resume ACP sessions across reloads. */
+  providerSessionId?: string
   /** For agent + json-claude tabs: override the model resolved from
    *  settings (claudeModel/codexModel). Set when a worktree was spawned
    *  with a one-shot pick (New Worktree screen "Model" field or the MCP

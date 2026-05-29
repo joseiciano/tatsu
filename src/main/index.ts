@@ -705,6 +705,8 @@ function treeToPersistedNode(node: PaneNode): PersistedPaneNode | null {
           command: stripped.command,
           cwd: stripped.cwd,
           model: stripped.model,
+          provider: stripped.provider,
+          providerSessionId: stripped.providerSessionId,
           ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {})
         }
       })

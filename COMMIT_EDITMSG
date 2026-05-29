@@ -1,1 +1,1 @@
-Wire ChatProvider into main IPC handlers and lifecycle
+Gate JsonModeChat UI by capabilities and add opencode chat tab creation
