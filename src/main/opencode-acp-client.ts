@@ -4,11 +4,55 @@ import { log } from './debug'
 
 export interface AcpMessage {
   jsonrpc: '2.0'
-  id?: string
+  id?: string | number
   method?: string
   params?: unknown
   result?: unknown
   error?: { code: number; message: string; data?: unknown }
+}
+
+export interface AcpInitializeResult {
+  protocolVersion: number
+  agentCapabilities: {
+    loadSession?: boolean
+    promptCapabilities?: { image?: boolean; embeddedContext?: boolean }
+    sessionCapabilities?: { list?: unknown; resume?: unknown; close?: unknown }
+    mcpCapabilities?: { http?: boolean; sse?: boolean }
+  }
+  agentInfo: { name: string; version: string }
+}
+
+export interface AcpSessionNewResult {
+  sessionId: string
+  modes?: { currentModeId?: string; availableModes?: unknown[] }
+  configOptions?: unknown[]
+}
+
+export interface AcpPromptResult {
+  stopReason: 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
+}
+
+export interface AcpSessionUpdate {
+  sessionId: string
+  update: {
+    sessionUpdate: string
+    [key: string]: unknown
+  }
+}
+
+export interface AcpPermissionRequest {
+  sessionId: string
+  toolCall: {
+    toolCallId: string
+    title: string
+    kind: string
+    status: string
+  }
+  options: Array<{
+    optionId: string
+    name: string
+    kind: string
+  }>
 }
 
 export type AcpEventHandler = (event: AcpMessage) => void
@@ -16,18 +60,16 @@ export type AcpEventHandler = (event: AcpMessage) => void
 export class AcpClient {
   private proc: ChildProcessWithoutNullStreams | null = null
   private buf = ''
-  private pendingRequests = new Map<string, (result: unknown) => void>()
+  private pendingRequests = new Map<string | number, (result: unknown) => void>()
   private eventHandler: AcpEventHandler | null = null
-  private sessionId: string
   private worktreePath: string
   private getOpencodeCommand: () => string
+  private nextId = 0
 
   constructor(
-    sessionId: string,
     worktreePath: string,
     getOpencodeCommand: () => string
   ) {
-    this.sessionId = sessionId
     this.worktreePath = worktreePath
     this.getOpencodeCommand = getOpencodeCommand
   }
@@ -39,8 +81,8 @@ export class AcpClient {
   start(): void {
     if (this.proc) return
     const cmd = this.getOpencodeCommand() || 'opencode'
-    const args = ['acp', '--session', this.sessionId]
-    log('opencode-acp', `spawn sessionId=${this.sessionId} cwd=${this.worktreePath}`)
+    const args = ['acp']
+    log('opencode-acp', `spawn cwd=${this.worktreePath} cmd=${cmd}`)
 
     try {
       this.proc = spawn(cmd, args, {
@@ -50,7 +92,7 @@ export class AcpClient {
       })
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
-      log('opencode-acp', `spawn failed sessionId=${this.sessionId}`, reason)
+      log('opencode-acp', `spawn failed`, reason)
       this.emit({
         jsonrpc: '2.0',
         method: 'error',
@@ -72,11 +114,11 @@ export class AcpClient {
 
     this.proc.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8')
-      log('opencode-acp', `stderr sessionId=${this.sessionId}: ${text.slice(0, 200)}`)
+      log('opencode-acp', `stderr: ${text.slice(0, 200)}`)
     })
 
     this.proc.on('exit', (code, signal) => {
-      log('opencode-acp', `exit sessionId=${this.sessionId} code=${code} signal=${signal}`)
+      log('opencode-acp', `exit code=${code} signal=${signal}`)
       this.proc = null
       this.emit({
         jsonrpc: '2.0',
@@ -91,7 +133,7 @@ export class AcpClient {
     try {
       msg = JSON.parse(line) as AcpMessage
     } catch (err) {
-      log('opencode-acp', `parse error sessionId=${this.sessionId}`, line.slice(0, 200))
+      log('opencode-acp', `parse error`, line.slice(0, 200))
       return
     }
 
@@ -110,19 +152,22 @@ export class AcpClient {
       try {
         this.eventHandler(msg)
       } catch (err) {
-        log('opencode-acp', `event handler error sessionId=${this.sessionId}`,
+        log('opencode-acp', `event handler error`,
           err instanceof Error ? err.message : String(err))
       }
     }
   }
 
+  private makeId(): number {
+    return this.nextId++
+  }
+
   sendRequest(method: string, params?: unknown): Promise<unknown> {
     return new Promise((resolve) => {
-      const id = randomUUID()
+      const id = this.makeId()
       this.pendingRequests.set(id, resolve)
       const msg: AcpMessage = { jsonrpc: '2.0', id, method, params }
       this.write(msg)
-      // Timeout after 30s
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id)
@@ -141,7 +186,7 @@ export class AcpClient {
     try {
       this.proc.stdin.write(JSON.stringify(msg) + '\n')
     } catch (err) {
-      log('opencode-acp', `stdin write failed sessionId=${this.sessionId}`,
+      log('opencode-acp', `stdin write failed`,
         err instanceof Error ? err.message : String(err))
     }
   }

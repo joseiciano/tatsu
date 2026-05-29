@@ -871,4 +871,40 @@ describe('terminalsReducer', () => {
     const agentTab = leaves[0].tabs[0]
     expect(agentTab.sessionId).toBe('sess-abc')
   })
+
+  it('providerSessionIdDiscovered sets providerSessionId on json-claude tabs', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1' },
+        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude' }
+      ],
+      activeTabId: 'sess-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/providerSessionIdDiscovered',
+      payload: { terminalId: 'sess-1', providerSessionId: 'prov-abc' }
+    })
+    const tabs = getLeaves(next.panes['/wt/a'])[0].tabs
+    expect(tabs[0].providerSessionId).toBe('prov-abc')
+    // Agent tab untouched.
+    expect(tabs[1]).toBe(getLeaves(start.panes['/wt/a'])[0].tabs[1])
+  })
+
+  it('providerSessionIdDiscovered is a no-op when id already matches', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', providerSessionId: 'prov-abc' }],
+      activeTabId: 'sess-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/providerSessionIdDiscovered',
+      payload: { terminalId: 'sess-1', providerSessionId: 'prov-abc' }
+    })
+    expect(next).toBe(start)
+  })
 })

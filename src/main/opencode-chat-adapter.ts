@@ -13,10 +13,14 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
   private store: Store
   private client: AcpClient
   private getOpencodeCommand: () => string
+  private worktreePath: string
+  private providerSessionId: string | null = null
   private partialText = ''
   private textFlushTimer: NodeJS.Timeout | null = null
   private entryCounter = 0
   private busy = false
+  private initialized = false
+  private pendingPermissionId: string | null = null
 
   constructor(
     sessionId: string,
@@ -25,31 +29,97 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     getOpencodeCommand: () => string
   ) {
     this.sessionId = sessionId
+    this.worktreePath = worktreePath
     this.store = store
     this.getOpencodeCommand = getOpencodeCommand
-    this.client = new AcpClient(sessionId, worktreePath, getOpencodeCommand)
+    this.client = new AcpClient(worktreePath, getOpencodeCommand)
     this.client.onEvent((msg) => this.handleAcpEvent(msg))
   }
 
-  start(worktreePath: string): void {
-    if (this.client) {
-      this.client.start()
-      this.store.dispatch({
-        type: 'jsonClaude/sessionStateChanged',
-        payload: { sessionId: this.sessionId, state: 'running' }
-      })
+  async start(worktreePath: string, _opts?: {
+    permissionMode?: JsonClaudePermissionMode
+    modelOverride?: string
+  }): Promise<void> {
+    this.worktreePath = worktreePath
+    this.client.start()
+
+    // Step 1: Initialize
+    const initResult = await this.client.sendRequest('initialize', {
+      protocolVersion: 1,
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: true },
+        terminal: true
+      },
+      clientInfo: { name: 'harness', version: '1.0.0' }
+    }) as { agentCapabilities?: { loadSession?: boolean; sessionCapabilities?: { resume?: unknown } } } | undefined
+
+    if (!initResult) {
+      log('opencode-adapter', `initialize failed or timed out sessionId=${this.sessionId}`)
+      this.dispatchError('Failed to initialize Opencode ACP connection')
+      return
     }
+
+    this.initialized = true
+    const caps = initResult.agentCapabilities
+
+    // Check if we have a persisted providerSessionId to resume/load
+    const persistedProviderSessionId = this.findPersistedProviderSessionId()
+
+    if (persistedProviderSessionId && caps?.loadSession) {
+      // Try to load existing session (replays history via session/update)
+      this.providerSessionId = persistedProviderSessionId
+      await this.client.sendRequest('session/load', {
+        sessionId: this.providerSessionId,
+        cwd: this.worktreePath,
+        mcpServers: []
+      })
+    } else if (persistedProviderSessionId && caps?.sessionCapabilities?.resume) {
+      // Try to resume without replaying history
+      this.providerSessionId = persistedProviderSessionId
+      await this.client.sendRequest('session/resume', {
+        sessionId: this.providerSessionId,
+        cwd: this.worktreePath,
+        mcpServers: []
+      })
+    } else {
+      // Create new session
+      const newResult = await this.client.sendRequest('session/new', {
+        cwd: this.worktreePath,
+        mcpServers: []
+      }) as { sessionId?: string } | undefined
+
+      if (!newResult?.sessionId) {
+        log('opencode-adapter', `session/new failed sessionId=${this.sessionId}`)
+        this.dispatchError('Failed to create Opencode session')
+        return
+      }
+
+      this.providerSessionId = newResult.sessionId
+      this.persistProviderSessionId(newResult.sessionId)
+    }
+
+    this.store.dispatch({
+      type: 'jsonClaude/sessionStateChanged',
+      payload: { sessionId: this.sessionId, state: 'running' }
+    })
   }
 
-  send(text: string): void {
-    this.client.sendNotification('message/send', { text })
+  send(text: string, _images?: Array<{ mediaType: string; data: string; path: string }>): void {
+    if (!this.providerSessionId || !this.initialized) {
+      log('opencode-adapter', `send called before initialization sessionId=${this.sessionId}`)
+      return
+    }
+
+    this.client.sendRequest('session/prompt', {
+      sessionId: this.providerSessionId,
+      prompt: [{ type: 'text', text }]
+    })
+
     this.appendUserEntry(text)
     this.setBusy(true)
   }
 
   cancelQueued(_entryId: string): void {
-    // Opencode ACP doesn't support canceling queued messages in the same way
-    // Dispatch entryRemoved optimistically
     this.store.dispatch({
       type: 'jsonClaude/entryRemoved',
       payload: { sessionId: this.sessionId, entryId: _entryId }
@@ -57,7 +127,10 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
   }
 
   interrupt(): void {
-    this.client.sendNotification('message/interrupt')
+    if (!this.providerSessionId) return
+    this.client.sendNotification('session/cancel', {
+      sessionId: this.providerSessionId
+    })
     this.setBusy(false)
   }
 
@@ -86,12 +159,28 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
   }
 
   seedFromTranscript(_worktreePath: string): void {
-    // TODO: Implement transcript seeding via opencode export
+    // History is replayed via session/load when resuming
   }
 
-  resolveApproval(_requestId: string, _result: ApprovalResult): boolean {
-    // Opencode ACP approval flow not yet implemented
-    return false
+  resolveApproval(requestId: string, result: ApprovalResult): boolean {
+    if (!this.providerSessionId || this.pendingPermissionId !== requestId) {
+      return false
+    }
+
+    let optionId: string
+    if (result.behavior === 'allow') {
+      optionId = 'allow-once'
+    } else {
+      optionId = 'reject'
+    }
+
+    this.client.sendRequest('session/request_permission', {
+      sessionId: this.providerSessionId,
+      outcome: { outcome: 'selected', optionId }
+    })
+
+    this.pendingPermissionId = null
+    return true
   }
 
   rerunAutoApprovalReview(_requestId: string): boolean {
@@ -102,50 +191,19 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     const method = msg.method
     const params = msg.params as Record<string, unknown> | undefined
 
-    if (method === 'assistant/text') {
-      const text = typeof params?.text === 'string' ? params.text : ''
-      if (text) {
-        this.partialText += text
-        this.scheduleTextFlush()
-      }
+    if (method === 'session/update') {
+      this.handleSessionUpdate(params)
       return
     }
 
-    if (method === 'assistant/complete') {
-      this.flushPartialText()
-      const blocks = this.buildBlocksFromParams(params)
-      this.appendAssistantEntry(blocks)
-      this.setBusy(false)
-      return
-    }
-
-    if (method === 'assistant/tool_use') {
-      this.flushPartialText()
-      const toolName = typeof params?.name === 'string' ? params.name : 'unknown'
-      const toolUseId = typeof params?.id === 'string' ? params.id : `tool-${this.entryCounter++}`
-      const input = typeof params?.input === 'object' && params?.input
-        ? (params.input as Record<string, unknown>)
-        : {}
-      this.appendAssistantEntry([
-        { type: 'tool_use', id: toolUseId, name: toolName, input }
-      ])
-      return
-    }
-
-    if (method === 'tool/result') {
-      const toolUseId = typeof params?.toolUseId === 'string' ? params.toolUseId : ''
-      const content = typeof params?.content === 'string' ? params.content : ''
-      const isError = params?.isError === true
-      this.store.dispatch({
-        type: 'jsonClaude/toolResultAttached',
-        payload: { sessionId: this.sessionId, toolUseId, content, isError }
-      })
+    if (method === 'session/request_permission') {
+      this.handlePermissionRequest(msg as AcpMessage & { id: string | number; params: Record<string, unknown> })
       return
     }
 
     if (method === 'error') {
       const message = typeof params?.message === 'string' ? params.message : 'Unknown error'
-      this.appendErrorEntry(message)
+      this.dispatchError(message)
       this.setBusy(false)
       return
     }
@@ -162,19 +220,164 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
         type: 'jsonClaude/sessionStateChanged',
         payload: { sessionId: this.sessionId, state: 'exited', exitCode: code, exitReason }
       })
-      this.appendErrorEntry(exitReason)
+      this.dispatchError(exitReason)
       this.setBusy(false)
       return
     }
   }
 
-  private buildBlocksFromParams(params: Record<string, unknown> | undefined): JsonClaudeMessageBlock[] {
-    const blocks: JsonClaudeMessageBlock[] = []
-    const text = typeof params?.text === 'string' ? params.text : ''
-    if (text) {
-      blocks.push({ type: 'text', text })
+  private handleSessionUpdate(params: Record<string, unknown> | undefined): void {
+    if (!params) return
+    const update = params.update as Record<string, unknown> | undefined
+    if (!update) return
+
+    const sessionUpdate = update.sessionUpdate as string
+    if (!sessionUpdate) return
+
+    switch (sessionUpdate) {
+      case 'agent_message_chunk': {
+        const content = update.content as Record<string, unknown> | undefined
+        const text = typeof content?.text === 'string' ? content.text : ''
+        if (text) {
+          this.partialText += text
+          this.scheduleTextFlush()
+        }
+        break
+      }
+
+      case 'user_message_chunk': {
+        const content = update.content as Record<string, unknown> | undefined
+        const text = typeof content?.text === 'string' ? content.text : ''
+        if (text) {
+          this.appendUserEntry(text)
+        }
+        break
+      }
+
+      case 'agent_thought_chunk': {
+        const content = update.content as Record<string, unknown> | undefined
+        const text = typeof content?.text === 'string' ? content.text : ''
+        if (text) {
+          this.store.dispatch({
+            type: 'jsonClaude/assistantThinkingDelta',
+            payload: {
+              sessionId: this.sessionId,
+              entryId: `${this.sessionId}-a-thought`,
+              textDelta: text
+            }
+          })
+        }
+        break
+      }
+
+      case 'tool_call': {
+        this.flushPartialText()
+        const toolCallId = typeof update.toolCallId === 'string' ? update.toolCallId : `tool-${this.entryCounter++}`
+        const title = typeof update.title === 'string' ? update.title : 'unknown'
+        const kind = typeof update.kind === 'string' ? update.kind : 'unknown'
+        this.appendAssistantEntry([
+          { type: 'tool_use', id: toolCallId, name: title, input: { kind } }
+        ])
+        break
+      }
+
+      case 'tool_call_update': {
+        const toolCallId = typeof update.toolCallId === 'string' ? update.toolCallId : ''
+        const status = typeof update.status === 'string' ? update.status : ''
+
+        if (status === 'completed' || status === 'failed') {
+          const content = update.content as Array<Record<string, unknown>> | undefined
+          let textContent = ''
+          let isError = status === 'failed'
+
+          if (Array.isArray(content)) {
+            for (const item of content) {
+              if (item.type === 'content' && typeof item.content === 'object' && item.content) {
+                const c = item.content as Record<string, unknown>
+                if (typeof c.text === 'string') {
+                  textContent += c.text
+                }
+              }
+            }
+          }
+
+          this.store.dispatch({
+            type: 'jsonClaude/toolResultAttached',
+            payload: { sessionId: this.sessionId, toolUseId: toolCallId, content: textContent, isError }
+          })
+        }
+        break
+      }
+
+      case 'available_commands_update': {
+        const commands = update.commands as string[] | undefined
+        if (Array.isArray(commands)) {
+          this.store.dispatch({
+            type: 'jsonClaude/slashCommandsChanged',
+            payload: { sessionId: this.sessionId, slashCommands: commands }
+          })
+        }
+        break
+      }
     }
-    return blocks
+
+    // Check if this is the end of a turn (prompt result would have stopReason)
+    if (sessionUpdate === 'agent_message_chunk' && update.isLast === true) {
+      this.flushPartialText()
+      this.setBusy(false)
+    }
+  }
+
+  private handlePermissionRequest(msg: AcpMessage & { id: string | number; params: Record<string, unknown> }): void {
+    const params = msg.params
+    const toolCall = params.toolCall as Record<string, unknown> | undefined
+    if (!toolCall) return
+
+    const requestId = `perm-${this.sessionId}-${Date.now()}`
+    this.pendingPermissionId = requestId
+
+    this.store.dispatch({
+      type: 'jsonClaude/approvalRequested',
+      payload: {
+        requestId,
+        sessionId: this.sessionId,
+        toolName: typeof toolCall.title === 'string' ? toolCall.title : 'unknown',
+        input: toolCall as Record<string, unknown>,
+        toolUseId: typeof toolCall.toolCallId === 'string' ? toolCall.toolCallId : undefined,
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  private findPersistedProviderSessionId(): string | undefined {
+    const panes = this.store.getSnapshot().state.terminals.panes
+    for (const tree of Object.values(panes)) {
+      for (const leaf of this.getLeaves(tree)) {
+        for (const tab of leaf.tabs) {
+          if (tab.id === this.sessionId && tab.type === 'json-claude') {
+            return tab.providerSessionId
+          }
+        }
+      }
+    }
+    return undefined
+  }
+
+  private persistProviderSessionId(providerSessionId: string): void {
+    this.store.dispatch({
+      type: 'terminals/providerSessionIdDiscovered',
+      payload: { terminalId: this.sessionId, providerSessionId }
+    })
+  }
+
+  private getLeaves(node: { type: string; tabs?: Array<{ id: string; type: string; providerSessionId?: string }>; children?: [unknown, unknown] }): Array<{ tabs: Array<{ id: string; type: string; providerSessionId?: string }> }> {
+    if (node.type === 'leaf') {
+      return [{ tabs: node.tabs || [] }]
+    }
+    if (node.children) {
+      return [...this.getLeaves(node.children[0] as typeof node), ...this.getLeaves(node.children[1] as typeof node)]
+    }
+    return []
   }
 
   private appendUserEntry(text: string): void {
@@ -207,7 +410,7 @@ export class OpencodeChatAdapter implements ChatSessionAdapter {
     })
   }
 
-  private appendErrorEntry(message: string): void {
+  private dispatchError(message: string): void {
     this.store.dispatch({
       type: 'jsonClaude/entryAppended',
       payload: {

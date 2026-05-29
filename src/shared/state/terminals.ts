@@ -251,6 +251,10 @@ export type TerminalsEvent =
       payload: { terminalId: string; sessionId: string }
     }
   | {
+      type: 'terminals/providerSessionIdDiscovered'
+      payload: { terminalId: string; providerSessionId: string }
+    }
+  | {
       type: 'terminals/controlTaken'
       payload: { terminalId: string; clientId: string; cols: number; rows: number }
     }
@@ -426,6 +430,25 @@ export function terminalsReducer(
             return { ...tab, sessionId }
           })
           return newTabs === leaf.tabs ? leaf : { ...leaf, tabs: newTabs }
+        })
+      }
+      return changed ? { ...state, panes: nextPanes } : state
+    }
+    case 'terminals/providerSessionIdDiscovered': {
+      const { terminalId, providerSessionId } = event.payload
+      const nextPanes: Record<string, PaneNode> = {}
+      let changed = false
+      for (const [path, tree] of Object.entries(state.panes)) {
+        nextPanes[path] = mapLeaves(tree, (leaf) => {
+          const i = leaf.tabs.findIndex(
+            (t) => t.id === terminalId && t.type === 'json-claude' && t.providerSessionId !== providerSessionId
+          )
+          if (i === -1) return leaf
+          changed = true
+          const tab = leaf.tabs[i]
+          const patched: TerminalTab = { ...tab, providerSessionId }
+          const nextTabs = [...leaf.tabs.slice(0, i), patched, ...leaf.tabs.slice(i + 1)]
+          return { ...leaf, tabs: nextTabs }
         })
       }
       return changed ? { ...state, panes: nextPanes } : state

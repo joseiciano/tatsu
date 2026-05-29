@@ -6,3 +6,4 @@ ccb0235e2af7a7fbf12147b5dda49abc314783e2 ccb0235e2af7a7fbf12147b5dda49abc314783e
 ccb0235e2af7a7fbf12147b5dda49abc314783e2 efb6ec77183035203606c8cc25cc1f47b82038d6 joseiciano <icianojn@gmail.com> 1780029274 -0500	commit: Add provider and capabilities to json-claude slice and chat tabs
 efb6ec77183035203606c8cc25cc1f47b82038d6 a523c385d47f834d0430b0c81a1524ce52d6227a joseiciano <icianojn@gmail.com> 1780030113 -0500	commit: Wire ChatProvider into main IPC handlers and lifecycle
 a523c385d47f834d0430b0c81a1524ce52d6227a 6c5c5a4463065a415156476d3e683cde51f40a99 joseiciano <icianojn@gmail.com> 1780030580 -0500	commit: Gate JsonModeChat UI by capabilities and add opencode chat tab creation
+6c5c5a4463065a415156476d3e683cde51f40a99 f16e959e903fe0f7a0f0205ecdc2dd3e82c294f3 joseiciano <icianojn@gmail.com> 1780031856 -0500	commit: Persist provider and providerSessionId on json-claude tabs
