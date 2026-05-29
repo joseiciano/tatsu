@@ -1,1 +1,1 @@
-Persist provider and providerSessionId on json-claude tabs
+Add terminals/providerSessionIdDiscovered reducer for ACP session persistence
