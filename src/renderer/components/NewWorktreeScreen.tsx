@@ -107,6 +107,11 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
     settings.defaultTerminalAgentId ?? 'claude'
   )
   const [modelOverride, setModelOverride] = useState('')
+
+  const effectiveAgentId: TerminalAgentId = mode === 'teleport' ? 'claude' : agentIdOverride
+  const effectiveAgentDef = getTerminalAgentDefinition(effectiveAgentId, settings.userTerminalAgents)
+  const agentSupportsPrompt = effectiveAgentDef?.capabilities.supportsPrompt !== false
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const branchRef = useRef<HTMLInputElement>(null)
@@ -176,7 +181,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
         await onPRSubmit(
           selectedRepo,
           prNumber,
-          reviewPrompt.trim(),
+          agentSupportsPrompt ? reviewPrompt.trim() : '',
           agentIdOverride,
           modelOverride.trim() || undefined
         )
@@ -185,7 +190,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
         setPrClickPending(null)
       }
     },
-    [onPRSubmit, prClickPending, selectedRepo, reviewPrompt, agentIdOverride, modelOverride]
+    [onPRSubmit, prClickPending, selectedRepo, reviewPrompt, agentIdOverride, modelOverride, agentSupportsPrompt]
   )
 
   const handleBranchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,7 +209,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
       await onSubmit(
         selectedRepo,
         effectiveBranch,
-        prompt.trim(),
+        agentSupportsPrompt ? prompt.trim() : '',
         parsedTeleport || undefined,
         effectiveAgent,
         modelOverride.trim() || undefined
@@ -213,7 +218,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
       setError(err instanceof Error ? err.message : 'Failed to create worktree')
       setSubmitting(false)
     }
-  }, [effectiveBranch, prompt, canSubmit, onSubmit, parsedTeleport, selectedRepo, mode, agentIdOverride, modelOverride])
+  }, [effectiveBranch, prompt, canSubmit, onSubmit, parsedTeleport, selectedRepo, mode, agentIdOverride, modelOverride, agentSupportsPrompt])
 
   const cycleRepo = useCallback((direction: 1 | -1) => {
     if (repoRoots.length <= 1) return
@@ -384,7 +389,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
               </label>
             )}
 
-            {mode === 'fresh' && (
+            {mode === 'fresh' && agentSupportsPrompt && (
               <label className="block mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-dim">
@@ -448,24 +453,30 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
 
             {mode === 'pr' && (
               <>
-                <label className="block mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-dim">
-                      Review prompt
-                    </span>
-                    <span className="text-xs text-faint">
-                      sent to Claude after the PR loads · edit defaults in Settings
-                    </span>
+                {agentSupportsPrompt ? (
+                  <label className="block mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-dim">
+                        Review prompt
+                      </span>
+                      <span className="text-xs text-faint">
+                        sent to Claude after the PR loads · edit defaults in Settings
+                      </span>
+                    </div>
+                    <textarea
+                      value={reviewPrompt}
+                      onChange={(e) => setReviewPrompt(e.target.value)}
+                      placeholder="Leave blank to drop in with no kickoff prompt."
+                      disabled={prClickPending !== null}
+                      rows={4}
+                      className="w-full bg-app border-2 border-border-strong rounded-lg px-4 py-3 text-sm text-fg-bright placeholder-faint outline-none focus:border-accent transition-colors resize-none"
+                    />
+                  </label>
+                ) : (
+                  <div className="mb-4 text-xs text-dim">
+                    Selected agent does not accept kickoff prompts.
                   </div>
-                  <textarea
-                    value={reviewPrompt}
-                    onChange={(e) => setReviewPrompt(e.target.value)}
-                    placeholder="Leave blank to drop in with no kickoff prompt."
-                    disabled={prClickPending !== null}
-                    rows={4}
-                    className="w-full bg-app border-2 border-border-strong rounded-lg px-4 py-3 text-sm text-fg-bright placeholder-faint outline-none focus:border-accent transition-colors resize-none"
-                  />
-                </label>
+                )}
                 <AgentModelRow
                   mode={mode}
                   agentId={agentIdOverride}
@@ -554,7 +565,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
             )}
           </div>
 
-          {mode === 'fresh' && (
+          {mode === 'fresh' && agentSupportsPrompt && (
           <div className="mt-10">
             <div className="mb-3 px-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-dim">
@@ -707,7 +718,7 @@ function AgentModelRow({
   // behind a collapsed header. Plain `useState` here makes the open flag
   // sticky once the user expands; collapsing again is always a click.
   const [openOverride, setOpenOverride] = useState(false)
-  const hasNonDefault = (!locked && agentId !== 'claude') || model.trim().length > 0
+  const hasNonDefault = (!locked && agentId !== 'claude') || (def?.capabilities.supportsModel !== false && model.trim().length > 0)
   const open = openOverride || hasNonDefault
 
   const handleAgentChange = (next: TerminalAgentId): void => {
@@ -753,40 +764,42 @@ function AgentModelRow({
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wider text-dim shrink-0">
-              Model
-            </span>
-            {modelOptions.length === 0 ? (
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={disabled}
-                placeholder={defaultLabel}
-                className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50"
-              />
-            ) : (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={disabled}
-                className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
-              >
-                <option value="">{defaultLabel}</option>
-                <optgroup label="Current">
-                  {modelOptions.filter((m) => m.tier === 'current').map((m) => (
-                    <option key={m.id} value={m.id}>{m.displayName}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Legacy">
-                  {modelOptions.filter((m) => m.tier === 'legacy').map((m) => (
-                    <option key={m.id} value={m.id}>{m.displayName}</option>
-                  ))}
-                </optgroup>
-              </select>
-            )}
-          </div>
+          {def?.capabilities.supportsModel !== false && (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-dim shrink-0">
+                Model
+              </span>
+              {modelOptions.length === 0 ? (
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={disabled}
+                  placeholder={defaultLabel}
+                  className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50"
+                />
+              ) : (
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={disabled}
+                  className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
+                >
+                  <option value="">{defaultLabel}</option>
+                  <optgroup label="Current">
+                    {modelOptions.filter((m) => m.tier === 'current').map((m) => (
+                      <option key={m.id} value={m.id}>{m.displayName}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Legacy">
+                    {modelOptions.filter((m) => m.tier === 'legacy').map((m) => (
+                      <option key={m.id} value={m.id}>{m.displayName}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

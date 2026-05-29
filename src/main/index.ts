@@ -76,7 +76,14 @@ import {
   DEFAULT_PR_REVIEW_PROMPT
 } from '../shared/state/settings'
 import { watchStatusDir } from './hooks'
-import { getAgent, getAgentById, isManagedAgent, listManagedAgents, type AgentKind } from './agents'
+import {
+  getAgent,
+  getAgentById,
+  isManagedAgent,
+  listManagedAgents,
+  type AgentKind
+} from './agents'
+import { getTerminalAgentDefinition } from '../shared/terminal-agent-registry'
 import { buildClaudeLaunchSettings } from './claude-launch'
 import {
   resolveTerminalAgentId,
@@ -2363,9 +2370,26 @@ function registerIpcHandlers(): void {
 
       // Generic / custom agent
       const command = resolveAgentCommand(settings, agentId)
-      const model = resolveAgentModel(settings, agentId, opts.modelOverride)
       const envVars = resolveAgentEnvVars(settings, agentId)
-      return buildGenericSpawnArgs({ command, model, initialPrompt: opts.initialPrompt })
+
+      // Resolve agent definition to check capabilities
+      const agentDef = getTerminalAgentDefinition(agentId, settings.userTerminalAgents)
+      const supportsModel = agentDef?.capabilities.supportsModel
+      const supportsPrompt = agentDef?.capabilities.supportsPrompt
+      const assignsSessionId = agentDef?.capabilities.assignsSessionId
+
+      // Only resolve model if the agent supports it
+      const model = supportsModel !== false ? resolveAgentModel(settings, agentId, opts.modelOverride) : null
+
+      return buildGenericSpawnArgs({
+        command,
+        model,
+        initialPrompt: opts.initialPrompt,
+        supportsPrompt,
+        supportsModel,
+        assignsSessionId,
+        sessionId: opts.sessionId
+      })
     }
   )
 

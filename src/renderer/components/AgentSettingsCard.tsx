@@ -159,8 +159,8 @@ export function AgentSettingsCard({
         <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
         <p className="text-xs text-dim mb-2">
           {agent.capabilities.assignsSessionId
-            ? 'Harness appends --session-id <uuid> so each tab has its own stable, resumable session.'
-            : 'The CLI command. Harness manages session resume automatically.'}
+            ? 'Harness appends `--session-id <uuid>` to the launch command.'
+            : 'The CLI command. Harness does not inject a session id.'}
         </p>
         <textarea
           value={commandDraft}
