@@ -26,7 +26,7 @@ import { log } from './debug'
 import { autoReview, checkDenyList } from './auto-approver'
 import type { AutoReviewStatus } from '../shared/state/json-claude'
 
-interface ApprovalResult {
+export interface ApprovalResult {
   behavior: 'allow' | 'deny'
   updatedInput?: Record<string, unknown>
   updatedPermissions?: unknown[]

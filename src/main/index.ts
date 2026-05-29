@@ -5,6 +5,9 @@ import { join } from 'path'
 import { PtyManager } from './pty-manager'
 import { ApprovalBridge } from './approval-bridge'
 import { JsonClaudeManager, bundledClaudeBinPath } from './json-claude-manager'
+import { ChatProviderManager } from './chat-provider'
+import { ClaudeChatAdapter } from './claude-chat-adapter'
+import { OpencodeChatAdapter } from './opencode-chat-adapter'
 import { shellQuote } from './shell-quote'
 import {
   readAttachmentImage,
@@ -296,6 +299,7 @@ const approvalBridge = new ApprovalBridge(store, {
   getAutoApproveSteerInstructions: () =>
     store.getSnapshot().state.settings.autoApproveSteerInstructions || ''
 })
+const chatProvider = new ChatProviderManager(store)
 const jsonClaudeManager = new JsonClaudeManager(store, {
   getClaudeCommand: () =>
     store.getSnapshot().state.settings.claudeCommand || DEFAULT_CLAUDE_COMMAND,
@@ -762,12 +766,12 @@ const panesFSM = new PanesFSM(store, {
   // could disconnect without intending to kill agents). Tab-close /
   // restart / clear events are the actual lifecycle boundary.
   killTabPty: (tabId) => ptyManager.kill(tabId),
-  killJsonClaude: (sessionId) => jsonClaudeManager.kill(sessionId),
+  killJsonClaude: (sessionId) => chatProvider.kill(sessionId),
   clearJsonClaudeSession: (sessionId) =>
     store.dispatch({ type: 'jsonClaude/sessionCleared', payload: { sessionId } }),
   startJsonClaudeWithPrompt: (sessionId, worktreePath, initialPrompt) => {
     startJsonClaudeSession(sessionId, worktreePath)
-    if (initialPrompt) jsonClaudeManager.send(sessionId, initialPrompt)
+    if (initialPrompt) chatProvider.send(sessionId, initialPrompt)
   },
   startJsonClaude: (sessionId, worktreePath) => {
     startJsonClaudeSession(sessionId, worktreePath)
@@ -792,28 +796,50 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
   return undefined
 }
 
+function findJsonClaudeTabProvider(sessionId: string): 'claude' | 'opencode' {
+  const panes = store.getSnapshot().state.terminals.panes
+  for (const tree of Object.values(panes)) {
+    for (const leaf of getLeaves(tree)) {
+      for (const tab of leaf.tabs) {
+        if (tab.id === sessionId && tab.type === 'json-claude') {
+          return tab.provider === 'opencode' ? 'opencode' : 'claude'
+        }
+      }
+    }
+  }
+  return 'claude'
+}
+
 /** Single source of truth for "spin up the json-claude subprocess for
  *  this sessionId". Used by the jsonClaude:start IPC handler, the
  *  panesFSM's startJsonClaudeWithPrompt + startJsonClaude options
  *  (kickoff + wake), so all paths produce the same dispatch + seed +
- *  create order. Idempotent — JsonClaudeManager.create() short-circuits
- *  if the instance is already running. */
+ *  create order. Idempotent — ChatProviderManager short-circuits
+ *  if the adapter is already registered. */
 function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
-  if (jsonClaudeManager.hasSession(sessionId)) return
-  store.dispatch({
-    type: 'jsonClaude/sessionStarted',
-    payload: {
-      sessionId,
-      worktreePath,
-      defaultPermissionMode:
-        store.getSnapshot().state.settings.jsonModeDefaultPermissionMode
-    }
-  })
-  jsonClaudeManager.seedFromTranscript(sessionId, worktreePath)
+  if (chatProvider.hasSession(sessionId)) return
+  const provider = findJsonClaudeTabProvider(sessionId)
   const permMode =
     store.getSnapshot().state.jsonClaude.sessions[sessionId]?.permissionMode ||
     'default'
-  jsonClaudeManager.create(sessionId, worktreePath, permMode, findJsonClaudeTabModel(sessionId))
+  const modelOverride = findJsonClaudeTabModel(sessionId)
+
+  if (provider === 'opencode') {
+    const adapter = new OpencodeChatAdapter(
+      sessionId,
+      worktreePath,
+      store,
+      () => store.getSnapshot().state.settings.opencodeCommand || 'opencode'
+    )
+    chatProvider.registerAdapter(adapter)
+    chatProvider.start(sessionId, worktreePath, provider, { modelOverride })
+    adapter.start(worktreePath)
+  } else {
+    const adapter = new ClaudeChatAdapter(sessionId, jsonClaudeManager, approvalBridge)
+    chatProvider.registerAdapter(adapter)
+    chatProvider.start(sessionId, worktreePath, provider, { permissionMode: permMode, modelOverride })
+    adapter.start(worktreePath, { permissionMode: permMode, modelOverride })
+  }
 }
 
 const worktreesFSM = new WorktreesFSM(store, {
@@ -2639,21 +2665,21 @@ function registerIpcHandlers(): void {
       text: string,
       images?: Array<{ mediaType: string; data: string; path: string }>
     ) => {
-      jsonClaudeManager.send(sessionId, text, images)
+      chatProvider.send(sessionId, text, images)
     }
   )
   transport.onSignal(
     'jsonClaude:cancelQueued',
     (_ctx, sessionId: string, messageId: string) => {
-      jsonClaudeManager.cancelQueued(sessionId, messageId)
+      chatProvider.cancelQueued(sessionId, messageId)
     }
   )
   transport.onRequest('jsonClaude:kill', (_ctx, sessionId: string) => {
-    jsonClaudeManager.kill(sessionId)
+    chatProvider.kill(sessionId)
     return true
   })
   transport.onRequest('jsonClaude:interrupt', (_ctx, sessionId: string) => {
-    jsonClaudeManager.interrupt(sessionId)
+    chatProvider.interrupt(sessionId)
     return true
   })
 
@@ -2696,13 +2722,13 @@ function registerIpcHandlers(): void {
             }
           })
           const timer = setTimeout(finish, 1500)
-          jsonClaudeManager.interrupt(sessionId)
+          chatProvider.interrupt(sessionId)
         })
       }
 
       approvalBridge.cancelPendingForSession(sessionId)
 
-      const outcome = jsonClaudeManager.rewindTo(sessionId, entryId)
+      const outcome = chatProvider.rewindTo(sessionId, entryId)
       if (!outcome.ok) return { ok: false, reason: outcome.reason }
 
       // Respawn so --resume re-seeds the slice from the truncated jsonl
@@ -2801,7 +2827,7 @@ function registerIpcHandlers(): void {
         type: 'jsonClaude/permissionModeChanged',
         payload: { sessionId, mode }
       })
-      jsonClaudeManager.setPermissionMode(sessionId, mode)
+      chatProvider.setPermissionMode(sessionId, mode)
       return true
     }
   )
@@ -3560,7 +3586,7 @@ if (desktopShellMod && desktopEarly) {
       void worktreesFSM.refreshList()
     },
     onBeforeQuit: () => {
-      jsonClaudeManager.killAll()
+      chatProvider.killAll()
       approvalBridge.stopAll()
     }
   })
@@ -3579,7 +3605,7 @@ if (desktopShellMod && desktopEarly) {
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')
-    jsonClaudeManager.killAll()
+    chatProvider.killAll()
     approvalBridge.stopAll()
     browserManager.destroyAll()
     sealAllActive()
