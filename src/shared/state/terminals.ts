@@ -1,3 +1,5 @@
+import type { TerminalAgentId } from '../terminal-agents'
+
 export type PtyStatus = 'idle' | 'processing' | 'waiting' | 'needs-approval'
 
 export interface PendingTool {
@@ -17,7 +19,8 @@ export interface TerminalProgress {
   value: number
 }
 
-export type AgentKind = 'claude' | 'codex' | 'opencode'
+/** @deprecated Use TerminalAgentId from terminal-agents.ts */
+export type AgentKind = TerminalAgentId
 
 export interface TerminalTab {
   id: string
@@ -36,7 +39,9 @@ export interface TerminalTab {
    *  spawn a subprocess per tab; they wake on first focus. */
   mode?: 'awake' | 'asleep'
   /** For agent tabs: which CLI agent this tab runs. */
-  agentKind?: AgentKind
+  agentId?: TerminalAgentId
+  /** @deprecated Use agentId instead. Kept for runtime compatibility with legacy events/tabs. */
+  agentKind?: TerminalAgentId
   /** For agent + json-claude tabs: override the model resolved from
    *  settings (claudeModel/codexModel). Set when a worktree was spawned
    *  with a one-shot pick (New Worktree screen "Model" field or the MCP
@@ -570,7 +575,7 @@ export function terminalsReducer(
           return {
             id: newId,
             type: 'agent' as const,
-            agentKind: 'claude' as const,
+            agentId: 'claude' as const,
             label: newLabel,
             sessionId
           }

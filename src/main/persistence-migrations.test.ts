@@ -436,3 +436,178 @@ describe('v6 → v7: legacy theme → themeMode + themeLight/themeDark', () => {
     expect(c.theme).toBeUndefined()
   })
 })
+
+describe('v7 → v8: generic terminal-agent model migration', () => {
+  it('folds defaultAgent into defaultTerminalAgentId', () => {
+    const c: AnyConfig = { defaultAgent: 'codex' }
+    runOne(7, c)
+    expect(c.defaultTerminalAgentId).toBe('codex')
+  })
+
+  it('does not overwrite existing defaultTerminalAgentId', () => {
+    const c: AnyConfig = { defaultAgent: 'codex', defaultTerminalAgentId: 'opencode' }
+    runOne(7, c)
+    expect(c.defaultTerminalAgentId).toBe('opencode')
+  })
+
+  it('folds legacy per-agent fields into agentConfigs', () => {
+    const c: AnyConfig = {
+      claudeCommand: 'claude --verbose',
+      claudeEnvVars: { FOO: 'bar' },
+      claudeModel: 'claude-opus-4-7',
+      codexCommand: 'codex',
+      codexModel: null,
+      opencodeCommand: 'opencode --debug'
+    }
+    runOne(7, c)
+    expect(c.agentConfigs).toBeDefined()
+    const configs = c.agentConfigs as Record<string, { command?: string; envVars?: Record<string, string>; model?: string | null }>
+    expect(configs['claude']).toEqual({
+      command: 'claude --verbose',
+      envVars: { FOO: 'bar' },
+      model: 'claude-opus-4-7'
+    })
+    expect(configs['codex']).toEqual({
+      command: 'codex',
+      model: null
+    })
+    expect(configs['opencode']).toEqual({
+      command: 'opencode --debug'
+    })
+  })
+
+  it('does not overwrite existing agentConfigs fields', () => {
+    const c: AnyConfig = {
+      claudeCommand: 'legacy-claude',
+      agentConfigs: {
+        claude: { command: 'new-claude', model: 'new-model' }
+      }
+    }
+    runOne(7, c)
+    const configs = c.agentConfigs as Record<string, { command?: string; model?: string | null }>
+    expect(configs['claude'].command).toBe('new-claude')
+    expect(configs['claude'].model).toBe('new-model')
+  })
+
+  it('migrates agentKind to agentId in nested panes', () => {
+    const c: AnyConfig = {
+      panes: {
+        '/a/repo1': {
+          '/a/repo1': {
+            type: 'leaf',
+            id: 'p1',
+            tabs: [
+              { id: 't1', type: 'agent', label: 'Claude', agentKind: 'claude' },
+              { id: 't2', type: 'shell', label: 'Shell' }
+            ],
+            activeTabId: 't1'
+          }
+        }
+      }
+    }
+    runOne(7, c)
+    const nested = c.panes as Record<string, Record<string, { tabs: Array<{ agentId?: string; agentKind?: string }> }>>
+    const tabs = nested['/a/repo1']['/a/repo1'].tabs
+    expect(tabs[0].agentId).toBe('claude')
+    expect('agentKind' in tabs[0]).toBe(false)
+    expect(tabs[1].agentId).toBeUndefined()
+    expect('agentKind' in tabs[1]).toBe(false)
+  })
+
+  it('migrates agentKind to agentId in legacyPanes', () => {
+    const c: AnyConfig = {
+      legacyPanes: {
+        '/wt/a': [
+          {
+            id: 'p1',
+            tabs: [
+              { id: 't1', type: 'agent', label: 'Claude', agentKind: 'codex' }
+            ],
+            activeTabId: 't1'
+          }
+        ]
+      }
+    }
+    runOne(7, c)
+    const legacy = c.legacyPanes as Record<string, Array<{ tabs: Array<{ agentId?: string; agentKind?: string }> }>>
+    const tab = legacy['/wt/a'][0].tabs[0]
+    expect(tab.agentId).toBe('codex')
+    expect('agentKind' in tab).toBe(false)
+  })
+
+  it('migrates agentKind to agentId in terminalTabs', () => {
+    const c: AnyConfig = {
+      terminalTabs: {
+        '/wt/a': [
+          { id: 't1', type: 'agent', label: 'Claude', agentKind: 'opencode' }
+        ]
+      }
+    }
+    runOne(7, c)
+    const terminalTabs = c.terminalTabs as Record<string, Array<{ agentId?: string; agentKind?: string }>>
+    const tab = terminalTabs['/wt/a'][0]
+    expect(tab.agentId).toBe('opencode')
+    expect('agentKind' in tab).toBe(false)
+  })
+
+  it('is idempotent — re-running does not change already-migrated config', () => {
+    const c: AnyConfig = {
+      defaultAgent: 'codex',
+      claudeCommand: 'claude',
+      panes: {
+        '/a/repo1': {
+          '/a/repo1': {
+            type: 'leaf',
+            id: 'p1',
+            tabs: [
+              { id: 't1', type: 'agent', label: 'Claude', agentKind: 'claude' }
+            ],
+            activeTabId: 't1'
+          }
+        }
+      }
+    }
+    runOne(7, c)
+    const first = JSON.parse(JSON.stringify(c))
+    runOne(7, c)
+    expect(c).toEqual(first)
+  })
+
+  it('does not create agentConfigs when no legacy fields exist', () => {
+    const c: AnyConfig = { defaultTerminalAgentId: 'claude' }
+    runOne(7, c)
+    expect(c.agentConfigs).toBeUndefined()
+  })
+
+  it('end-to-end: full legacy config migrates to new shape', () => {
+    const c: AnyConfig = {
+      schemaVersion: 0,
+      defaultAgent: 'codex',
+      claudeCommand: 'claude --verbose',
+      claudeModel: 'claude-opus-4-7',
+      panes: {
+        '/a/repo1': {
+          '/a/repo1': {
+            type: 'leaf',
+            id: 'p1',
+            tabs: [
+              { id: 't1', type: 'agent', label: 'Claude', agentKind: 'claude' }
+            ],
+            activeTabId: 't1'
+          }
+        }
+      }
+    }
+    runMigrations(c)
+    expect(c.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(c.defaultTerminalAgentId).toBe('codex')
+    expect(c.agentConfigs).toBeDefined()
+    const configs = c.agentConfigs as Record<string, { command?: string; model?: string | null }>
+    expect(configs['claude'].command).toBe('claude --verbose')
+    expect(configs['claude'].model).toBe('claude-opus-4-7')
+    const nested = c.panes as Record<string, Record<string, { tabs: Array<{ agentId?: string; agentKind?: string }> }>>
+    const tab = nested['/a/repo1']['/a/repo1'].tabs[0]
+    expect(tab.agentId).toBe('claude')
+    expect('agentKind' in tab).toBe(false)
+  })
+})

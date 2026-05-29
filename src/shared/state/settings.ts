@@ -1,4 +1,5 @@
 import type { JsonClaudePermissionMode } from './json-claude'
+import type { TerminalAgentId, UserTerminalAgentDefinition, AgentRuntimeConfig } from '../terminal-agents'
 
 export interface WorktreeScripts {
   setup: string
@@ -9,6 +10,7 @@ export type MergeStrategy = 'squash' | 'merge-commit' | 'fast-forward'
 export type WorktreeBase = 'remote' | 'local'
 export type WorktreeDetail = 'diff' | 'age' | 'pr' | 'none'
 
+/** @deprecated Use TerminalAgentId from terminal-agents.ts */
 export type AgentKindSetting = 'claude' | 'codex' | 'opencode'
 
 export type BrowserToolsMode = 'view' | 'full'
@@ -94,14 +96,33 @@ export interface SettingsState {
    *  changes only when the on-disk contents actually change. */
   customThemes: CustomTheme[]
   hotkeys: Record<string, string> | null
+  /** Default terminal agent for new tabs. */
+  defaultTerminalAgentId: TerminalAgentId
+  /** User-defined terminal agents that extend or override built-ins. */
+  userTerminalAgents: UserTerminalAgentDefinition[]
+  /** Per-agent runtime configuration (command, env vars, model). */
+  agentConfigs: Record<TerminalAgentId, AgentRuntimeConfig>
+  /** @deprecated Use defaultTerminalAgentId. Kept for backwards compatibility. */
   defaultAgent: AgentKindSetting
+  /** @deprecated Use agentConfigs['claude'].command. Kept for backwards compatibility. */
   claudeCommand: string
+  /** @deprecated Use agentConfigs['codex'].command. Kept for backwards compatibility. */
   codexCommand: string
+  /** @deprecated Use agentConfigs['opencode'].command. Kept for backwards compatibility. */
   opencodeCommand: string
-  worktreeScripts: WorktreeScripts
+  /** @deprecated Use agentConfigs['claude'].envVars. Kept for backwards compatibility. */
   claudeEnvVars: Record<string, string>
+  /** @deprecated Use agentConfigs['codex'].envVars. Kept for backwards compatibility. */
   codexEnvVars: Record<string, string>
+  /** @deprecated Use agentConfigs['opencode'].envVars. Kept for backwards compatibility. */
   opencodeEnvVars: Record<string, string>
+  /** @deprecated Use agentConfigs['claude'].model. Kept for backwards compatibility. */
+  claudeModel: string | null
+  /** @deprecated Use agentConfigs['codex'].model. Kept for backwards compatibility. */
+  codexModel: string | null
+  /** @deprecated Use agentConfigs['opencode'].model. Kept for backwards compatibility. */
+  opencodeModel: string | null
+  worktreeScripts: WorktreeScripts
   harnessMcpEnabled: boolean
   nameClaudeSessions: boolean
   terminalFontFamily: string
@@ -111,9 +132,6 @@ export interface SettingsState {
   mergeStrategy: MergeStrategy
   worktreeDetail: WorktreeDetail
   shareClaudeSettings: boolean
-  claudeModel: string | null
-  codexModel: string | null
-  opencodeModel: string | null
   hasGithubToken: boolean
   githubAuthSource: 'pat' | 'gh-cli' | null
   /** GitHub login of the user whose token is configured. Resolved at
@@ -210,14 +228,21 @@ export type SettingsEvent =
   | { type: 'settings/themeDarkChanged'; payload: string }
   | { type: 'settings/customThemesChanged'; payload: CustomTheme[] }
   | { type: 'settings/hotkeysChanged'; payload: Record<string, string> | null }
+  | { type: 'settings/defaultTerminalAgentIdChanged'; payload: TerminalAgentId }
+  | { type: 'settings/userTerminalAgentsChanged'; payload: UserTerminalAgentDefinition[] }
+  | { type: 'settings/agentRuntimeConfigChanged'; payload: { agentId: TerminalAgentId; config: AgentRuntimeConfig } }
+  | { type: 'settings/agentRuntimeConfigRemoved'; payload: TerminalAgentId }
   | { type: 'settings/defaultAgentChanged'; payload: AgentKindSetting }
   | { type: 'settings/claudeCommandChanged'; payload: string }
   | { type: 'settings/codexCommandChanged'; payload: string }
   | { type: 'settings/opencodeCommandChanged'; payload: string }
-  | { type: 'settings/worktreeScriptsChanged'; payload: WorktreeScripts }
   | { type: 'settings/claudeEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/codexEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/opencodeEnvVarsChanged'; payload: Record<string, string> }
+  | { type: 'settings/claudeModelChanged'; payload: string | null }
+  | { type: 'settings/codexModelChanged'; payload: string | null }
+  | { type: 'settings/opencodeModelChanged'; payload: string | null }
+  | { type: 'settings/worktreeScriptsChanged'; payload: WorktreeScripts }
   | { type: 'settings/harnessMcpEnabledChanged'; payload: boolean }
   | { type: 'settings/nameClaudeSessionsChanged'; payload: boolean }
   | { type: 'settings/terminalFontFamilyChanged'; payload: string }
@@ -231,9 +256,6 @@ export type SettingsEvent =
   | { type: 'settings/githubAuthSourceChanged'; payload: 'pat' | 'gh-cli' | null }
   | { type: 'settings/viewerLoginChanged'; payload: string | null }
   | { type: 'settings/harnessStarredChanged'; payload: boolean | null }
-  | { type: 'settings/claudeModelChanged'; payload: string | null }
-  | { type: 'settings/codexModelChanged'; payload: string | null }
-  | { type: 'settings/opencodeModelChanged'; payload: string | null }
   | { type: 'settings/autoUpdateEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptChanged'; payload: string }
@@ -271,14 +293,20 @@ export const initialSettings: SettingsState = {
   themeDark: DEFAULT_DARK_THEME,
   customThemes: EMPTY_CUSTOM_THEMES,
   hotkeys: null,
+  defaultTerminalAgentId: 'claude',
+  userTerminalAgents: [],
+  agentConfigs: {},
   defaultAgent: 'claude',
   claudeCommand: '',
   codexCommand: '',
   opencodeCommand: '',
-  worktreeScripts: { setup: '', teardown: '' },
   claudeEnvVars: {},
   codexEnvVars: {},
   opencodeEnvVars: {},
+  claudeModel: null,
+  codexModel: null,
+  opencodeModel: null,
+  worktreeScripts: { setup: '', teardown: '' },
   harnessMcpEnabled: true,
   nameClaudeSessions: false,
   terminalFontFamily: '',
@@ -288,9 +316,6 @@ export const initialSettings: SettingsState = {
   mergeStrategy: 'squash',
   worktreeDetail: 'diff',
   shareClaudeSettings: true,
-  claudeModel: null,
-  codexModel: null,
-  opencodeModel: null,
   hasGithubToken: false,
   githubAuthSource: null,
   viewerLogin: null,
@@ -334,22 +359,58 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, customThemes: event.payload }
     case 'settings/hotkeysChanged':
       return { ...state, hotkeys: event.payload }
+    case 'settings/defaultTerminalAgentIdChanged':
+      return { ...state, defaultTerminalAgentId: event.payload }
+    case 'settings/userTerminalAgentsChanged':
+      return { ...state, userTerminalAgents: event.payload }
+    case 'settings/agentRuntimeConfigChanged': {
+      const { agentId, config } = event.payload
+      const existing = state.agentConfigs[agentId]
+      if (
+        existing &&
+        existing.command === config.command &&
+        JSON.stringify(existing.envVars ?? {}) === JSON.stringify(config.envVars ?? {}) &&
+        existing.model === config.model
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        agentConfigs: {
+          ...state.agentConfigs,
+          [agentId]: config
+        }
+      }
+    }
+    case 'settings/agentRuntimeConfigRemoved': {
+      const agentId = event.payload
+      if (!(agentId in state.agentConfigs)) return state
+      const { [agentId]: _dropped, ...rest } = state.agentConfigs
+      void _dropped
+      return { ...state, agentConfigs: rest }
+    }
     case 'settings/defaultAgentChanged':
-      return { ...state, defaultAgent: event.payload }
+      return { ...state, defaultAgent: event.payload, defaultTerminalAgentId: event.payload }
     case 'settings/claudeCommandChanged':
       return { ...state, claudeCommand: event.payload }
     case 'settings/codexCommandChanged':
       return { ...state, codexCommand: event.payload }
     case 'settings/opencodeCommandChanged':
       return { ...state, opencodeCommand: event.payload }
-    case 'settings/worktreeScriptsChanged':
-      return { ...state, worktreeScripts: event.payload }
     case 'settings/claudeEnvVarsChanged':
       return { ...state, claudeEnvVars: event.payload }
     case 'settings/codexEnvVarsChanged':
       return { ...state, codexEnvVars: event.payload }
     case 'settings/opencodeEnvVarsChanged':
       return { ...state, opencodeEnvVars: event.payload }
+    case 'settings/claudeModelChanged':
+      return { ...state, claudeModel: event.payload }
+    case 'settings/codexModelChanged':
+      return { ...state, codexModel: event.payload }
+    case 'settings/opencodeModelChanged':
+      return { ...state, opencodeModel: event.payload }
+    case 'settings/worktreeScriptsChanged':
+      return { ...state, worktreeScripts: event.payload }
     case 'settings/harnessMcpEnabledChanged':
       return { ...state, harnessMcpEnabled: event.payload }
     case 'settings/nameClaudeSessionsChanged':
@@ -376,12 +437,6 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, viewerLogin: event.payload }
     case 'settings/harnessStarredChanged':
       return { ...state, harnessStarred: event.payload }
-    case 'settings/claudeModelChanged':
-      return { ...state, claudeModel: event.payload }
-    case 'settings/codexModelChanged':
-      return { ...state, codexModel: event.payload }
-    case 'settings/opencodeModelChanged':
-      return { ...state, opencodeModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
     case 'settings/harnessSystemPromptEnabledChanged':

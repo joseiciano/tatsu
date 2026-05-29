@@ -14,13 +14,15 @@
 
 import { basename, dirname, join } from 'path'
 
-import type { AgentKind } from '../shared/state/terminals'
+import type { TerminalAgentId } from '../shared/terminal-agents'
 
 export interface PersistedTab {
   id: string
   type: 'agent' | 'shell' | 'browser' | 'json-claude'
   label: string
-  agentKind?: AgentKind
+  agentId?: TerminalAgentId
+  /** @deprecated Legacy alias for agentId. Migrated to agentId by v7→v8. */
+  agentKind?: TerminalAgentId
   sessionId?: string
   /** For browser tabs: last URL so we can restore the tab on reload. */
   url?: string
@@ -194,6 +196,106 @@ export const migrations: Migration[] = [
       c.themeDark = legacy
     }
     delete c.theme
+  },
+
+  // v7 → v8: generic terminal-agent model migration.
+  // a) Folds defaultAgent → defaultTerminalAgentId.
+  // b) Folds claude/codex/opencode command/env/model into agentConfigs[agentId]
+  //    without overwriting existing new-config fields.
+  // c) Migrates every persisted tab agentKind → agentId across pane trees/legacy
+  //    shapes, deleting agentKind.
+  // d) Idempotent — safe to re-run.
+  (c) => {
+    // a) defaultAgent → defaultTerminalAgentId
+    if (typeof c.defaultAgent === 'string' && !c.defaultTerminalAgentId) {
+      c.defaultTerminalAgentId = c.defaultAgent
+    }
+
+    // b) Fold legacy per-agent fields into agentConfigs
+    const agentConfigs: Record<string, { command?: string; envVars?: Record<string, string>; model?: string | null }> =
+      (c.agentConfigs as typeof agentConfigs) ?? {}
+
+    const foldLegacy = (agentId: string, commandKey: string, envKey: string, modelKey: string) => {
+      const existing = agentConfigs[agentId] ?? {}
+      let changed = false
+      const next: typeof existing = { ...existing }
+      if (typeof c[commandKey] === 'string' && next.command === undefined) {
+        next.command = c[commandKey] as string
+        changed = true
+      }
+      if (c[envKey] && typeof c[envKey] === 'object' && next.envVars === undefined) {
+        next.envVars = { ...(c[envKey] as Record<string, string>) }
+        changed = true
+      }
+      if ((typeof c[modelKey] === 'string' || c[modelKey] === null) && next.model === undefined) {
+        next.model = c[modelKey] as string | null
+        changed = true
+      }
+      if (changed) {
+        agentConfigs[agentId] = next
+      }
+    }
+
+    foldLegacy('claude', 'claudeCommand', 'claudeEnvVars', 'claudeModel')
+    foldLegacy('codex', 'codexCommand', 'codexEnvVars', 'codexModel')
+    foldLegacy('opencode', 'opencodeCommand', 'opencodeEnvVars', 'opencodeModel')
+
+    if (Object.keys(agentConfigs).length > 0) {
+      c.agentConfigs = agentConfigs
+    }
+
+    // c) Migrate tabs: agentKind → agentId
+    const migrateTab = (tab: Record<string, unknown>) => {
+      if (typeof tab.agentKind === 'string' && !tab.agentId) {
+        tab.agentId = tab.agentKind
+      }
+      if ('agentKind' in tab) {
+        delete tab.agentKind
+      }
+    }
+
+    // Nested panes (current shape)
+    const panes = c.panes as Record<string, Record<string, { tabs?: Record<string, unknown>[] }>> | undefined
+    if (panes && typeof panes === 'object') {
+      for (const byWt of Object.values(panes)) {
+        if (!byWt || typeof byWt !== 'object') continue
+        for (const paneNode of Object.values(byWt)) {
+          if (!paneNode || typeof paneNode !== 'object') continue
+          const tabs = (paneNode as { tabs?: Record<string, unknown>[] }).tabs
+          if (!Array.isArray(tabs)) continue
+          for (const tab of tabs) {
+            if (tab && typeof tab === 'object') migrateTab(tab)
+          }
+        }
+      }
+    }
+
+    // Legacy flat panes (v2 shape)
+    const legacyPanes = c.legacyPanes as Record<string, { tabs?: Record<string, unknown>[] }[]> | undefined
+    if (legacyPanes && typeof legacyPanes === 'object') {
+      for (const paneList of Object.values(legacyPanes)) {
+        if (!Array.isArray(paneList)) continue
+        for (const pane of paneList) {
+          if (!pane || typeof pane !== 'object') continue
+          const tabs = pane.tabs
+          if (!Array.isArray(tabs)) continue
+          for (const tab of tabs) {
+            if (tab && typeof tab === 'object') migrateTab(tab)
+          }
+        }
+      }
+    }
+
+    // Even older terminalTabs (v1 shape)
+    const terminalTabs = c.terminalTabs as Record<string, Record<string, unknown>[]> | undefined
+    if (terminalTabs && typeof terminalTabs === 'object') {
+      for (const tabs of Object.values(terminalTabs)) {
+        if (!Array.isArray(tabs)) continue
+        for (const tab of tabs) {
+          if (tab && typeof tab === 'object') migrateTab(tab)
+        }
+      }
+    }
   }
 ]
 

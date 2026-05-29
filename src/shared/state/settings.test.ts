@@ -65,12 +65,94 @@ describe('settingsReducer', () => {
     expect(s2.hotkeys).toBeNull()
   })
 
-  it('claudeCommandChanged sets the command string', () => {
+  it('defaultTerminalAgentIdChanged sets the default agent', () => {
+    expect(initialSettings.defaultTerminalAgentId).toBe('claude')
     const next = apply(initialSettings, {
-      type: 'settings/claudeCommandChanged',
-      payload: 'claude --verbose'
+      type: 'settings/defaultTerminalAgentIdChanged',
+      payload: 'codex'
     })
-    expect(next.claudeCommand).toBe('claude --verbose')
+    expect(next.defaultTerminalAgentId).toBe('codex')
+  })
+
+  it('userTerminalAgentsChanged replaces the array', () => {
+    expect(initialSettings.userTerminalAgents).toEqual([])
+    const agents = [
+      {
+        id: 'custom-agent',
+        displayName: 'Custom',
+        vendor: 'CustomCo',
+        capabilities: {
+          assignsSessionId: false,
+          supportsResume: false,
+          supportsModel: true,
+          supportsPrompt: true,
+          supportsJsonMode: false,
+          supportsHarnessMcp: true,
+          supportsHooks: false
+        }
+      }
+    ]
+    const next = apply(initialSettings, {
+      type: 'settings/userTerminalAgentsChanged',
+      payload: agents
+    })
+    expect(next.userTerminalAgents).toEqual(agents)
+  })
+
+  it('agentRuntimeConfigChanged sets config for an agent', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/agentRuntimeConfigChanged',
+      payload: {
+        agentId: 'claude',
+        config: { command: 'claude --verbose', envVars: { FOO: 'bar' }, model: 'claude-opus-4-7' }
+      }
+    })
+    expect(next.agentConfigs['claude']).toEqual({
+      command: 'claude --verbose',
+      envVars: { FOO: 'bar' },
+      model: 'claude-opus-4-7'
+    })
+  })
+
+  it('agentRuntimeConfigChanged returns same reference when unchanged', () => {
+    const withConfig = apply(initialSettings, {
+      type: 'settings/agentRuntimeConfigChanged',
+      payload: {
+        agentId: 'claude',
+        config: { command: 'claude', envVars: {}, model: null }
+      }
+    })
+    const same = apply(withConfig, {
+      type: 'settings/agentRuntimeConfigChanged',
+      payload: {
+        agentId: 'claude',
+        config: { command: 'claude', envVars: {}, model: null }
+      }
+    })
+    expect(same).toBe(withConfig)
+  })
+
+  it('agentRuntimeConfigRemoved deletes a config', () => {
+    const withConfig = apply(initialSettings, {
+      type: 'settings/agentRuntimeConfigChanged',
+      payload: {
+        agentId: 'claude',
+        config: { command: 'claude --verbose' }
+      }
+    })
+    const removed = apply(withConfig, {
+      type: 'settings/agentRuntimeConfigRemoved',
+      payload: 'claude'
+    })
+    expect(removed.agentConfigs['claude']).toBeUndefined()
+  })
+
+  it('agentRuntimeConfigRemoved returns same reference when missing', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/agentRuntimeConfigRemoved',
+      payload: 'missing'
+    })
+    expect(next).toBe(initialSettings)
   })
 
   it('worktreeScriptsChanged replaces both setup and teardown', () => {
@@ -79,14 +161,6 @@ describe('settingsReducer', () => {
       payload: { setup: 'pnpm i', teardown: 'echo bye' }
     })
     expect(next.worktreeScripts).toEqual({ setup: 'pnpm i', teardown: 'echo bye' })
-  })
-
-  it('claudeEnvVarsChanged replaces the full map', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/claudeEnvVarsChanged',
-      payload: { FOO: 'bar', BAZ: 'qux' }
-    })
-    expect(next.claudeEnvVars).toEqual({ FOO: 'bar', BAZ: 'qux' })
   })
 
   it('expandedDiagnosticLoggingEnabledChanged toggles the flag', () => {
@@ -231,90 +305,6 @@ describe('settingsReducer', () => {
     expect(pat.githubAuthSource).toBe('pat')
     const none = apply(pat, { type: 'settings/githubAuthSourceChanged', payload: null })
     expect(none.githubAuthSource).toBeNull()
-  })
-
-  it('claudeModelChanged sets the model', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/claudeModelChanged',
-      payload: 'claude-opus-4-7'
-    })
-    expect(next.claudeModel).toBe('claude-opus-4-7')
-  })
-
-  it('claudeModelChanged clears with null', () => {
-    const withModel = apply(initialSettings, {
-      type: 'settings/claudeModelChanged',
-      payload: 'claude-opus-4-7'
-    })
-    const cleared = apply(withModel, {
-      type: 'settings/claudeModelChanged',
-      payload: null
-    })
-    expect(cleared.claudeModel).toBeNull()
-  })
-
-  it('codexModelChanged sets the model', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/codexModelChanged',
-      payload: 'o3'
-    })
-    expect(next.codexModel).toBe('o3')
-  })
-
-  it('codexModelChanged clears with null', () => {
-    const withModel = apply(initialSettings, {
-      type: 'settings/codexModelChanged',
-      payload: 'o3'
-    })
-    const cleared = apply(withModel, {
-      type: 'settings/codexModelChanged',
-      payload: null
-    })
-    expect(cleared.codexModel).toBeNull()
-  })
-
-  it('opencodeCommandChanged sets the command string', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/opencodeCommandChanged',
-      payload: 'opencode --verbose'
-    })
-    expect(next.opencodeCommand).toBe('opencode --verbose')
-  })
-
-  it('opencodeModelChanged sets the model', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/opencodeModelChanged',
-      payload: 'openai/gpt-4'
-    })
-    expect(next.opencodeModel).toBe('openai/gpt-4')
-  })
-
-  it('opencodeModelChanged clears with null', () => {
-    const withModel = apply(initialSettings, {
-      type: 'settings/opencodeModelChanged',
-      payload: 'openai/gpt-4'
-    })
-    const cleared = apply(withModel, {
-      type: 'settings/opencodeModelChanged',
-      payload: null
-    })
-    expect(cleared.opencodeModel).toBeNull()
-  })
-
-  it('opencodeEnvVarsChanged replaces the full map', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/opencodeEnvVarsChanged',
-      payload: { FOO: 'bar', BAZ: 'qux' }
-    })
-    expect(next.opencodeEnvVars).toEqual({ FOO: 'bar', BAZ: 'qux' })
-  })
-
-  it('defaultAgentChanged accepts opencode', () => {
-    const next = apply(initialSettings, {
-      type: 'settings/defaultAgentChanged',
-      payload: 'opencode'
-    })
-    expect(next.defaultAgent).toBe('opencode')
   })
 
   it('harnessSystemPromptEnabledChanged toggles flag', () => {
@@ -526,14 +516,14 @@ describe('settingsReducer', () => {
     expect(initialSettings.jsonModeDefaultPermissionMode).toBe('acceptEdits')
     const start: SettingsState = {
       ...initialSettings,
-      claudeCommand: 'pre-existing'
+      defaultTerminalAgentId: 'pre-existing'
     }
     const planned = apply(start, {
       type: 'settings/jsonModeDefaultPermissionModeChanged',
       payload: 'plan'
     })
     expect(planned.jsonModeDefaultPermissionMode).toBe('plan')
-    expect(planned.claudeCommand).toBe('pre-existing')
+    expect(planned.defaultTerminalAgentId).toBe('pre-existing')
     const back = apply(planned, {
       type: 'settings/jsonModeDefaultPermissionModeChanged',
       payload: 'default'
@@ -617,11 +607,11 @@ describe('settingsReducer', () => {
   it('leaves unrelated fields untouched', () => {
     const start: SettingsState = {
       ...initialSettings,
-      claudeCommand: 'pre-existing',
+      defaultTerminalAgentId: 'pre-existing',
       nameClaudeSessions: true
     }
     const next = apply(start, { type: 'settings/themeDarkChanged', payload: 'nord' })
-    expect(next.claudeCommand).toBe('pre-existing')
+    expect(next.defaultTerminalAgentId).toBe('pre-existing')
     expect(next.nameClaudeSessions).toBe(true)
   })
 })

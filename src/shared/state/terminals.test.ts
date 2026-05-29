@@ -547,7 +547,7 @@ describe('terminalsReducer', () => {
       type: 'leaf',
       id: 'p1',
       tabs: [
-        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1' },
+        { id: 'agent-1', type: 'agent', label: 'Claude', agentId: 'claude', sessionId: 'sess-1' },
         { id: 'shell-1', type: 'shell', label: 'Shell' }
       ],
       activeTabId: 'agent-1'
@@ -596,7 +596,7 @@ describe('terminalsReducer', () => {
     const tab = leaves[0].tabs[0]
     expect(tab.type).toBe('agent')
     expect(tab.id).toBe('agent-new')
-    expect(tab.agentKind).toBe('claude')
+    expect(tab.agentId).toBe('claude')
     // sessionId carried over so --resume picks up the same on-disk jsonl.
     expect(tab.sessionId).toBe('sess-1')
     expect(leaves[0].activeTabId).toBe('agent-new')
@@ -606,7 +606,7 @@ describe('terminalsReducer', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
-      tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1' }],
+      tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentId: 'claude', sessionId: 'sess-1' }],
       activeTabId: 'agent-1'
     }
     const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
@@ -676,7 +676,7 @@ describe('terminalsReducer', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
-      tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude' }],
+      tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentId: 'claude' }],
       activeTabId: 'agent-1'
     }
     const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
@@ -858,7 +858,7 @@ describe('terminalsReducer', () => {
       direction: 'horizontal',
       ratio: 0.5,
       children: [
-        { type: 'leaf', id: 'p1', tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude' }], activeTabId: 'agent-1' },
+        { type: 'leaf', id: 'p1', tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentId: 'claude' }], activeTabId: 'agent-1' },
         leaf('p2', ['t2'])
       ]
     }

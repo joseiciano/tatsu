@@ -114,7 +114,7 @@ export interface ControlServerDeps {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
   /** Returns the caller's current scope, or null if the terminal is not

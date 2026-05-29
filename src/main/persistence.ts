@@ -11,6 +11,7 @@ import {
 } from './persistence-migrations'
 import type { CostsState } from '../shared/state/costs'
 import type { SnoozeEntry } from '../shared/state/snooze'
+import type { TerminalAgentId, UserTerminalAgentDefinition, AgentRuntimeConfig } from '../shared/terminal-agents'
 
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
 
@@ -46,27 +47,23 @@ export interface Config {
   repoRoots: string[]
   // Custom hotkey overrides: action name → shortcut string (e.g. "Cmd+Shift+T")
   hotkeys?: Record<string, string>
-  // Which agent CLI to default to when creating new tabs: 'claude', 'codex', or 'opencode'.
+  // Which agent CLI to default to when creating new tabs.
+  defaultTerminalAgentId?: TerminalAgentId
+  // User-defined terminal agents that extend or override built-ins.
+  userTerminalAgents?: UserTerminalAgentDefinition[]
+  // Per-agent runtime configuration (command, env vars, model).
+  agentConfigs?: Record<TerminalAgentId, AgentRuntimeConfig>
+  // Legacy per-agent fields — migrated into agentConfigs by v7→v8.
   defaultAgent?: 'claude' | 'codex' | 'opencode'
-  // Command used to launch Claude in a worktree terminal. Runs via login shell.
-  // Harness appends `--session-id <uuid>` so each tab has a stable resumable session.
   claudeCommand?: string
-  // Command used to launch Codex in a worktree terminal.
   codexCommand?: string
-  // Command used to launch Opencode in a worktree terminal.
   opencodeCommand?: string
-  // Extra environment variables injected into the PTY when spawning a Claude tab.
   claudeEnvVars?: Record<string, string>
-  // Model override for Claude Code (passed as --model <id>).
-  claudeModel?: string
-  // Model override for Codex (passed as --model <id>).
-  codexModel?: string
-  // Model override for Opencode (passed as --model <provider/model>).
-  opencodeModel?: string
-  // Extra environment variables injected into the PTY when spawning a Codex tab.
   codexEnvVars?: Record<string, string>
-  // Extra environment variables injected into the PTY when spawning an Opencode tab.
   opencodeEnvVars?: Record<string, string>
+  claudeModel?: string
+  codexModel?: string
+  opencodeModel?: string
   // When false, Harness won't inject `--mcp-config <path>` pointing at the
   // bundled harness-control MCP server. Default is enabled (undefined/true).
   harnessMcpEnabled?: boolean
