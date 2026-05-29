@@ -140,6 +140,32 @@ describe('OpencodeChatAdapter', () => {
       await Promise.race([startPromise, new Promise((r) => setTimeout(r, 10))])
     })
 
+    it('builds command line with modelOverride when passed to start', async () => {
+      mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
+      mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
+      await adapter.start('/wt/test', { modelOverride: 'gpt-4o' })
+      const cmdLine = (adapter as any).buildCommandLine()
+      expect(cmdLine).toBe("opencode --model 'gpt-4o' acp")
+    })
+
+    it('builds command line with settings opencodeModel when no override', async () => {
+      store.dispatch({ type: 'settings/opencodeModelChanged', payload: 'claude-sonnet' })
+      mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
+      mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
+      await adapter.start('/wt/test')
+      const cmdLine = (adapter as any).buildCommandLine()
+      expect(cmdLine).toBe("opencode --model 'claude-sonnet' acp")
+    })
+
+    it('does not duplicate --model when already present in command', async () => {
+      const adapterWithModel = new OpencodeChatAdapter('sess-2', '/wt/test', store, () => 'opencode --model existing')
+      mockSendRequest.mockResolvedValueOnce({ agentCapabilities: {} })
+      mockSendRequest.mockResolvedValueOnce({ sessionId: 'prov-123' })
+      await adapterWithModel.start('/wt/test', { modelOverride: 'gpt-4o' })
+      const cmdLine = (adapterWithModel as any).buildCommandLine()
+      expect(cmdLine).toBe('opencode --model existing acp')
+    })
+
     it('uses session/load when providerSessionId exists and loadSession is supported', async () => {
       setupPanes('prov-existing')
       mockSendRequest.mockResolvedValueOnce({

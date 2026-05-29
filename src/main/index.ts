@@ -835,7 +835,7 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
     )
     chatProvider.start(sessionId, worktreePath, provider, { modelOverride })
     chatProvider.registerAdapter(adapter)
-    adapter.start(worktreePath)
+    adapter.start(worktreePath, { modelOverride })
   } else {
     const adapter = new ClaudeChatAdapter(sessionId, jsonClaudeManager, approvalBridge)
     chatProvider.start(sessionId, worktreePath, provider, { permissionMode: permMode, modelOverride })
