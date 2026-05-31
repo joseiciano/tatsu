@@ -109,10 +109,9 @@ describe('repoConfigsReducer', () => {
     expect(
       effectiveRightPanelOrder({
         rightPanelOrder: [
-          'cost',
+          'todos',
           'pr',
           'merge',
-          'todos',
           'commits',
           'changedFiles',
           'allFiles',
@@ -120,10 +119,9 @@ describe('repoConfigsReducer', () => {
         ]
       })
     ).toEqual([
-      'cost',
+      'todos',
       'pr',
       'merge',
-      'todos',
       'commits',
       'changedFiles',
       'allFiles',
@@ -134,9 +132,9 @@ describe('repoConfigsReducer', () => {
   it('effectiveRightPanelOrder fills in missing keys and drops unknown', () => {
     // Partial saved order — the missing keys get appended in canonical order
     const result = effectiveRightPanelOrder({
-      rightPanelOrder: ['cost', 'pr'] as never
+      rightPanelOrder: ['todos', 'pr'] as never
     })
-    expect(result[0]).toBe('cost')
+    expect(result[0]).toBe('todos')
     expect(result[1]).toBe('pr')
     // Remaining keys in canonical order
     expect(result.slice(2)).toEqual([
@@ -144,7 +142,6 @@ describe('repoConfigsReducer', () => {
       'commits',
       'changedFiles',
       'allFiles',
-      'todos',
       'scratchpad'
     ])
     expect(result).toHaveLength(DEFAULT_RIGHT_PANEL_ORDER.length)

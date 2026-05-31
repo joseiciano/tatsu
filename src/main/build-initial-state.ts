@@ -6,7 +6,6 @@ import { initialWorktrees } from '../shared/state/worktrees'
 import { initialTerminals } from '../shared/state/terminals'
 import { initialUpdater } from '../shared/state/updater'
 import { initialRepoConfigs } from '../shared/state/repo-configs'
-import { initialCosts } from '../shared/state/costs'
 import { initialBrowser } from '../shared/state/browser'
 import { initialJsonClaude } from '../shared/state/json-claude'
 import { initialSnooze } from '../shared/state/snooze'
@@ -64,7 +63,6 @@ export function buildInitialAppState(
     terminals: initialTerminals,
     updater: initialUpdater,
     repoConfigs: initialRepoConfigs,
-    costs: config.costs ? { ...initialCosts, ...config.costs } : initialCosts,
     browser: initialBrowser,
     jsonClaude: initialJsonClaude,
     snooze: config.snooze ? { byPath: { ...config.snooze } } : initialSnooze,

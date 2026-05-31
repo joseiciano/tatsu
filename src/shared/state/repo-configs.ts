@@ -5,7 +5,6 @@ export type RightPanelKey =
   | 'commits'
   | 'changedFiles'
   | 'allFiles'
-  | 'cost'
   | 'scratchpad'
 
 export const DEFAULT_RIGHT_PANEL_ORDER: RightPanelKey[] = [
@@ -15,7 +14,6 @@ export const DEFAULT_RIGHT_PANEL_ORDER: RightPanelKey[] = [
   'changedFiles',
   'allFiles',
   'todos',
-  'cost',
   'scratchpad'
 ]
 
@@ -47,8 +45,8 @@ export interface RepoConfig {
 
 /** Read an effective panel order, filling in any keys missing from the
  * saved order with the canonical default order (appended at the end)
- * and dropping any unknown keys. Always returns all six keys exactly
- * once. */
+ *  and dropping any unknown keys. Always returns all keys exactly
+ *  once. */
 export function effectiveRightPanelOrder(config: RepoConfig | null | undefined): RightPanelKey[] {
   const saved = config?.rightPanelOrder
   if (!saved || saved.length === 0) return [...DEFAULT_RIGHT_PANEL_ORDER]

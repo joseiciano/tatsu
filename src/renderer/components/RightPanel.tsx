@@ -59,9 +59,9 @@ export function RightPanel({
     onCollapsedChangeRef.current?.(collapsed)
   }, [id, collapsed])
 
-  // On unmount, signal collapsed so consumers (e.g. CostPanel's interest
-  // gate) treat the panel as no longer visible — otherwise tearing the
-  // panel down via parent reconciliation would leak interest.
+  // On unmount, signal collapsed so consumers treat the panel as no
+  // longer visible — otherwise tearing the panel down via parent
+  // reconciliation would leak state.
   useEffect(() => {
     return () => {
       onCollapsedChangeRef.current?.(true)

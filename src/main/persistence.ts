@@ -9,7 +9,6 @@ import {
   type PersistedPaneNode,
   type PersistedTab
 } from './persistence-migrations'
-import type { CostsState } from '../shared/state/costs'
 import type { SnoozeEntry } from '../shared/state/snooze'
 
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
@@ -137,10 +136,6 @@ export interface Config {
   // gh-cli-detected user. Sticky — if they later unstar manually, we
   // don't re-star on next boot.
   harnessAutoStarred?: boolean
-  // Per-terminal token usage + estimated cost, tallied from Claude Code
-  // session jsonl transcripts. Entries persist across tab/terminal death
-  // so worktree-level totals survive restarts.
-  costs?: CostsState
   // When false, Harness skips background update checks on startup and
   // on its periodic timer. The manual "Check for updates" button in
   // Settings still works. Default is enabled (undefined/true).

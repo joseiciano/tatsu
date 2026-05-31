@@ -10,9 +10,6 @@ export type { RepoConfig }
 import type { WeeklyStats, TopWorktree } from '../shared/weekly-stats'
 export type { WeeklyStats, TopWorktree }
 
-import type { SessionCostSummary, ClaudeAuthInfo, SubscriptionTier } from '../shared/cost-summary'
-export type { SessionCostSummary, ClaudeAuthInfo, SubscriptionTier }
-
 import type { AddRepoResult } from '../shared/repo-pick'
 export type { AddRepoResult }
 
@@ -351,9 +348,6 @@ export interface ElectronAPI {
    *  Always returns the absolute directory path so the web client can
    *  surface it manually. */
   openThemesFolder(): Promise<{ ok: true; path: string } | { ok: false; path: string; message: string }>
-  setCostsInterest(expanded: boolean): Promise<boolean>
-  getAllSessionCosts(sinceMs?: number): Promise<SessionCostSummary[]>
-  getClaudeAuthStatus(): Promise<ClaudeAuthInfo>
   getAvailableThemes(): Promise<readonly string[]>
   setTerminalFontFamily(fontFamily: string): Promise<boolean>
   getDefaultTerminalFontFamily(): Promise<string>

@@ -10,7 +10,6 @@ const LABELS: Record<RightPanelKey, string> = {
   commits: 'Branch Commits',
   changedFiles: 'Changed Files',
   allFiles: 'All Files',
-  cost: 'Cost',
   scratchpad: 'Scratchpad'
 }
 

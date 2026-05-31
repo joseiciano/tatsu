@@ -3,7 +3,6 @@ import { useRepoConfigs, useSettings } from '../store'
 import { useBackend } from '../backend'
 import { PRStatusPanel, MergeLocallyPanel } from './PRStatusPanel'
 import { BranchCommitsPanel } from './BranchCommitsPanel'
-import { CostPanel } from './CostPanel'
 import type { Worktree, PRStatus } from '../types'
 
 interface MobileRightPanelProps {
@@ -14,7 +13,7 @@ interface MobileRightPanelProps {
 }
 
 // Fullscreen takeover that surfaces the useful slices of the desktop
-// right panel — PR status, local merge, branch commits, cost. File
+// right panel — PR status, local merge, branch commits. File
 // panels (ChangedFiles / AllFiles) are intentionally omitted: their
 // primary interaction is "tap a file to open a diff tab", and mobile
 // can't render diff/file tabs meaningfully.
@@ -69,7 +68,6 @@ export function MobileRightPanel({
             onRemoveWorktree={handleRemoveWorktree}
           />
           <BranchCommitsPanel worktreePath={activeWorktree.path} />
-          <CostPanel worktreePath={activeWorktree.path} />
           <div className="px-4 py-3 text-xs text-dim">
             File diffs and commit review open only on desktop for now.
           </div>

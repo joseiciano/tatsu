@@ -80,9 +80,6 @@ import { getAgent, type AgentKind } from './agents'
 import { buildClaudeLaunchSettings } from './claude-launch'
 import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
-import { CostTracker } from './cost-tracker'
-import { getAllSessionCosts } from './cost-aggregator'
-import { getClaudeAuthStatus } from './claude-auth'
 import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing'
 import { startControlServer } from './control-server'
 import { writeMcpConfigForTerminal, pruneMcpConfigs, getBridgeScriptPath } from './mcp-config'
@@ -411,7 +408,6 @@ transport.onClientDisconnect((clientId) => {
     type: 'terminals/clientDisconnected',
     payload: { clientId }
   })
-  costTracker.removeClient(clientId)
 })
 
 if (webHttpServer && wsTransport) {
@@ -468,39 +464,6 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
   }
   return result
 }
-
-// Tails Claude Code session jsonl transcripts on Stop hook events,
-// sums per-model usage, and dispatches costs/usageUpdated. See
-// src/main/cost-tracker.ts and src/shared/state/costs.ts.
-const costTracker = new CostTracker(store)
-costTracker.start()
-
-// CostPanel is collapsed-by-default. Renderer signals its expand state
-// per client; tracker short-circuits parsing while the set is empty.
-transport.onRequest('costs:setInterest', (ctx, expanded: boolean) => {
-  costTracker.setClientInterested(ctx.clientId, expanded)
-  return true
-})
-
-transport.onRequest(
-  'costs:getAllSessions',
-  async (_ctx, sinceMs?: number) => {
-    return getAllSessionCosts({ sinceMs })
-  }
-)
-
-transport.onRequest('claude:getAuthStatus', async () => {
-  return getClaudeAuthStatus()
-})
-
-// Auto-persist the costs slice to config.json on each change. Debounced
-// inside saveConfig; cheap to fire on every dispatch.
-store.subscribe((event) => {
-  if (event.type.startsWith('costs/')) {
-    config.costs = store.getSnapshot().state.costs
-    saveConfig(config)
-  }
-})
 
 // Persist snooze entries through to disk so wakeAt survives restart.
 store.subscribe((event) => {

@@ -60,12 +60,6 @@ import {
   type RepoConfigsState
 } from './repo-configs'
 import {
-  initialCosts,
-  costsReducer,
-  type CostsEvent,
-  type CostsState
-} from './costs'
-import {
   initialBrowser,
   browserReducer,
   type BrowserEvent,
@@ -114,19 +108,6 @@ export type {
   PendingWorktree,
   PendingStatus
 } from './worktrees'
-export type {
-  CostsState,
-  CostsEvent,
-  ModelTally,
-  SessionUsage,
-  ContentBreakdown
-} from './costs'
-export {
-  totalForSession,
-  addBreakdown,
-  cloneBreakdown,
-  emptyBreakdown
-} from './costs'
 export type {
   TerminalsState,
   TerminalsEvent,
@@ -179,7 +160,6 @@ export interface AppState {
   terminals: TerminalsState
   updater: UpdaterState
   repoConfigs: RepoConfigsState
-  costs: CostsState
   browser: BrowserState
   jsonClaude: JsonClaudeState
   snooze: SnoozeState
@@ -196,7 +176,6 @@ export type StateEvent =
   | TerminalsEvent
   | UpdaterEvent
   | RepoConfigsEvent
-  | CostsEvent
   | BrowserEvent
   | JsonClaudeEvent
   | SnoozeEvent
@@ -212,7 +191,6 @@ export const initialState: AppState = {
   terminals: initialTerminals,
   updater: initialUpdater,
   repoConfigs: initialRepoConfigs,
-  costs: initialCosts,
   browser: initialBrowser,
   jsonClaude: initialJsonClaude,
   snooze: initialSnooze,
@@ -259,9 +237,6 @@ export function rootReducer(state: AppState, event: StateEvent): AppState {
       ...state,
       repoConfigs: repoConfigsReducer(state.repoConfigs, event as RepoConfigsEvent)
     }
-  }
-  if (event.type.startsWith('costs/')) {
-    return { ...state, costs: costsReducer(state.costs, event as CostsEvent) }
   }
   if (event.type.startsWith('browser/')) {
     return { ...state, browser: browserReducer(state.browser, event as BrowserEvent) }
@@ -329,7 +304,6 @@ export function mergeWireSnapshot(state: WireSnapshotState): AppState {
     terminals: { ...initialState.terminals, ...state.terminals },
     updater: { ...initialState.updater, ...state.updater },
     repoConfigs: { ...initialState.repoConfigs, ...state.repoConfigs },
-    costs: { ...initialState.costs, ...state.costs },
     browser: { ...initialState.browser, ...state.browser },
     jsonClaude: { ...initialState.jsonClaude, ...state.jsonClaude },
     snooze: { ...initialState.snooze, ...state.snooze },

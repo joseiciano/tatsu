@@ -62,7 +62,7 @@ export function MobileApp(): JSX.Element {
   const [selectedTabByWorktree, setSelectedTabByWorktree] = useState<Record<string, string>>({})
   const [pickerOpen, setPickerOpen] = useState(false)
   // Fullscreen takeover that surfaces the desktop right panel (PR status,
-  // branch commits, cost). Per-client UI focus → renderer-local state, not
+  // branch commits). Per-client UI focus → renderer-local state, not
   // a slice (see CLAUDE.md workflow #5).
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
 
