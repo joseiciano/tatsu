@@ -332,6 +332,7 @@ export interface ElectronAPI {
   ): () => void
   setClaudeEnvVars(vars: Record<string, string>): Promise<boolean>
   setDefaultAgent(agent: string): Promise<boolean>
+  setDefaultClaudeChatRuntime(value: 'legacy' | 'acp'): Promise<boolean>
   setCodexCommand(command: string): Promise<boolean>
   setClaudeModel(model: string | null): Promise<boolean>
   setCodexModel(model: string | null): Promise<boolean>
@@ -545,7 +546,8 @@ export interface ElectronAPI {
     entryId: string
   ): Promise<{ ok: boolean; reason?: string }>
   openJsonClaudeAuthLoginTab(
-    worktreePath: string
+    worktreePath: string,
+    sessionId: string
   ): Promise<{ ok: true; tabId: string } | { ok: false; error: string }>
   setJsonClaudePermissionMode(
     id: string,

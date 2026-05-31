@@ -221,6 +221,8 @@ export function buildBackend(
       req('repoConfig:set', repoRoot, next),
     setClaudeEnvVars: (vars: Record<string, string>) => req('config:setClaudeEnvVars', vars),
     setDefaultAgent: (agent: string) => req('config:setDefaultAgent', agent),
+    setDefaultClaudeChatRuntime: (value: 'legacy' | 'acp') =>
+      req('config:setDefaultClaudeChatRuntime', value),
     setCodexCommand: (command: string) => req('config:setCodexCommand', command),
     setClaudeModel: (model: string | null) => req('config:setClaudeModel', model),
     setCodexModel: (model: string | null) => req('config:setCodexModel', model),
@@ -536,8 +538,8 @@ export function buildBackend(
     interruptJsonClaude: (id: string) => req('jsonClaude:interrupt', id),
     rewindJsonClaudeTo: (id: string, entryId: string) =>
       req('jsonClaude:rewindTo', id, entryId),
-    openJsonClaudeAuthLoginTab: (worktreePath: string) =>
-      req('jsonClaude:openAuthLoginTab', worktreePath),
+    openJsonClaudeAuthLoginTab: (worktreePath: string, sessionId: string) =>
+      req('jsonClaude:openAuthLoginTab', worktreePath, sessionId),
     setJsonClaudePermissionMode: (
       id: string,
       mode: 'default' | 'acceptEdits' | 'plan'

@@ -39,7 +39,11 @@ import { JsonModeMentionPopover, type MentionPopoverItem } from './JsonModeMenti
 import { JsonModeChatImageThumb } from './JsonModeChatImageThumb'
 import { fuzzyMatch } from '../fuzzy'
 import 'highlight.js/styles/github-dark.css'
-import type { JsonClaudeChatEntry } from '../../shared/state/json-claude'
+import type {
+  JsonClaudeChatEntry,
+  ClaudeChatRuntime,
+  ChatRuntimeCapabilities
+} from '../../shared/state/json-claude'
 
 const REMARK_PLUGINS = [remarkGfm]
 const REHYPE_PLUGINS = [rehypeHighlight]
@@ -330,11 +334,13 @@ function SubprocessExitCard({
 function AuthFailureCard({
   message,
   onOpenLoginTab,
-  onRetry
+  onRetry,
+  canOpenAuthLogin
 }: {
   message?: string
   onOpenLoginTab: () => void
   onRetry: () => void
+  canOpenAuthLogin: boolean
 }): JSX.Element {
   return (
     <div
@@ -363,21 +369,31 @@ function AuthFailureCard({
             {message}
           </pre>
         )}
-        <div>
-          Click{' '}
-          <span className="font-semibold text-fg-bright">Sign in</span> to open{' '}
-          <code className="font-mono text-fg-bright">claude auth login</code> in
-          a new shell tab. Complete the OAuth handshake there, then click{' '}
-          <span className="font-semibold text-fg-bright">Retry</span> to resume
-          this session.
-        </div>
+        {canOpenAuthLogin ? (
+          <div>
+            Click{' '}
+            <span className="font-semibold text-fg-bright">Sign in</span> to open{' '}
+            <code className="font-mono text-fg-bright">claude auth login</code> in
+            a new shell tab. Complete the OAuth handshake there, then click{' '}
+            <span className="font-semibold text-fg-bright">Retry</span> to resume
+            this session.
+          </div>
+        ) : (
+          <div>
+            Click{' '}
+            <span className="font-semibold text-fg-bright">Retry</span> to resume
+            this session once the authentication issue is resolved.
+          </div>
+        )}
         <div className="flex gap-2 pt-1">
-          <button
-            onClick={onOpenLoginTab}
-            className="px-2 py-1 bg-accent text-white rounded hover:bg-accent/90 cursor-pointer"
-          >
-            Sign in
-          </button>
+          {canOpenAuthLogin && (
+            <button
+              onClick={onOpenLoginTab}
+              className="px-2 py-1 bg-accent text-white rounded hover:bg-accent/90 cursor-pointer"
+            >
+              Sign in
+            </button>
+          )}
           <button
             onClick={onRetry}
             className="px-2 py-1 bg-panel-raised border border-border-strong rounded text-fg-bright hover:bg-panel cursor-pointer"
@@ -409,6 +425,21 @@ function formatTier(tier: string | undefined): string | null {
   // SDK enum: 'five_hour' | 'seven_day' | 'unified'. Pretty-print without
   // hard-coding the full set so future tiers fall through readably.
   return tier.replace(/_/g, ' ')
+}
+
+/** Maps a runtime identifier to the user-visible label shown in the
+ *  status bar. */
+export function getRuntimeLabel(runtime: ClaudeChatRuntime | undefined): string {
+  return runtime === 'acp' ? 'Claude (ACP)' : 'Claude (legacy)'
+}
+
+/** Returns whether a capability is enabled. When capabilities are omitted
+ *  (e.g. older runtimes) every capability defaults to `true`. */
+export function isCapabilityEnabled(
+  capabilities: ChatRuntimeCapabilities | undefined,
+  key: keyof ChatRuntimeCapabilities
+): boolean {
+  return capabilities?.[key] !== false
 }
 
 function RateLimitWarningCard({
@@ -541,6 +572,7 @@ interface RenderContext {
   isExited: boolean
   onOpenLoginTab: () => void
   onRetryAuth: () => void
+  canOpenAuthLogin: boolean
 }
 
 function renderEntries(
@@ -657,6 +689,7 @@ function renderEntries(
             message={entry.errorMessage}
             onOpenLoginTab={ctx.onOpenLoginTab}
             onRetry={ctx.onRetryAuth}
+            canOpenAuthLogin={ctx.canOpenAuthLogin}
           />
         )
       })
@@ -1221,7 +1254,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
         // the bundled binary and the json-mode subprocess share
         // ~/.claude/, so credentials written by the login tab are
         // visible on the next Retry.
-        void backend.openJsonClaudeAuthLoginTab(worktreePath)
+        void backend.openJsonClaudeAuthLoginTab(worktreePath, sessionId)
       },
       onRetryAuth: () => {
         // Same restart sequence as the "Reconnect" button on the exited-
@@ -1231,7 +1264,8 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           await backend.killJsonClaude(sessionId)
           await backend.startJsonClaude(sessionId, worktreePath)
         })()
-      }
+      },
+      canOpenAuthLogin: isCapabilityEnabled(session?.capabilities, 'canOpenAuthLogin')
     })
     // approvalByToolUseId already depends on pending; pendingToolUseIds
     // also derives from pending.
@@ -1402,6 +1436,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
 
   const slashTrigger = useMemo(() => {
     if (session?.state === 'exited') return null
+    if (!isCapabilityEnabled(session?.capabilities, 'hasSlashCommands')) return null
     const trig = findTrigger(draft, cursorPos, '/')
     if (!trig) return null
     // Only allow ascii letters / digits / `-` / `:` (the namespace
@@ -1410,7 +1445,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
     // literal slashes followed by punctuation without it lingering.
     if (!/^[a-zA-Z0-9:-]*$/.test(trig.query)) return null
     return trig
-  }, [draft, cursorPos, session?.state])
+  }, [draft, cursorPos, session?.state, session?.capabilities?.hasSlashCommands])
 
   const mentionTrigger = useMemo<{ start: number; query: string } | null>(() => {
     if (session?.state === 'exited') return null
@@ -1813,7 +1848,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
                 ? entries[entryIndexById.get(targetEntryId) ?? -1]
                 : undefined
               const onContextMenu =
-                targetEntryId && targetEntry?.kind === 'assistant'
+                targetEntryId && targetEntry?.kind === 'assistant' && isCapabilityEnabled(session?.capabilities, 'canRewind')
                   ? (e: ReactMouseEvent): void => openRewindMenu(targetEntryId, e)
                   : undefined
               return g.kind === 'single' ? (
@@ -2033,13 +2068,19 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
             // the actual "no live subprocess" case.
           />
           <div className="flex items-center gap-2 px-2 pb-1.5 pt-0.5">
-            <div
-              className="flex items-center gap-1.5 text-xs text-muted"
-              title={`session ${state}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${stateDot}`} />
-              <span>{state}</span>
-            </div>
+          <div
+            className="flex items-center gap-1.5 text-xs text-muted"
+            title={`session ${state}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${stateDot}`} />
+            <span>{state}</span>
+          </div>
+          {session && (
+            <span className="text-xs text-muted/60">
+              {getRuntimeLabel(session.runtime)}
+            </span>
+          )}
+          {isCapabilityEnabled(session?.capabilities, 'canSetPermissionMode') && (
             <button
               onClick={cyclePermissionMode}
               className={`px-1.5 py-0.5 rounded border text-xs cursor-pointer hover:opacity-80 transition-opacity ${modeBadgeStyle}`}
@@ -2047,6 +2088,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
             >
               {modeBadgeLabel}
             </button>
+          )}
             <div className="flex-1" />
             {busy && (
               <button
