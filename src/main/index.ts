@@ -5,6 +5,9 @@ import { join } from 'path'
 import { PtyManager } from './pty-manager'
 import { ApprovalBridge } from './approval-bridge'
 import { JsonClaudeManager, bundledClaudeBinPath } from './json-claude-manager'
+import { ChatRuntimeRegistry } from './chat-runtimes'
+import { ClaudeLegacyRuntime } from './chat-runtimes/claude-legacy'
+import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
 import { shellQuote } from './shell-quote'
 import {
   readAttachmentImage,
@@ -529,6 +532,10 @@ store.subscribe((event) => {
 const jsonClaudeStatusDeriver = new JsonClaudeStatusDeriver(store)
 jsonClaudeStatusDeriver.start()
 
+const chatRuntimeRegistry = new ChatRuntimeRegistry(store)
+chatRuntimeRegistry.register('legacy', new ClaudeLegacyRuntime(jsonClaudeManager))
+chatRuntimeRegistry.register('acp', new ClaudeAcpRuntime(store))
+
 /** Resolve the GitHub login of whoever owns the configured token, and
  *  dispatch it so the sidebar can route PRs they didn't author into the
  *  Reviewing group. Best-effort: any failure leaves the slice at null,
@@ -701,6 +708,7 @@ function treeToPersistedNode(node: PaneNode): PersistedPaneNode | null {
           command: stripped.command,
           cwd: stripped.cwd,
           model: stripped.model,
+          runtime: stripped.runtime,
           ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {})
         }
       })
@@ -756,18 +764,20 @@ const panesFSM = new PanesFSM(store, {
     const s = store.getSnapshot().state.settings
     return s.defaultClaudeTabType === 'json' ? 'json' : 'xterm'
   },
+  getDefaultClaudeChatRuntime: () =>
+    store.getSnapshot().state.settings.defaultClaudeChatRuntime ?? 'legacy',
   // Authoritative PTY teardown when tabs leave the tree. The renderer
   // no longer kills PTYs from XTerminal unmount cleanups (that was the
   // only path before, and it broke the moment we had clients that
   // could disconnect without intending to kill agents). Tab-close /
   // restart / clear events are the actual lifecycle boundary.
   killTabPty: (tabId) => ptyManager.kill(tabId),
-  killJsonClaude: (sessionId) => jsonClaudeManager.kill(sessionId),
+  killJsonClaude: (sessionId) => chatRuntimeRegistry.kill(sessionId),
   clearJsonClaudeSession: (sessionId) =>
     store.dispatch({ type: 'jsonClaude/sessionCleared', payload: { sessionId } }),
   startJsonClaudeWithPrompt: (sessionId, worktreePath, initialPrompt) => {
     startJsonClaudeSession(sessionId, worktreePath)
-    if (initialPrompt) jsonClaudeManager.send(sessionId, initialPrompt)
+    if (initialPrompt) chatRuntimeRegistry.send(sessionId, initialPrompt)
   },
   startJsonClaude: (sessionId, worktreePath) => {
     startJsonClaudeSession(sessionId, worktreePath)
@@ -799,21 +809,27 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
  *  create order. Idempotent — JsonClaudeManager.create() short-circuits
  *  if the instance is already running. */
 function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
-  if (jsonClaudeManager.hasSession(sessionId)) return
+  if (chatRuntimeRegistry.hasSession(sessionId)) return
+  const runtime = chatRuntimeRegistry.resolveRuntimeFromSessionOrTab(sessionId)
+  const capabilities = chatRuntimeRegistry.getRuntimeById(runtime).getCapabilities(sessionId)
   store.dispatch({
     type: 'jsonClaude/sessionStarted',
     payload: {
       sessionId,
       worktreePath,
       defaultPermissionMode:
-        store.getSnapshot().state.settings.jsonModeDefaultPermissionMode
+        store.getSnapshot().state.settings.jsonModeDefaultPermissionMode,
+      runtime,
+      capabilities
     }
   })
-  jsonClaudeManager.seedFromTranscript(sessionId, worktreePath)
   const permMode =
     store.getSnapshot().state.jsonClaude.sessions[sessionId]?.permissionMode ||
     'default'
-  jsonClaudeManager.create(sessionId, worktreePath, permMode, findJsonClaudeTabModel(sessionId))
+  chatRuntimeRegistry.start(sessionId, worktreePath, {
+    permissionMode: permMode,
+    modelOverride: findJsonClaudeTabModel(sessionId)
+  })
 }
 
 const worktreesFSM = new WorktreesFSM(store, {
@@ -1490,6 +1506,18 @@ function registerIpcHandlers(): void {
     return true
   })
 
+  transport.onRequest('config:setDefaultClaudeChatRuntime', (_ctx, value: 'legacy' | 'acp') => {
+    if (value !== 'legacy' && value !== 'acp') return false
+    if (value === 'legacy') {
+      delete config.defaultClaudeChatRuntime
+    } else {
+      config.defaultClaudeChatRuntime = value
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/defaultClaudeChatRuntimeChanged', payload: value })
+    return true
+  })
+
   transport.onRequest('config:setCodexCommand', (_ctx, command: string) => {
     const trimmed = command.trim()
     if (!trimmed || trimmed === 'codex') {
@@ -2116,6 +2144,9 @@ function registerIpcHandlers(): void {
   transport.onRequest(
     'panes:addTab',
     (_ctx, wtPath: string, tab: TerminalTab, paneId?: string) => {
+      if (tab.type === 'json-claude' && tab.runtime !== 'legacy' && tab.runtime !== 'acp') {
+        tab = { ...tab, runtime: 'legacy' }
+      }
       panesFSM.addTab(wtPath, tab, paneId)
       return true
     }
@@ -2639,21 +2670,21 @@ function registerIpcHandlers(): void {
       text: string,
       images?: Array<{ mediaType: string; data: string; path: string }>
     ) => {
-      jsonClaudeManager.send(sessionId, text, images)
+      chatRuntimeRegistry.send(sessionId, text, images)
     }
   )
   transport.onSignal(
     'jsonClaude:cancelQueued',
     (_ctx, sessionId: string, messageId: string) => {
-      jsonClaudeManager.cancelQueued(sessionId, messageId)
+      chatRuntimeRegistry.cancelQueued(sessionId, messageId)
     }
   )
   transport.onRequest('jsonClaude:kill', (_ctx, sessionId: string) => {
-    jsonClaudeManager.kill(sessionId)
+    chatRuntimeRegistry.kill(sessionId)
     return true
   })
   transport.onRequest('jsonClaude:interrupt', (_ctx, sessionId: string) => {
-    jsonClaudeManager.interrupt(sessionId)
+    chatRuntimeRegistry.interrupt(sessionId)
     return true
   })
 
@@ -2696,13 +2727,13 @@ function registerIpcHandlers(): void {
             }
           })
           const timer = setTimeout(finish, 1500)
-          jsonClaudeManager.interrupt(sessionId)
+          chatRuntimeRegistry.interrupt(sessionId)
         })
       }
 
       approvalBridge.cancelPendingForSession(sessionId)
 
-      const outcome = jsonClaudeManager.rewindTo(sessionId, entryId)
+      const outcome = chatRuntimeRegistry.rewindTo(sessionId, entryId)
       if (!outcome.ok) return { ok: false, reason: outcome.reason }
 
       // Respawn so --resume re-seeds the slice from the truncated jsonl
@@ -2716,7 +2747,14 @@ function registerIpcHandlers(): void {
 
   transport.onRequest(
     'jsonClaude:openAuthLoginTab',
-    (_ctx, worktreePath: string): { ok: true; tabId: string } | { ok: false; error: string } => {
+    (_ctx, worktreePath: string, sessionId: string): { ok: true; tabId: string } | { ok: false; error: string } => {
+      // Auth login is legacy-runtime only for now. ACP sessions return
+      // a clear unsupported result.
+      const runtime = chatRuntimeRegistry.resolveRuntimeFromSessionOrTab(sessionId)
+      if (runtime === 'acp') {
+        return { ok: false, error: 'Auth login is not supported by the ACP runtime' }
+      }
+
       // One-click /login flow. Spawns the bundled claude binary's
       // `auth login` subcommand in a regular shell tab so the user
       // gets the OAuth handshake without leaving Harness. Both binaries
@@ -2801,7 +2839,7 @@ function registerIpcHandlers(): void {
         type: 'jsonClaude/permissionModeChanged',
         payload: { sessionId, mode }
       })
-      jsonClaudeManager.setPermissionMode(sessionId, mode)
+      chatRuntimeRegistry.setPermissionMode(sessionId, mode)
       return true
     }
   )
@@ -3560,7 +3598,7 @@ if (desktopShellMod && desktopEarly) {
       void worktreesFSM.refreshList()
     },
     onBeforeQuit: () => {
-      jsonClaudeManager.killAll()
+      chatRuntimeRegistry.killAll()
       approvalBridge.stopAll()
     }
   })
@@ -3579,7 +3617,7 @@ if (desktopShellMod && desktopEarly) {
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')
-    jsonClaudeManager.killAll()
+    chatRuntimeRegistry.killAll()
     approvalBridge.stopAll()
     browserManager.destroyAll()
     sealAllActive()

@@ -132,6 +132,7 @@ export function buildInitialAppState(
         config.jsonModeDefaultPermissionMode === 'plan'
           ? config.jsonModeDefaultPermissionMode
           : 'acceptEdits',
+      defaultClaudeChatRuntime: config.defaultClaudeChatRuntime === 'acp' ? 'acp' : 'legacy',
       autoSleepMinutes:
         typeof config.autoSleepMinutes === 'number' &&
         Number.isFinite(config.autoSleepMinutes) &&

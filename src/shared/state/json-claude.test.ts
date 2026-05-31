@@ -3,6 +3,7 @@ import {
   initialJsonClaude,
   jsonClaudeReducer,
   stripJsonClaudeEntries,
+  defaultCapabilitiesFor,
   type JsonClaudeState,
   type JsonClaudeChatEntry
 } from './json-claude'
@@ -1251,6 +1252,47 @@ describe('jsonClaudeReducer', () => {
     expect(stored.kind).toBe('error')
     expect(stored.errorKind).toBe('rate-limit-error')
     expect(stored.errorMessage).toBe('Rate limit reached')
+  })
+
+  it('runtimeChanged updates the session runtime and resets capabilities to the new runtime defaults', () => {
+    let state = seedSession(initialJsonClaude)
+    // Seed with legacy runtime (default) which has full capabilities
+    expect(state.sessions[SID].runtime).toBe('legacy')
+    expect(state.sessions[SID].capabilities.canRewind).toBe(true)
+    expect(state.sessions[SID].capabilities.hasSlashCommands).toBe(true)
+
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/runtimeChanged',
+      payload: { sessionId: SID, runtime: 'acp' }
+    })
+
+    expect(state.sessions[SID].runtime).toBe('acp')
+    expect(state.sessions[SID].capabilities).toEqual(defaultCapabilitiesFor('acp'))
+    expect(state.sessions[SID].capabilities.canRewind).toBe(false)
+    expect(state.sessions[SID].capabilities.hasSlashCommands).toBe(false)
+  })
+
+  it('capabilitiesChanged updates the session when the capability set differs', () => {
+    let state = seedSession(initialJsonClaude)
+    const newCaps = { ...state.sessions[SID].capabilities, canRewind: false }
+
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/capabilitiesChanged',
+      payload: { sessionId: SID, capabilities: newCaps }
+    })
+
+    expect(state.sessions[SID].capabilities.canRewind).toBe(false)
+    expect(state.sessions[SID].capabilities.canInterrupt).toBe(true)
+  })
+
+  it('capabilitiesChanged is a no-op when the capability set is identical', () => {
+    let state = seedSession(initialJsonClaude)
+    const before = state
+    const next = jsonClaudeReducer(state, {
+      type: 'jsonClaude/capabilitiesChanged',
+      payload: { sessionId: SID, capabilities: state.sessions[SID].capabilities }
+    })
+    expect(next).toBe(before)
   })
 })
 

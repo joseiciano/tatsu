@@ -76,4 +76,17 @@ describe('buildInitialAppState', () => {
     expect(result.settings.hasGithubToken).toBe(true)
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
   })
+
+  it('defaults defaultClaudeChatRuntime to legacy when missing', () => {
+    const result = buildInitialAppState(emptyConfig, { hasGithubToken: false })
+    expect(result.settings.defaultClaudeChatRuntime).toBe('legacy')
+  })
+
+  it('preserves an explicit acp defaultClaudeChatRuntime value', () => {
+    const result = buildInitialAppState(
+      { ...emptyConfig, defaultClaudeChatRuntime: 'acp' },
+      { hasGithubToken: false }
+    )
+    expect(result.settings.defaultClaudeChatRuntime).toBe('acp')
+  })
 })

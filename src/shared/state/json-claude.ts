@@ -11,6 +11,19 @@ export type JsonClaudeSessionState =
   | 'exited'
   | 'auth-required'
 
+export type ClaudeChatRuntime = 'legacy' | 'acp'
+
+export interface ChatRuntimeCapabilities {
+  canInterrupt: boolean
+  canRewind: boolean
+  canSetPermissionMode: boolean
+  canApproveTools: boolean
+  canResume: boolean
+  canOpenAuthLogin: boolean
+  hasSlashCommands: boolean
+  hasCostTracking: boolean
+}
+
 /** Mirrors `claude --permission-mode` choices. Subset relevant to a
  *  json-claude tab: we don't expose bypassPermissions (unsafe) or
  *  dontAsk/auto (overlap with default). */
@@ -27,6 +40,35 @@ export const EDIT_TOOL_NAMES = [
   'MultiEdit',
   'NotebookEdit'
 ] as const
+
+/** Default capability set for a runtime. Legacy has full parity; ACP
+ *  starts with a restricted set and expands feature-by-feature. */
+export function defaultCapabilitiesFor(
+  runtime: ClaudeChatRuntime
+): ChatRuntimeCapabilities {
+  if (runtime === 'acp') {
+    return {
+      canInterrupt: true,
+      canRewind: false,
+      canSetPermissionMode: false,
+      canApproveTools: false,
+      canResume: true,
+      canOpenAuthLogin: false,
+      hasSlashCommands: false,
+      hasCostTracking: false
+    }
+  }
+  return {
+    canInterrupt: true,
+    canRewind: true,
+    canSetPermissionMode: true,
+    canApproveTools: true,
+    canResume: true,
+    canOpenAuthLogin: true,
+    hasSlashCommands: true,
+    hasCostTracking: true
+  }
+}
 
 export interface JsonClaudeMessageBlock {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result'
@@ -173,7 +215,7 @@ export interface JsonClaudeSession {
    *  `.claude/commands/*.md`. Empty until init lands. */
   slashCommands: string[]
   /** Audit map of tool calls that were auto-approved by the LLM-based
-   *  reviewer (instead of going through the user UI). Keyed by toolUseId
+   *  auto-reviewer (instead of going through the user UI). Keyed by toolUseId
    *  so the per-tool card can render a small "auto-approved" badge.
    *  Only populated when settings.autoApprovePermissions is on. */
   autoApprovedDecisions: Record<
@@ -193,6 +235,13 @@ export interface JsonClaudeSession {
     string,
     { toolName: string; timestamp: number }
   >
+  /** Which chat runtime powers this session: the legacy stream-json
+   *  subprocess or the ACP SDK. Default 'legacy' until ACP proves itself. */
+  runtime: ClaudeChatRuntime
+  /** Capability flags advertised by the active runtime. The renderer gates
+   *  UI actions (rewind, permission mode, approvals, etc.) from these
+   *  rather than hardcoding runtime checks. */
+  capabilities: ChatRuntimeCapabilities
 }
 
 /** Status of the LLM-based auto-reviewer for a single pending approval.
@@ -238,6 +287,11 @@ export type JsonClaudeEvent =
          *  exists (resume / re-attach / mode-change respawn), the
          *  reducer preserves the existing mode and ignores this. */
         defaultPermissionMode?: JsonClaudePermissionMode
+        /** Runtime to use for this session. Defaults to 'legacy'. */
+        runtime?: ClaudeChatRuntime
+        /** Capability flags advertised by the runtime. If omitted, the
+         *  reducer seeds defaults appropriate to the runtime. */
+        capabilities?: ChatRuntimeCapabilities
       }
     }
   | {
@@ -373,6 +427,14 @@ export type JsonClaudeEvent =
         timestamp: number
       }
     }
+  | {
+      type: 'jsonClaude/runtimeChanged'
+      payload: { sessionId: string; runtime: ClaudeChatRuntime }
+    }
+  | {
+      type: 'jsonClaude/capabilitiesChanged'
+      payload: { sessionId: string; capabilities: ChatRuntimeCapabilities }
+    }
 
 export const initialJsonClaude: JsonClaudeState = {
   sessions: {},
@@ -474,6 +536,12 @@ export function jsonClaudeReducer(
       // kill+respawn the same way permissionMode does. Reset exit
       // bookkeeping.
       const existing = state.sessions[sessionId]
+      const runtime =
+        existing?.runtime ?? event.payload.runtime ?? 'legacy'
+      const capabilities =
+        existing?.capabilities ??
+        event.payload.capabilities ??
+        defaultCapabilitiesFor(runtime)
       return {
         ...state,
         sessions: {
@@ -494,7 +562,9 @@ export function jsonClaudeReducer(
             slashCommands: existing?.slashCommands ?? [],
             autoApprovedDecisions: existing?.autoApprovedDecisions ?? {},
             sessionToolApprovals: existing?.sessionToolApprovals ?? [],
-            sessionAllowedDecisions: existing?.sessionAllowedDecisions ?? {}
+            sessionAllowedDecisions: existing?.sessionAllowedDecisions ?? {},
+            runtime,
+            capabilities
           }
         }
       }
@@ -877,6 +947,52 @@ export function jsonClaudeReducer(
               ...session.sessionAllowedDecisions,
               [toolUseId]: { toolName, timestamp }
             }
+          }
+        }
+      }
+    }
+    case 'jsonClaude/runtimeChanged': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session) return state
+      if (session.runtime === event.payload.runtime) return state
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: {
+            ...session,
+            runtime: event.payload.runtime,
+            // Reset capabilities to defaults for the new runtime so the
+            // renderer doesn't show stale capability gates.
+            capabilities: defaultCapabilitiesFor(event.payload.runtime)
+          }
+        }
+      }
+    }
+    case 'jsonClaude/capabilitiesChanged': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session) return state
+      const nextCaps = event.payload.capabilities
+      const prevCaps = session.capabilities
+      if (
+        prevCaps.canInterrupt === nextCaps.canInterrupt &&
+        prevCaps.canRewind === nextCaps.canRewind &&
+        prevCaps.canSetPermissionMode === nextCaps.canSetPermissionMode &&
+        prevCaps.canApproveTools === nextCaps.canApproveTools &&
+        prevCaps.canResume === nextCaps.canResume &&
+        prevCaps.canOpenAuthLogin === nextCaps.canOpenAuthLogin &&
+        prevCaps.hasSlashCommands === nextCaps.hasSlashCommands &&
+        prevCaps.hasCostTracking === nextCaps.hasCostTracking
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: {
+            ...session,
+            capabilities: nextCaps
           }
         }
       }

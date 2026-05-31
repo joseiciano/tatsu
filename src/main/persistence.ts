@@ -217,6 +217,9 @@ export interface Config {
   // Existing sessions keep whatever mode they were last in. Default
   // 'acceptEdits' (auto-allow Edit/Write, still ask for Bash etc.).
   jsonModeDefaultPermissionMode?: 'default' | 'acceptEdits' | 'plan'
+  // Default chat runtime for new Claude sessions. 'legacy' uses the stream-json
+  // subprocess; 'acp' uses the ACP SDK.
+  defaultClaudeChatRuntime?: 'legacy' | 'acp'
   // Minutes a json-mode tab can sit at 'waiting' before the auto-sleep
   // monitor tears its subprocess down. 0 disables auto-sleep. Default 30.
   autoSleepMinutes?: number
