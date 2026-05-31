@@ -1,4 +1,4 @@
-import type { JsonClaudePermissionMode } from './json-claude'
+import type { ClaudeChatRuntime, JsonClaudePermissionMode } from './json-claude'
 
 export interface WorktreeScripts {
   setup: string
@@ -175,6 +175,9 @@ export interface SettingsState {
    *  don't get a wall of approval cards for routine edits; Bash and
    *  other risky tools still surface approvals. */
   jsonModeDefaultPermissionMode: JsonClaudePermissionMode
+  /** Default chat runtime for new Claude sessions. 'legacy' uses the stream-json
+   *  subprocess; 'acp' uses the ACP SDK. */
+  defaultClaudeChatRuntime: ClaudeChatRuntime
   /** Minutes a json-mode tab can sit at the yellow "waiting" dot before
    *  the auto-sleep monitor tears its subprocess down. The slept tab
    *  stays in the tree (history intact) and re-spawns on click. 0
@@ -256,6 +259,7 @@ export type SettingsEvent =
       type: 'settings/jsonModeDefaultPermissionModeChanged'
       payload: JsonClaudePermissionMode
     }
+  | { type: 'settings/defaultClaudeChatRuntimeChanged'; payload: ClaudeChatRuntime }
   | { type: 'settings/autoSleepMinutesChanged'; payload: number }
   | { type: 'settings/snoozeDefaultDaysChanged'; payload: number }
   | { type: 'settings/expandedDiagnosticLoggingEnabledChanged'; payload: boolean }
@@ -314,6 +318,7 @@ export const initialSettings: SettingsState = {
   uiScale: 'small',
   jsonModeSendOnEnter: false,
   jsonModeDefaultPermissionMode: 'acceptEdits',
+  defaultClaudeChatRuntime: 'legacy',
   autoSleepMinutes: 30,
   snoozeDefaultDays: 7,
   expandedDiagnosticLoggingEnabled: false,
@@ -420,6 +425,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, jsonModeSendOnEnter: event.payload }
     case 'settings/jsonModeDefaultPermissionModeChanged':
       return { ...state, jsonModeDefaultPermissionMode: event.payload }
+    case 'settings/defaultClaudeChatRuntimeChanged':
+      return { ...state, defaultClaudeChatRuntime: event.payload }
     case 'settings/autoSleepMinutesChanged':
       return { ...state, autoSleepMinutes: event.payload }
     case 'settings/snoozeDefaultDaysChanged':

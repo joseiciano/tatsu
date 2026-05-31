@@ -346,6 +346,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     wsTransportPort,
     wsTransportHost,
     defaultClaudeTabType,
+    defaultClaudeChatRuntime,
     jsonModeChatDensity,
     uiScale,
     jsonModeSendOnEnter,
@@ -1763,6 +1764,41 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 Claude Code
                 {defaultAgent === 'claude' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
               </h3>
+
+              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
+                <label className="block text-sm font-medium text-fg mb-1">Default chat runtime</label>
+                <p className="text-xs text-dim mb-2">
+                  Which Claude runtime new Chat tabs use.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: 'legacy', label: 'Claude (legacy)' },
+                    { id: 'acp', label: 'Claude (ACP)' }
+                  ] as const).map((opt) => {
+                    const isActive = defaultClaudeChatRuntime === opt.id
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`px-3 py-2 rounded-lg border text-sm text-center cursor-pointer transition-colors ${
+                          isActive
+                            ? 'bg-surface text-fg-bright border-fg'
+                            : 'bg-panel-raised text-muted border-border hover:text-fg hover:border-border-strong'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="claude-chat-runtime"
+                          value={opt.id}
+                          checked={isActive}
+                          onChange={() => void backend.setDefaultClaudeChatRuntime(opt.id)}
+                          className="sr-only"
+                        />
+                        {opt.label}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
 
               <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
                 <label className="block text-sm font-medium text-fg mb-1">Model</label>

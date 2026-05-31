@@ -555,6 +555,24 @@ describe('settingsReducer', () => {
     expect(off.useSystemClaudeForJsonMode).toBe(false)
   })
 
+  it('defaultClaudeChatRuntime defaults to legacy', () => {
+    expect(initialSettings.defaultClaudeChatRuntime).toBe('legacy')
+  })
+
+  it('defaultClaudeChatRuntimeChanged switches between legacy and acp', () => {
+    expect(initialSettings.defaultClaudeChatRuntime).toBe('legacy')
+    const acp = apply(initialSettings, {
+      type: 'settings/defaultClaudeChatRuntimeChanged',
+      payload: 'acp'
+    })
+    expect(acp.defaultClaudeChatRuntime).toBe('acp')
+    const legacy = apply(acp, {
+      type: 'settings/defaultClaudeChatRuntimeChanged',
+      payload: 'legacy'
+    })
+    expect(legacy.defaultClaudeChatRuntime).toBe('legacy')
+  })
+
   it('autoSleepMinutesChanged sets the threshold', () => {
     const next = apply(initialSettings, {
       type: 'settings/autoSleepMinutesChanged',
