@@ -145,6 +145,31 @@ describe('PanesFSM.splitPane', () => {
     expect(cloned.filePath).toBe('src/foo.ts')
   })
 
+  it('carries over runtime when cloning a json-claude tab', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/json-runtime'
+    const sourceTabId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+    const sourceTab: TerminalTab = {
+      id: sourceTabId,
+      type: 'json-claude',
+      label: 'Chat',
+      sessionId: sourceTabId,
+      mode: 'awake',
+      runtime: 'acp'
+    }
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-source',
+      tabs: [sourceTab],
+      activeTabId: sourceTabId
+    })
+
+    const newPane = fsm.splitPane(wtPath, 'pane-source', 'horizontal')
+    const cloned = newPane!.tabs[0]
+    expect(cloned.type).toBe('json-claude')
+    expect(cloned.runtime).toBe('acp')
+  })
+
   it('wraps the source pane in a split node containing both children', () => {
     const { fsm, store } = buildFSM()
     const wtPath = '/wt/split'
@@ -172,6 +197,183 @@ describe('PanesFSM.splitPane', () => {
       expect(tree.children).toHaveLength(2)
       expect(tree.children[0].id).toBe('pane-source')
     }
+  })
+})
+
+describe('PanesFSM.ensureInitialized', () => {
+  it('defaults json-claude tab runtime to legacy when no getter is provided', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/default-runtime'
+    fsm.ensureInitialized(wtPath)
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
+    expect(chatTab).toBeUndefined()
+  })
+
+  it('sources runtime from getDefaultClaudeChatRuntime for new json-claude tabs', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultClaudeTabType: () => 'json',
+      getDefaultClaudeChatRuntime: () => 'acp'
+    })
+    const wtPath = '/wt/acp-runtime'
+    fsm.ensureInitialized(wtPath)
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
+    expect(chatTab).toBeDefined()
+    expect(chatTab!.runtime).toBe('acp')
+  })
+
+  it('defaults json-claude tab runtime to legacy when getter returns undefined', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultClaudeTabType: () => 'json',
+      getDefaultClaudeChatRuntime: () => undefined as any
+    })
+    const wtPath = '/wt/legacy-runtime'
+    fsm.ensureInitialized(wtPath)
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
+    expect(chatTab).toBeDefined()
+    expect(chatTab!.runtime).toBe('legacy')
+  })
+})
+
+describe('PanesFSM.convertTabType', () => {
+  it('uses default runtime when converting agent → json-claude and source has no runtime', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultClaudeChatRuntime: () => 'acp'
+    })
+    const wtPath = '/wt/convert-default'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1' }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.runtime).toBe('acp')
+  })
+
+  it('preserves existing runtime when converting agent → json-claude', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultClaudeChatRuntime: () => 'acp'
+    })
+    const wtPath = '/wt/convert-preserve'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1', runtime: 'legacy' as const }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.runtime).toBe('legacy')
+  })
+
+  it('defaults to legacy when converting agent → json-claude with no getter', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/convert-fallback'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1' }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.runtime).toBe('legacy')
+  })
+
+  it('preserves runtime when converting json-claude → agent for round-trip', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/roundtrip'
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: sessionId, type: 'json-claude', label: 'Chat', sessionId, mode: 'awake', runtime: 'acp' as const }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.runtime).toBe('acp')
+  })
+
+  it('round-trips json-claude → agent → json-claude restoring original runtime', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultClaudeChatRuntime: () => 'legacy'
+    })
+    const wtPath = '/wt/full-roundtrip'
+    const sessionId = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: sessionId, type: 'json-claude', label: 'Chat', sessionId, mode: 'awake', runtime: 'acp' as const }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+    const afterAgent = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const agentTabId = afterAgent.tabs[0].id
+
+    fsm.convertTabType(wtPath, agentTabId, 'json-claude')
+    const afterJson = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = afterJson.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.runtime).toBe('acp')
   })
 })
 
@@ -208,5 +410,33 @@ describe('PanesFSM.restoreFromConfig', () => {
     expect(shellTab?.mode).toBe('asleep')
     expect(agentTab?.mode).toBeUndefined()
     expect(chatTab?.mode).toBe('asleep')
+  })
+
+  it('preserves runtime on hydrated json-claude tabs', async () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/restore-runtime'
+    await fsm.restoreFromConfig({
+      _ignored: {
+        [wtPath]: {
+          type: 'leaf',
+          id: 'pane-1',
+          tabs: [
+            {
+              id: 'chat-1',
+              type: 'json-claude',
+              label: 'Chat',
+              sessionId: 'chat-1',
+              runtime: 'acp'
+            }
+          ],
+          activeTabId: 'chat-1'
+        }
+      }
+    })
+    fsm.ensureInitialized(wtPath)
+    const tree = store.getSnapshot().state.terminals.panes[wtPath]
+    const leaf = tree as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.id === 'chat-1')
+    expect(chatTab?.runtime).toBe('acp')
   })
 })

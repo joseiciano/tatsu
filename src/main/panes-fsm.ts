@@ -18,6 +18,7 @@ import {
 import type { PersistedPaneNode } from './persistence'
 import { agentDisplayName, getAgentInfo } from '../shared/agent-registry'
 import { log } from './debug'
+import type { ClaudeChatRuntime } from '../shared/state/json-claude'
 
 interface PanesFSMOptions {
   persist: (panes: Record<string, PaneNode>) => void
@@ -28,6 +29,9 @@ interface PanesFSMOptions {
    *  a default Claude agent tab spawns as a json-claude tab instead of
    *  an xterm-hosted one. */
   getDefaultClaudeTabType?: () => 'xterm' | 'json'
+  /** Read the default Claude chat runtime setting. Used when creating a
+   *  new json-claude tab to set its runtime. Defaults to 'legacy'. */
+  getDefaultClaudeChatRuntime?: () => ClaudeChatRuntime
   /** Tear down the PTY backing a closed tab. Called for agent + shell
    *  tabs when they're removed from the tree (closeTab, restartAgentTab,
    *  clearForWorktree). Authoritative on the main side so PTY lifetime
@@ -179,6 +183,7 @@ export class PanesFSM {
         command: t.command,
         cwd: t.cwd,
         model: t.model,
+        runtime: t.runtime,
         ...(t.customLabel ? { customLabel: t.customLabel } : {})
       }
       // Persisted json-claude and shell tabs hydrate as 'asleep' so app
@@ -241,13 +246,15 @@ export class PanesFSM {
     let jsonClaudeKickoff: { sessionId: string; initialPrompt?: string; model?: string } | null = null
     if (wantsJson) {
       const sessionId = crypto.randomUUID()
+      const runtime = this.opts.getDefaultClaudeChatRuntime?.() ?? 'legacy'
       agentTab = {
         id: sessionId,
         type: 'json-claude',
         label: 'Chat',
         sessionId,
         mode: 'awake',
-        model
+        model,
+        runtime
       }
       jsonClaudeKickoff = { sessionId, initialPrompt: opts?.initialPrompt, model }
     } else {
@@ -452,9 +459,13 @@ export class PanesFSM {
         ? sessionId
         : `agent-${wtPath.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`
     const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName('claude')
+    const runtime =
+      newType === 'json-claude'
+        ? (tab.runtime ?? this.opts.getDefaultClaudeChatRuntime?.() ?? 'legacy')
+        : tab.runtime
     this.store.dispatch({
       type: 'terminals/tabTypeChanged',
-      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel }
+      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel, runtime }
     })
     this.opts.persist(this.buildPersistPayload())
   }
@@ -606,7 +617,8 @@ export class PanesFSM {
         label: sourceActive!.label,
         sessionId,
         mode: 'awake',
-        model: sourceActive!.model
+        model: sourceActive!.model,
+        runtime: sourceActive!.runtime
       }
     } else {
       tab = {

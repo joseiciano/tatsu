@@ -31,6 +31,17 @@ function makeSession(
     autoApprovedDecisions: {},
     sessionToolApprovals: [],
     sessionAllowedDecisions: {},
+    runtime: 'legacy',
+    capabilities: {
+      canInterrupt: true,
+      canRewind: true,
+      canSetPermissionMode: true,
+      canApproveTools: true,
+      canResume: true,
+      canOpenAuthLogin: true,
+      hasSlashCommands: true,
+      hasCostTracking: true
+    },
     ...overrides
   }
 }
