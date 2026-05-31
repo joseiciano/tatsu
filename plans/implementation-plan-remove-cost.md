@@ -1,5 +1,16 @@
 # Implementation Plan: Remove Cost Tracking
 
+## Overview
+
+This is a full removal of the cost-tracking feature, not a UI hide. The plan removes both the live tracking path and the historical aggregation path end-to-end:
+
+- **Shared state and types** — delete the costs slice, pricing constants, and cost-summary helpers.
+- **Main-process parsing and wiring** — delete the cost tracker, aggregator, JSONL fold parser, and Claude auth module; remove all construction and IPC handlers.
+- **Renderer and backend API** — delete the costs hook, backend methods, and type declarations.
+- **UI entry points** — delete the `CostPanel` and `ActivityCosts` components and remove them from all parent layouts.
+- **Persisted and right-panel config** — remove costs from persisted config and from the right-panel key set.
+- **Cleanup and verification** — search for lingering references, update comments, and run typecheck, build, and tests.
+
 ## 1. Remove shared cost domain types/state
 - [ ] delete `src/shared/state/costs.ts`
 - [ ] delete `src/shared/state/costs.test.ts`
