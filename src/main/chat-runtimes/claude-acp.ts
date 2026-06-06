@@ -1,6 +1,8 @@
 import type { ChatRuntime } from './types'
 import type { Store } from '../store'
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import { createRequire } from 'module'
+import { dirname, join, sep } from 'path'
 
 import type {
   Query,
@@ -60,6 +62,33 @@ function makeUserMessage(
   } as SDKUserMessage
 }
 
+interface ClaudeAcpRuntimeOptions {
+  resolveExecutablePath?: () => string | undefined
+}
+
+export function resolveClaudeAgentSdkExecutablePath(opts: {
+  platform?: NodeJS.Platform
+  arch?: string
+  resolveFromSdk?: (id: string) => string
+} = {}): string | undefined {
+  try {
+    const { platform = process.platform, arch = process.arch, resolveFromSdk } = opts
+    const dynamicRequire = createRequire(__filename)
+    const sdkEntry = dynamicRequire.resolve('@anthropic-ai/claude-agent-sdk')
+    const sdkRequire = createRequire(sdkEntry)
+    const resolveNative = resolveFromSdk ?? ((id: string) => sdkRequire.resolve(id))
+    const nativePackageJson = resolveNative(
+      `@anthropic-ai/claude-agent-sdk-${platform}-${arch}/package.json`
+    )
+    return join(dirname(nativePackageJson), 'claude').replace(
+      `${sep}app.asar${sep}`,
+      `${sep}app.asar.unpacked${sep}`
+    )
+  } catch {
+    return undefined
+  }
+}
+
 /** Real ACP runtime using @anthropic-ai/claude-agent-sdk.
  *
  *  Supports start, send, streaming assistant output, interrupt, kill,
@@ -72,9 +101,11 @@ export class ClaudeAcpRuntime implements ChatRuntime {
   private startedSessions: Set<string> = new Set()
   private pendingSends: Map<string, Array<{ text: string; images?: Array<{ mediaType: string; path: string; data: string }> }>> = new Map()
   private modelOverrides: Map<string, string> = new Map()
+  private resolveExecutablePath: () => string | undefined
 
-  constructor(store: Store) {
+  constructor(store: Store, opts: ClaudeAcpRuntimeOptions = {}) {
     this.store = store
+    this.resolveExecutablePath = opts.resolveExecutablePath ?? resolveClaudeAgentSdkExecutablePath
   }
 
   hasSession(sessionId: string): boolean {
@@ -241,6 +272,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
     const modelOverride = this.modelOverrides.get(sessionId)
     this.modelOverrides.delete(sessionId)
 
+    const pathToClaudeCodeExecutable = this.resolveExecutablePath()
     const opts: Options = {
       cwd: worktreePath,
       env: {
@@ -251,6 +283,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       includePartialMessages: true,
       permissionMode: mapPermissionMode(permissionMode),
       persistSession: false,
+      ...(pathToClaudeCodeExecutable ? { pathToClaudeCodeExecutable } : {}),
       ...(modelOverride ? { model: modelOverride } : {})
     }
 

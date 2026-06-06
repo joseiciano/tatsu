@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ClaudeAcpRuntime } from './claude-acp'
+import { ClaudeAcpRuntime, resolveClaudeAgentSdkExecutablePath } from './claude-acp'
 import { Store } from '../store'
 import type { JsonClaudeEvent } from '../../shared/state/json-claude'
 import type { StateEvent } from '../../shared/state'
@@ -83,6 +83,18 @@ function createStore(): Store & { events: StateEvent[] } {
   store.subscribe((event) => events.push(event))
   return Object.assign(store, { events })
 }
+
+describe('resolveClaudeAgentSdkExecutablePath', () => {
+  it('rewrites packaged app.asar paths to app.asar.unpacked', () => {
+    const path = resolveClaudeAgentSdkExecutablePath({
+      platform: 'darwin',
+      arch: 'arm64',
+      resolveFromSdk: () => '/Applications/Harness.app/Contents/Resources/app.asar/node_modules/pkg/package.json'
+    })
+
+    expect(path).toBe('/Applications/Harness.app/Contents/Resources/app.asar.unpacked/node_modules/pkg/claude')
+  })
+})
 
 describe('ClaudeAcpRuntime', () => {
   let runtime: ClaudeAcpRuntime
@@ -740,6 +752,18 @@ describe('ClaudeAcpRuntime', () => {
       expect(query).toHaveBeenCalledTimes(1)
       const opts = (query as any).mock.calls[0][0].options
       expect(opts.model).toBe('claude-sonnet-4-6')
+    })
+
+    it('passes resolved native Claude path to the SDK query options', () => {
+      const resolveExecutablePath = vi.fn(() => '/tmp/claude')
+      runtime = new ClaudeAcpRuntime(store, { resolveExecutablePath })
+
+      runtime.start('s1', '/wt')
+      runtime.send('s1', 'hello')
+
+      expect(resolveExecutablePath).toHaveBeenCalledTimes(1)
+      const opts = (query as any).mock.calls[0][0].options
+      expect(opts.pathToClaudeCodeExecutable).toBe('/tmp/claude')
     })
 
     it('cleans up modelOverride after consumption', () => {
