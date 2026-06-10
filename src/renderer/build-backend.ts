@@ -229,10 +229,6 @@ export function buildBackend(
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
-    setAutoApprovePermissions: (enabled: boolean) =>
-      req('config:setAutoApprovePermissions', enabled),
-    setAutoApproveSteerInstructions: (text: string) =>
-      req('config:setAutoApproveSteerInstructions', text),
     setClaudeTuiFullscreen: (enabled: boolean) => req('config:setClaudeTuiFullscreen', enabled),
     setWsTransportEnabled: (enabled: boolean) => req('config:setWsTransportEnabled', enabled),
     setWsTransportPort: (port: number) => req('config:setWsTransportPort', port),
@@ -536,8 +532,8 @@ export function buildBackend(
     interruptJsonClaude: (id: string) => req('jsonClaude:interrupt', id),
     rewindJsonClaudeTo: (id: string, entryId: string) =>
       req('jsonClaude:rewindTo', id, entryId),
-    openJsonClaudeAuthLoginTab: (worktreePath: string) =>
-      req('jsonClaude:openAuthLoginTab', worktreePath),
+    openJsonClaudeAuthLoginTab: (worktreePath: string, sessionId: string) =>
+      req('jsonClaude:openAuthLoginTab', worktreePath, sessionId),
     setJsonClaudePermissionMode: (
       id: string,
       mode: 'default' | 'acceptEdits' | 'plan'

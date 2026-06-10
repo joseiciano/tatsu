@@ -1,8 +1,8 @@
-// JSON-mode Claude tab state. Distinct from the terminals slice because
-// this tab type does not run a PTY — its lifecycle is driven by a
-// long-lived `claude -p --input-format stream-json` subprocess managed by
-// JsonClaudeManager, and its per-tool approval flow rides an MCP bridge
-// instead of the terminal-hook status dir.
+// Chat-tab state. Distinct from terminals slice because this UI does not run
+// PTY — lifecycle comes from ChatRuntimeRegistry + ClaudeAcpRuntime driving
+// @anthropic-ai/claude-agent-sdk query() stream, while terminal-hook status
+// remains separate. Renderer still consumes legacy `jsonClaude:*` event names
+// so runtime swap stayed transport-compatible.
 
 export type JsonClaudeSessionState =
   | 'idle'
@@ -10,6 +10,19 @@ export type JsonClaudeSessionState =
   | 'running'
   | 'exited'
   | 'auth-required'
+
+export type ClaudeChatRuntime = 'acp'
+
+export interface ChatRuntimeCapabilities {
+  canInterrupt: boolean
+  canRewind: boolean
+  canSetPermissionMode: boolean
+  canApproveTools: boolean
+  canResume: boolean
+  canOpenAuthLogin: boolean
+  hasSlashCommands: boolean
+  hasCostTracking: boolean
+}
 
 /** Mirrors `claude --permission-mode` choices. Subset relevant to a
  *  json-claude tab: we don't expose bypassPermissions (unsafe) or
@@ -27,6 +40,20 @@ export const EDIT_TOOL_NAMES = [
   'MultiEdit',
   'NotebookEdit'
 ] as const
+
+/** Default capability set for ACP chat runtime. */
+export function defaultAcpCapabilities(): ChatRuntimeCapabilities {
+  return {
+    canInterrupt: true,
+    canRewind: false,
+    canSetPermissionMode: false,
+    canApproveTools: false,
+    canResume: true,
+    canOpenAuthLogin: false,
+    hasSlashCommands: false,
+    hasCostTracking: false
+  }
+}
 
 export interface JsonClaudeMessageBlock {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result'
@@ -172,10 +199,8 @@ export interface JsonClaudeSession {
    *  user's enabled Skills, plugin commands, and project-local
    *  `.claude/commands/*.md`. Empty until init lands. */
   slashCommands: string[]
-  /** Audit map of tool calls that were auto-approved by the LLM-based
-   *  reviewer (instead of going through the user UI). Keyed by toolUseId
-   *  so the per-tool card can render a small "auto-approved" badge.
-   *  Only populated when settings.autoApprovePermissions is on. */
+  /** Audit map of tool calls that were auto-approved by auto-reviewer.
+   *  Keyed by toolUseId so per-tool card can render small "auto-approved" badge. */
   autoApprovedDecisions: Record<
     string,
     { model: string; reason: string; timestamp: number }
@@ -193,16 +218,18 @@ export interface JsonClaudeSession {
     string,
     { toolName: string; timestamp: number }
   >
+  /** Capability flags advertised by the active runtime. The renderer gates
+   *  UI actions (rewind, permission mode, approvals, etc.) from these
+   *  rather than hardcoding runtime checks. */
+  capabilities: ChatRuntimeCapabilities
 }
 
-/** Status of the LLM-based auto-reviewer for a single pending approval.
- *  Set on the pending entry only when settings.autoApprovePermissions is
- *  on. The renderer reads this to draw a small "asking auto-approver"
- *  spinner while pending and a muted "auto-approver: <reason>" line
- *  once the reviewer has decided to ask. We never see a finished
- *  'approve' here in practice — that path resolves the approval and
- *  drops the entry from pendingApprovals before the renderer can
- *  observe it. */
+/** Status of LLM-based auto-reviewer for single pending approval.
+ *  Renderer reads this to draw small "asking auto-approver" spinner while
+ *  pending and muted "auto-approver: <reason>" line once reviewer has
+ *  decided to ask. We never see finished 'approve' here in practice — that
+ *  path resolves approval and drops entry from pendingApprovals before
+ *  renderer can observe it. */
 export interface AutoReviewStatus {
   state: 'pending' | 'finished'
   decision?: 'approve' | 'ask'
@@ -238,6 +265,9 @@ export type JsonClaudeEvent =
          *  exists (resume / re-attach / mode-change respawn), the
          *  reducer preserves the existing mode and ignores this. */
         defaultPermissionMode?: JsonClaudePermissionMode
+        /** Capability flags advertised by the runtime. If omitted, the
+         *  reducer seeds ACP defaults. */
+        capabilities?: ChatRuntimeCapabilities
       }
     }
   | {
@@ -373,6 +403,10 @@ export type JsonClaudeEvent =
         timestamp: number
       }
     }
+  | {
+      type: 'jsonClaude/capabilitiesChanged'
+      payload: { sessionId: string; capabilities: ChatRuntimeCapabilities }
+    }
 
 export const initialJsonClaude: JsonClaudeState = {
   sessions: {},
@@ -474,6 +508,10 @@ export function jsonClaudeReducer(
       // kill+respawn the same way permissionMode does. Reset exit
       // bookkeeping.
       const existing = state.sessions[sessionId]
+      const capabilities =
+        existing?.capabilities ??
+        event.payload.capabilities ??
+        defaultAcpCapabilities()
       return {
         ...state,
         sessions: {
@@ -494,7 +532,8 @@ export function jsonClaudeReducer(
             slashCommands: existing?.slashCommands ?? [],
             autoApprovedDecisions: existing?.autoApprovedDecisions ?? {},
             sessionToolApprovals: existing?.sessionToolApprovals ?? [],
-            sessionAllowedDecisions: existing?.sessionAllowedDecisions ?? {}
+            sessionAllowedDecisions: existing?.sessionAllowedDecisions ?? {},
+            capabilities
           }
         }
       }
@@ -877,6 +916,34 @@ export function jsonClaudeReducer(
               ...session.sessionAllowedDecisions,
               [toolUseId]: { toolName, timestamp }
             }
+          }
+        }
+      }
+    }
+    case 'jsonClaude/capabilitiesChanged': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session) return state
+      const nextCaps = event.payload.capabilities
+      const prevCaps = session.capabilities
+      if (
+        prevCaps.canInterrupt === nextCaps.canInterrupt &&
+        prevCaps.canRewind === nextCaps.canRewind &&
+        prevCaps.canSetPermissionMode === nextCaps.canSetPermissionMode &&
+        prevCaps.canApproveTools === nextCaps.canApproveTools &&
+        prevCaps.canResume === nextCaps.canResume &&
+        prevCaps.canOpenAuthLogin === nextCaps.canOpenAuthLogin &&
+        prevCaps.hasSlashCommands === nextCaps.hasSlashCommands &&
+        prevCaps.hasCostTracking === nextCaps.hasCostTracking
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: {
+            ...session,
+            capabilities: nextCaps
           }
         }
       }

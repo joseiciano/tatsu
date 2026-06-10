@@ -3,9 +3,8 @@ import { createRequire } from 'module'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { PtyManager } from './pty-manager'
-import { ApprovalBridge } from './approval-bridge'
-import { JsonClaudeManager, bundledClaudeBinPath } from './json-claude-manager'
-import { shellQuote } from './shell-quote'
+import { ChatRuntimeRegistry } from './chat-runtimes'
+import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
 import {
   readAttachmentImage,
   writeAttachmentImage
@@ -85,8 +84,7 @@ import { getAllSessionCosts } from './cost-aggregator'
 import { getClaudeAuthStatus } from './claude-auth'
 import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing'
 import { startControlServer } from './control-server'
-import { writeMcpConfigForTerminal, pruneMcpConfigs, getBridgeScriptPath } from './mcp-config'
-import { getControlServerInfo } from './control-server'
+import { writeMcpConfigForTerminal, pruneMcpConfigs } from './mcp-config'
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
@@ -117,7 +115,7 @@ if (runtime === 'electron') {
   const ds = dynamicRequire('./desktop-shell') as typeof import('./desktop-shell')
   ds.applyDevModeOverride()
 }
-// PATH fix runs before bootLocal so PtyManager / JsonClaudeManager are
+// PATH fix runs before bootLocal so PtyManager / chat runtimes are
 // constructed with an environment that includes Homebrew/nvm/etc.
 // Covers both Electron-from-Dock and headless-via-ssh/systemd, both of
 // which can start with a stripped PATH. No-op outside of macOS today;
@@ -288,44 +286,6 @@ try {
 } catch (err) {
   log('themes', `initial scan failed: ${(err as Error).message}`)
 }
-const approvalBridge = new ApprovalBridge(store, {
-  getClaudeCommand: () =>
-    store.getSnapshot().state.settings.claudeCommand || DEFAULT_CLAUDE_COMMAND,
-  isAutoApproveEnabled: () =>
-    store.getSnapshot().state.settings.autoApprovePermissions === true,
-  getAutoApproveSteerInstructions: () =>
-    store.getSnapshot().state.settings.autoApproveSteerInstructions || ''
-})
-const jsonClaudeManager = new JsonClaudeManager(store, {
-  getClaudeCommand: () =>
-    store.getSnapshot().state.settings.claudeCommand || DEFAULT_CLAUDE_COMMAND,
-  getUseSystemClaude: () =>
-    store.getSnapshot().state.settings.useSystemClaudeForJsonMode === true,
-  getApprovalSocketPath: (sessionId) => approvalBridge.startSession(sessionId),
-  closeApprovalSession: (sessionId) => approvalBridge.stopSession(sessionId),
-  getClaudeEnvVars: () =>
-    store.getSnapshot().state.settings.claudeEnvVars || {},
-  getControlServer: () => getControlServerInfo(),
-  getControlBridgeScriptPath: () => getBridgeScriptPath(),
-  isHarnessMcpEnabled: () =>
-    store.getSnapshot().state.settings.harnessMcpEnabled !== false,
-  getCallerScope: (sessionId) => {
-    const scope = resolveCallerScope(sessionId)
-    if (!scope) return null
-    return {
-      worktreePath: scope.worktreePath,
-      repoRoot: scope.repoRoot,
-      isMain: scope.isMain
-    }
-  },
-  getLaunchSettings: (worktreePath, modelOverride) =>
-    buildClaudeLaunchSettings({
-      cwd: worktreePath,
-      worktrees: store.getSnapshot().state.worktrees.list,
-      config,
-      modelOverride
-    })
-})
 const perfMonitor = new PerfMonitor()
 setGitHubApiRecorder(() => perfMonitor.recordGitHubApiCall())
 setGitHubApiLoggingEnabled(config.expandedDiagnosticLoggingEnabled === true)
@@ -528,6 +488,9 @@ store.subscribe((event) => {
 // Lives in its own module — see src/main/json-claude-status-deriver.ts.
 const jsonClaudeStatusDeriver = new JsonClaudeStatusDeriver(store)
 jsonClaudeStatusDeriver.start()
+
+const chatRuntimeRegistry = new ChatRuntimeRegistry(store)
+chatRuntimeRegistry.register('acp', new ClaudeAcpRuntime(store))
 
 /** Resolve the GitHub login of whoever owns the configured token, and
  *  dispatch it so the sidebar can route PRs they didn't author into the
@@ -762,12 +725,12 @@ const panesFSM = new PanesFSM(store, {
   // could disconnect without intending to kill agents). Tab-close /
   // restart / clear events are the actual lifecycle boundary.
   killTabPty: (tabId) => ptyManager.kill(tabId),
-  killJsonClaude: (sessionId) => jsonClaudeManager.kill(sessionId),
+  killJsonClaude: (sessionId) => chatRuntimeRegistry.kill(sessionId),
   clearJsonClaudeSession: (sessionId) =>
     store.dispatch({ type: 'jsonClaude/sessionCleared', payload: { sessionId } }),
   startJsonClaudeWithPrompt: (sessionId, worktreePath, initialPrompt) => {
     startJsonClaudeSession(sessionId, worktreePath)
-    if (initialPrompt) jsonClaudeManager.send(sessionId, initialPrompt)
+    if (initialPrompt) chatRuntimeRegistry.send(sessionId, initialPrompt)
   },
   startJsonClaude: (sessionId, worktreePath) => {
     startJsonClaudeSession(sessionId, worktreePath)
@@ -796,24 +759,28 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
  *  this sessionId". Used by the jsonClaude:start IPC handler, the
  *  panesFSM's startJsonClaudeWithPrompt + startJsonClaude options
  *  (kickoff + wake), so all paths produce the same dispatch + seed +
- *  create order. Idempotent — JsonClaudeManager.create() short-circuits
+ *  create order. Idempotent — chat runtime start short-circuits
  *  if the instance is already running. */
 function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
-  if (jsonClaudeManager.hasSession(sessionId)) return
+  if (chatRuntimeRegistry.hasSession(sessionId)) return
+  const capabilities = chatRuntimeRegistry.getRuntimeById('acp').getCapabilities(sessionId)
   store.dispatch({
     type: 'jsonClaude/sessionStarted',
     payload: {
       sessionId,
       worktreePath,
       defaultPermissionMode:
-        store.getSnapshot().state.settings.jsonModeDefaultPermissionMode
+        store.getSnapshot().state.settings.jsonModeDefaultPermissionMode,
+      capabilities
     }
   })
-  jsonClaudeManager.seedFromTranscript(sessionId, worktreePath)
   const permMode =
     store.getSnapshot().state.jsonClaude.sessions[sessionId]?.permissionMode ||
     'default'
-  jsonClaudeManager.create(sessionId, worktreePath, permMode, findJsonClaudeTabModel(sessionId))
+  chatRuntimeRegistry.start(sessionId, worktreePath, {
+    permissionMode: permMode,
+    modelOverride: findJsonClaudeTabModel(sessionId)
+  })
 }
 
 const worktreesFSM = new WorktreesFSM(store, {
@@ -1754,35 +1721,6 @@ function registerIpcHandlers(): void {
     return true
   })
 
-  transport.onRequest('config:setAutoApprovePermissions', (_ctx, enabled: boolean) => {
-    if (enabled) {
-      config.autoApprovePermissions = true
-    } else {
-      delete config.autoApprovePermissions
-    }
-    saveConfig(config)
-    store.dispatch({
-      type: 'settings/autoApprovePermissionsChanged',
-      payload: config.autoApprovePermissions === true
-    })
-    return true
-  })
-
-  transport.onRequest('config:setAutoApproveSteerInstructions', (_ctx, text: string) => {
-    const trimmed = (text || '').trim()
-    if (!trimmed) {
-      delete config.autoApproveSteerInstructions
-    } else {
-      config.autoApproveSteerInstructions = text
-    }
-    saveConfig(config)
-    store.dispatch({
-      type: 'settings/autoApproveSteerInstructionsChanged',
-      payload: config.autoApproveSteerInstructions || ''
-    })
-    return true
-  })
-
   transport.onRequest('mcp:prepareForTerminal', (_ctx, terminalId: string): string | null => {
     if (config.harnessMcpEnabled === false) return null
     if (!terminalId) return null
@@ -2585,34 +2523,14 @@ function registerIpcHandlers(): void {
     ptyManager.kill(id)
   })
 
-  // Permission-prompt approval pipe. A json-claude tab asks Claude Code to
-  // delegate per-tool approvals to our bundled MCP server, which forwards
-  // the request over a per-session Unix socket owned by ApprovalBridge.
-  // The request surfaces in the store as jsonClaude/approvalRequested; the
-  // renderer UI calls this handler once the user clicks Allow/Deny, which
-  // writes the PermissionResult back out over the same socket.
   transport.onRequest(
     'jsonClaude:resolveApproval',
-    (
-      _ctx,
-      requestId: string,
-      result: {
-        behavior: 'allow' | 'deny'
-        updatedInput?: Record<string, unknown>
-        updatedPermissions?: unknown[]
-        message?: string
-        interrupt?: boolean
-      }
-    ) => {
-      return approvalBridge.resolveApproval(requestId, result)
-    }
+    () => false
   )
 
   transport.onRequest(
     'jsonClaude:rerunAutoApprovalReview',
-    (_ctx, requestId: string) => {
-      return approvalBridge.rerunAutoApprovalReview(requestId)
-    }
+    () => false
   )
 
   // JSON-mode Claude subprocess lifecycle. start == spawn claude -p with
@@ -2639,21 +2557,21 @@ function registerIpcHandlers(): void {
       text: string,
       images?: Array<{ mediaType: string; data: string; path: string }>
     ) => {
-      jsonClaudeManager.send(sessionId, text, images)
+      chatRuntimeRegistry.send(sessionId, text, images)
     }
   )
   transport.onSignal(
     'jsonClaude:cancelQueued',
     (_ctx, sessionId: string, messageId: string) => {
-      jsonClaudeManager.cancelQueued(sessionId, messageId)
+      chatRuntimeRegistry.cancelQueued(sessionId, messageId)
     }
   )
   transport.onRequest('jsonClaude:kill', (_ctx, sessionId: string) => {
-    jsonClaudeManager.kill(sessionId)
+    chatRuntimeRegistry.kill(sessionId)
     return true
   })
   transport.onRequest('jsonClaude:interrupt', (_ctx, sessionId: string) => {
-    jsonClaudeManager.interrupt(sessionId)
+    chatRuntimeRegistry.interrupt(sessionId)
     return true
   })
 
@@ -2696,13 +2614,11 @@ function registerIpcHandlers(): void {
             }
           })
           const timer = setTimeout(finish, 1500)
-          jsonClaudeManager.interrupt(sessionId)
+          chatRuntimeRegistry.interrupt(sessionId)
         })
       }
 
-      approvalBridge.cancelPendingForSession(sessionId)
-
-      const outcome = jsonClaudeManager.rewindTo(sessionId, entryId)
+      const outcome = chatRuntimeRegistry.rewindTo(sessionId, entryId)
       if (!outcome.ok) return { ok: false, reason: outcome.reason }
 
       // Respawn so --resume re-seeds the slice from the truncated jsonl
@@ -2716,29 +2632,10 @@ function registerIpcHandlers(): void {
 
   transport.onRequest(
     'jsonClaude:openAuthLoginTab',
-    (_ctx, worktreePath: string): { ok: true; tabId: string } | { ok: false; error: string } => {
-      // One-click /login flow. Spawns the bundled claude binary's
-      // `auth login` subcommand in a regular shell tab so the user
-      // gets the OAuth handshake without leaving Harness. Both binaries
-      // share ~/.claude/, so credentials written here are picked up by
-      // the json-mode subprocess on its next start. Falls back to PATH
-      // `claude` if the bundled binary can't be resolved (unsupported
-      // platform).
-      let bin: string
-      try {
-        bin = bundledClaudeBinPath()
-      } catch {
-        bin = 'claude'
-      }
-      const command = `${shellQuote(bin)} auth login`
-      const id = `shell-auth-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      panesFSM.addTab(worktreePath, {
-        id,
-        type: 'shell',
-        label: 'claude auth login',
-        command
-      })
-      return { ok: true, tabId: id }
+    (_ctx, worktreePath: string, sessionId: string): { ok: true; tabId: string } | { ok: false; error: string } => {
+      void worktreePath
+      void sessionId
+      return { ok: false, error: 'Auth login is not supported by the ACP runtime' }
     }
   )
 
@@ -2801,7 +2698,7 @@ function registerIpcHandlers(): void {
         type: 'jsonClaude/permissionModeChanged',
         payload: { sessionId, mode }
       })
-      jsonClaudeManager.setPermissionMode(sessionId, mode)
+      chatRuntimeRegistry.setPermissionMode(sessionId, mode)
       return true
     }
   )
@@ -3560,8 +3457,7 @@ if (desktopShellMod && desktopEarly) {
       void worktreesFSM.refreshList()
     },
     onBeforeQuit: () => {
-      jsonClaudeManager.killAll()
-      approvalBridge.stopAll()
+      chatRuntimeRegistry.killAll()
     }
   })
   desktopHooks.startAutoUpdateChecks = handle.startAutoUpdateChecks
@@ -3579,8 +3475,7 @@ if (desktopShellMod && desktopEarly) {
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')
-    jsonClaudeManager.killAll()
-    approvalBridge.stopAll()
+    chatRuntimeRegistry.killAll()
     browserManager.destroyAll()
     sealAllActive()
     saveConfigSync(config)
@@ -3591,4 +3486,3 @@ if (desktopShellMod && desktopEarly) {
 }
 
 } // end bootLocal()
-

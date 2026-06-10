@@ -62,8 +62,8 @@ Harness is built as three layers in one repo. Understanding the layering up fron
                ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  Main / Backend (src/main)                                   │
-│  Owns the world: store, PTYs, json-claude subprocess         │
-│  manager, PR poller, file watchers, persistence.             │
+│  Owns the world: store, PTYs, chat runtime registry,         │
+│  PR poller, file watchers, persistence.                      │
 │  Runs as the Electron main process OR as a standalone        │
 │  headless Node server (`harness-server`).                    │
 └──────────────────────────────────────────────────────────────┘
@@ -131,7 +131,7 @@ The deep architecture documentation lives in [CLAUDE.md](CLAUDE.md). It's the or
 - **Anti-patterns to avoid in slices and derivers** — common mistakes that look fine in isolation but cause perf problems at scale (subscriber sweeps, reducer `.map()` allocations, etc.).
 - **How performance debugging works** — the perf log + HUD that we lean on when something feels slow.
 
-If you're touching the Chat interface specifically (internally referred to as "json-mode"), the `plans/json-mode-native-chat.md` document has the live feature backlog and design notes.
+If you're touching the Chat interface specifically (internally referred to as "json-mode"), the `plans/acp-claude.md` document has the current architecture and design notes. The legacy runtime is documented in `plans/json-mode-native-chat.md` for historical reference.
 
 ## Code style
 

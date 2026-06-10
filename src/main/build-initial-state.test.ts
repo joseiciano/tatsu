@@ -76,4 +76,5 @@ describe('buildInitialAppState', () => {
     expect(result.settings.hasGithubToken).toBe(true)
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
   })
+
 })

@@ -299,8 +299,6 @@ export interface ElectronAPI {
   setClaudeCommand(command: string): Promise<boolean>
   getDefaultClaudeCommand(): Promise<string>
   setHarnessMcpEnabled(enabled: boolean): Promise<boolean>
-  setAutoApprovePermissions(enabled: boolean): Promise<boolean>
-  setAutoApproveSteerInstructions(text: string): Promise<boolean>
   setClaudeTuiFullscreen(enabled: boolean): Promise<boolean>
   setWsTransportEnabled(enabled: boolean): Promise<boolean>
   setWsTransportPort(port: number): Promise<number>
@@ -545,7 +543,8 @@ export interface ElectronAPI {
     entryId: string
   ): Promise<{ ok: boolean; reason?: string }>
   openJsonClaudeAuthLoginTab(
-    worktreePath: string
+    worktreePath: string,
+    sessionId: string
   ): Promise<{ ok: true; tabId: string } | { ok: false; error: string }>
   setJsonClaudePermissionMode(
     id: string,

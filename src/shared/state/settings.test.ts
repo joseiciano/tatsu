@@ -440,36 +440,6 @@ describe('settingsReducer', () => {
     expect(xterm.defaultClaudeTabType).toBe('xterm')
   })
 
-  it('autoApprovePermissionsChanged toggles the flag', () => {
-    expect(initialSettings.autoApprovePermissions).toBe(false)
-    const on = apply(initialSettings, {
-      type: 'settings/autoApprovePermissionsChanged',
-      payload: true
-    })
-    expect(on.autoApprovePermissions).toBe(true)
-    const off = apply(on, {
-      type: 'settings/autoApprovePermissionsChanged',
-      payload: false
-    })
-    expect(off.autoApprovePermissions).toBe(false)
-  })
-
-  it('autoApproveSteerInstructionsChanged sets the steer text', () => {
-    expect(initialSettings.autoApproveSteerInstructions).toBe('')
-    const next = apply(initialSettings, {
-      type: 'settings/autoApproveSteerInstructionsChanged',
-      payload: 'approve pnpm install for this project'
-    })
-    expect(next.autoApproveSteerInstructions).toBe(
-      'approve pnpm install for this project'
-    )
-    const cleared = apply(next, {
-      type: 'settings/autoApproveSteerInstructionsChanged',
-      payload: ''
-    })
-    expect(cleared.autoApproveSteerInstructions).toBe('')
-  })
-
   it('jsonModeChatDensityChanged switches between compact and comfy', () => {
     expect(initialSettings.jsonModeChatDensity).toBe('compact')
     const comfy = apply(initialSettings, {
@@ -539,20 +509,6 @@ describe('settingsReducer', () => {
       payload: 'default'
     })
     expect(back.jsonModeDefaultPermissionMode).toBe('default')
-  })
-
-  it('useSystemClaudeForJsonModeChanged toggles the diagnostic flag', () => {
-    expect(initialSettings.useSystemClaudeForJsonMode).toBe(false)
-    const on = apply(initialSettings, {
-      type: 'settings/useSystemClaudeForJsonModeChanged',
-      payload: true
-    })
-    expect(on.useSystemClaudeForJsonMode).toBe(true)
-    const off = apply(on, {
-      type: 'settings/useSystemClaudeForJsonModeChanged',
-      payload: false
-    })
-    expect(off.useSystemClaudeForJsonMode).toBe(false)
   })
 
   it('autoSleepMinutesChanged sets the threshold', () => {

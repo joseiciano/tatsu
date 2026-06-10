@@ -189,18 +189,6 @@ export interface Config {
   // True once the user dismisses the "Switch to the new Chat mode"
   // overlay shown on Terminal Claude tabs.
   chatPromotionDismissed?: boolean
-  // When true, JSON-mode tabs delegate per-tool approval decisions to a
-  // Haiku oneshot for obviously-safe tool calls. Productivity feature
-  // only — not a security boundary. Default off (undefined treated as
-  // false).
-  autoApprovePermissions?: boolean
-  // Optional project-specific guidance appended to the auto-approver's
-  // policy prompt. Empty by default. Has no effect unless
-  // autoApprovePermissions is on.
-  autoApproveSteerInstructions?: string
-  // Diagnostic toggle (no UI): when true, json-mode tabs spawn the user's
-  // PATH `claude` instead of the bundled one. Default off.
-  useSystemClaudeForJsonMode?: boolean
   // Visual density of the JSON-mode chat. Undefined = compact (the
   // historical look). 'comfy' bumps font sizes, padding, and corner
   // radius for newcomers / screen-sharing.

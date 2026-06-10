@@ -3,6 +3,7 @@ import {
   initialJsonClaude,
   jsonClaudeReducer,
   stripJsonClaudeEntries,
+  defaultAcpCapabilities,
   type JsonClaudeState,
   type JsonClaudeChatEntry
 } from './json-claude'
@@ -25,6 +26,8 @@ describe('jsonClaudeReducer', () => {
     expect(next.sessions[SID].entries).toEqual([])
     expect(next.sessions[SID].entriesHydrated).toBe(false)
     expect(next.sessions[SID].busy).toBe(false)
+    expect(next.sessions[SID].capabilities).toEqual(defaultAcpCapabilities())
+    expect('runtime' in next.sessions[SID]).toBe(false)
   })
 
   it('sessionStateChanged updates state + exit info', () => {
@@ -1251,6 +1254,29 @@ describe('jsonClaudeReducer', () => {
     expect(stored.kind).toBe('error')
     expect(stored.errorKind).toBe('rate-limit-error')
     expect(stored.errorMessage).toBe('Rate limit reached')
+  })
+
+  it('capabilitiesChanged updates the session when the capability set differs', () => {
+    let state = seedSession(initialJsonClaude)
+    const newCaps = { ...state.sessions[SID].capabilities, canRewind: false }
+
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/capabilitiesChanged',
+      payload: { sessionId: SID, capabilities: newCaps }
+    })
+
+    expect(state.sessions[SID].capabilities.canRewind).toBe(false)
+    expect(state.sessions[SID].capabilities.canInterrupt).toBe(true)
+  })
+
+  it('capabilitiesChanged is a no-op when the capability set is identical', () => {
+    let state = seedSession(initialJsonClaude)
+    const before = state
+    const next = jsonClaudeReducer(state, {
+      type: 'jsonClaude/capabilitiesChanged',
+      payload: { sessionId: SID, capabilities: state.sessions[SID].capabilities }
+    })
+    expect(next).toBe(before)
   })
 })
 

@@ -1,5 +1,7 @@
 # JSON-mode native chat — backlog
 
+> **Historical note**: this document describes the legacy json-claude runtime (JsonClaudeManager, ApprovalBridge, subprocess/jsonl architecture) which was removed in favor of the ACP chat runtime. For current architecture, see `plans/acp-claude.md`.
+
 Phase 1 (MCP permission bridge) and Phase 2 (json-claude tab MVP) are
 shipped in PR #21 and merged into this branch. This file is the live
 backlog of what's left, organized so each item can be picked up in its

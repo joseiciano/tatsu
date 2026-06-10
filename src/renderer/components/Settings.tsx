@@ -42,7 +42,6 @@ type SubSectionId =
   | 'hotkeys-overlays'
   | 'hotkeys-external'
   | 'experimental-browser-control'
-  | 'experimental-auto-approve'
   | 'experimental-web-mobile'
 
 interface SubSection {
@@ -87,7 +86,6 @@ const SECTIONS: Section[] = [
   { id: 'support', label: 'Support', icon: LifeBuoy },
   { id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
     { id: 'experimental-browser-control', label: 'Browser control' },
-    { id: 'experimental-auto-approve', label: 'Auto-approve' },
     { id: 'experimental-web-mobile', label: 'Web & mobile' }
   ]}
 ]
@@ -162,7 +160,6 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     'hotkeys-overlays': null,
     'hotkeys-external': null,
     'experimental-browser-control': null,
-    'experimental-auto-approve': null,
     'experimental-web-mobile': null
   })
   const isProgrammaticScroll = useRef(false)
@@ -351,8 +348,6 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     jsonModeSendOnEnter,
     jsonModeDefaultPermissionMode,
     autoSleepMinutes,
-    autoApprovePermissions,
-    autoApproveSteerInstructions,
     snoozeDefaultDays,
     expandedDiagnosticLoggingEnabled
   } = settings
@@ -773,23 +768,6 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   const handleToggleHarnessMcp = useCallback(async (enabled: boolean) => {
     await backend.setHarnessMcpEnabled(enabled)
   }, [])
-
-  const handleToggleAutoApprovePermissions = useCallback(async (enabled: boolean) => {
-    await backend.setAutoApprovePermissions(enabled)
-  }, [])
-
-  const [autoApproveSteerDraft, setAutoApproveSteerDraft] = useState<string>(autoApproveSteerInstructions)
-  useEffect(() => {
-    setAutoApproveSteerDraft(autoApproveSteerInstructions)
-  }, [autoApproveSteerInstructions])
-  const [autoApproveSteerSaveResult, setAutoApproveSteerSaveResult] = useState<
-    { ok: boolean; message: string } | null
-  >(null)
-  const handleSaveAutoApproveSteer = useCallback(async () => {
-    setAutoApproveSteerSaveResult(null)
-    await backend.setAutoApproveSteerInstructions(autoApproveSteerDraft)
-    setAutoApproveSteerSaveResult({ ok: true, message: 'Saved · used on next auto-review' })
-  }, [autoApproveSteerDraft])
 
   const handleToggleAutoUpdate = useCallback(async (enabled: boolean) => {
     await backend.setAutoUpdateEnabled(enabled)
@@ -3280,72 +3258,6 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     </select>
                   </div>
                 </div>
-              </div>
-
-              {/* Auto-approve safe tool calls sub-card */}
-              <div
-                ref={(el) => { subSectionRefs.current['experimental-auto-approve'] = el }}
-                id="experimental-auto-approve"
-                className="bg-panel-raised border border-warning/30 rounded-lg p-4 mb-4"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-sm font-semibold text-fg-bright">Auto-approve safe tool calls</h3>
-                  <span className="text-xs font-medium text-warning bg-warning/10 border border-warning/30 rounded px-1.5 py-0.5">
-                    Experimental
-                  </span>
-                </div>
-                <p className="text-xs text-dim mb-3">
-                  In Chat tabs, spawns a Haiku oneshot to approve obviously-safe tool calls (Read, Grep, Edit, …) instead of prompting you. A hardcoded deny-list catches risky calls (<code className="bg-panel px-1 rounded text-xs">rm -rf</code>, <code className="bg-panel px-1 rounded text-xs">git push</code>, <code className="bg-panel px-1 rounded text-xs">WebFetch</code>, …) before Haiku is consulted. Productivity feature only — an LLM judging another LLM is not a security boundary. Has no effect on Terminal tabs.
-                </p>
-
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoApprovePermissions}
-                    onChange={(e) => handleToggleAutoApprovePermissions(e.target.checked)}
-                    className="mt-0.5 cursor-pointer icon-base" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fg-bright">Enable auto-approve</div>
-                    <div className="text-xs text-dim mt-0.5">
-                      Manual Allow/Deny still works at any time and wins the race against the reviewer.
-                    </div>
-                  </div>
-                </label>
-
-                {autoApprovePermissions && (
-                  <div className="mt-4 pt-3 border-t border-border">
-                    <label className="block text-xs font-medium text-fg mb-1">
-                      Project-specific guidance <span className="text-faint font-normal">(optional)</span>
-                    </label>
-                    <p className="text-xs text-dim mb-2">
-                      Free-text instructions appended to the reviewer's policy prompt. Use to add carve-outs (e.g. <em>&quot;approve <code className="bg-panel px-1 rounded text-xs">pnpm install</code> for this project&quot;</em>) or extra strictness (e.g. <em>&quot;deny any Bash that writes outside src/&quot;</em>). The hardcoded safety bullets always run first; this is purely additive guidance. You can also edit + re-review from any rejected approval card.
-                    </p>
-                    <textarea
-                      value={autoApproveSteerDraft}
-                      onChange={(e) => setAutoApproveSteerDraft(e.target.value)}
-                      placeholder="e.g. Approve pnpm install. Deny any Bash command that touches /etc."
-                      spellCheck={false}
-                      className="w-full bg-panel border border-border-strong rounded p-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono min-h-[80px] resize-y"
-                    />
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        onClick={handleSaveAutoApproveSteer}
-                        disabled={autoApproveSteerDraft === autoApproveSteerInstructions}
-                        className="px-2.5 py-1 text-xs rounded bg-success/20 hover:bg-success/30 text-success transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Save guidance
-                      </button>
-                      {autoApproveSteerSaveResult && (
-                        <span
-                          className={`text-xs flex items-center gap-1 ${autoApproveSteerSaveResult.ok ? 'text-success' : 'text-danger'}`}
-                        >
-                          {autoApproveSteerSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}
-                          {autoApproveSteerSaveResult.message}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Web / mobile client sub-card */}
