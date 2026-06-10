@@ -4,7 +4,7 @@ import {
   type JsonClaudePendingApproval
 } from '../../shared/state/json-claude'
 import { formatPendingTool } from '../pending-tool'
-import { useJsonClaudeSession, useSettings } from '../store'
+import { useJsonClaudeSession } from '../store'
 import { useBackend } from '../backend'
 import {
   suggestPermissionPatterns,
@@ -42,8 +42,7 @@ export function JsonClaudeApprovalCard({
   onResolve
 }: JsonClaudeApprovalCardProps): JSX.Element {
   const backend = useBackend()
-  const settings = useSettings()
-  const savedGuidance = settings.autoApproveSteerInstructions
+  const savedGuidance = ''
   const [mode, setMode] = useState<
     'summary' | 'edit' | 'deny' | 'edit-guidance' | 'always'
   >('summary')
@@ -128,12 +127,10 @@ export function JsonClaudeApprovalCard({
   }
 
   async function saveGuidance(): Promise<void> {
-    await backend.setAutoApproveSteerInstructions(guidanceDraft)
     setGuidanceSavedAt(Date.now())
   }
 
   async function saveGuidanceAndRerun(): Promise<void> {
-    await backend.setAutoApproveSteerInstructions(guidanceDraft)
     // Setting the saved timestamp before the IPC means the "Saved"
     // hint is briefly visible if re-review happens to be slow on the
     // first call. The card immediately re-renders with autoReview.state

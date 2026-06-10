@@ -3,16 +3,8 @@ import type { ChatRuntimeCapabilities } from '../../shared/state/json-claude'
 import { getRuntimeLabel, isCapabilityEnabled } from './JsonModeChat'
 
 describe('getRuntimeLabel', () => {
-  it('returns "Claude (legacy)" for undefined runtime', () => {
-    expect(getRuntimeLabel(undefined)).toBe('Claude (legacy)')
-  })
-
-  it('returns "Claude (legacy)" for legacy runtime', () => {
-    expect(getRuntimeLabel('legacy')).toBe('Claude (legacy)')
-  })
-
-  it('returns "Claude (ACP)" for acp runtime', () => {
-    expect(getRuntimeLabel('acp')).toBe('Claude (ACP)')
+  it('returns ACP label', () => {
+    expect(getRuntimeLabel()).toBe('Claude (ACP)')
   })
 })
 

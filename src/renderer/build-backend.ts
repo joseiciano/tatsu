@@ -221,8 +221,6 @@ export function buildBackend(
       req('repoConfig:set', repoRoot, next),
     setClaudeEnvVars: (vars: Record<string, string>) => req('config:setClaudeEnvVars', vars),
     setDefaultAgent: (agent: string) => req('config:setDefaultAgent', agent),
-    setDefaultClaudeChatRuntime: (value: 'legacy' | 'acp') =>
-      req('config:setDefaultClaudeChatRuntime', value),
     setCodexCommand: (command: string) => req('config:setCodexCommand', command),
     setClaudeModel: (model: string | null) => req('config:setClaudeModel', model),
     setCodexModel: (model: string | null) => req('config:setCodexModel', model),
@@ -231,10 +229,6 @@ export function buildBackend(
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
-    setAutoApprovePermissions: (enabled: boolean) =>
-      req('config:setAutoApprovePermissions', enabled),
-    setAutoApproveSteerInstructions: (text: string) =>
-      req('config:setAutoApproveSteerInstructions', text),
     setClaudeTuiFullscreen: (enabled: boolean) => req('config:setClaudeTuiFullscreen', enabled),
     setWsTransportEnabled: (enabled: boolean) => req('config:setWsTransportEnabled', enabled),
     setWsTransportPort: (port: number) => req('config:setWsTransportPort', port),

@@ -41,7 +41,6 @@ import { fuzzyMatch } from '../fuzzy'
 import 'highlight.js/styles/github-dark.css'
 import type {
   JsonClaudeChatEntry,
-  ClaudeChatRuntime,
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
@@ -74,8 +73,8 @@ interface JsonModeChatProps {
   sessionId: string
   worktreePath: string
   /** When 'asleep', the component renders chat history (if any in
-   *  slice) but does not auto-spawn the subprocess. The user wakes
-   *  the tab explicitly via panes:wakeTab (right-click menu or first
+   *  slice) but does not auto-start chat runtime session. The user wakes
+   *  tab explicitly via panes:wakeTab (right-click menu or first
    *  selection). Defaults to 'awake' for back-compat callers. */
   mode?: 'awake' | 'asleep'
 }
@@ -427,10 +426,9 @@ function formatTier(tier: string | undefined): string | null {
   return tier.replace(/_/g, ' ')
 }
 
-/** Maps a runtime identifier to the user-visible label shown in the
- *  status bar. */
-export function getRuntimeLabel(runtime: ClaudeChatRuntime | undefined): string {
-  return runtime === 'acp' ? 'Claude (ACP)' : 'Claude (legacy)'
+/** Returns user-visible runtime label shown in status bar. */
+export function getRuntimeLabel(): string {
+  return 'Claude (ACP)'
 }
 
 /** Returns whether a capability is enabled. When capabilities are omitted
@@ -1019,11 +1017,11 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
     })
   }, [setUserScrolledUp])
 
-  // Spin the subprocess up the first time this session is rendered.
+  // Start runtime session first time this tab is rendered.
   // Slept tabs (mode='asleep') skip this — they wait for an explicit
   // wake (sidebar select, right-click → wake) which goes through the
   // panes:wakeTab IPC. We don't tear down on unmount — closing the tab
-  // is the lifecycle boundary, owned by PanesFSM.
+  // is lifecycle boundary, owned by PanesFSM.
   useEffect(() => {
     if (mode !== 'awake') return
     if (session) return
@@ -1211,6 +1209,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
   const entries = session?.entries ?? []
   const entriesHydrated = session?.entriesHydrated ?? false
   const deferredEntries = useDeferredValue(entries)
+  const canOpenAuthLogin = isCapabilityEnabled(session?.capabilities, 'canOpenAuthLogin')
   const rows = useMemo(() => {
     // Sub-agent nesting pre-pass: split the flat entries array into a
     // top-level transcript and a children-by-parent map so the Task
@@ -1248,12 +1247,9 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       worktreePath,
       isExited: session?.state === 'exited',
       onOpenLoginTab: () => {
-        // One-click sign-in: main spawns the bundled claude binary's
-        // `auth login` subcommand in a fresh shell tab. The tab runs
-        // the OAuth handshake to completion and exits cleanly. Both
-        // the bundled binary and the json-mode subprocess share
-        // ~/.claude/, so credentials written by the login tab are
-        // visible on the next Retry.
+        // Capability-gated auth helper. Runtimes that support browser login can
+        // open a dedicated auth tab; unsupported runtimes surface a disabled UI.
+        // Successful login still lands in ~/.claude/, so a later Retry sees it.
         void backend.openJsonClaudeAuthLoginTab(worktreePath, sessionId)
       },
       onRetryAuth: () => {
@@ -1265,11 +1261,10 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           await backend.startJsonClaude(sessionId, worktreePath)
         })()
       },
-      canOpenAuthLogin: isCapabilityEnabled(session?.capabilities, 'canOpenAuthLogin')
+      canOpenAuthLogin
     })
     // approvalByToolUseId already depends on pending; pendingToolUseIds
     // also derives from pending.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     deferredEntries,
     approvalByToolUseId,
@@ -1278,7 +1273,8 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
     sessionAllowedDecisions,
     sessionId,
     worktreePath,
-    session?.state
+    session?.state,
+    canOpenAuthLogin
   ])
 
   const groupedItems = useMemo(() => groupConsecutiveToolRows(rows), [rows])
@@ -1293,7 +1289,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
   //     on the full run
   //   - it sits before any compact_boundary — claude won't see those
   //     raw turns again on --resume so truncating into them doesn't help
-  //   - the session is exited — no subprocess to respawn against
+  //   - the session is exited — no live runtime to rewind against
   const [rewindMenu, setRewindMenu] = useState<
     | { entryId: string; x: number; y: number; disabledReason: string | null }
     | null
@@ -2060,12 +2056,12 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
             // desktop keeps the chat dense.
             className="block w-full bg-transparent border-0 px-2.5 pt-2 pb-1 text-base sm:text-sm resize-none outline-none placeholder:text-faint min-h-[60px] max-h-[200px]"
             rows={2}
-            // Never disabled — sleep kills the subprocess and dispatches
-            // state='exited', and the wake transition arrives as separate
+            // Never disabled — sleep stops runtime session and dispatches
+            // state='exited', and wake transition arrives as separate
             // tabWoken + state='running' IPC events. Toggling disabled on
-            // either of those races would briefly blur the focused
-            // textarea, kicking the user out mid-keystroke. send() guards
-            // the actual "no live subprocess" case.
+            // either of those races would briefly blur focused textarea,
+            // kicking user out mid-keystroke. send() guards actual
+            // "no live runtime session" case.
           />
           <div className="flex items-center gap-2 px-2 pb-1.5 pt-0.5">
           <div
@@ -2077,7 +2073,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           </div>
           {session && (
             <span className="text-xs text-muted/60">
-              {getRuntimeLabel(session.runtime)}
+              {getRuntimeLabel()}
             </span>
           )}
           {isCapabilityEnabled(session?.capabilities, 'canSetPermissionMode') && (

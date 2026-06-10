@@ -17,10 +17,10 @@
 //       web-client/                                 vite-bundled renderer
 //       mcp/{permission-prompt-mcp.js, mcp-bridge.js}
 //       node_modules/
-//         node-pty/, ws/                            runtime deps externalized by vite
-//         @anthropic-ai/claude-code-<platform>/    json-mode subprocess (npm layout
-//           package.json                            so require.resolve from main/index.js
-//           claude                                  matches the Electron resolution path)
+//         node-pty/, ws/                                 runtime deps externalized by vite
+//         @anthropic-ai/claude-agent-sdk-<platform>/     ACP executable package (npm layout
+//           package.json                                 so require.resolve from main/index.js
+//           claude                                       matches the Electron resolution path)
 
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
@@ -54,9 +54,9 @@ function detectPlatform() {
 }
 
 const CLAUDE_PLATFORM_PKG = {
-  'darwin-arm64': '@anthropic-ai/claude-code-darwin-arm64',
-  'linux-x64': '@anthropic-ai/claude-code-linux-x64',
-  'linux-arm64': '@anthropic-ai/claude-code-linux-arm64'
+  'darwin-arm64': '@anthropic-ai/claude-agent-sdk-darwin-arm64',
+  'linux-x64': '@anthropic-ai/claude-agent-sdk-linux-x64',
+  'linux-arm64': '@anthropic-ai/claude-agent-sdk-linux-arm64'
 }
 
 async function downloadNodeBinary(platform, nodeDist) {
@@ -119,7 +119,7 @@ function rebuildNodePtyForTargetNode() {
 
 async function copyClaudeBinary(platform, libDir) {
   const pkgName = CLAUDE_PLATFORM_PKG[platform]
-  if (!pkgName) throw new Error(`No claude-code package mapping for ${platform}`)
+  if (!pkgName) throw new Error(`No claude-agent-sdk package mapping for ${platform}`)
   const r = createRequire(join(repoRoot, 'package.json'))
   const pkgJsonPath = r.resolve(`${pkgName}/package.json`)
   const srcPkgDir = dirname(pkgJsonPath)
@@ -136,7 +136,7 @@ async function copyClaudeBinary(platform, libDir) {
 // `require('node-pty')` and `require('ws')` in the bundled main.js
 // resolve through plain Node lookup at runtime. We ship them as a real
 // node_modules tree next to main.js so resolution Just Works.
-const RUNTIME_PACKAGES = ['node-pty', 'ws']
+const RUNTIME_PACKAGES = ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk']
 
 async function copyRuntimePackages(libDir) {
   const destRoot = join(libDir, 'node_modules')

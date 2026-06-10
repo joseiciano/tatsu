@@ -15,7 +15,6 @@
 import { basename, dirname, join } from 'path'
 
 import type { AgentKind } from '../shared/state/terminals'
-import type { ClaudeChatRuntime } from '../shared/state/json-claude'
 
 export interface PersistedTab {
   id: string
@@ -32,8 +31,6 @@ export interface PersistedTab {
   /** For agent + json-claude tabs: per-tab model pin. Wins over the
    *  global claudeModel/codexModel setting at spawn time. */
   model?: string
-  /** For json-claude tabs: which chat runtime powers this session. */
-  runtime?: ClaudeChatRuntime
   /** User-defined label override. Empty/undefined falls back to `label`. */
   customLabel?: string
 }

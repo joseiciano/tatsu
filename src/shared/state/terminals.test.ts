@@ -851,12 +851,12 @@ describe('terminalsReducer', () => {
     expect(noTab).toBe(start)
   })
 
-  it('tabTypeChanged preserves runtime when converting agent → json-claude', () => {
+  it('tabTypeChanged omits runtime when converting agent → json-claude', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
       tabs: [
-        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1', runtime: 'acp' as const }
+        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1' }
       ],
       activeTabId: 'agent-1'
     }
@@ -873,7 +873,7 @@ describe('terminalsReducer', () => {
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.type).toBe('json-claude')
-    expect(tab.runtime).toBe('acp')
+    expect('runtime' in tab).toBe(false)
   })
 
   it('tabTypeChanged omits runtime when source agent tab has no runtime', () => {
@@ -901,38 +901,12 @@ describe('terminalsReducer', () => {
     expect('runtime' in tab).toBe(false)
   })
 
-  it('tabTypeChanged uses payload runtime over source tab runtime when converting to json-claude', () => {
+  it('tabTypeChanged omits runtime when converting json-claude → agent', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
       tabs: [
-        { id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1', runtime: 'legacy' as const }
-      ],
-      activeTabId: 'agent-1'
-    }
-    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
-    const next = apply(start, {
-      type: 'terminals/tabTypeChanged',
-      payload: {
-        worktreePath: '/wt/a',
-        tabId: 'agent-1',
-        newId: 'sess-1',
-        newType: 'json-claude',
-        newLabel: 'Chat',
-        runtime: 'acp'
-      }
-    })
-    const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
-    expect(tab.type).toBe('json-claude')
-    expect(tab.runtime).toBe('acp')
-  })
-
-  it('tabTypeChanged preserves runtime when converting json-claude → agent', () => {
-    const tree: PaneNode = {
-      type: 'leaf',
-      id: 'p1',
-      tabs: [
-        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', mode: 'awake', runtime: 'acp' as const }
+        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', mode: 'awake' }
       ],
       activeTabId: 'sess-1'
     }
@@ -944,21 +918,20 @@ describe('terminalsReducer', () => {
         tabId: 'sess-1',
         newId: 'agent-new',
         newType: 'agent',
-        newLabel: 'Claude',
-        runtime: 'acp'
+        newLabel: 'Claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.type).toBe('agent')
-    expect(tab.runtime).toBe('acp')
+    expect('runtime' in tab).toBe(false)
   })
 
-  it('tabSlept preserves runtime on json-claude tabs', () => {
+  it('tabSlept does not add runtime on json-claude tabs', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
       tabs: [
-        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', mode: 'awake', runtime: 'acp' as const }
+        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', mode: 'awake' }
       ],
       activeTabId: 'sess-1'
     }
@@ -969,15 +942,15 @@ describe('terminalsReducer', () => {
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.mode).toBe('asleep')
-    expect(tab.runtime).toBe('acp')
+    expect('runtime' in tab).toBe(false)
   })
 
-  it('tabWoken preserves runtime on json-claude tabs', () => {
+  it('tabWoken does not add runtime on json-claude tabs', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
       tabs: [
-        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', mode: 'asleep', runtime: 'acp' as const }
+        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', mode: 'asleep' }
       ],
       activeTabId: 'sess-1'
     }
@@ -988,15 +961,15 @@ describe('terminalsReducer', () => {
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.mode).toBe('awake')
-    expect(tab.runtime).toBe('acp')
+    expect('runtime' in tab).toBe(false)
   })
 
-  it('tabRenamed preserves runtime on json-claude tabs', () => {
+  it('tabRenamed does not add runtime on json-claude tabs', () => {
     const tree: PaneNode = {
       type: 'leaf',
       id: 'p1',
       tabs: [
-        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1', runtime: 'acp' as const }
+        { id: 'sess-1', type: 'json-claude', label: 'Chat', sessionId: 'sess-1' }
       ],
       activeTabId: 'sess-1'
     }
@@ -1007,7 +980,7 @@ describe('terminalsReducer', () => {
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.customLabel).toBe('Renamed')
-    expect(tab.runtime).toBe('acp')
+    expect('runtime' in tab).toBe(false)
   })
 
   it('sessionIdDiscovered backfills a session id in pane tree', () => {

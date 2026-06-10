@@ -19,7 +19,6 @@ function makeSession(
     autoApprovedDecisions: {},
     sessionToolApprovals: [],
     sessionAllowedDecisions: {},
-    runtime: 'legacy',
     capabilities: {
       canInterrupt: true,
       canRewind: true,

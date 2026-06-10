@@ -1,4 +1,4 @@
-import type { ClaudeChatRuntime, JsonClaudePermissionMode } from './json-claude'
+import type { JsonClaudePermissionMode } from './json-claude'
 
 export interface WorktreeScripts {
   setup: string
@@ -140,23 +140,6 @@ export interface SettingsState {
    *  mode" overlay shown on Terminal Claude tabs. Persistent so the
    *  promotion stays dismissed across reloads. */
   chatPromotionDismissed: boolean
-  /** When true, JSON-mode tabs run a Haiku oneshot to auto-approve
-   *  obviously-safe tool calls instead of prompting the user. Productivity
-   *  feature only — an LLM judging another LLM is not a security boundary.
-   *  A hardcoded deny-list catches the high-blast-radius cases (rm -rf,
-   *  git push, web fetch, etc.) before Haiku is ever consulted. Default
-   *  off. */
-  autoApprovePermissions: boolean
-  /** Optional project-specific guidance appended to the auto-approver's
-   *  policy prompt (after the hardcoded safety preamble). Useful for
-   *  per-project carve-outs like "approve `pnpm install` on this repo"
-   *  or "be especially strict about Bash that writes outside src/".
-   *  Empty by default — the base policy is what runs. Has no effect
-   *  unless autoApprovePermissions is on. */
-  autoApproveSteerInstructions: string
-  /** Diagnostic toggle (no UI): when true, json-mode tabs spawn the user's
-   *  PATH `claude` instead of the bundled one. Default off. */
-  useSystemClaudeForJsonMode: boolean
   /** Visual density of the JSON-mode chat. 'compact' (default) keeps the
    *  power-user defaults; 'comfy' bumps font sizes, padding, and corner
    *  radius for newcomers / screen-sharing. Wired via CSS variables on
@@ -175,9 +158,6 @@ export interface SettingsState {
    *  don't get a wall of approval cards for routine edits; Bash and
    *  other risky tools still surface approvals. */
   jsonModeDefaultPermissionMode: JsonClaudePermissionMode
-  /** Default chat runtime for new Claude sessions. 'legacy' uses the stream-json
-   *  subprocess; 'acp' uses the ACP SDK. */
-  defaultClaudeChatRuntime: ClaudeChatRuntime
   /** Minutes a json-mode tab can sit at the yellow "waiting" dot before
    *  the auto-sleep monitor tears its subprocess down. The slept tab
    *  stays in the tree (history intact) and re-spawns on click. 0
@@ -249,9 +229,6 @@ export type SettingsEvent =
   | { type: 'settings/browserToolsModeChanged'; payload: BrowserToolsMode }
   | { type: 'settings/defaultClaudeTabTypeChanged'; payload: 'xterm' | 'json' }
   | { type: 'settings/chatPromotionDismissedChanged'; payload: boolean }
-  | { type: 'settings/autoApprovePermissionsChanged'; payload: boolean }
-  | { type: 'settings/autoApproveSteerInstructionsChanged'; payload: string }
-  | { type: 'settings/useSystemClaudeForJsonModeChanged'; payload: boolean }
   | { type: 'settings/jsonModeChatDensityChanged'; payload: JsonModeChatDensity }
   | { type: 'settings/uiScaleChanged'; payload: UiScale }
   | { type: 'settings/jsonModeSendOnEnterChanged'; payload: boolean }
@@ -259,7 +236,6 @@ export type SettingsEvent =
       type: 'settings/jsonModeDefaultPermissionModeChanged'
       payload: JsonClaudePermissionMode
     }
-  | { type: 'settings/defaultClaudeChatRuntimeChanged'; payload: ClaudeChatRuntime }
   | { type: 'settings/autoSleepMinutesChanged'; payload: number }
   | { type: 'settings/snoozeDefaultDaysChanged'; payload: number }
   | { type: 'settings/expandedDiagnosticLoggingEnabledChanged'; payload: boolean }
@@ -311,14 +287,10 @@ export const initialSettings: SettingsState = {
   browserToolsMode: 'full',
   defaultClaudeTabType: 'xterm',
   chatPromotionDismissed: false,
-  autoApprovePermissions: false,
-  autoApproveSteerInstructions: '',
-  useSystemClaudeForJsonMode: false,
   jsonModeChatDensity: 'compact',
   uiScale: 'small',
   jsonModeSendOnEnter: false,
   jsonModeDefaultPermissionMode: 'acceptEdits',
-  defaultClaudeChatRuntime: 'legacy',
   autoSleepMinutes: 30,
   snoozeDefaultDays: 7,
   expandedDiagnosticLoggingEnabled: false,
@@ -411,12 +383,6 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, defaultClaudeTabType: event.payload }
     case 'settings/chatPromotionDismissedChanged':
       return { ...state, chatPromotionDismissed: event.payload }
-    case 'settings/autoApprovePermissionsChanged':
-      return { ...state, autoApprovePermissions: event.payload }
-    case 'settings/autoApproveSteerInstructionsChanged':
-      return { ...state, autoApproveSteerInstructions: event.payload }
-    case 'settings/useSystemClaudeForJsonModeChanged':
-      return { ...state, useSystemClaudeForJsonMode: event.payload }
     case 'settings/jsonModeChatDensityChanged':
       return { ...state, jsonModeChatDensity: event.payload }
     case 'settings/uiScaleChanged':
@@ -425,8 +391,6 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, jsonModeSendOnEnter: event.payload }
     case 'settings/jsonModeDefaultPermissionModeChanged':
       return { ...state, jsonModeDefaultPermissionMode: event.payload }
-    case 'settings/defaultClaudeChatRuntimeChanged':
-      return { ...state, defaultClaudeChatRuntime: event.payload }
     case 'settings/autoSleepMinutesChanged':
       return { ...state, autoSleepMinutes: event.payload }
     case 'settings/snoozeDefaultDaysChanged':

@@ -4,12 +4,11 @@ import type {
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
-/** Main-process chat runtime abstraction. Two implementations exist:
- *  - ClaudeLegacyRuntime (wraps JsonClaudeManager)
+/** Main-process chat runtime abstraction. Current implementation:
  *  - ClaudeAcpRuntime (uses @anthropic-ai/claude-agent-sdk)
  *
- *  The renderer continues talking to the same `jsonClaude:*` backend API;
- *  the main process routes requests to the selected runtime. */
+ *  Renderer still talks to same `jsonClaude:*` backend API; registry keeps
+ *  IPC surface stable even though ACP is only registered runtime today. */
 export interface ChatRuntime {
   /** Returns true if this runtime currently owns a live session. */
   hasSession(sessionId: string): boolean

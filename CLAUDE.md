@@ -20,7 +20,7 @@ navigation.
 - **lucide-react** v1.x for icons (note: brand icons like `Github` are NOT exported in this version — use `GitPullRequest` etc.)
 - **electron-builder** for packaging, signed with the user's personal Developer ID, notarized
 - **electron-updater** for OTA updates from GitHub releases
-- **`@anthropic-ai/claude-code`** is bundled as a dep (pinned native binary) and used by Chat tabs (internally `json-mode`) only. Terminal tabs (internally xterm-hosted) continue to spawn the user's PATH `claude` so power users on bleeding-edge / beta builds keep that experience. Both share `~/.claude/` for auth + MCP config.
+- **`@anthropic-ai/claude-agent-sdk`** powers Chat tabs through `ClaudeAcpRuntime`, resolving bundled platform-specific native `claude` executable at runtime. Terminal tabs (internally xterm-hosted) still spawn the user's PATH `claude` so power users on bleeding-edge / beta builds keep that experience. Both share `~/.claude/` for auth + MCP config.
 
 ## Architecture (read this before touching state)
 
@@ -110,6 +110,10 @@ src/
 │   ├── activity-deriver.ts        # Subscribes to store, derives + records activity transitions
 │   ├── pty-manager.ts             # node-pty lifecycle, dispatches statuses to store
 │   ├── hooks.ts                   # Installs Claude Code hooks, dispatches statuses to store
+│   ├── chat-runtimes/
+│   │   ├── index.ts               # ChatRuntimeRegistry: routes jsonClaude IPC to active runtime
+│   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
+│   │   └── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
 │   ├── worktree.ts                # git worktree CRUD primitives
 │   ├── github.ts                  # GitHub REST API calls
 │   ├── repo-config.ts             # Per-repo .harness.json read/write
@@ -427,24 +431,18 @@ hard dependency on `gh`.
   happens via the chip strip's `+` button (or `File → Add Backend…`
   if/when wired). Tokens encrypted in `secrets.enc` keyed
   `backend-token:<id>`; connections list lives in `userData/config.json`.
-- **Dual-claude model** — Harness ships two Claude Code binaries. **Terminal
-  tabs** (internally xterm-hosted) spawn `/bin/zsh -ilc claude` so the user's
-  PATH `claude` is what runs (lets bleeding-edge / beta testers stay on their
-  own build). **Chat tabs** (internally `json-mode`) spawn the bundled
-  `@anthropic-ai/claude-code` native binary directly — pinned per Harness
-  release so the `--permission-prompt-tool` round trip and stream-json
-  schema can't drift between npm publishes. Both share `~/.claude/` for
-  auth + MCP config, so the dual binaries are invisible at the user
-  level. The bundled binary is the platform-specific one from
-  `@anthropic-ai/claude-code-<platform>-<arch>` (~216MB on disk per
-  platform); resolved at runtime via `createRequire` so the bundler
-  doesn't try to inline it. electron-builder hardlink-dedups, so the
-  resolver targets the platform subpackage's `claude` directly rather
-  than the wrapper's `bin/claude.exe`. Both packages live in
-  `asarUnpack` (native binaries can't exec from inside asar). The
-  undocumented `useSystemClaudeForJsonMode: true` setting in
-  `config.json` flips json-mode back to PATH `claude` for diagnostics
-  / version comparison — no UI, edit the JSON directly.
+- **Terminal tabs vs ACP chat tabs** — **Terminal tabs** (internally
+  xterm-hosted) spawn `/bin/zsh -ilc claude` so the user's PATH `claude`
+  is what runs (lets bleeding-edge / beta testers stay on their own
+  build). **Chat tabs** still use the `jsonClaude:*` transport surface,
+  but main routes those calls through `ChatRuntimeRegistry` into
+  `ClaudeAcpRuntime`, which uses `@anthropic-ai/claude-agent-sdk`'s
+  `query()` API. The runtime resolves bundled platform-native `claude`
+  executable from `@anthropic-ai/claude-agent-sdk-<platform>-<arch>` via
+  `createRequire`, rewrites `app.asar` paths to `app.asar.unpacked`, and
+  keeps `persistSession: false` so Harness-owned slice state remains
+  source of truth for visible chat lifecycle. Terminal tabs and chat tabs
+  still share `~/.claude/` for auth + MCP config.
 
 ## Workflow conventions
 

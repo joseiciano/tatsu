@@ -299,8 +299,6 @@ export interface ElectronAPI {
   setClaudeCommand(command: string): Promise<boolean>
   getDefaultClaudeCommand(): Promise<string>
   setHarnessMcpEnabled(enabled: boolean): Promise<boolean>
-  setAutoApprovePermissions(enabled: boolean): Promise<boolean>
-  setAutoApproveSteerInstructions(text: string): Promise<boolean>
   setClaudeTuiFullscreen(enabled: boolean): Promise<boolean>
   setWsTransportEnabled(enabled: boolean): Promise<boolean>
   setWsTransportPort(port: number): Promise<number>
@@ -332,7 +330,6 @@ export interface ElectronAPI {
   ): () => void
   setClaudeEnvVars(vars: Record<string, string>): Promise<boolean>
   setDefaultAgent(agent: string): Promise<boolean>
-  setDefaultClaudeChatRuntime(value: 'legacy' | 'acp'): Promise<boolean>
   setCodexCommand(command: string): Promise<boolean>
   setClaudeModel(model: string | null): Promise<boolean>
   setCodexModel(model: string | null): Promise<boolean>

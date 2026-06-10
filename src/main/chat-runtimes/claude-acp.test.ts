@@ -74,6 +74,18 @@ function createMockQuery(): any {
     _getStreamInputMessages: () => streamInputMessages
   }
 
+  q._consumePrompt = async (prompt: unknown) => {
+    if (!prompt || typeof prompt === 'string') return
+    for await (const msg of prompt as AsyncIterable<any>) {
+      streamInputMessages.push(msg)
+      messages.push({ type: 'user', message: msg.message, parent_tool_use_id: null })
+      if (pendingResolve) {
+        pendingResolve({ done: false, value: messages.shift() })
+        pendingResolve = null
+      }
+    }
+  }
+
   return q
 }
 
@@ -105,7 +117,10 @@ describe('ClaudeAcpRuntime', () => {
     store = createStore()
     runtime = new ClaudeAcpRuntime(store)
     mockQuery = createMockQuery()
-    vi.mocked(query).mockReturnValue(mockQuery)
+    vi.mocked(query).mockImplementation((args: any) => {
+      void mockQuery._consumePrompt(args?.prompt)
+      return mockQuery
+    })
     vi.mocked(query).mockClear()
     store.events.length = 0
   })
@@ -155,20 +170,35 @@ describe('ClaudeAcpRuntime', () => {
       expect((userEntries[0] as any).payload.entry.text).toBe('hello')
     })
 
+    it('warns and uses started worktree path when store session state is absent', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      runtime.start('s1', '/wt')
+      runtime.send('s1', 'hello')
+
+      expect(warn).toHaveBeenCalledWith(
+        '[json-claude] missing sessionStarted state for s1; falling back to runtime start worktree path'
+      )
+      expect(query).toHaveBeenCalledTimes(1)
+      expect((query as any).mock.calls[0][0].options.cwd).toBe('/wt')
+
+      warn.mockRestore()
+    })
+
     it('queues subsequent sends while busy and streams them when the turn finishes', async () => {
       runtime.start('s1', '/wt')
       runtime.send('s1', 'first')
       runtime.send('s1', 'second')
 
-      // While busy, the second send should be queued (no streamInput yet).
-      expect(mockQuery.streamInput).toHaveBeenCalledTimes(0)
+      // While busy, queued input is buffered in runtime state until the turn finishes.
+      expect(mockQuery._getStreamInputMessages()).toHaveLength(0)
       const userEntries = store.events.filter(
         (e) => e.type === 'jsonClaude/entryAppended' && (e as any).payload.entry.kind === 'user'
       )
       expect(userEntries.length).toBe(2)
       expect((userEntries[1] as any).payload.entry.isQueued).toBe(true)
 
-      // Finish the turn — queued message should be streamed.
+      // Finish the turn — queued message should reach the prompt queue.
       mockQuery._pushMessage({
         type: 'result',
         subtype: 'success',
@@ -178,7 +208,7 @@ describe('ClaudeAcpRuntime', () => {
 
       await new Promise((r) => setTimeout(r, 50))
 
-      expect(mockQuery.streamInput).toHaveBeenCalledTimes(1)
+      expect(mockQuery._getStreamInputMessages()).toHaveLength(2)
       const unqueued = store.events.filter((e) => e.type === 'jsonClaude/userEntriesUnqueued')
       expect(unqueued.length).toBe(1)
     })
@@ -188,6 +218,15 @@ describe('ClaudeAcpRuntime', () => {
       runtime.send('s1', 'hello')
       const ev = store.events.find((e) => e.type === 'jsonClaude/busyChanged')
       expect((ev as any).payload.busy).toBe(true)
+    })
+
+    it('moves session to running after first send starts the query', () => {
+      runtime.start('s1', '/wt')
+      runtime.send('s1', 'hello')
+
+      const stateEvents = store.events.filter((e) => e.type === 'jsonClaude/sessionStateChanged')
+      const lastState = stateEvents[stateEvents.length - 1]
+      expect((lastState as any).payload.state).toBe('running')
     })
 
     it('sets busy to true on subsequent send when session is not busy', async () => {
@@ -212,6 +251,11 @@ describe('ClaudeAcpRuntime', () => {
       const busyEvents = store.events.filter((e) => e.type === 'jsonClaude/busyChanged')
       expect(busyEvents.length).toBe(1)
       expect((busyEvents[0] as any).payload.busy).toBe(true)
+
+
+      const stateEvents = store.events.filter((e) => e.type === 'jsonClaude/sessionStateChanged')
+      const lastState = stateEvents[stateEvents.length - 1]
+      expect((lastState as any).payload.state).toBe('running')
 
       mockQuery.close()
       await new Promise((r) => setTimeout(r, 50))
@@ -264,7 +308,7 @@ describe('ClaudeAcpRuntime', () => {
       runtime.send('s1', 'second')
       runtime.send('s1', 'third')
 
-      expect(mockQuery.streamInput).toHaveBeenCalledTimes(0)
+      expect(mockQuery._getStreamInputMessages()).toHaveLength(0)
 
       // Finish first turn — second should be sent.
       mockQuery._pushMessage({
@@ -276,7 +320,7 @@ describe('ClaudeAcpRuntime', () => {
 
       await new Promise((r) => setTimeout(r, 50))
 
-      expect(mockQuery.streamInput).toHaveBeenCalledTimes(1)
+      expect(mockQuery._getStreamInputMessages()).toHaveLength(2)
     })
 
     it('clears queued messages on kill', () => {
@@ -290,7 +334,7 @@ describe('ClaudeAcpRuntime', () => {
         (e) => e.type === 'jsonClaude/entryAppended' && (e as any).payload.entry.kind === 'user'
       )
       expect(userEntries.length).toBe(2)
-      expect(mockQuery.streamInput).toHaveBeenCalledTimes(0)
+      expect(mockQuery._getStreamInputMessages()).toHaveLength(0)
     })
 
     it('uses original base64 data when dequeuing queued images without reading disk', async () => {
@@ -300,7 +344,7 @@ describe('ClaudeAcpRuntime', () => {
       const image = { mediaType: 'image/png', data: 'original-base64', path: '/tmp/img.png' }
       runtime.send('s1', 'second', [image])
 
-      // Finish first turn — queued message should be streamed with original base64.
+      // Finish first turn — queued message should reach the prompt queue with original base64.
       mockQuery._pushMessage({
         type: 'result',
         subtype: 'success',
@@ -310,11 +354,10 @@ describe('ClaudeAcpRuntime', () => {
 
       await new Promise((r) => setTimeout(r, 50))
 
-      expect(mockQuery.streamInput).toHaveBeenCalledTimes(1)
       const messages = mockQuery._getStreamInputMessages()
 
-      expect(messages.length).toBe(1)
-      const content = messages[0].message.content
+      expect(messages.length).toBe(2)
+      const content = messages[1].message.content
       expect(content[0].type).toBe('image')
       expect(content[0].source.data).toBe('original-base64')
     })
@@ -553,6 +596,27 @@ describe('ClaudeAcpRuntime', () => {
       expect(errors.length).toBe(1)
       expect((errors[0] as any).payload.entry.errorMessage).toContain('something broke')
     })
+
+
+    it('does not emit busy false then true when dequeuing queued messages after result', async () => {
+      runtime.start('s1', '/wt')
+      runtime.send('s1', 'first')
+      runtime.send('s1', 'second')
+
+      store.events.length = 0
+      mockQuery._pushMessage({
+        type: 'result',
+        subtype: 'success',
+        is_error: false
+      })
+
+      await new Promise((r) => setTimeout(r, 0))
+
+      const busyEvents = store.events.filter((e) => e.type === 'jsonClaude/busyChanged')
+      expect(busyEvents.length).toBe(0)
+      const unqueued = store.events.filter((e) => e.type === 'jsonClaude/userEntriesUnqueued')
+      expect(unqueued.length).toBe(1)
+    })
   })
 
   describe('system messages', () => {
@@ -572,6 +636,26 @@ describe('ClaudeAcpRuntime', () => {
       const ev = store.events.find((e) => e.type === 'jsonClaude/slashCommandsChanged')
       expect(ev).toBeDefined()
       expect((ev as any).payload.slashCommands).toEqual(['clear', 'compact'])
+    })
+
+
+    it('emits auth failure guidance that tells users how to re-authenticate', async () => {
+      runtime.start('s1', '/wt')
+      runtime.send('s1', 'hello')
+
+      mockQuery._pushMessage({
+        type: 'auth_status',
+        error: 'token expired'
+      })
+      mockQuery.close()
+
+      await new Promise((r) => setTimeout(r, 50))
+
+      const errors = store.events.filter(
+        (e) => e.type === 'jsonClaude/entryAppended' && (e as any).payload.entry.kind === 'error'
+      )
+      expect(errors.length).toBe(1)
+      expect((errors[0] as any).payload.entry.errorMessage).toContain('claude auth login')
     })
   })
 
@@ -613,9 +697,9 @@ describe('ClaudeAcpRuntime', () => {
       await new Promise((r) => setTimeout(r, 50))
 
       const busyEvents = store.events.filter((e) => e.type === 'jsonClaude/busyChanged')
-      // busy=false from finally, then busy=true from resume dequeue.
-      expect(busyEvents.length).toBe(2)
-      expect((busyEvents[busyEvents.length - 1] as any).payload.busy).toBe(true)
+      // Runtime should stay busy while the queued message is resumed.
+      expect(busyEvents.length).toBe(0)
+      expect(mockQuery._getStreamInputMessages()).toHaveLength(2)
     })
   })
 
@@ -660,6 +744,43 @@ describe('ClaudeAcpRuntime', () => {
       const stateEvents = store.events.filter((e) => e.type === 'jsonClaude/sessionStateChanged')
       expect(stateEvents.length).toBe(1)
       expect((stateEvents[0] as any).payload.state).toBe('exited')
+    })
+
+
+    it('flushes pending deltas and finalizes partial assistant entry before kill cleanup', async () => {
+      runtime.start('s1', '/wt')
+      runtime.send('s1', 'hello')
+
+      mockQuery._pushMessage({
+        type: 'stream_event',
+        event: { type: 'message_start', message: { id: 'msg-1' } }
+      })
+      mockQuery._pushMessage({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          content_block: { type: 'text' }
+        }
+      })
+      mockQuery._pushMessage({
+        type: 'stream_event',
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'partial text' }
+        }
+      })
+
+      await new Promise((r) => setTimeout(r, 0))
+      store.events.length = 0
+
+      runtime.kill('s1')
+
+      const deltas = store.events.filter((e) => e.type === 'jsonClaude/assistantTextDelta')
+      expect(deltas.length).toBe(1)
+      expect((deltas[0] as any).payload.textDelta).toBe('partial text')
+
+      const finalized = store.events.filter((e) => e.type === 'jsonClaude/assistantEntryFinalized')
+      expect(finalized.length).toBe(1)
     })
   })
 
@@ -725,22 +846,17 @@ describe('ClaudeAcpRuntime', () => {
   })
 
   describe('permission mode safety', () => {
-    it('forces default permission mode and updates slice state', () => {
-      // Seed the store with acceptEdits so we can verify it gets overridden.
+    it('uses stored permission mode when creating ACP query options', () => {
       store.dispatch({
         type: 'jsonClaude/sessionStarted',
         payload: { sessionId: 's1', worktreePath: '/wt', defaultPermissionMode: 'acceptEdits' }
       })
-      store.events.length = 0
-
       runtime.start('s1', '/wt')
       runtime.send('s1', 'hello')
 
-      const modeChange = store.events.find(
-        (e) => e.type === 'jsonClaude/permissionModeChanged'
-      )
-      expect(modeChange).toBeDefined()
-      expect((modeChange as any).payload.mode).toBe('default')
+      expect(query).toHaveBeenCalledTimes(1)
+      const opts = (query as any).mock.calls[0][0].options
+      expect(opts.permissionMode).toBe('acceptEdits')
     })
   })
 

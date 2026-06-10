@@ -17,10 +17,10 @@ import type {
   JsonClaudeChatEntry,
   JsonClaudeMessageBlock
 } from '../../shared/state/json-claude'
-import { defaultCapabilitiesFor } from '../../shared/state/json-claude'
+import { defaultAcpCapabilities } from '../../shared/state/json-claude'
 
 interface AcpSession {
-  query: Query
+  query: Query | null
   abortController: AbortController
   worktreePath: string
   busy: boolean
@@ -30,7 +30,11 @@ interface AcpSession {
   interrupted: boolean
   pendingTextDelta: string
   pendingThinkingDelta: string
+  // Batch streamed deltas behind one timer so reducer/store does not dispatch on every token.
   flushTimer: ReturnType<typeof setTimeout> | null
+  inputQueue: SDKUserMessage[]
+  inputResolvers: Array<() => void>
+  inputClosed: boolean
 }
 
 function mapPermissionMode(mode: JsonClaudePermissionMode): PermissionMode {
@@ -91,14 +95,15 @@ export function resolveClaudeAgentSdkExecutablePath(opts: {
 
 /** Real ACP runtime using @anthropic-ai/claude-agent-sdk.
  *
- *  Supports start, send, streaming assistant output, interrupt, kill,
- *  and clear unsupported-action behavior. History/transcript replay is
- *  isolated from legacy jsonl. Output is normalized into existing store
- *  events so the current renderer functions. */
+ *  Keeps renderer contract on existing `jsonClaude:*` events while swapping
+ *  subprocess/jsonl plumbing for SDK query() stream. `persistSession: false` is
+ *  intentional: Harness owns visible session state in slice/store and treats
+ *  reconnect as fresh runtime bootstrap, not SDK-managed transcript resume. */
 export class ClaudeAcpRuntime implements ChatRuntime {
   private store: Store
   private sessions: Map<string, AcpSession> = new Map()
-  private startedSessions: Set<string> = new Set()
+  private startedSessions: Map<string, string> = new Map()
+  // start() records pre-query worktree bootstrap in startedSessions until first send creates query().
   private pendingSends: Map<string, Array<{ text: string; images?: Array<{ mediaType: string; path: string; data: string }> }>> = new Map()
   private modelOverrides: Map<string, string> = new Map()
   private resolveExecutablePath: () => string | undefined
@@ -122,7 +127,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
   ): void {
     // Move fresh/woken tabs out of connecting into a sensible non-running
     // state until the first send actually creates the query.
-    this.startedSessions.add(sessionId)
+    this.startedSessions.set(sessionId, worktreePath)
     this.store.dispatch({
       type: 'jsonClaude/sessionStateChanged',
       payload: { sessionId, state: 'idle' }
@@ -146,7 +151,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
     if (session.busy) {
       // Queue the message for when the current turn finishes.
       const entryId = `${sessionId}-u-${session.entryCounter++}`
-      this._appendQueuedUserEntry(sessionId, entryId, text, images)
+      this._appendUserEntry(sessionId, entryId, text, images, { queued: true })
       const queue = this.pendingSends.get(sessionId) ?? []
       queue.push({
         text,
@@ -160,7 +165,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       return
     }
 
-    // Subsequent send: stream input into the existing query.
+    // Subsequent send: append input into the long-lived queue.
     const entryId = `${sessionId}-u-${session.entryCounter++}`
     this._appendUserEntry(sessionId, entryId, text, images)
 
@@ -169,21 +174,16 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       type: 'jsonClaude/busyChanged',
       payload: { sessionId, busy: true }
     })
-
-    session.query
-      .streamInput(
-        (async function* () {
-          yield makeUserMessage(text, images)
-        })()
-      )
-      .catch((err) => {
-        this._emitError(sessionId, `Send failed: ${err instanceof Error ? err.message : String(err)}`)
-      })
+    this._enqueueInput(session, makeUserMessage(text, images))
+    this.store.dispatch({
+      type: 'jsonClaude/sessionStateChanged',
+      payload: { sessionId, state: 'running' }
+    })
   }
 
   interrupt(sessionId: string): void {
     const session = this.sessions.get(sessionId)
-    if (!session) return
+    if (!session || !session.query) return
     session.interrupted = true
     session.query.interrupt().catch(() => {
       // ignore interrupt errors
@@ -202,9 +202,11 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       clearTimeout(session.flushTimer)
       session.flushTimer = null
     }
+    this._finalizeActiveAssistantEntry(sessionId, session)
+    this._closeInput(session)
     session.abortController.abort()
     try {
-      session.query.close()
+      session.query?.close()
     } catch {
       // ignore close errors
     }
@@ -244,7 +246,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
   }
 
   getCapabilities(_sessionId: string): ChatRuntimeCapabilities {
-    return defaultCapabilitiesFor('acp')
+    return defaultAcpCapabilities()
   }
 
   // ------------------------------------------------------------------
@@ -258,15 +260,16 @@ export class ClaudeAcpRuntime implements ChatRuntime {
   ): void {
     const snapshot = this.store.getSnapshot()
     const sessionState = snapshot.state.jsonClaude.sessions[sessionId]
-    const worktreePath = sessionState?.worktreePath ?? '/tmp'
-    // Force ACP to a safe permission mode; do not inherit acceptEdits.
-    const permissionMode: JsonClaudePermissionMode = 'default'
-    if (sessionState?.permissionMode && sessionState.permissionMode !== permissionMode) {
-      this.store.dispatch({
-        type: 'jsonClaude/permissionModeChanged',
-        payload: { sessionId, mode: permissionMode }
-      })
+    const worktreePath = sessionState?.worktreePath ?? this.startedSessions.get(sessionId)
+    if (!sessionState) {
+      console.warn(
+        `[json-claude] missing sessionStarted state for ${sessionId}; falling back to runtime start worktree path`
+      )
     }
+    if (!worktreePath) {
+      throw new Error(`Missing worktree path for jsonClaude session ${sessionId}`)
+    }
+    const permissionMode: JsonClaudePermissionMode = sessionState?.permissionMode ?? 'acceptEdits'
     this.startedSessions.delete(sessionId)
     const abortController = new AbortController()
     const modelOverride = this.modelOverrides.get(sessionId)
@@ -287,18 +290,33 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       ...(modelOverride ? { model: modelOverride } : {})
     }
 
+    const session: AcpSession = {
+      query: null,
+      abortController,
+      worktreePath,
+      busy: true,
+      entryCounter: 0,
+      currentAssistantEntryId: null,
+      currentMessageId: null,
+      interrupted: false,
+      pendingTextDelta: '',
+      pendingThinkingDelta: '',
+      flushTimer: null,
+      inputQueue: [],
+      inputResolvers: [],
+      inputClosed: false
+    }
+    this.sessions.set(sessionId, session)
+
     let q: Query
     try {
-      const prompt = images?.length
-        ? (async function* () {
-            yield makeUserMessage(text, images)
-          })()
-        : text
       q = query({
-        prompt: prompt as string | AsyncIterable<SDKUserMessage>,
+        prompt: this._createPromptStream(session),
         options: opts
       })
+      session.query = q
     } catch (err) {
+      this.sessions.delete(sessionId)
       this._emitError(
         sessionId,
         `Failed to start ACP session: ${err instanceof Error ? err.message : String(err)}`
@@ -315,27 +333,16 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       return
     }
 
-    const session: AcpSession = {
-      query: q,
-      abortController,
-      worktreePath,
-      busy: true,
-      entryCounter: 0,
-      currentAssistantEntryId: null,
-      currentMessageId: null,
-      interrupted: false,
-      pendingTextDelta: '',
-      pendingThinkingDelta: '',
-      flushTimer: null
-    }
-    this.sessions.set(sessionId, session)
-
-    // Append the user entry immediately for UI feedback.
     const entryId = `${sessionId}-u-${session.entryCounter++}`
     this._appendUserEntry(sessionId, entryId, text, images)
     this.store.dispatch({
       type: 'jsonClaude/busyChanged',
       payload: { sessionId, busy: true }
+    })
+    this._enqueueInput(session, makeUserMessage(text, images))
+    this.store.dispatch({
+      type: 'jsonClaude/sessionStateChanged',
+      payload: { sessionId, state: 'running' }
     })
 
     this._iterateMessages(sessionId, q).catch((err) => {
@@ -344,6 +351,31 @@ export class ClaudeAcpRuntime implements ChatRuntime {
         `ACP iteration error: ${err instanceof Error ? err.message : String(err)}`
       )
     })
+  }
+
+  private async *_createPromptStream(session: AcpSession): AsyncIterable<SDKUserMessage> {
+    while (true) {
+      if (session.inputQueue.length > 0) {
+        yield session.inputQueue.shift()!
+        continue
+      }
+      if (session.inputClosed) return
+      await new Promise<void>((resolve) => {
+        session.inputResolvers.push(resolve)
+      })
+    }
+  }
+
+  private _enqueueInput(session: AcpSession, message: SDKUserMessage): void {
+    session.inputQueue.push(message)
+    const resolve = session.inputResolvers.shift()
+    resolve?.()
+  }
+
+  private _closeInput(session: AcpSession): void {
+    session.inputClosed = true
+    const resolvers = session.inputResolvers.splice(0)
+    for (const resolve of resolvers) resolve()
   }
 
   private _flushDeltas(sessionId: string): void {
@@ -386,13 +418,15 @@ export class ClaudeAcpRuntime implements ChatRuntime {
     } finally {
       const session = this.sessions.get(sessionId)
       if (session) {
-        this._flushDeltas(sessionId)
+        this._finalizeActiveAssistantEntry(sessionId, session)
 
-        session.busy = false
-        this.store.dispatch({
-          type: 'jsonClaude/busyChanged',
-          payload: { sessionId, busy: false }
-        })
+        if (!session.interrupted && session.busy) {
+          session.busy = false
+          this.store.dispatch({
+            type: 'jsonClaude/busyChanged',
+            payload: { sessionId, busy: false }
+          })
+        }
 
         if (session.interrupted) {
           session.interrupted = false
@@ -401,31 +435,13 @@ export class ClaudeAcpRuntime implements ChatRuntime {
             payload: { sessionId, state: 'idle' }
           })
 
-          // Try to send any queued messages for interrupted sessions.
-          const queue = this.pendingSends.get(sessionId)
-          if (queue && queue.length > 0) {
-            const pending = queue.shift()!
-            if (queue.length === 0) {
-              this.pendingSends.delete(sessionId)
-            }
-            this.store.dispatch({
-              type: 'jsonClaude/userEntriesUnqueued',
-              payload: { sessionId }
-            })
-            session.busy = true
+          const resumed = this._resumeNextQueuedMessage(sessionId, session)
+          if (!resumed && session.busy) {
+            session.busy = false
             this.store.dispatch({
               type: 'jsonClaude/busyChanged',
-              payload: { sessionId, busy: true }
+              payload: { sessionId, busy: false }
             })
-            session.query
-              .streamInput(
-                (async function* () {
-                  yield makeUserMessage(pending.text, pending.images)
-                })()
-              )
-              .catch((err) => {
-                this._emitError(sessionId, `Send failed: ${err instanceof Error ? err.message : String(err)}`)
-              })
           }
         } else {
           this.store.dispatch({
@@ -440,18 +456,6 @@ export class ClaudeAcpRuntime implements ChatRuntime {
           this.sessions.delete(sessionId)
           this.pendingSends.delete(sessionId)
           this.modelOverrides.delete(sessionId)
-        }
-
-        this._flushDeltas(sessionId)
-
-        // Finalize any dangling partial entry so the renderer doesn't
-        // leave a blinking cursor forever.
-        if (session.currentAssistantEntryId) {
-          this.store.dispatch({
-            type: 'jsonClaude/assistantEntryFinalized',
-            payload: { sessionId, entryId: session.currentAssistantEntryId, blocks: [] }
-          })
-          session.currentAssistantEntryId = null
         }
       }
     }
@@ -509,7 +513,11 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       case 'auth_status': {
         const authMsg = msg as any
         if (authMsg.error) {
-          this._emitError(sessionId, `Auth error: ${authMsg.error}`, 'auth-failure')
+          this._emitError(
+            sessionId,
+            `Auth error: ${authMsg.error}. Open a Terminal tab and run \`claude auth login\` to re-authenticate, then retry.`,
+            'auth-failure'
+          )
         }
         break
       }
@@ -675,6 +683,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
         if (delta.type === 'text_delta') {
           session.pendingTextDelta += delta.text
           if (!session.flushTimer) {
+          // Flush at most every 50ms: keeps streaming feel while avoiding one store event per token.
             session.flushTimer = setTimeout(() => this._flushDeltas(sessionId), 50)
           }
         } else if (delta.type === 'thinking_delta') {
@@ -700,47 +709,51 @@ export class ClaudeAcpRuntime implements ChatRuntime {
     }
   }
 
-  private async _handleResult(sessionId: string, msg: any): Promise<void> {
+  private _handleResult(sessionId: string, msg: any): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
 
-    session.busy = false
-    this.store.dispatch({
-      type: 'jsonClaude/busyChanged',
-      payload: { sessionId, busy: false }
-    })
+    const resumed = this._resumeNextQueuedMessage(sessionId, session)
+    if (!resumed) {
+      session.busy = false
+      this.store.dispatch({
+        type: 'jsonClaude/busyChanged',
+        payload: { sessionId, busy: false }
+      })
+    }
 
     if (msg.subtype === 'error_during_execution' || msg.is_error) {
       const errors = msg.errors?.join('; ') || 'Unknown error'
       this._emitError(sessionId, `Turn failed: ${errors}`)
     }
 
-    // Send any queued message now that the turn has finished.
+  }
+
+  private _resumeNextQueuedMessage(sessionId: string, session: AcpSession): boolean {
     const queue = this.pendingSends.get(sessionId)
-    if (queue && queue.length > 0) {
-      const pending = queue.shift()!
-      if (queue.length === 0) {
-        this.pendingSends.delete(sessionId)
-      }
-      this.store.dispatch({
-        type: 'jsonClaude/userEntriesUnqueued',
-        payload: { sessionId }
-      })
-      session.busy = true
-      this.store.dispatch({
-        type: 'jsonClaude/busyChanged',
-        payload: { sessionId, busy: true }
-      })
-      session.query
-        .streamInput(
-          (async function* () {
-            yield makeUserMessage(pending.text, pending.images)
-          })()
-        )
-        .catch((err) => {
-          this._emitError(sessionId, `Send failed: ${err instanceof Error ? err.message : String(err)}`)
-        })
+    if (!queue || queue.length === 0) return false
+
+    const pending = queue.shift()!
+    if (queue.length === 0) {
+      this.pendingSends.delete(sessionId)
     }
+    this.store.dispatch({
+      type: 'jsonClaude/userEntriesUnqueued',
+      payload: { sessionId }
+    })
+    this._enqueueInput(session, makeUserMessage(pending.text, pending.images))
+    return true
+  }
+
+  private _finalizeActiveAssistantEntry(sessionId: string, session: AcpSession): void {
+    this._flushDeltas(sessionId)
+    if (!session.currentAssistantEntryId) return
+
+    this.store.dispatch({
+      type: 'jsonClaude/assistantEntryFinalized',
+      payload: { sessionId, entryId: session.currentAssistantEntryId, blocks: [] }
+    })
+    session.currentAssistantEntryId = null
   }
 
   private _handleSystemMessage(sessionId: string, msg: any): void {
@@ -765,26 +778,8 @@ export class ClaudeAcpRuntime implements ChatRuntime {
     sessionId: string,
     entryId: string,
     text: string,
-    images?: Array<{ mediaType: string; data: string; path: string }>
-  ): void {
-    const entry: JsonClaudeChatEntry = {
-      entryId,
-      kind: 'user',
-      text,
-      timestamp: Date.now(),
-      images: images?.map((img) => ({ path: img.path, mediaType: img.mediaType }))
-    }
-    this.store.dispatch({
-      type: 'jsonClaude/entryAppended',
-      payload: { sessionId, entry }
-    })
-  }
-
-  private _appendQueuedUserEntry(
-    sessionId: string,
-    entryId: string,
-    text: string,
-    images?: Array<{ mediaType: string; data: string; path: string }>
+    images?: Array<{ mediaType: string; data: string; path: string }>,
+    opts?: { queued?: boolean }
   ): void {
     const entry: JsonClaudeChatEntry = {
       entryId,
@@ -792,13 +787,14 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       text,
       timestamp: Date.now(),
       images: images?.map((img) => ({ path: img.path, mediaType: img.mediaType })),
-      isQueued: true
+      ...(opts?.queued ? { isQueued: true } : {})
     }
     this.store.dispatch({
       type: 'jsonClaude/entryAppended',
       payload: { sessionId, entry }
     })
   }
+
 
   private _emitError(
     sessionId: string,
@@ -824,6 +820,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
     const status = info?.status
     if (!status) return
     const isWarning = status === 'allowed_warning'
+    // Ignore neutral rate-limit updates. Only warning/error states become transcript cards.
     const isError = status === 'rejected'
     if (!isWarning && !isError) return
 

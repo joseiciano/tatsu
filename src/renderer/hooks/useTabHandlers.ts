@@ -4,7 +4,6 @@ import { getLeaves, findLeaf, findLeafByTabId } from '../../shared/state/termina
 import { agentDisplayName, getAgentInfo } from '../../shared/agent-registry'
 import { focusTerminalById, markTerminalClosing } from '../components/XTerminal'
 import { useBackend } from '../backend'
-import { useSettings } from '../store'
 
 function makeTerminalId(prefix: string, worktreePath: string): string {
   const safe = worktreePath.replace(/[/\\]/g, '-').replace(/^-+/, '').replace(/-+/g, '-')
@@ -30,7 +29,6 @@ export function useTabHandlers({
   setActiveWorktreeId
 }: UseTabHandlersArgs) {
   const backend = useBackend()
-  const settings = useSettings()
   const appendTabToPane = useCallback(
     (worktreePath: string, tab: TerminalTab, paneId?: string) => {
       const tree = panes[worktreePath]
@@ -95,13 +93,12 @@ export function useTabHandlers({
           id: sessionId,
           type: 'json-claude',
           label: 'Chat',
-          sessionId,
-          runtime: settings.defaultClaudeChatRuntime
+          sessionId
         },
         paneId
       )
     },
-    [appendTabToPane, settings.defaultClaudeChatRuntime]
+    [appendTabToPane]
   )
 
   const handleCloseTab = useCallback(

@@ -115,9 +115,6 @@ export function buildInitialAppState(
       browserToolsMode: config.browserToolsMode === 'view' ? 'view' : 'full',
       defaultClaudeTabType: config.defaultClaudeTabType === 'json' ? 'json' : 'xterm',
       chatPromotionDismissed: config.chatPromotionDismissed === true,
-      autoApprovePermissions: config.autoApprovePermissions === true,
-      autoApproveSteerInstructions: config.autoApproveSteerInstructions || '',
-      useSystemClaudeForJsonMode: config.useSystemClaudeForJsonMode === true,
       jsonModeChatDensity: config.jsonModeChatDensity === 'comfy' ? 'comfy' : 'compact',
       uiScale:
         config.uiScale === 'x-small' ||
@@ -132,7 +129,6 @@ export function buildInitialAppState(
         config.jsonModeDefaultPermissionMode === 'plan'
           ? config.jsonModeDefaultPermissionMode
           : 'acceptEdits',
-      defaultClaudeChatRuntime: config.defaultClaudeChatRuntime === 'acp' ? 'acp' : 'legacy',
       autoSleepMinutes:
         typeof config.autoSleepMinutes === 'number' &&
         Number.isFinite(config.autoSleepMinutes) &&

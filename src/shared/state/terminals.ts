@@ -1,5 +1,3 @@
-import type { ClaudeChatRuntime } from './json-claude'
-
 export type PtyStatus = 'idle' | 'processing' | 'waiting' | 'needs-approval'
 
 export interface PendingTool {
@@ -44,8 +42,6 @@ export interface TerminalTab {
    *  with a one-shot pick (New Worktree screen "Model" field or the MCP
    *  create_worktree `model` param). Empty/undefined = use settings. */
   model?: string
-  /** For json-claude tabs: which chat runtime powers this session. */
-  runtime?: ClaudeChatRuntime
   /** For diff/file tabs: the file path */
   filePath?: string
   /** For diff tabs: whether the diff is for staged changes */
@@ -276,7 +272,6 @@ export type TerminalsEvent =
         newId: string
         newType: 'agent' | 'json-claude'
         newLabel: string
-        runtime?: ClaudeChatRuntime
       }
     }
   | {
@@ -563,15 +558,13 @@ export function terminalsReducer(
           // way, generating one if the source tab somehow lacked it.
           const sessionId = t.sessionId ?? newId
           changed = true
-          const runtime = event.payload.runtime ?? t.runtime
           if (newType === 'json-claude') {
             return {
               id: newId,
               type: 'json-claude' as const,
               label: newLabel,
               sessionId,
-              mode: 'awake' as const,
-              ...(runtime ? { runtime } : {})
+              mode: 'awake' as const
             }
           }
           return {
@@ -579,8 +572,7 @@ export function terminalsReducer(
             type: 'agent' as const,
             agentKind: 'claude' as const,
             label: newLabel,
-            sessionId,
-            ...(runtime ? { runtime } : {})
+            sessionId
           }
         })
         const activeTabId = leaf.activeTabId === tabId ? newId : leaf.activeTabId

@@ -3,7 +3,7 @@ import {
   initialJsonClaude,
   jsonClaudeReducer,
   stripJsonClaudeEntries,
-  defaultCapabilitiesFor,
+  defaultAcpCapabilities,
   type JsonClaudeState,
   type JsonClaudeChatEntry
 } from './json-claude'
@@ -26,6 +26,8 @@ describe('jsonClaudeReducer', () => {
     expect(next.sessions[SID].entries).toEqual([])
     expect(next.sessions[SID].entriesHydrated).toBe(false)
     expect(next.sessions[SID].busy).toBe(false)
+    expect(next.sessions[SID].capabilities).toEqual(defaultAcpCapabilities())
+    expect('runtime' in next.sessions[SID]).toBe(false)
   })
 
   it('sessionStateChanged updates state + exit info', () => {
@@ -1252,24 +1254,6 @@ describe('jsonClaudeReducer', () => {
     expect(stored.kind).toBe('error')
     expect(stored.errorKind).toBe('rate-limit-error')
     expect(stored.errorMessage).toBe('Rate limit reached')
-  })
-
-  it('runtimeChanged updates the session runtime and resets capabilities to the new runtime defaults', () => {
-    let state = seedSession(initialJsonClaude)
-    // Seed with legacy runtime (default) which has full capabilities
-    expect(state.sessions[SID].runtime).toBe('legacy')
-    expect(state.sessions[SID].capabilities.canRewind).toBe(true)
-    expect(state.sessions[SID].capabilities.hasSlashCommands).toBe(true)
-
-    state = jsonClaudeReducer(state, {
-      type: 'jsonClaude/runtimeChanged',
-      payload: { sessionId: SID, runtime: 'acp' }
-    })
-
-    expect(state.sessions[SID].runtime).toBe('acp')
-    expect(state.sessions[SID].capabilities).toEqual(defaultCapabilitiesFor('acp'))
-    expect(state.sessions[SID].capabilities.canRewind).toBe(false)
-    expect(state.sessions[SID].capabilities.hasSlashCommands).toBe(false)
   })
 
   it('capabilitiesChanged updates the session when the capability set differs', () => {
