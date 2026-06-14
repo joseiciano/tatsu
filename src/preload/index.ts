@@ -27,6 +27,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { ElectronClientTransport } from './transport-electron'
+import { IPC_CHANNELS, PRELOAD_GLOBALS } from './constants'
 import type {
   ClientTransport,
   LocalTransportHandle,
@@ -44,15 +45,15 @@ const localTransportHandle: LocalTransportHandle = {
   getClientId: () => transport.getClientId(),
   onReconnect: (cb) => transport.onReconnect(cb)
 }
-contextBridge.exposeInMainWorld('__harness_local_transport', localTransportHandle)
+contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.localTransport, localTransportHandle)
 
 const electronHelpers: ElectronOnlyHelpers = {
   getFilePath: (file) => webUtils.getPathForFile(file),
-  windowMinimize: () => ipcRenderer.send('window:minimize'),
-  windowToggleMaximize: () => ipcRenderer.send('window:toggleMaximize'),
-  windowClose: () => ipcRenderer.send('window:close')
+  windowMinimize: () => ipcRenderer.send(IPC_CHANNELS.windowMinimize),
+  windowToggleMaximize: () => ipcRenderer.send(IPC_CHANNELS.windowToggleMaximize),
+  windowClose: () => ipcRenderer.send(IPC_CHANNELS.windowClose)
 }
-contextBridge.exposeInMainWorld('__harness_electron_helpers', electronHelpers)
+contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.electronHelpers, electronHelpers)
 
-contextBridge.exposeInMainWorld('__HARNESS_WEB__', false)
-contextBridge.exposeInMainWorld('__HARNESS_PLATFORM__', process.platform)
+contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.web, false)
+contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.platform, process.platform)

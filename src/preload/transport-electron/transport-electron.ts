@@ -7,6 +7,7 @@
 // method on window.api.
 
 import { ipcRenderer, type IpcRendererEvent } from 'electron'
+import { IPC_CHANNELS } from '../constants'
 import type { StateEvent, StateSnapshot } from '../../shared/state'
 import type {
   ClientSignalHandler,
@@ -17,16 +18,16 @@ import type {
 
 export class ElectronClientTransport implements ClientTransport {
   getStateSnapshot(): Promise<StateSnapshot> {
-    return ipcRenderer.invoke('state:getSnapshot')
+    return ipcRenderer.invoke(IPC_CHANNELS.stateGetSnapshot)
   }
 
   onStateEvent(listener: StateEventListener): () => void {
     const handler = (_event: IpcRendererEvent, stateEvent: StateEvent, seq: number): void => {
       listener(stateEvent, seq)
     }
-    ipcRenderer.on('state:event', handler)
+    ipcRenderer.on(IPC_CHANNELS.stateEvent, handler)
     return () => {
-      ipcRenderer.removeListener('state:event', handler)
+      ipcRenderer.removeListener(IPC_CHANNELS.stateEvent, handler)
     }
   }
 
@@ -49,7 +50,7 @@ export class ElectronClientTransport implements ClientTransport {
   }
 
   getClientId(): Promise<string> {
-    return ipcRenderer.invoke('transport:getClientId') as Promise<string>
+    return ipcRenderer.invoke(IPC_CHANNELS.transportGetClientId) as Promise<string>
   }
 
   onReconnect(_cb: ReconnectListener): () => void {
