@@ -33,7 +33,7 @@ export default defineConfig({
         // index.js where the require can find it at runtime.
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          'desktop-shell': resolve(__dirname, 'src/main/desktop-shell.ts')
+          'desktop-shell': resolve(__dirname, 'src/main/desktop-shell/desktop-shell.ts')
         },
         external: ['electron', 'node-pty'],
         output: {
