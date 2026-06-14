@@ -9,6 +9,7 @@ import { useConnections, getBackendsRegistry, useSettings, useSnooze } from '../
 import { useBackend } from '../../backend'
 import { SCALES } from '../../../shared/state/settings'
 import { cycleWorktreeDetail } from '../../worktree-detail-override'
+import type { PaletteMode } from '../../components/CommandPalette'
 
 interface UseHotkeyHandlersArgs {
   worktrees: Worktree[]
@@ -33,7 +34,7 @@ interface UseHotkeyHandlersArgs {
   setShowNewWorktree: React.Dispatch<React.SetStateAction<boolean>>
   setShowCommandCenter: React.Dispatch<React.SetStateAction<boolean>>
   setShowCommandPalette: React.Dispatch<React.SetStateAction<boolean>>
-  setCommandPaletteMode: React.Dispatch<React.SetStateAction<'root' | 'files'>>
+  setCommandPaletteMode: React.Dispatch<React.SetStateAction<PaletteMode>>
   setShowPerfMonitor: React.Dispatch<React.SetStateAction<boolean>>
   setShowHotkeyCheatsheet: React.Dispatch<React.SetStateAction<boolean>>
   setShowReview: React.Dispatch<React.SetStateAction<boolean>>

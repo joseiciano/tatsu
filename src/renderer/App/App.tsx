@@ -34,7 +34,7 @@ import { Activity } from '../components/Activity'
 import { Cleanup } from '../components/Cleanup'
 import { CommandCenter } from '../components/CommandCenter'
 import { ReviewScreen } from '../components/ReviewScreen'
-import { CommandPalette } from '../components/CommandPalette'
+import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
 import { NewProjectScreen } from '../components/NewProjectScreen'
 import { RemoteFilePicker } from '../components/RemoteFilePicker'
@@ -234,7 +234,7 @@ function DesktopApp(): JSX.Element {
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
-  const [commandPaletteMode, setCommandPaletteMode] = useState<'root' | 'files'>('root')
+  const [commandPaletteMode, setCommandPaletteMode] = useState<PaletteMode>('root')
   const [showPerfMonitor, setShowPerfMonitor] = useState(false)
   const [showHotkeyCheatsheet, setShowHotkeyCheatsheet] = useState(false)
   const [showNewProject, setShowNewProject] = useState(false)

@@ -1,61 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, GitPullRequest, ArrowRight, FileText, Server } from 'lucide-react'
-import type { Worktree, PtyStatus, PRStatus } from '../../types'
-import type { Action, HotkeyBinding } from '../../hotkeys'
+import type { PRStatus, PtyStatus } from '../../types'
+import type { Action } from '../../hotkeys'
 import { ACTION_LABELS, bindingToString } from '../../hotkeys'
 import { groupWorktrees, GROUP_ORDER, GROUP_LABELS, type GroupKey } from '../../worktree-sort'
 import { repoNameColor } from '../RepoIcon'
 import { fuzzyMatch } from '../../fuzzy'
 import { useBackend } from '../../backend'
 import { useSettings, useSnooze } from '../../store'
-
-export type PaletteMode = 'root' | 'files'
-
-interface CommandPaletteProps {
-  worktrees: Worktree[]
-  worktreeStatuses: Record<string, PtyStatus>
-  prStatuses: Record<string, PRStatus | null>
-  mergedPaths: Record<string, boolean>
-  activeWorktreeId: string | null
-  resolvedHotkeys: Record<Action, HotkeyBinding>
-  initialMode?: PaletteMode
-  onClose: () => void
-  onSelectWorktree: (path: string) => void
-  onAction: (action: Action) => void
-  onOpenFile: (filePath: string) => void
-  onAddBackend: () => void
-}
-
-type PaletteItem =
-  | { kind: 'worktree'; wt: Worktree }
-  | { kind: 'action'; action: Action; label: string; hint?: string }
-  | { kind: 'open-files'; label: string }
-  | { kind: 'add-backend'; label: string }
-  | { kind: 'heading'; label: string }
-  | { kind: 'recent-worktree'; wt: Worktree }
-  | { kind: 'recent-action'; action: Action; label: string; hint?: string }
-  | { kind: 'recent-file'; path: string; label: string }
-
-type FileItem = {
-  path: string
-  indices: number[]
-  recent: boolean
-}
-
-interface PaletteRecent {
-  id: string
-  type: 'worktree' | 'action' | 'file'
-  label: string
-  timestamp: number
-  worktreePath?: string
-}
+import type { CommandPaletteProps, FileItem, PaletteItem, PaletteMode, PaletteRecent } from './types'
+import {
+  EXCLUDED_ACTIONS,
+  FILE_CACHE_TTL_MS,
+  MAX_FILE_RESULTS,
+  PALETTE_RECENTS_KEY,
+  PALETTE_RECENTS_LIMIT,
+  PR_ICON_COLOR,
+  PR_STATE_COLOR,
+  RECENTS_LIMIT,
+  STATUS_COLORS,
+  STATUS_LABELS
+} from './constants'
 
 const FILE_CACHE = new Map<string, { files: string[]; ts: number }>()
-const FILE_CACHE_TTL_MS = 10_000
-const MAX_FILE_RESULTS = 100
-const RECENTS_LIMIT = 20
-const PALETTE_RECENTS_KEY = 'harness:commandPalette:recents'
-const PALETTE_RECENTS_LIMIT = 3
 
 function recentsKey(worktreePath: string): string {
   return `file-picker-recents:${worktreePath}`
@@ -140,43 +107,6 @@ function pushRecent(worktreePath: string, filePath: string): void {
     /* ignore */
   }
 }
-
-const STATUS_COLORS: Record<PtyStatus | 'merged', string> = {
-  idle: 'bg-faint',
-  processing: 'bg-success animate-pulse',
-  waiting: 'bg-warning',
-  'needs-approval': 'bg-danger animate-pulse',
-  merged: 'bg-accent',
-}
-
-const STATUS_LABELS: Record<PtyStatus | 'merged', string> = {
-  idle: 'Idle',
-  processing: 'Working...',
-  waiting: 'Waiting for input',
-  'needs-approval': 'Needs approval',
-  merged: 'Merged',
-}
-
-const PR_ICON_COLOR: Record<string, string> = {
-  success: 'text-success',
-  failure: 'text-danger',
-  pending: 'text-warning',
-  none: 'text-dim',
-}
-
-const PR_STATE_COLOR: Record<string, string> = {
-  open: 'text-success',
-  draft: 'text-dim',
-  merged: 'text-accent',
-  closed: 'text-danger',
-}
-
-const EXCLUDED_ACTIONS: Set<Action> = new Set([
-  'worktree1', 'worktree2', 'worktree3', 'worktree4', 'worktree5',
-  'worktree6', 'worktree7', 'worktree8', 'worktree9',
-  'commandPalette',
-  'fileQuickOpen',
-])
 
 function fuzzyScore(query: string, text: string): number {
   const q = query.toLowerCase()

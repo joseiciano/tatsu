@@ -36,11 +36,13 @@ import {
 import type { LocalTransportHandle, BackendConnection } from '../types'
 import { WebSocketClientTransport } from '../../shared/transport/transport-websocket'
 import { initBackend, getBackend } from '../backend'
-
-/** Stable id for the in-process Electron backend. Mirrors the value in
- *  src/main/persistence.ts; duplicated here because main isn't
- *  importable from renderer code. */
-export const LOCAL_BACKEND_ID = 'local'
+import type { BackendStatus, ReconnectSubscriber } from './types'
+import {
+  DEFAULT_BACKEND_STATUS,
+  EMPTY_CONNECTIONS,
+  FALLBACK_ACTIVE_BACKEND,
+  LOCAL_BACKEND_ID
+} from './constants'
 
 /** Per-backend client-side mirror. One instance per configured backend.
  *  Owns the AppState mirror, the listener set, and the cached client
@@ -99,34 +101,12 @@ class ClientStore {
  *  plans/tier-1-multi-backend-ux.md §C). For Tier 1 v1 the registry
  *  starts with only the local backend; remote backends are added in
  *  later steps when the chip strip / add-backend modal lands. */
-/** Per-backend connection status (Tier 1 §I). KISS: two states only.
- *  The local backend is hardcoded to 'connected' since it has no
- *  socket to drop. Reasons populate the chip tooltip on disconnect. */
-export interface BackendStatus {
-  state: 'connected' | 'disconnected'
-  reason?: string
-}
-
 interface BackendEntry {
   connection: BackendConnection
   transport: LocalTransportHandle
   store: ClientStore
   status: BackendStatus
 }
-
-/** Stable snapshot returned for ids the registry doesn't know about,
- *  shared across calls so useSyncExternalStore selectors stay
- *  reference-stable for missing entries. */
-const DEFAULT_BACKEND_STATUS: BackendStatus = { state: 'connected' }
-
-/** Subscribe to "this transport reconnected" events at the registry
- *  level. Fires after each (re)connect (including the first), once the
- *  registry's ClientStore has been seeded with the fresh server-side
- *  clientId. XTerminal subscribes here to re-fire `terminal:join` after
- *  a reconnect — the server's old `controllerClientId` was cleared when
- *  the old socket closed, and the renderer's mount-only join effect
- *  doesn't run again on its own. */
-type ReconnectSubscriber = (backendId: string, clientId: string) => void
 
 export class BackendsRegistry {
   private entries = new Map<string, BackendEntry>()
@@ -645,21 +625,6 @@ export function useJsonClaudeSession(sessionId: string) {
  *  so subscribers here skip the streaming hot path entirely. */
 export function useJsonClaudePendingApprovals() {
   return useAppState((s) => s.jsonClaude.pendingApprovals)
-}
-
-/** Stable empty-array reference returned by the SSR / pre-init hook
- *  paths so `useSyncExternalStore`'s reference comparison doesn't
- *  detect a "change" on every render and fall into an infinite update
- *  loop. */
-const EMPTY_CONNECTIONS: readonly BackendConnection[] = []
-
-/** Stable fallback for `useActiveBackend`'s server-side render path. */
-const FALLBACK_ACTIVE_BACKEND: BackendConnection = {
-  id: LOCAL_BACKEND_ID,
-  label: 'Local',
-  url: '',
-  kind: 'local',
-  addedAt: 0
 }
 
 const subscribeConnectionsList = (cb: () => void): (() => void) =>
