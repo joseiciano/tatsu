@@ -16,7 +16,25 @@ import { log } from '../debug'
 import { perfLog } from '../perf-log'
 import { resolveUserShell, loginShellCommandArgs } from '../user-shell'
 import { detectInProgressOp } from '../git-ops-state'
-import type { Worktree } from '../../shared/state/worktrees'
+import type {
+  WorktreeInfo,
+  AddWorktreeOptions,
+  ContinueWorktreeResult,
+  ChangedFile,
+  ChangedFilesMode,
+  BranchCommit,
+  CommitDiff,
+  FileDiffSides,
+  MergeStrategy,
+  MainWorktreeStatus,
+  MergeLocalResult,
+  MergeConflictPreview,
+  FileReadResult,
+  FileBinaryReadResult,
+  FileWriteResult,
+  WorktreeScriptResult
+} from './types'
+import { MAX_FILE_READ_BYTES, MAX_FILE_BINARY_READ_BYTES, EXT_TO_MIME, MAX_FILE_WRITE_BYTES } from './constants'
 
 const execFileAsync = promisify(execFile)
 
@@ -32,10 +50,6 @@ async function tracedExec(
   const text = typeof stdout === 'string' ? stdout : stdout.toString()
   return { stdout: text, execMs, outputBytes: text.length }
 }
-
-// Alias so existing imports of WorktreeInfo keep working; the canonical
-// shape now lives in src/shared/state/worktrees.ts.
-export type WorktreeInfo = Worktree
 
 function getCreatedAt(path: string): number {
   try {
@@ -163,19 +177,6 @@ export async function listBranches(repoRoot: string): Promise<string[]> {
   return stdout.trim().split('\n').filter(Boolean)
 }
 
-export interface AddWorktreeOptions {
-  /** Explicit base branch to fork from. Overrides fetchRemote detection. */
-  baseBranch?: string
-  /** If true, fetch the default branch from origin before creating so the
-   * new worktree starts at the tip of the latest remote main. Falls back
-   * to local HEAD if the fetch fails (e.g. offline). */
-  fetchRemote?: boolean
-  /** When set, skip `-b` and check out the named branch as-is. Used by
-   * the open-PR flow, where the local branch was already created by a
-   * `git fetch origin pull/<N>/head:pr-<N>` ahead of this call. */
-  checkoutExisting?: boolean
-}
-
 /**
  * Resolve a base ref to fork/branch from, optionally fetching origin first.
  * Matches the same logic addWorktree and continueWorktree share:
@@ -253,14 +254,6 @@ export async function addWorktree(
   return created
 }
 
-export interface ContinueWorktreeResult {
-  worktree: WorktreeInfo
-  /** Dirty files were stashed and successfully re-applied. */
-  stashReapplied: boolean
-  /** Dirty files are still in the stash because pop conflicted. */
-  stashConflict: boolean
-}
-
 /**
  * Reuse an existing worktree path and re-point it at a brand new branch
  * forked from the repo's default base (optionally fetching origin first).
@@ -333,19 +326,6 @@ export async function isWorktreeDirty(path: string): Promise<boolean> {
   }
 }
 
-export interface ChangedFile {
-  path: string
-  status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked'
-  staged: boolean
-  /** Lines added. Undefined for binary files (numstat reports `-`) and
-   * untracked files (no diff baseline yet). */
-  additions?: number
-  /** Lines deleted. Undefined for binary files and untracked files. */
-  deletions?: number
-}
-
-export type ChangedFilesMode = 'working' | 'branch'
-
 /** Detect the repo's default base branch (e.g. "main" or "master"). */
 export async function getDefaultBaseRef(worktreePath: string): Promise<string> {
   try {
@@ -364,16 +344,6 @@ export async function getDefaultBaseRef(worktreePath: string): Promise<string> {
     } catch {}
   }
   return 'HEAD'
-}
-
-export interface BranchCommit {
-  hash: string
-  shortHash: string
-  subject: string
-  author: string
-  relativeDate: string
-  timestamp: number
-  pushed: boolean
 }
 
 /** Hashes of commits on this branch not yet reachable from origin/<branch>.
@@ -669,17 +639,6 @@ async function getChangedFilesImpl(
   return result
 }
 
-export interface CommitDiff {
-  hash: string
-  shortHash: string
-  author: string
-  authorEmail: string
-  date: string
-  subject: string
-  body: string
-  diff: string
-}
-
 /** Get a single commit's metadata + full diff. */
 export async function getCommitDiff(
   worktreePath: string,
@@ -878,15 +837,6 @@ export async function getFileDiff(
   return finish()
 }
 
-export interface FileDiffSides {
-  original: string
-  modified: string
-  originalExists: boolean
-  modifiedExists: boolean
-  modifiedBinary: boolean
-  error?: string
-}
-
 async function getFileAtRef(
   worktreePath: string,
   ref: string,
@@ -1001,18 +951,6 @@ export async function getFileDiffSides(
   })
 }
 
-export type MergeStrategy = 'squash' | 'merge-commit' | 'fast-forward'
-
-export interface MainWorktreeStatus {
-  path: string
-  currentBranch: string
-  baseBranch: string
-  isOnBase: boolean
-  isDirty: boolean
-  /** True when the worktree is ready to accept a merge without any fixups */
-  ready: boolean
-}
-
 /** Resolve the local base branch name (no remote prefix) — "main" or "master". */
 async function getLocalBaseBranch(repoRoot: string): Promise<string> {
   const ref = await getDefaultBaseRef(repoRoot)
@@ -1092,14 +1030,6 @@ export async function prepareMainForMerge(repoRoot: string): Promise<MainWorktre
     await execFileAsync('git', ['checkout', status.baseBranch], { cwd: status.path })
   }
   return getMainWorktreeStatus(repoRoot)
-}
-
-export interface MergeLocalResult {
-  ok: true
-  strategy: MergeStrategy
-  mergedBranch: string
-  baseBranch: string
-  mainPath: string
 }
 
 /** Merge a worktree's branch into the local base branch inside the main worktree.
@@ -1183,13 +1113,6 @@ export async function mergeWorktreeLocally(
     baseBranch: status.baseBranch,
     mainPath: status.path
   }
-}
-
-export interface MergeConflictPreview {
-  hasConflict: boolean
-  files: string[]
-  /** True if git merge-tree isn't supported by the installed git (pre-2.38). */
-  unsupported?: boolean
 }
 
 /** Preview a three-way merge of `sourceBranch` into `baseBranch` in-memory
@@ -1316,16 +1239,6 @@ export async function listAllFiles(worktreePath: string): Promise<string[]> {
   return result
 }
 
-const MAX_FILE_READ_BYTES = 2 * 1024 * 1024
-
-export interface FileReadResult {
-  content: string | null
-  size: number
-  binary: boolean
-  truncated: boolean
-  error?: string
-}
-
 /** Read a single file from within a worktree. Rejects paths that escape the worktree. */
 export async function readWorktreeFile(
   worktreePath: string,
@@ -1369,27 +1282,6 @@ export async function readWorktreeFile(
   }
 }
 
-// Larger ceiling for binary viewers (images / PDFs) than the editor read
-// path, which is meant for text editing.
-const MAX_FILE_BINARY_READ_BYTES = 50 * 1024 * 1024
-
-const EXT_TO_MIME: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  svg: 'image/svg+xml',
-  bmp: 'image/bmp',
-  ico: 'image/x-icon',
-  avif: 'image/avif',
-  pdf: 'application/pdf'
-}
-
-export type FileBinaryReadResult =
-  | { ok: true; base64: string; mime: string; size: number }
-  | { ok: false; error: string }
-
 // base64 keeps the bytes intact across both Electron IPC structured-clone
 // and the JSON-only WebSocket transport, at ~33% size overhead.
 export async function readWorktreeFileBinary(
@@ -1423,13 +1315,6 @@ export async function readWorktreeFileBinary(
     return { ok: false, error: (err as Error).message }
   }
 }
-
-export interface FileWriteResult {
-  ok: boolean
-  error?: string
-}
-
-const MAX_FILE_WRITE_BYTES = 5 * 1024 * 1024
 
 /** Write a single file within a worktree. Rejects paths that escape the
  * worktree and refuses symlinks. Last-write-wins — no concurrent-edit
@@ -1468,14 +1353,6 @@ export async function writeWorktreeFile(
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
-}
-
-export interface WorktreeScriptResult {
-  ok: boolean
-  exitCode: number
-  stdout: string
-  stderr: string
-  error?: string
 }
 
 /** Run a user-configured setup/teardown command via the user's login shell

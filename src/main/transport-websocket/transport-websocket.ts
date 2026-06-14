@@ -33,7 +33,7 @@
 
 import { randomBytes, randomUUID } from 'crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
-import type { IncomingMessage, Server as HttpServer } from 'http'
+import type { IncomingMessage } from 'http'
 import { stripSnapshotForWire, type StateEvent } from '../../shared/state'
 import type {
   ConnectionContext,
@@ -45,38 +45,9 @@ import type { Store } from '../store'
 import type { PerfMonitor } from '../perf-monitor'
 import { log } from '../debug'
 import { perfLog } from '../perf-log'
+import type { ServerFrame, ClientFrame, WebSocketServerTransportOptions } from './types'
+import { SLOW_IPC_MS } from './constants'
 
-const SLOW_IPC_MS = 50
-
-type ServerFrame =
-  | { t: 'state'; event: StateEvent; seq: number }
-  | { t: 'snapres'; id: string; ok: true; snapshot: unknown }
-  | { t: 'snapres'; id: string; ok: false; error: string }
-  | { t: 'res'; id: string; ok: true; value: unknown }
-  | { t: 'res'; id: string; ok: false; error: string }
-  | { t: 'sig'; name: string; args: unknown[] }
-
-type ClientFrame =
-  | { t: 'snapreq'; id: string }
-  | { t: 'req'; id: string; name: string; args: unknown[] }
-  | { t: 'send'; name: string; args: unknown[] }
-
-export interface WebSocketServerTransportOptions {
-  /** Port to bind. Required unless `server` is provided, in which case
-   *  the WS server piggy-backs on the existing http.Server's port. */
-  port?: number
-  /** Override the auth token; default: a fresh 32-byte hex string. */
-  token?: string
-  /** Host to bind. Default 127.0.0.1. Set to '0.0.0.0' to expose on the
-   *  LAN — token auth still applies, but there is no TLS. Ignored when
-   *  `server` is provided (the http.Server already chose its bind). */
-  host?: string
-  /** Optional existing http.Server to attach to. When set, the WS server
-   *  shares the http server's port + bind via the upgrade event. The
-   *  HTTP server (used to serve the web-client bundle) and this WS
-   *  transport share one port + same-origin auth via this path. */
-  server?: HttpServer
-}
 
 export class WebSocketServerTransport implements ServerTransport {
   private wss: WebSocketServer | null = null

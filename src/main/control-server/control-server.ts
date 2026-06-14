@@ -1,8 +1,16 @@
-import { createServer, IncomingMessage, ServerResponse } from 'http'
+import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import { randomBytes, randomUUID } from 'crypto'
-import { addWorktree, listWorktrees, defaultWorktreeDir, WorktreeInfo } from '../worktree'
-import { log } from '../debug'
+import { addWorktree, listWorktrees, defaultWorktreeDir, type WorktreeInfo } from '../worktree'
 import type { AgentKind } from '../../shared/state/terminals'
+import { log } from '../debug'
+import {
+  type BrowserQueries,
+  type BrowserPerms,
+  type CallerScope,
+  type ControlServerDeps,
+  type ShellQueries
+} from './types'
+import { FULL_CONTROL_BROWSER_PATHS } from './constants'
 
 export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
@@ -14,125 +22,6 @@ export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string
   return { error: 'agentKind must be "claude", "codex", or "opencode"' }
 }
 
-export interface BrowserTabSummary {
-  id: string
-  url: string
-  title: string
-}
-
-export interface BrowserQueries {
-  listTabsForWorktree: (worktreePath: string) => BrowserTabSummary[]
-  getTabWorktree: (tabId: string) => string | null
-  getTabUrl: (tabId: string) => string | null
-  getTabConsoleLogs: (
-    tabId: string
-  ) => Array<{ ts: number; level: string; message: string }>
-  screenshotTab: (
-    tabId: string,
-    opts?: { format?: 'jpeg' | 'png'; quality?: number }
-  ) => Promise<{ data: string; format: 'jpeg' | 'png' } | null>
-  getTabDom: (tabId: string) => Promise<string | null>
-  getTabClickables: (tabId: string) => Promise<unknown | null>
-  navigateTab: (tabId: string, url: string) => void
-  backTab: (tabId: string) => void
-  forwardTab: (tabId: string) => void
-  reloadTab: (tabId: string) => void
-  createTab: (worktreePath: string, url: string) => { id: string; url: string }
-  clickTab: (
-    tabId: string,
-    x: number,
-    y: number,
-    options?: { button?: 'left' | 'right' | 'middle'; clickCount?: number }
-  ) => void
-  typeTab: (tabId: string, text: string, key?: string) => void
-  scrollTab: (tabId: string, deltaX: number, deltaY: number) => Promise<void>
-  showCursor: (tabId: string, x: number, y: number) => Promise<void>
-}
-
-export interface ShellTabSummary {
-  id: string
-  label: string
-  command?: string
-  cwd?: string
-  alive: boolean
-}
-
-export interface ReadShellOutputOptions {
-  lines: number
-  /** Case-insensitive regex. When set, keep only matching lines (plus any
-   * requested context) from the output before applying the `lines` cap. */
-  match?: string
-  /** Lines of context to include before/after each match. Ignored when `match`
-   * is not set. */
-  context?: number
-}
-
-export interface ShellQueries {
-  listShellsForWorktree: (worktreePath: string) => ShellTabSummary[]
-  getShellWorktree: (shellId: string) => string | null
-  readShellOutput: (
-    shellId: string,
-    opts: ReadShellOutputOptions
-  ) => { output: string; matchCount?: number; error?: string }
-  createShell: (
-    worktreePath: string,
-    opts: { command?: string; cwd?: string; label?: string }
-  ) => { id: string; label: string }
-  killShell: (shellId: string) => void
-}
-
-/** Scope derived from the caller's terminal id on every request. The
- * source of truth — env vars injected into the MCP bridge can go stale
- * (teleport sessions, deleted worktrees), so each tool call re-resolves. */
-export interface CallerScope {
-  terminalId: string
-  worktreePath: string
-  repoRoot: string
-  isMain: boolean
-}
-
-export interface BrowserPerms {
-  enabled: boolean
-  mode: 'view' | 'full'
-}
-
-export interface ControlServerDeps {
-  getRepoRoots: () => string[]
-  getWorktreeBase: () => 'remote' | 'local'
-  /** Default prompt used when an MCP `create_worktree` call provides
-   * `prNumber` but no explicit `initialPrompt`. Resolved per-request so
-   * Settings edits take effect mid-session. */
-  getPrReviewPrompt: () => string
-  broadcast: (channel: string, ...args: unknown[]) => void
-  runWorktreeSetup: (ctx: { repoRoot: string; worktreePath: string; branch: string }) => Promise<void>
-  /** Drive the full PR-creation FSM (fetch PR metadata, fetch refs/pull/<n>/head,
-   * create the worktree, run setup, fire panes init + PR poller refresh) and
-   * return the new worktree's path + branch. Host wires this to
-   * `worktreesFSM.runPendingPR` plus a renderer focus broadcast. */
-  runPendingPRWorktree: (params: {
-    id: string
-    repoRoot: string
-    prNumber: number
-    initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
-    model?: string
-  }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
-  /** Returns the caller's current scope, or null if the terminal is not
-   * associated with any known worktree (e.g. the worktree was deleted). */
-  resolveCallerScope: (terminalId: string) => CallerScope | null
-  /** Current browser-tool permissions. Re-read on every request so user
-   * toggles take effect mid-session without restarting the bridge. */
-  getBrowserPerms: () => BrowserPerms
-  browser: BrowserQueries
-  shell: ShellQueries
-}
-
-const FULL_CONTROL_BROWSER_PATHS = new Set([
-  '/browser/click',
-  '/browser/type',
-  '/browser/scroll',
-  '/browser/cursor'
-])
 
 let serverInfo: { port: number; token: string } | null = null
 

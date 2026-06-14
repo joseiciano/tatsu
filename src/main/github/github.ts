@@ -5,14 +5,25 @@ import { getCachedToken, invalidateTokenCache, resolveGitHubToken } from '../git
 import { trackedFetch } from '../github-recorder'
 import type { CheckStatus, PRReview, PRStatus } from '../../shared/state/prs'
 import type { PRSummary, PRMetadata } from '../../shared/github-types'
+import {
+  type RepoContext,
+  type PRStatusRequest,
+  type ApiPRListItem,
+  type GraphQLActor,
+  type GraphQLPR,
+  type GraphQLCheckContext,
+  type GraphQLBatchResponse,
+  type GitHubMergeMethod,
+  type MergePRResult,
+  type ParentInfo
+} from './types'
+import { PR_FRAGMENT } from './constants'
 
 export type { CheckStatus, PRReview, PRStatus, PRSummary, PRMetadata }
 
 const execFileAsync = promisify(execFile)
 
-/** Parse the GitHub owner/repo from a remote URL like git@github.com:owner/repo.git or https://github.com/owner/repo.git */
 function parseRemoteUrl(url: string): { owner: string; repo: string } | null {
-  // SSH: git@github.com:owner/repo.git
   const sshMatch = url.match(/[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/)
   if (sshMatch) {
     return { owner: sshMatch[1], repo: sshMatch[2] }
@@ -20,7 +31,6 @@ function parseRemoteUrl(url: string): { owner: string; repo: string } | null {
   return null
 }
 
-/** Get the GitHub owner/repo for the given worktree by inspecting its origin remote */
 export async function getRepoInfo(worktreePath: string): Promise<{ owner: string; repo: string } | null> {
   try {
     const { stdout } = await execFileAsync(
@@ -34,8 +44,6 @@ export async function getRepoInfo(worktreePath: string): Promise<{ owner: string
   }
 }
 
-/** Earliest tag (by version-sort) that contains the given commit, or null
- *  if no tag does / git can't reach the SHA. Used for merged-PR display. */
 async function getFirstTagContaining(worktreePath: string, sha: string): Promise<string | null> {
   if (!sha || !/^[0-9a-f]{7,40}$/i.test(sha)) return null
   try {
@@ -61,7 +69,6 @@ async function doFetch(url: string, token: string | null): Promise<Response> {
   return trackedFetch(url, { headers })
 }
 
-/** Make an authenticated request to the GitHub REST API. On 401, invalidate the token cache and retry once. */
 async function githubFetch(url: string): Promise<unknown> {
   let token = getCachedToken()
   let res = await doFetch(url, token)
@@ -79,20 +86,8 @@ async function githubFetch(url: string): Promise<unknown> {
   return res.json()
 }
 
-type ParentInfo = { owner: string; repo: string } | 'self'
 const forkParentCache = new Map<string, ParentInfo>()
 
-/** Origin (= what `remote.origin.url` points at) plus the repo we should
- *  query for PR data. For non-forks the two are equal; for forks
- *  `upstream` is the parent repo where PRs are typically opened. */
-export interface RepoContext {
-  origin: { owner: string; repo: string }
-  upstream: { owner: string; repo: string }
-}
-
-/** Read origin from the worktree and resolve upstream via GitHub. Returns
- *  null if the worktree has no parseable origin remote. Fork detection is
- *  cached per-process. */
 export async function getRepoContext(worktreePath: string): Promise<RepoContext | null> {
   const origin = await getRepoInfo(worktreePath)
   if (!origin) return null
@@ -100,10 +95,6 @@ export async function getRepoContext(worktreePath: string): Promise<RepoContext 
   return { origin, upstream }
 }
 
-/** Resolve which repo to query for PR data. When `origin` is a fork on
- *  GitHub, PRs are typically opened against the parent repo, so we query
- *  upstream's pulls list instead. Result is cached per-process. On error
- *  the cache is left empty so the next poll retries. */
 async function resolveQueryRepo(
   origin: { owner: string; repo: string }
 ): Promise<{ owner: string; repo: string }> {
@@ -129,8 +120,6 @@ async function resolveQueryRepo(
   }
 }
 
-/** Fetches commits-behind via GitHub's compare endpoint. Returns null on
- *  any failure — the count is a nice-to-have, not a correctness signal. */
 async function fetchBehindBy(
   owner: string,
   repo: string,
@@ -149,139 +138,11 @@ async function fetchBehindBy(
   }
 }
 
-interface ApiPRListItem {
-  number: number
-  title: string
-  state: 'open' | 'closed'
-  draft: boolean
-  merged_at: string | null
-  html_url: string
-  user: { login: string; avatar_url: string } | null
-  base: { ref: string; repo: { full_name: string } | null } | null
-  head: {
-    ref: string
-    sha: string
-    repo: { full_name: string } | null
-  }
-  assignees: { login: string; avatar_url: string }[] | null
-  updated_at: string
-}
-
 function computeOverall(checks: CheckStatus[]): PRStatus['checksOverall'] {
   if (checks.length === 0) return 'none'
   if (checks.some((c) => c.state === 'failure' || c.state === 'error')) return 'failure'
   if (checks.some((c) => c.state === 'pending')) return 'pending'
   return 'success'
-}
-
-export interface PRStatusRequest {
-  /** Worktree path — used as the result map key. */
-  worktreePath: string
-  /** Local branch name — the PR's head ref on the origin remote.
-   *  Empty / detached worktrees are skipped (result map gets null). */
-  branch: string
-  /** Worktree HEAD SHA — used to disambiguate when multiple PRs share a
-   *  branch name (e.g. several forks contributing branches called "fix"). */
-  headSha: string
-}
-
-interface GraphQLActor {
-  login?: string | null
-  avatarUrl?: string | null
-}
-
-interface GraphQLPR {
-  number: number
-  title: string
-  state: 'OPEN' | 'CLOSED' | 'MERGED'
-  isDraft: boolean
-  url: string
-  mergedAt: string | null
-  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
-  additions: number
-  deletions: number
-  baseRefName: string
-  baseRepository: { defaultBranchRef: { name: string } | null } | null
-  headRefOid: string
-  headRepository: { nameWithOwner: string } | null
-  mergeCommit: { oid: string } | null
-  author: GraphQLActor | null
-  milestone: { title: string; url: string; state: 'OPEN' | 'CLOSED' } | null
-  assignees: { nodes: Array<GraphQLActor | null> | null } | null
-  labels: { nodes: Array<{ name: string; color: string; description: string | null } | null> | null } | null
-  mergeQueueEntry: { position: number; estimatedTimeToMerge: number | null } | null
-  closingIssuesReferences: {
-    nodes: Array<{ number: number; title: string; state: 'OPEN' | 'CLOSED'; url: string } | null> | null
-  } | null
-  reviews: {
-    nodes: Array<{
-      author: GraphQLActor | null
-      state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING'
-      body: string
-      submittedAt: string
-      url: string
-    } | null> | null
-  } | null
-  commits: {
-    nodes: Array<{
-      commit: {
-        statusCheckRollup: {
-          contexts: { nodes: Array<GraphQLCheckContext | null> | null } | null
-        } | null
-      }
-    } | null> | null
-  } | null
-}
-
-type GraphQLCheckContext =
-  | {
-      __typename: 'CheckRun'
-      name: string
-      status:
-        | 'QUEUED'
-        | 'IN_PROGRESS'
-        | 'COMPLETED'
-        | 'WAITING'
-        | 'PENDING'
-        | 'REQUESTED'
-      conclusion:
-        | 'SUCCESS'
-        | 'FAILURE'
-        | 'NEUTRAL'
-        | 'CANCELLED'
-        | 'SKIPPED'
-        | 'TIMED_OUT'
-        | 'ACTION_REQUIRED'
-        | 'STALE'
-        | 'STARTUP_FAILURE'
-        | null
-      detailsUrl: string | null
-      permalink: string | null
-      startedAt: string | null
-      title: string | null
-      summary: string | null
-    }
-  | {
-      __typename: 'StatusContext'
-      context: string
-      state: 'EXPECTED' | 'ERROR' | 'FAILURE' | 'PENDING' | 'SUCCESS'
-      description: string | null
-      targetUrl: string | null
-      createdAt: string | null
-    }
-
-interface GraphQLBatchResponse {
-  data?:
-    | ({
-        repository?:
-          | ({
-              defaultBranchRef: { name: string } | null
-              milestones: { totalCount: number } | null
-            } & Record<string, { nodes: GraphQLPR[] | null } | null>)
-          | null
-      } & Record<string, { nodes: Array<GraphQLPR | { __typename?: string }> | null } | null>)
-    | null
-  errors?: Array<{ message: string }> | null
 }
 
 function gqlCheckState(c: Extract<GraphQLCheckContext, { __typename: 'CheckRun' }>): CheckStatus['state'] {
@@ -321,47 +182,6 @@ function gqlStatusState(s: Extract<GraphQLCheckContext, { __typename: 'StatusCon
   }
 }
 
-const PR_FRAGMENT = `fragment PR on PullRequest {
-  number title state isDraft url mergedAt mergeable additions deletions
-  baseRefName
-  baseRepository { defaultBranchRef { name } }
-  headRefOid
-  headRepository { nameWithOwner }
-  mergeCommit { oid }
-  author { login avatarUrl }
-  milestone { title url state }
-  assignees(first: 10) { nodes { login avatarUrl } }
-  labels(first: 20) { nodes { name color description } }
-  mergeQueueEntry { position estimatedTimeToMerge }
-  closingIssuesReferences(first: 10) { nodes { number title state url } }
-  reviews(last: 100) {
-    nodes { author { login avatarUrl } state body submittedAt url }
-  }
-  commits(last: 1) {
-    nodes {
-      commit {
-        statusCheckRollup {
-          contexts(first: 100) {
-            nodes {
-              __typename
-              ... on CheckRun {
-                name status conclusion detailsUrl permalink startedAt title summary
-              }
-              ... on StatusContext {
-                context state description targetUrl createdAt
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`
-
-/** Build a single GraphQL request that looks up the PR for each requested
- *  branch via headRefName. Aliased sub-queries keep the whole batch in one
- *  round-trip. Returns map: worktreePath → PRStatus|null. Throws on
- *  transport failure so the caller preserves cached state. */
 export async function fetchPRStatusesForRepo(
   ctx: RepoContext,
   requests: PRStatusRequest[]
@@ -375,8 +195,6 @@ export async function fetchPRStatusesForRepo(
     return result
   }
 
-  // Worktrees without a branch (detached / new) can't be looked up by
-  // headRefName. Mark them null up-front; don't include them in the query.
   const queryable = requests.filter((r) => r.branch && r.branch !== '(detached)')
   for (const r of requests) {
     if (!queryable.includes(r)) result.set(r.worktreePath, null)
@@ -390,11 +208,6 @@ export async function fetchPRStatusesForRepo(
   const repoAliasParts: string[] = []
   const topAliasParts: string[] = []
   const variables: Record<string, string> = { owner, name: repo }
-  // Branch-name lookup handles the common case. SHA-via-search handles
-  // both cross-fork PRs (whose commits aren't linked from the upstream's
-  // associatedPullRequests index) and `gh pr checkout`-style synthetic
-  // local branches whose name doesn't match the PR's head.ref. Both fire
-  // in the same request so the fallback adds no extra round-trip.
   queryable.forEach((req, i) => {
     varDefs.push(`$branch${i}:String!`)
     variables[`branch${i}`] = req.branch
@@ -446,12 +259,8 @@ ${PR_FRAGMENT}`
 
   const defaultBranchName = repoData.defaultBranchRef?.name ?? ''
 
-  // Resolve per-request, then fetch behind_by + first-release-tag in parallel.
   const built = await Promise.all(
     queryable.map(async (req, i) => {
-      // A worktree sitting on the repo's default branch (main/master) is
-      // not the head of any PR — skip the resolution entirely to avoid
-      // misattributing the latest squash-merged PR's status to it.
       if (defaultBranchName && req.branch === defaultBranchName) {
         return { worktreePath: req.worktreePath, branch: req.branch, status: null as PRStatus | null }
       }
@@ -461,7 +270,6 @@ ${PR_FRAGMENT}`
         | null
         | undefined
       const branchNodes = brAlias?.nodes ?? []
-      // search returns Issue | PullRequest; filter to PR-shaped nodes only.
       const searchNodes = (searchAlias?.nodes ?? []).filter(
         (n): n is GraphQLPR => !!n && typeof (n as GraphQLPR).number === 'number'
       )
@@ -480,9 +288,6 @@ ${PR_FRAGMENT}`
     })
   )
 
-  // Any branch that some PR is targeting as base (develop / integration /
-  // release/*, etc.) is a merge point, not a PR head. Null out attributions
-  // for worktrees sitting on one of those.
   const baseBranches = new Set<string>()
   for (const b of built) if (b.status) baseBranches.add(b.status.baseBranch)
   for (const b of built) {
@@ -493,18 +298,6 @@ ${PR_FRAGMENT}`
   return result
 }
 
-/** Resolve which PR (if any) belongs to a given worktree.
- *
- *  Branch-name nodes come from `pullRequests(headRefName: $branch)` — the
- *  filter is by ref, so any same-origin hit is a legitimate match for
- *  this branch. We prefer an exact SHA match if available, then
- *  same-origin, then the most-recently-updated.
- *
- *  Search nodes come from `search("type:pr repo:o/n <sha>")` — the index
- *  matches the SHA appearing anywhere in the PR's commit history or
- *  body, including squash-merge commits that land on the default branch.
- *  That's too loose to trust on its own, so we require the candidate's
- *  `headRefOid` to equal the worktree's HEAD SHA before accepting it. */
 function resolvePRForWorktree(
   branchNodes: GraphQLPR[],
   searchNodes: GraphQLPR[],
@@ -517,10 +310,6 @@ function resolvePRForWorktree(
       searchNodes.find((n) => n.headRefOid === headSha)
     if (bySha) return bySha
   }
-  // No SHA match. Same-origin branch-name hit is still a legitimate
-  // match (worktree slightly behind the PR head, or PR force-pushed).
-  // Cross-fork branch-name hits are ignored — `feature/foo` on someone
-  // else's fork is not our PR.
   const sameRepo = branchNodes.find((n) => n.headRepository?.nameWithOwner === originFull)
   if (sameRepo) return sameRepo
   return null
@@ -533,9 +322,6 @@ function buildPRStatus(
   firstReleaseTag: string | null,
   hasMilestones: boolean
 ): PRStatus {
-  // Dedupe by check name, keeping the latest startedAt — GraphQL's
-  // statusCheckRollup returns one entry per re-run of a check, and the
-  // renderer keys by name.
   const byName = new Map<string, CheckStatus>()
   const contexts = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []
   for (const c of contexts) {
@@ -657,7 +443,6 @@ function buildPRStatus(
   }
 }
 
-/** Check whether the authenticated user has starred the repo. */
 export async function isRepoStarred(token: string, owner: string, repo: string): Promise<boolean | null> {
   try {
     const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
@@ -675,7 +460,6 @@ export async function isRepoStarred(token: string, owner: string, repo: string):
   }
 }
 
-/** Unstar a repository. Idempotent. */
 export async function unstarRepo(token: string, owner: string, repo: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
@@ -694,7 +478,6 @@ export async function unstarRepo(token: string, owner: string, repo: string): Pr
   }
 }
 
-/** Star a repository on behalf of the authenticated user. Idempotent. */
 export async function starRepo(token: string, owner: string, repo: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
@@ -714,18 +497,6 @@ export async function starRepo(token: string, owner: string, repo: string): Prom
   }
 }
 
-export type GitHubMergeMethod = 'merge' | 'squash' | 'rebase'
-
-export interface MergePRResult {
-  ok: boolean
-  error?: string
-  errorCode?: 'unauthorized' | 'method_not_allowed' | 'conflict' | 'unprocessable' | 'unknown'
-  sha?: string
-}
-
-/** Merge a pull request via GitHub's REST API. Mirrors the auth/error
- * style of getPRStatus: resolves the cached token, retries once on 401
- * after re-resolving. */
 export async function mergePR(
   token: string,
   owner: string,
@@ -771,7 +542,6 @@ export async function mergePR(
     const data = (await res.json()) as { message?: string }
     apiMessage = data?.message || ''
   } catch {
-    // ignore — fall back to status text
   }
 
   if (res.status === 401 || res.status === 403) {
@@ -829,9 +599,6 @@ function toPRSummary(pr: ApiPRListItem): PRSummary {
   }
 }
 
-/** List the most recently updated open PRs for the given local repo.
- *  Returns null on auth/network failure so callers can show a graceful
- *  empty/error state. Capped at 50 to keep the modal fast. */
 export async function listOpenPRs(repoRoot: string): Promise<PRSummary[] | null> {
   const repoInfo = await getRepoInfo(repoRoot)
   if (!repoInfo) return null
@@ -848,8 +615,6 @@ export async function listOpenPRs(repoRoot: string): Promise<PRSummary[] | null>
   }
 }
 
-/** Fetch a single PR's metadata (head SHA + base branch). Used as a
- *  cheap freshness check immediately before creating a worktree. */
 export async function getPRMetadata(
   repoRoot: string,
   prNumber: number
@@ -869,7 +634,6 @@ export async function getPRMetadata(
   }
 }
 
-/** Test a token by making an authenticated request to /user. Returns the username if valid. */
 export async function testToken(token: string): Promise<{ ok: boolean; username?: string; error?: string }> {
   try {
     const res = await trackedFetch('https://api.github.com/user', {
