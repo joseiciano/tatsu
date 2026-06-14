@@ -13,7 +13,7 @@ import {
   mapLeaves,
   replaceNode,
   removeLeaf
-} from './terminals'
+} from '.'
 
 function apply(state: TerminalsState, event: TerminalsEvent): TerminalsState {
   return terminalsReducer(state, event)

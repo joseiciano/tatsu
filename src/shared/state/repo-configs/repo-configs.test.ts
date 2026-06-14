@@ -7,7 +7,7 @@ import {
   repoConfigsReducer,
   type RepoConfig,
   type RepoConfigsState
-} from './repo-configs'
+} from '.'
 
 describe('repoConfigsReducer', () => {
   it('loaded replaces the whole map', () => {

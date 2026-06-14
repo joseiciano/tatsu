@@ -1,49 +1,5 @@
-export type RightPanelKey =
-  | 'merge'
-  | 'pr'
-  | 'todos'
-  | 'commits'
-  | 'changedFiles'
-  | 'allFiles'
-  | 'cost'
-  | 'scratchpad'
-
-export const DEFAULT_RIGHT_PANEL_ORDER: RightPanelKey[] = [
-  'merge',
-  'pr',
-  'commits',
-  'changedFiles',
-  'allFiles',
-  'todos',
-  'cost',
-  'scratchpad'
-]
-
-export type HiddenRightPanels = Partial<Record<RightPanelKey, boolean>>
-
-/** Panels hidden by default unless the user explicitly enables them.
- *  Merged UNDER the saved config in `effectiveHiddenRightPanels` — once a
- *  user toggles a panel here, their choice wins. */
-export const DEFAULT_HIDDEN_RIGHT_PANELS: HiddenRightPanels = {
-  scratchpad: true
-}
-
-export interface RepoConfig {
-  version?: number
-  setupCommand?: string
-  teardownCommand?: string
-  mergeStrategy?: 'squash' | 'merge-commit' | 'fast-forward'
-  /** @deprecated use hiddenRightPanels.merge. Migrated on load. */
-  hideMergePanel?: boolean
-  /** @deprecated use hiddenRightPanels.pr. Migrated on load. */
-  hidePrPanel?: boolean
-  /** Per-panel visibility. A key set to true hides that panel. */
-  hiddenRightPanels?: HiddenRightPanels
-  /** Order of right-column panels. Unknown / missing keys fall back to
-   * DEFAULT_RIGHT_PANEL_ORDER (any key absent from the saved order is
-   * appended to the end in canonical order). */
-  rightPanelOrder?: RightPanelKey[]
-}
+import type { HiddenRightPanels, RepoConfigsEvent, RepoConfigsState, RepoConfig, RightPanelKey } from './types'
+import { DEFAULT_HIDDEN_RIGHT_PANELS, DEFAULT_RIGHT_PANEL_ORDER } from './constants'
 
 /** Read an effective panel order, filling in any keys missing from the
  * saved order with the canonical default order (appended at the end)
@@ -80,21 +36,6 @@ export function effectiveHiddenRightPanels(config: RepoConfig | null | undefined
   if (config?.hideMergePanel && out.merge === undefined) out.merge = true
   if (config?.hidePrPanel && out.pr === undefined) out.pr = true
   return out
-}
-
-export interface RepoConfigsState {
-  /** Per-repo config keyed by repoRoot. Hydrated at boot from each repo's
-   * .harness.json file and updated whenever a setRepoConfig call commits. */
-  byRepo: Record<string, RepoConfig>
-}
-
-export type RepoConfigsEvent =
-  | { type: 'repoConfigs/loaded'; payload: Record<string, RepoConfig> }
-  | { type: 'repoConfigs/changed'; payload: { repoRoot: string; config: RepoConfig } }
-  | { type: 'repoConfigs/removed'; payload: string }
-
-export const initialRepoConfigs: RepoConfigsState = {
-  byRepo: {}
 }
 
 export function repoConfigsReducer(

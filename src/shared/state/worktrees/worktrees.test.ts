@@ -7,7 +7,7 @@ import {
   type Worktree,
   type WorktreesEvent,
   type WorktreesState
-} from './worktrees'
+} from '.'
 
 function apply(state: WorktreesState, event: WorktreesEvent): WorktreesState {
   return worktreesReducer(state, event)

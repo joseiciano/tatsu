@@ -4,7 +4,7 @@ import {
   settingsReducer,
   type SettingsEvent,
   type SettingsState
-} from './settings'
+} from '.'
 
 function apply(state: SettingsState, event: SettingsEvent): SettingsState {
   return settingsReducer(state, event)

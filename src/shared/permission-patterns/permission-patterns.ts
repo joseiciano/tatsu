@@ -33,16 +33,7 @@
 // when the request's file_path is outside the supplied cwd, we drop
 // narrow/medium and only emit the bare grant.
 
-export interface PermissionRule {
-  toolName: string
-  ruleContent?: string
-}
-
-export interface PermissionPatternSuggestion {
-  rule: PermissionRule
-  label: string
-  scope: 'narrow' | 'medium' | 'broad'
-}
+import type { PermissionPatternSuggestion, PermissionRule } from './types'
 
 function strField(input: Record<string, unknown> | undefined, key: string): string | null {
   if (!input) return null

@@ -5,7 +5,7 @@ import {
   totalForSession,
   type CostsState,
   type SessionUsage
-} from './costs'
+} from '.'
 
 function stubUsage(overrides: Partial<SessionUsage> = {}): SessionUsage {
   return {

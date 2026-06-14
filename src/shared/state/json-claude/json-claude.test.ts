@@ -6,7 +6,7 @@ import {
   defaultAcpCapabilities,
   type JsonClaudeState,
   type JsonClaudeChatEntry
-} from './json-claude'
+} from '.'
 
 const WT = '/tmp/wt'
 const SID = 'session-1'

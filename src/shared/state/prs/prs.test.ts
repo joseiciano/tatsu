@@ -5,7 +5,7 @@ import {
   type PRStatus,
   type PRsEvent,
   type PRsState
-} from './prs'
+} from '.'
 
 function apply(state: PRsState, event: PRsEvent): PRsState {
   return prsReducer(state, event)
