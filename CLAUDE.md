@@ -33,13 +33,12 @@ you're doing it wrong — that value belongs in a slice.
 
 ### The store + slice pattern
 
-State is partitioned into **slices** under `src/shared/state/`. Each
-slice has:
-- A `State` interface (the data shape)
-- An `Event` discriminated union (the mutations)
-- A `reducer(state, event) → state` pure function
-- An `initial<Slice>` constant
-- A test file with one test per event variant
+State is partitioned into **slice packages** under `src/shared/state/`.
+Each slice package has:
+- An `index.ts` barrel for public exports
+- A `<slice>.ts` reducer module
+- Optional `types.ts` / `constants.ts` helpers when the slice is large enough
+- A `<slice>.test.ts` file with one test per event variant
 
 Current slices: `settings`, `prs`, `onboarding`, `hooks`, `worktrees`,
 `terminals` (which also owns `panes` and `lastActive`), `updater`,
@@ -53,13 +52,13 @@ right slice (or making a new one) and editing the reducer + event union.
 2. **Main / preload**: the IPC handler in `src/main/index.ts` does the
    side effect (validation, writing to disk, etc.) and **dispatches a
    typed event** through the store: `store.dispatch({type: 'settings/themeChanged', payload: 'solarized'})`.
-3. **Main / store**: `src/main/store.ts` runs the dispatched event
+3. **Main / store**: `src/main/store/store.ts` runs the dispatched event
    through the shared `rootReducer`, updates its in-memory `AppState`,
    bumps a monotonic `seq`, and notifies subscribers.
-4. **Main / transport**: `src/main/transport-electron.ts` subscribes to
+4. **Main / transport**: `src/main/transport-electron/transport-electron.ts` subscribes to
    the store and forwards every event over the `state:event` IPC channel
    to all `BrowserWindow`s.
-5. **Renderer / client store**: `src/renderer/store.ts` listens on
+5. **Renderer / client store**: `src/renderer/store/store.ts` listens on
    `state:event`, applies the **same** shared `rootReducer` to its local
    mirror, and bumps its own seq.
 6. **Renderer / hooks**: `useSyncExternalStore` notifies any component
@@ -88,55 +87,62 @@ slice. If no, renderer.
 
 ```
 src/
-├── shared/state/                  # Slices imported by BOTH main and renderer
+├── shared/state/                  # Slice packages imported by BOTH main and renderer
 │   ├── index.ts                   # Root reducer + AppState + StateEvent union
-│   ├── settings.ts                # Theme, hotkeys, claudeCommand, fonts, …
-│   ├── prs.ts                     # byPath PRStatus, mergedByPath, loading
-│   ├── worktrees.ts               # list, repoRoots, pending FSM entries
-│   ├── terminals.ts               # statuses, pendingTools, shellActivity, panes, lastActive
-│   ├── onboarding.ts              # quest step
-│   ├── hooks.ts                   # consent + justInstalled
-│   ├── updater.ts                 # status (checking/available/downloading/…)
-│   ├── repo-configs.ts            # byRepo: per-repo .harness.json contents
-│   └── *.test.ts                  # vitest reducer tests, one per slice
+│   ├── settings/                  # Theme, hotkeys, claudeCommand, fonts, …
+│   │   ├── index.ts               # Public exports
+│   │   ├── settings.ts            # Reducer + initial state
+│   │   ├── types.ts               # State/Event types
+│   │   ├── constants.ts           # Shared constants
+│   │   └── settings.test.ts       # Reducer tests
+│   ├── prs/                       # byPath PRStatus, mergedByPath, loading
+│   ├── worktrees/                 # list, repoRoots, pending FSM entries
+│   ├── terminals/                 # statuses, pendingTools, shellActivity, panes, lastActive
+│   ├── onboarding/                # quest step
+│   ├── hooks/                     # consent + justInstalled
+│   ├── updater/                   # status (checking/available/downloading/…)
+│   └── repo-configs/              # byRepo: per-repo .harness.json contents
 │
 ├── main/
 │   ├── index.ts                   # IPC handlers, menu, autoUpdater, store init
-│   ├── store.ts                   # The authoritative Store class (~40 lines)
-│   ├── transport-electron.ts      # Forwards store events to all windows via state:event IPC
-│   ├── pr-poller.ts               # Background PR polling, focus refresh, dedup
-│   ├── worktrees-fsm.ts           # Pending-creation FSM (addWorktree → setup script → outcome)
-│   ├── panes-fsm.ts               # Every pane/tab mutation (addTab, closeTab, splitPane, …)
-│   ├── activity-deriver.ts        # Subscribes to store, derives + records activity transitions
-│   ├── pty-manager.ts             # node-pty lifecycle, dispatches statuses to store
-│   ├── hooks.ts                   # Installs Claude Code hooks, dispatches statuses to store
-│   ├── chat-runtimes/
-│   │   ├── index.ts               # ChatRuntimeRegistry: routes jsonClaude IPC to active runtime
+│   ├── store/                     # The authoritative Store class
+│   │   ├── index.ts               # Public exports
+│   │   ├── store.ts               # Implementation
+│   │   └── store.test.ts          # Tests, when present
+│   ├── transport-electron/        # Forwards store events to all windows via state:event IPC
+│   ├── pr-poller/                 # Background PR polling, focus refresh, dedup
+│   ├── worktrees-fsm/             # Pending-creation FSM (addWorktree → setup script → outcome)
+│   ├── panes-fsm/                 # Every pane/tab mutation (addTab, closeTab, splitPane, …)
+│   ├── activity-deriver/          # Subscribes to store, derives + records activity transitions
+│   ├── pty-manager/               # node-pty lifecycle, dispatches statuses to store
+│   ├── hooks/                     # Installs Claude Code hooks, dispatches statuses to store
+│   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
+│   │   ├── index.ts               # Public exports
 │   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
 │   │   └── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
-│   ├── worktree.ts                # git worktree CRUD primitives
-│   ├── github.ts                  # GitHub REST API calls
-│   ├── repo-config.ts             # Per-repo .harness.json read/write
-│   ├── persistence.ts             # JSON config at userData/config.json
-│   ├── secrets.ts                 # safeStorage-encrypted secrets
-│   └── debug.ts                   # File-based debug logger
+│   ├── worktree/                  # git worktree CRUD primitives
+│   ├── github/                    # GitHub REST API calls
+│   ├── repo-config/               # Per-repo .harness.json read/write
+│   ├── persistence/               # JSON config at userData/config.json
+│   ├── secrets/                   # safeStorage-encrypted secrets
+│   └── debug/                     # File-based debug logger
 │
 ├── preload/index.ts               # contextBridge — exposes window.api
 │
 └── renderer/
-    ├── App.tsx                    # Root component, per-client UI focus + JSX
-    ├── store.ts                   # Client mirror + useSettings/usePrs/usePanes/etc. hooks
-    ├── types.ts                   # ElectronAPI interface (re-exports shared types)
-    ├── hotkeys.ts                 # Hotkey definitions, parsing, formatting
-    ├── worktree-sort.ts           # Group worktrees by PR status
+    ├── App/                       # Root component, per-client UI focus + JSX
+    ├── store/                     # Client mirror + useSettings/usePrs/usePanes/etc. hooks
+    ├── types/                     # ElectronAPI interface (re-exports shared types)
+    ├── hotkeys/                   # Hotkey definitions, parsing, formatting
+    ├── worktree-sort/             # Group worktrees by PR status
     ├── components/                # React components
     └── hooks/
-        ├── useHotkeys.ts          # Keyboard event subscription
-        ├── useMetaHeld.ts         # Meta key detection
-        ├── useTailLineBuffer.ts   # Rolling tail-line cache for CommandCenter
-        ├── useTabHandlers.ts      # All pane/tab mutation handlers (addTab, splitPane, …)
-        ├── useWorktreeHandlers.ts # All worktree+repo+pending-creation handlers
-        └── useHotkeyHandlers.ts   # Sidebar-aware hotkey action map + keystroke binding
+        ├── useHotkeys/            # Keyboard event subscription
+        ├── useMetaHeld/           # Meta key detection
+        ├── useTailLineBuffer/     # Rolling tail-line cache for CommandCenter
+        ├── useTabHandlers/        # All pane/tab mutation handlers (addTab, splitPane, …)
+        ├── useWorktreeHandlers/   # All worktree+repo+pending-creation handlers
+        └── useHotkeyHandlers/     # Sidebar-aware hotkey action map + keystroke binding
 ```
 
 ### Adding a new piece of shared state — the 5-file checklist
@@ -145,7 +151,7 @@ This is more ceremony than just adding a `useState`, but the payoff is
 that any future client (web/mobile/another window) gets the value for
 free. Pattern is the same for every slice:
 
-1. **Add to the slice** (`src/shared/state/<slice>.ts`):
+1. **Add to the slice package** (`src/shared/state/<slice>/<slice>.ts`):
    - Add the field to the `State` interface
    - Add an `Event` variant for mutations
    - Add a reducer case
@@ -161,8 +167,8 @@ free. Pattern is the same for every slice:
    ```
 4. **Expose in preload + types**:
    - `src/preload/index.ts`: `setX: (v) => ipcRenderer.invoke('myslice:setX', v)`
-   - `src/renderer/types.ts`: add to `ElectronAPI` interface
-5. **Add a reducer test** in `src/shared/state/<slice>.test.ts` (one
+   - `src/renderer/types/types.ts`: add to `ElectronAPI` interface
+5. **Add a reducer test** in `src/shared/state/<slice>/<slice>.test.ts` (one
    test per new event variant)
 
 The renderer reads the value via the existing `useSettings()` /
@@ -198,7 +204,7 @@ Some main-side modules subscribe to the store and react to events:
 - **`ActivityDeriver`** — actively *subscribes* to the store. Watches
   `terminals/*` and `prs/*` events, computes per-worktree effective
   state, debounces `lastActive` updates, dedups `recordActivity` calls
-  to `activity.ts`.
+  to `activity/activity.ts`.
 - **`installHooksForAcceptedWorktrees`** — small subscriber in
   `main/index.ts` that listens for `worktrees/listChanged` and
   `hooks/consentChanged`, installs hooks into any new worktree if
@@ -212,7 +218,7 @@ callback closes over `panesFSM`. Don't reorder without thinking.
 
 The store-and-slice architecture is sharp. Four common mistakes turn it
 into a quadratic CPU sink. All four are caught either at code review or
-by the cascade detector in `src/main/store.ts`, which logs a `[cascade]`
+by the cascade detector in `src/main/store/store.ts`, which logs a `[cascade]`
 line to `perf.log` whenever one root event triggers more than 5 nested
 dispatches.
 
@@ -272,17 +278,17 @@ catch yourself writing `useState` for a value that came from the store,
 delete it and read via the hook.
 
 Per-client UI state (active worktree, modal visibility, sidebar width)
-**stays as `useState` in App.tsx** — those are inherently per-viewer.
+**stays as `useState` in `src/renderer/App/App.tsx`** — those are inherently per-viewer.
 
 ### Why "where does this live" can take a few file hops to answer
 
 A `useSettings().theme` read traces through:
-1. `App.tsx` calls the hook
-2. `src/renderer/store.ts` defines the hook (`useAppState((s) => s.settings)`)
-3. `useSyncExternalStore` reads from the client mirror in `store.ts`
+1. `src/renderer/App/App.tsx` calls the hook
+2. `src/renderer/store/store.ts` defines the hook (`useAppState((s) => s.settings)`)
+3. `useSyncExternalStore` reads from the client mirror in `src/renderer/store/store.ts`
 4. The mirror was populated by a `state:event` IPC message
 5. Main dispatched that event from an IPC handler in `main/index.ts`
-6. The handler ran the reducer in `src/shared/state/settings.ts`
+6. The handler ran the reducer in `src/shared/state/settings/settings.ts`
 
 Six files for one value. The mitigation: **the structure is the same
 for every slice**. Once you understand it once, every other slice
@@ -316,19 +322,19 @@ Two log files in `userData`:
 What gets written to `perf.log` (and where the threshold lives):
 
 - `[store-slow]` — any `store.dispatch` whose reducer + listener fan-out
-  totals ≥ `SLOW_DISPATCH_MS` (5 ms; `src/main/store.ts`).
+  totals ≥ `SLOW_DISPATCH_MS` (5 ms; `src/main/store/store.ts`).
 - `[ipc-slow]` — any IPC request or fire-and-forget signal handler that
-  takes ≥ `SLOW_IPC_MS` (50 ms; `src/main/transport-electron.ts` and
-  `src/main/transport-websocket.ts` — both transports are wrapped so
+  takes ≥ `SLOW_IPC_MS` (50 ms; `src/main/transport-electron/transport-electron.ts` and
+  `src/main/transport-websocket/transport-websocket.ts` — both transports are wrapped so
   headless gets the same trace).
 - `[eventloop-spike]` — main-process event-loop lag (timer drift on a
   500 ms interval) ≥ `LAG_SPIKE_THRESHOLD_MS` (100 ms;
-  `src/main/perf-monitor.ts`).
+  `src/main/perf-monitor/perf-monitor.ts`).
 - `[snapshot]` — one summary line every `SNAPSHOT_INTERVAL_MS` (30 s)
   with current rates, lag, RSS, active PTYs, and top event types. Cheap
   continuous trace for "what was happening at <timestamp>".
 - `[render-slow]` — React commits ≥ `SLOW_COMMIT_MS` (16 ms = one frame
-  at 60 fps; `src/renderer/main.tsx`). Forwarded from the renderer over
+  at 60 fps; `src/renderer/main/main.tsx`). Forwarded from the renderer over
   the `perf:logSlowRender` fire-and-forget signal — telemetry must not
   block the render.
 - `[changed-files]` — every `getChangedFiles` / `getCommitChangedFiles`
@@ -350,10 +356,10 @@ reported timestamp.
 
 The user pastes a GitHub personal access token into Settings. It's encrypted
 via `safeStorage` and stored in `userData/secrets.enc`. All GitHub data
-(PR status, check runs, statuses) goes through `src/main/github.ts` using
+(PR status, check runs, statuses) goes through `src/main/github/github.ts` using
 `fetch()` against the REST API.
 
-Token resolution lives in `src/main/github-auth.ts` and runs once at boot
+Token resolution lives in `src/main/github-auth/github-auth.ts` and runs once at boot
 (re-runs on a 401): an explicit PAT in `secrets.enc` or `GITHUB_TOKEN` wins,
 then `gh auth token` (spawned through a login zsh so Homebrew's `gh` is on
 PATH), then nothing. The `gh` CLI is an **optional** auto-detect convenience
@@ -378,7 +384,7 @@ hard dependency on `gh`.
   instead of running the command directly, so the user's full PATH is loaded
   (homebrew binaries, nvm, etc.).
 - **Login-shell PATH fix at boot** — at boot we run the user's login shell once
-  via `path-fix.ts` to capture its PATH and **merge** into `process.env.PATH`.
+  via `src/main/path-fix/path-fix.ts` to capture its PATH and **merge** into `process.env.PATH`.
   Without this, the bundled claude (spawned directly, not via shell) inherits
   whatever stripped PATH Harness was launched with and can't find homebrew/
   nvm/pyenv tools. The fix runs in both Electron-local boots (Finder/Dock
@@ -408,15 +414,15 @@ hard dependency on `gh`.
   to N backends (the in-process local one + remote `harness-server`
   instances), with a chip strip at the bottom of the sidebar to switch.
   See `plans/tier-1-multi-backend-ux.md` for the full design.
-  Architecturally: `src/renderer/store.ts` holds a `BackendsRegistry`
+  Architecturally: `src/renderer/store/store.ts` holds a `BackendsRegistry`
   of `(transport, ClientStore)` pairs; the local entry uses
   `ElectronClientTransport` (via the preload's `__harness_local_transport`
   handle), remotes use `WebSocketClientTransport` directly in renderer
   context. Each transport's `onStateEvent` is wired to its own store at
   registration time, so there's no central event router — per-backend
   channels are naturally segregated. `window.api` is built in the
-  RENDERER (`src/renderer/build-backend.ts`, exported via
-  `src/renderer/backend.ts` as `getBackend()` / `useBackend()`),
+  RENDERER (`src/renderer/build-backend/build-backend.ts`, exported via
+  `src/renderer/backend/backend.ts` as `getBackend()` / `useBackend()`),
   with each method calling `registry.getActiveTransport().request(...)`
   lazily. For local active that's the preload-bridged handle (1
   contextBridge crossing); for remote active it's the WS transport
@@ -469,9 +475,9 @@ These are how the user wants Claude to behave when working on this repo:
 
 4. **Don't add comments unless asked.** Code should explain itself; comments
    are reserved for non-obvious "why" notes. The exception is the comment
-   blocks already present in `src/main/store.ts`, `src/main/index.ts`
+   blocks already present in `src/main/store/store.ts`, `src/main/index.ts`
    (around the panesFSM/worktreesFSM construction), `src/shared/state/index.ts`,
-   `src/renderer/store.ts`, and `src/main/activity-deriver.ts` — those
+   `src/renderer/store/store.ts`, and `src/main/activity-deriver/activity-deriver.ts` — those
    document the load-bearing architecture decisions and should be
    preserved/updated rather than removed.
 
@@ -480,7 +486,7 @@ These are how the user wants Claude to behave when working on this repo:
    that should survive a reload or be visible to other clients, stop.
    Add it to a slice instead — see "Adding a new piece of shared state"
    above. Per-client UI focus / modal visibility / sidebar widths stay
-   as `useState` in App.tsx; everything else is a slice.
+   as `useState` in `src/renderer/App/App.tsx`; everything else is a slice.
 
 6. **Don't write planning/decision documents.** Work from conversation
    context. Don't create scratch markdown files or design docs.
