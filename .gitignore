@@ -5,6 +5,7 @@ dist-headless/
 .headless-data/
 release/
 .cache/
+prompts/
 *.tsbuildinfo
 .env
 .env.local

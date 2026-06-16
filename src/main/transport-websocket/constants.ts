@@ -1,0 +1,1 @@
+export const SLOW_IPC_MS = 50
