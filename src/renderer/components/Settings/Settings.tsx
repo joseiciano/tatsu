@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
-import { HARNESS_ISSUES_URL, HARNESS_RELEASES_URL, harnessReleaseNotesUrl } from '../../../shared/constants'
+import { TATSU_ISSUES_URL, TATSU_RELEASES_URL, tatsuReleaseNotesUrl } from '../../../shared/constants'
 import { useSettings, useUpdater, useRepoConfigs, useHooks } from '../../store'
 import { useBackend } from '../../backend'
 import type { UpdaterStatus, MergeStrategy, RepoConfig, WorktreeDetail } from '../../types'
@@ -312,7 +312,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     claudeCommand,
     codexCommand,
     opencodeCommand,
-    harnessMcpEnabled,
+    tatsuMcpEnabled,
     claudeEnvVars,
     codexEnvVars,
     opencodeEnvVars,
@@ -328,13 +328,13 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     worktreeDetail,
     hasGithubToken: settingsHasToken,
     githubAuthSource: authSource,
-    harnessStarred,
+    tatsuStarred,
     worktreeScripts,
     shareClaudeSettings,
     autoUpdateEnabled,
-    harnessSystemPromptEnabled,
-    harnessSystemPrompt,
-    harnessSystemPromptMain,
+    tatsuSystemPromptEnabled,
+    tatsuSystemPrompt,
+    tatsuSystemPromptMain,
     prReviewPrompt,
     claudeTuiFullscreen,
     browserToolsEnabled,
@@ -402,10 +402,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   const [opencodeEnvSaveResult, setOpencodeEnvSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [opencodeRevealedEnvRows, setOpencodeRevealedEnvRows] = useState<Set<number>>(new Set())
 
-  const [systemPromptDraft, setSystemPromptDraft] = useState<string>(harnessSystemPrompt)
-  useEffect(() => { setSystemPromptDraft(harnessSystemPrompt) }, [harnessSystemPrompt])
-  const [systemPromptMainDraft, setSystemPromptMainDraft] = useState<string>(harnessSystemPromptMain)
-  useEffect(() => { setSystemPromptMainDraft(harnessSystemPromptMain) }, [harnessSystemPromptMain])
+  const [systemPromptDraft, setSystemPromptDraft] = useState<string>(tatsuSystemPrompt)
+  useEffect(() => { setSystemPromptDraft(tatsuSystemPrompt) }, [tatsuSystemPrompt])
+  const [systemPromptMainDraft, setSystemPromptMainDraft] = useState<string>(tatsuSystemPromptMain)
+  useEffect(() => { setSystemPromptMainDraft(tatsuSystemPromptMain) }, [tatsuSystemPromptMain])
   const [systemPromptSaveResult, setSystemPromptSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const [prReviewPromptDraft, setPrReviewPromptDraft] = useState<string>(prReviewPrompt)
@@ -765,8 +765,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     setClaudeSaveResult({ ok: true, message: 'Saved · new tabs will use this command' })
   }, [claudeCommandDraft])
 
-  const handleToggleHarnessMcp = useCallback(async (enabled: boolean) => {
-    await backend.setHarnessMcpEnabled(enabled)
+  const handleToggleTatsuMcp = useCallback(async (enabled: boolean) => {
+    await backend.setTatsuMcpEnabled(enabled)
   }, [])
 
   const handleToggleAutoUpdate = useCallback(async (enabled: boolean) => {
@@ -840,15 +840,15 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   }, [])
 
   const handleSaveSystemPrompt = useCallback(async () => {
-    await backend.setHarnessSystemPrompt(systemPromptDraft)
-    await backend.setHarnessSystemPromptMain(systemPromptMainDraft)
+    await backend.setTatsuSystemPrompt(systemPromptDraft)
+    await backend.setTatsuSystemPromptMain(systemPromptMainDraft)
     setSystemPromptSaveResult({ ok: true, message: 'Saved · new sessions will use this prompt' })
     setTimeout(() => setSystemPromptSaveResult(null), 2000)
   }, [systemPromptDraft, systemPromptMainDraft])
 
   const handleResetSystemPrompt = useCallback(async () => {
-    await backend.setHarnessSystemPrompt('')
-    await backend.setHarnessSystemPromptMain('')
+    await backend.setTatsuSystemPrompt('')
+    await backend.setTatsuSystemPromptMain('')
     setSystemPromptSaveResult({ ok: true, message: 'Reset to defaults' })
     setTimeout(() => setSystemPromptSaveResult(null), 2000)
   }, [])
@@ -867,7 +867,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
   const effectiveClaudeCommand = claudeCommandDraft.trim() || defaultClaudeCommand
   const modelPart = claudeModel && !effectiveClaudeCommand.includes('--model') ? ` --model ${claudeModel}` : ''
-  const mcpPart = harnessMcpEnabled ? ' --mcp-config <per-session>' : ''
+  const mcpPart = tatsuMcpEnabled ? ' --mcp-config <per-session>' : ''
   const previewInner = `${effectiveClaudeCommand}${modelPart}${mcpPart} --session-id <uuid>`
   const commandPreview = `<shell> -ilc "${previewInner}"`
 
@@ -1078,7 +1078,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             <Download className="icon-xs" />
             <span>
               <a
-                onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+                onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
                 className="underline hover:text-fg-bright cursor-pointer"
               >
                 Tatsu {updaterStatus.version}
@@ -1094,7 +1094,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             <span>
               Downloading{' '}
               <a
-                onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+                onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
                 className="underline hover:text-fg-bright cursor-pointer"
               >
                 Tatsu {updaterStatus.version}
@@ -1110,7 +1110,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <Check className="icon-xs" />
               <span>
                 <a
-                  onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+                  onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
                   className="underline hover:text-fg-bright cursor-pointer"
                 >
                   Tatsu {updaterStatus.version}
@@ -1799,7 +1799,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
                 <div className="mt-4 pt-3 border-t border-border">
                   <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={harnessMcpEnabled} onChange={(e) => handleToggleHarnessMcp(e.target.checked)} className="mt-0.5 cursor-pointer icon-base" />
+                    <input type="checkbox" checked={tatsuMcpEnabled} onChange={(e) => handleToggleTatsuMcp(e.target.checked)} className="mt-0.5 cursor-pointer icon-base" />
                     <div className="flex-1">
                       <div className="text-sm text-fg-bright">Enable Tatsu MCP</div>
                       <div className="text-xs text-dim mt-0.5">
@@ -2251,8 +2251,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 <label className="flex items-start gap-2 cursor-pointer mb-4">
                   <input
                     type="checkbox"
-                    checked={harnessSystemPromptEnabled}
-                    onChange={(e) => { void backend.setHarnessSystemPromptEnabled(e.target.checked) }}
+                    checked={tatsuSystemPromptEnabled}
+                    onChange={(e) => { void backend.setTatsuSystemPromptEnabled(e.target.checked) }}
                     className="mt-0.5 cursor-pointer icon-base" />
                   <div className="flex-1">
                     <div className="text-sm text-fg-bright">Inject Tatsu context into Claude sessions</div>
@@ -2262,7 +2262,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   </div>
                 </label>
 
-                {harnessSystemPromptEnabled && (
+                {tatsuSystemPromptEnabled && (
                   <>
                     <div className="mb-4">
                       <label className="block text-xs font-medium text-fg mb-1">Base prompt</label>
@@ -2804,15 +2804,15 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 encrypted and stored locally using your macOS keychain.
               </p>
 
-              {authed && harnessStarred !== null && (
+              {authed && tatsuStarred !== null && (
                 <label className="mb-4 flex items-center gap-2 cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={harnessStarred}
-                    onChange={(e) => { void backend.setHarnessStarred(e.target.checked) }}
+                    checked={tatsuStarred}
+                    onChange={(e) => { void backend.setTatsuStarred(e.target.checked) }}
                     className="icon-base accent-warning cursor-pointer" />
                   <Star
-                    className={`icon-sm ${harnessStarred ? 'text-warning fill-warning shrink-0' : 'text-warning shrink-0'}`} />
+                    className={`icon-sm ${tatsuStarred ? 'text-warning fill-warning shrink-0' : 'text-warning shrink-0'}`} />
                   <span className="text-sm text-fg group-hover:text-fg-bright transition-colors">
                     Star Tatsu on GitHub
                   </span>
@@ -3042,7 +3042,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <div className="text-xs text-dim font-mono mt-0.5">
                       {version ? (
                         <a
-                          onClick={() => backend.openExternal(harnessReleaseNotesUrl(version))}
+                          onClick={() => backend.openExternal(tatsuReleaseNotesUrl(version))}
                           className="underline hover:text-fg-bright cursor-pointer"
                         >
                           {version}
@@ -3107,7 +3107,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
               <div className="mt-3 text-xs text-dim">
                 <a
-                  onClick={() => backend.openExternal(HARNESS_RELEASES_URL)}
+                  onClick={() => backend.openExternal(TATSU_RELEASES_URL)}
                   className="text-muted hover:text-fg-bright underline cursor-pointer"
                 >
                   View all releases on GitHub
@@ -3209,7 +3209,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 These features are in active development. APIs and UI may change,
                 and you should expect rough edges. Each one is opt-in below.{' '}
                 <a
-                  onClick={() => backend.openExternal(HARNESS_ISSUES_URL)}
+                  onClick={() => backend.openExternal(TATSU_ISSUES_URL)}
                   className="text-muted hover:text-fg-bright underline cursor-pointer"
                 >
                   File an issue

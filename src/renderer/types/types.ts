@@ -298,7 +298,7 @@ export interface ElectronAPI {
   resetHotkeyOverrides(): Promise<boolean>
   setClaudeCommand(command: string): Promise<boolean>
   getDefaultClaudeCommand(): Promise<string>
-  setHarnessMcpEnabled(enabled: boolean): Promise<boolean>
+  setTatsuMcpEnabled(enabled: boolean): Promise<boolean>
   setClaudeTuiFullscreen(enabled: boolean): Promise<boolean>
   setWsTransportEnabled(enabled: boolean): Promise<boolean>
   setWsTransportPort(port: number): Promise<number>
@@ -320,9 +320,9 @@ export interface ElectronAPI {
   setAutoUpdateEnabled(enabled: boolean): Promise<boolean>
   setExpandedDiagnosticLoggingEnabled(enabled: boolean): Promise<boolean>
   setShareClaudeSettings(enabled: boolean): Promise<boolean>
-  setHarnessSystemPromptEnabled(enabled: boolean): Promise<boolean>
-  setHarnessSystemPrompt(prompt: string): Promise<boolean>
-  setHarnessSystemPromptMain(prompt: string): Promise<boolean>
+  setTatsuSystemPromptEnabled(enabled: boolean): Promise<boolean>
+  setTatsuSystemPrompt(prompt: string): Promise<boolean>
+  setTatsuSystemPromptMain(prompt: string): Promise<boolean>
   setPrReviewPrompt(prompt: string): Promise<boolean>
   prepareMcpForTerminal(terminalId: string): Promise<string | null>
   onWorktreesExternalCreate(
@@ -420,7 +420,7 @@ export interface ElectronAPI {
   hasGithubToken(): Promise<boolean>
   setGithubToken(token: string): Promise<{ ok: boolean; username?: string; error?: string }>
   clearGithubToken(): Promise<boolean>
-  setHarnessStarred(starred: boolean): Promise<{ ok: boolean; error?: string }>
+  setTatsuStarred(starred: boolean): Promise<{ ok: boolean; error?: string }>
 
   getVersion(): Promise<string>
   readRecentLog(maxLines?: number): Promise<string>

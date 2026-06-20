@@ -32,7 +32,7 @@ export const THEME_APP_BG: Record<string, string> = {
 
 export const DEFAULT_CLAUDE_COMMAND = 'claude'
 
-export const DEFAULT_HARNESS_SYSTEM_PROMPT = `You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to tatsu-control MCP tools:
+export const DEFAULT_TATSU_SYSTEM_PROMPT = `You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to tatsu-control MCP tools:
 
 - mcp__tatsu-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.
 - mcp__tatsu-control__list_worktrees: List all active worktrees.
@@ -61,7 +61,7 @@ Tatsu also exposes shell tabs for long-running processes — anything that would
 
 Prefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (\`pnpm test\`, \`tsc --noEmit\`, \`git status\`) still belong on Bash.`
 
-export const DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN = `You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the tatsu-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable.`
+export const DEFAULT_TATSU_SYSTEM_PROMPT_MAIN = `You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the tatsu-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable.`
 
 export const DEFAULT_TERMINAL_FONT_FAMILY =
   "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"

@@ -307,6 +307,32 @@ export type WireSnapshotState = {
   [K in keyof AppState]?: Partial<AppState[K]>
 }
 
+/** Legacy field-name mapping for pre-name-change (Phase 5) servers.
+ *  When a new renderer connects to an old server whose settings snapshot
+ *  still uses `harness*` field names, this maps them to the current
+ *  `tatsu*` names. Only maps when the new key is not already present so
+ *  a newer value always wins. */
+function mapLegacySettingsFields(
+  settings: Partial<Record<string, unknown>>
+): Partial<Record<string, unknown>> {
+  const legacy: Array<[string, string]> = [
+    ['harnessMcpEnabled', 'tatsuMcpEnabled'],
+    ['harnessStarred', 'tatsuStarred'],
+    ['harnessSystemPromptEnabled', 'tatsuSystemPromptEnabled'],
+    ['harnessSystemPrompt', 'tatsuSystemPrompt'],
+    ['harnessSystemPromptMain', 'tatsuSystemPromptMain']
+  ]
+  let mapped: Partial<Record<string, unknown>> | undefined
+  for (const [oldKey, newKey] of legacy) {
+    if (!(oldKey in settings)) continue
+    if (newKey in settings) continue
+    if (!mapped) mapped = { ...settings }
+    mapped[newKey] = mapped[oldKey]
+    delete mapped[oldKey]
+  }
+  return mapped ?? settings
+}
+
 /** Per-slice shallow merge of a wire snapshot against `initialState`
  *  defaults. Protects against two version skews:
  *
@@ -318,10 +344,21 @@ export type WireSnapshotState = {
  *
  *  If a future PR adds a slice to `AppState`/`initialState` and forgets
  *  to add a line here, TypeScript will fail the build: the object
- *  literal won't satisfy `AppState`. */
+ *  literal won't satisfy `AppState`.
+ *
+ *  Also maps legacy field names from old servers (pre-name-change) to
+ *  their current counterparts so a new renderer connecting to an older
+ *  server still gets the correct values. */
 export function mergeWireSnapshot(state: WireSnapshotState): AppState {
   return {
-    settings: { ...initialState.settings, ...state.settings },
+    // Map legacy harness* fields in the wire snapshot to tatsu* BEFORE
+    // merging with initialState. Otherwise initialState defaults would
+    // shadow legacy values (e.g. tatsuMcpEnabled: true from initialState
+    // masks harnessMcpEnabled: false from an old server).
+    settings: {
+      ...initialState.settings,
+      ...mapLegacySettingsFields((state.settings ?? {}) as Record<string, unknown>)
+    } as unknown as AppState['settings'],
     prs: { ...initialState.prs, ...state.prs },
     onboarding: { ...initialState.onboarding, ...state.onboarding },
     hooks: { ...initialState.hooks, ...state.hooks },

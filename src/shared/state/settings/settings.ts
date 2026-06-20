@@ -28,8 +28,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, codexEnvVars: event.payload }
     case 'settings/opencodeEnvVarsChanged':
       return { ...state, opencodeEnvVars: event.payload }
-    case 'settings/harnessMcpEnabledChanged':
-      return { ...state, harnessMcpEnabled: event.payload }
+    case 'settings/tatsuMcpEnabledChanged':
+      return { ...state, tatsuMcpEnabled: event.payload }
     case 'settings/nameClaudeSessionsChanged':
       return { ...state, nameClaudeSessions: event.payload }
     case 'settings/terminalFontFamilyChanged':
@@ -52,8 +52,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, githubAuthSource: event.payload }
     case 'settings/viewerLoginChanged':
       return { ...state, viewerLogin: event.payload }
-    case 'settings/harnessStarredChanged':
-      return { ...state, harnessStarred: event.payload }
+    case 'settings/tatsuStarredChanged':
+      return { ...state, tatsuStarred: event.payload }
     case 'settings/claudeModelChanged':
       return { ...state, claudeModel: event.payload }
     case 'settings/codexModelChanged':
@@ -62,12 +62,12 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, opencodeModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
-    case 'settings/harnessSystemPromptEnabledChanged':
-      return { ...state, harnessSystemPromptEnabled: event.payload }
-    case 'settings/harnessSystemPromptChanged':
-      return { ...state, harnessSystemPrompt: event.payload }
-    case 'settings/harnessSystemPromptMainChanged':
-      return { ...state, harnessSystemPromptMain: event.payload }
+    case 'settings/tatsuSystemPromptEnabledChanged':
+      return { ...state, tatsuSystemPromptEnabled: event.payload }
+    case 'settings/tatsuSystemPromptChanged':
+      return { ...state, tatsuSystemPrompt: event.payload }
+    case 'settings/tatsuSystemPromptMainChanged':
+      return { ...state, tatsuSystemPromptMain: event.payload }
     case 'settings/claudeTuiFullscreenChanged':
       return { ...state, claudeTuiFullscreen: event.payload }
     case 'settings/wsTransportEnabledChanged':

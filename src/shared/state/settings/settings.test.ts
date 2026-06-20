@@ -134,14 +134,14 @@ describe('settingsReducer', () => {
     expect(on.shareClaudeSettings).toBe(true)
   })
 
-  it('harnessMcpEnabledChanged toggles mcp flag', () => {
+  it('tatsuMcpEnabledChanged toggles mcp flag', () => {
     const off = apply(initialSettings, {
-      type: 'settings/harnessMcpEnabledChanged',
+      type: 'settings/tatsuMcpEnabledChanged',
       payload: false
     })
-    expect(off.harnessMcpEnabled).toBe(false)
-    const on = apply(off, { type: 'settings/harnessMcpEnabledChanged', payload: true })
-    expect(on.harnessMcpEnabled).toBe(true)
+    expect(off.tatsuMcpEnabled).toBe(false)
+    const on = apply(off, { type: 'settings/tatsuMcpEnabledChanged', payload: true })
+    expect(on.tatsuMcpEnabled).toBe(true)
   })
 
   it('nameClaudeSessionsChanged toggles flag', () => {
@@ -212,13 +212,13 @@ describe('settingsReducer', () => {
     expect(gone.hasGithubToken).toBe(false)
   })
 
-  it('harnessStarredChanged tracks star state', () => {
-    const yes = apply(initialSettings, { type: 'settings/harnessStarredChanged', payload: true })
-    expect(yes.harnessStarred).toBe(true)
-    const no = apply(yes, { type: 'settings/harnessStarredChanged', payload: false })
-    expect(no.harnessStarred).toBe(false)
-    const unknown = apply(no, { type: 'settings/harnessStarredChanged', payload: null })
-    expect(unknown.harnessStarred).toBeNull()
+  it('tatsuStarredChanged tracks star state', () => {
+    const yes = apply(initialSettings, { type: 'settings/tatsuStarredChanged', payload: true })
+    expect(yes.tatsuStarred).toBe(true)
+    const no = apply(yes, { type: 'settings/tatsuStarredChanged', payload: false })
+    expect(no.tatsuStarred).toBe(false)
+    const unknown = apply(no, { type: 'settings/tatsuStarredChanged', payload: null })
+    expect(unknown.tatsuStarred).toBeNull()
   })
 
   it('githubAuthSourceChanged updates the source', () => {
@@ -317,33 +317,33 @@ describe('settingsReducer', () => {
     expect(next.defaultAgent).toBe('opencode')
   })
 
-  it('harnessSystemPromptEnabledChanged toggles flag', () => {
+  it('tatsuSystemPromptEnabledChanged toggles flag', () => {
     const off = apply(initialSettings, {
-      type: 'settings/harnessSystemPromptEnabledChanged',
+      type: 'settings/tatsuSystemPromptEnabledChanged',
       payload: false
     })
-    expect(off.harnessSystemPromptEnabled).toBe(false)
+    expect(off.tatsuSystemPromptEnabled).toBe(false)
     const on = apply(off, {
-      type: 'settings/harnessSystemPromptEnabledChanged',
+      type: 'settings/tatsuSystemPromptEnabledChanged',
       payload: true
     })
-    expect(on.harnessSystemPromptEnabled).toBe(true)
+    expect(on.tatsuSystemPromptEnabled).toBe(true)
   })
 
-  it('harnessSystemPromptChanged sets the prompt', () => {
+  it('tatsuSystemPromptChanged sets the prompt', () => {
     const next = apply(initialSettings, {
-      type: 'settings/harnessSystemPromptChanged',
+      type: 'settings/tatsuSystemPromptChanged',
       payload: 'custom prompt'
     })
-    expect(next.harnessSystemPrompt).toBe('custom prompt')
+    expect(next.tatsuSystemPrompt).toBe('custom prompt')
   })
 
-  it('harnessSystemPromptMainChanged sets the main prompt', () => {
+  it('tatsuSystemPromptMainChanged sets the main prompt', () => {
     const next = apply(initialSettings, {
-      type: 'settings/harnessSystemPromptMainChanged',
+      type: 'settings/tatsuSystemPromptMainChanged',
       payload: 'main only text'
     })
-    expect(next.harnessSystemPromptMain).toBe('main only text')
+    expect(next.tatsuSystemPromptMain).toBe('main only text')
   })
 
   it('claudeTuiFullscreenChanged toggles flag', () => {

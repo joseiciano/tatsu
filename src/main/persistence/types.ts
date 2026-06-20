@@ -36,7 +36,7 @@ export interface Config {
   opencodeModel?: string
   codexEnvVars?: Record<string, string>
   opencodeEnvVars?: Record<string, string>
-  harnessMcpEnabled?: boolean
+  tatsuMcpEnabled?: boolean
   panes?: Record<string, Record<string, PersistedPaneNode>>
   legacyPanes?: Record<string, PersistedPane[]>
   terminalTabs?: Record<string, PersistedTab[]>
@@ -58,15 +58,15 @@ export interface Config {
   onboarding?: {
     quest?: QuestStep
   }
-  harnessAutoStarred?: boolean
+  tatsuAutoStarred?: boolean
   costs?: CostsState
   autoUpdateEnabled?: boolean
   shareClaudeSettings?: boolean
   hooksConsent?: 'pending' | 'accepted' | 'declined'
   hooksMigratedToGlobal?: boolean
-  harnessSystemPromptEnabled?: boolean
-  harnessSystemPrompt?: string
-  harnessSystemPromptMain?: string
+  tatsuSystemPromptEnabled?: boolean
+  tatsuSystemPrompt?: string
+  tatsuSystemPromptMain?: string
   prReviewPrompt?: string
   claudeTuiFullscreen?: boolean
   wsTransportEnabled?: boolean

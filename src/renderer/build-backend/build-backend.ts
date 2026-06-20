@@ -228,7 +228,7 @@ export function buildBackend(
     setOpencodeCommand: (command: string) => req('config:setOpencodeCommand', command),
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
-    setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
+    setTatsuMcpEnabled: (enabled: boolean) => req('config:setTatsuMcpEnabled', enabled),
     setClaudeTuiFullscreen: (enabled: boolean) => req('config:setClaudeTuiFullscreen', enabled),
     setWsTransportEnabled: (enabled: boolean) => req('config:setWsTransportEnabled', enabled),
     setWsTransportPort: (port: number) => req('config:setWsTransportPort', port),
@@ -255,11 +255,11 @@ export function buildBackend(
     setExpandedDiagnosticLoggingEnabled: (enabled: boolean) =>
       req('config:setExpandedDiagnosticLoggingEnabled', enabled),
     setShareClaudeSettings: (enabled: boolean) => req('config:setShareClaudeSettings', enabled),
-    setHarnessSystemPromptEnabled: (enabled: boolean) =>
-      req('config:setHarnessSystemPromptEnabled', enabled),
-    setHarnessSystemPrompt: (prompt: string) => req('config:setHarnessSystemPrompt', prompt),
-    setHarnessSystemPromptMain: (prompt: string) =>
-      req('config:setHarnessSystemPromptMain', prompt),
+    setTatsuSystemPromptEnabled: (enabled: boolean) =>
+      req('config:setTatsuSystemPromptEnabled', enabled),
+    setTatsuSystemPrompt: (prompt: string) => req('config:setTatsuSystemPrompt', prompt),
+    setTatsuSystemPromptMain: (prompt: string) =>
+      req('config:setTatsuSystemPromptMain', prompt),
     setPrReviewPrompt: (prompt: string) => req('config:setPrReviewPrompt', prompt),
     prepareMcpForTerminal: (terminalId: string) =>
       req('mcp:prepareForTerminal', terminalId),
@@ -359,7 +359,7 @@ export function buildBackend(
     hasGithubToken: () => req('settings:hasGithubToken'),
     setGithubToken: (token: string) => req('settings:setGithubToken', token),
     clearGithubToken: () => req('settings:clearGithubToken'),
-    setHarnessStarred: (starred: boolean) => req('settings:setHarnessStarred', starred),
+    setTatsuStarred: (starred: boolean) => req('settings:setTatsuStarred', starred),
 
     getVersion: () => req('updater:getVersion'),
     readRecentLog: (maxLines?: number) => req('debug:readRecentLog', maxLines),

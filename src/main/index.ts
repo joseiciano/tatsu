@@ -53,8 +53,8 @@ import {
   DEFAULT_WORKTREE_BASE,
   DEFAULT_MERGE_STRATEGY,
   DEFAULT_WORKTREE_DETAIL,
-  DEFAULT_HARNESS_SYSTEM_PROMPT,
-  DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
+  DEFAULT_TATSU_SYSTEM_PROMPT,
+  DEFAULT_TATSU_SYSTEM_PROMPT_MAIN,
   pruneTerminalHistory,
   LOCAL_BACKEND_ID,
   type BackendConnection,
@@ -77,7 +77,7 @@ import {
 import { watchStatusDir } from './hooks'
 import { getAgent, type AgentKind } from './agents'
 import { buildClaudeLaunchSettings } from './claude-launch'
-import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
+import { TATSU_REPO_OWNER, TATSU_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
 import { CostTracker } from './cost-tracker'
 import { getAllSessionCosts } from './cost-aggregator'
@@ -174,15 +174,15 @@ function findShellWorktree(shellId: string): string | null {
   }
   return null
 }
-// Resolves the harness version from disk so it works in every runtime
+// Resolves the tatsu version from disk so it works in every runtime
 // (Electron dev/packaged, headless dev, headless tarball). Electron's
 // `app.getVersion()` would do the job in two of those four, but the
 // headless server has no `app`, so we read package.json (or the
 // pack-headless VERSION sidecar) directly. Cached after first hit —
 // the file layout doesn't change while the process is alive.
-let cachedHarnessVersion: string | null = null
-function getHarnessVersion(): string {
-  if (cachedHarnessVersion) return cachedHarnessVersion
+let cachedTatsuVersion: string | null = null
+function getTatsuVersion(): string {
+  if (cachedTatsuVersion) return cachedTatsuVersion
   const candidates: Array<{ path: string; parse: (text: string) => string | null }> = [
     {
       path: join(__dirname, '..', '..', 'package.json'),
@@ -200,15 +200,15 @@ function getHarnessVersion(): string {
     try {
       const v = parse(readFileSync(path, 'utf8'))
       if (v) {
-        cachedHarnessVersion = v
+        cachedTatsuVersion = v
         return v
       }
     } catch {
       // try next candidate
     }
   }
-  cachedHarnessVersion = 'unknown'
-  return cachedHarnessVersion
+  cachedTatsuVersion = 'unknown'
+  return cachedTatsuVersion
 }
 
 // Headless-only CLI flags (--host / --port / --help / --version). Parse
@@ -222,7 +222,7 @@ const cliFlags: CliFlags = (() => {
   }
   const result = parseCliFlags(process.argv.slice(2))
   if (result.kind === 'error') {
-    process.stderr.write(`harness-server: ${result.message}\n\n`)
+    process.stderr.write(`tatsu-server: ${result.message}\n\n`)
     process.stderr.write(USAGE)
     process.exit(2)
   }
@@ -510,28 +510,28 @@ async function refreshViewerLogin(): Promise<void> {
   })
 }
 
-/** Query the harness star state, dispatch it to the slice, and auto-star
+/** Query the tatsu star state, dispatch it to the slice, and auto-star
  *  exactly once per user (sticky so manual unstars survive reboots). Safe
  *  to call after any token resolution — boot, PAT save, etc. */
-async function refreshHarnessStarState(): Promise<void> {
+async function refreshTatsuStarState(): Promise<void> {
   const token = getCachedToken()
   if (!token) {
-    store.dispatch({ type: 'settings/harnessStarredChanged', payload: null })
+    store.dispatch({ type: 'settings/tatsuStarredChanged', payload: null })
     return
   }
-  const starred = await isRepoStarred(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
-  if (starred === false && !config.harnessAutoStarred) {
-    const result = await starRepo(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
+  const starred = await isRepoStarred(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
+  if (starred === false && !config.tatsuAutoStarred) {
+    const result = await starRepo(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
     if (result.ok) {
-      config.harnessAutoStarred = true
+      config.tatsuAutoStarred = true
       saveConfig(config)
-      store.dispatch({ type: 'settings/harnessStarredChanged', payload: true })
-      log('app', 'auto-starred harness on first GitHub connection')
+      store.dispatch({ type: 'settings/tatsuStarredChanged', payload: true })
+      log('app', 'auto-starred tatsu on first GitHub connection')
       return
     }
     log('app', 'auto-star failed', result.error)
   }
-  store.dispatch({ type: 'settings/harnessStarredChanged', payload: starred })
+  store.dispatch({ type: 'settings/tatsuStarredChanged', payload: starred })
 }
 
 const prPoller = new PRPoller(store, {
@@ -1648,46 +1648,46 @@ function registerIpcHandlers(): void {
     return true
   })
 
-  transport.onRequest('config:setHarnessSystemPromptEnabled', (_ctx, enabled: boolean) => {
+  transport.onRequest('config:setTatsuSystemPromptEnabled', (_ctx, enabled: boolean) => {
     if (enabled) {
-      delete config.harnessSystemPromptEnabled
+      delete config.tatsuSystemPromptEnabled
     } else {
-      config.harnessSystemPromptEnabled = false
+      config.tatsuSystemPromptEnabled = false
     }
     saveConfig(config)
     store.dispatch({
-      type: 'settings/harnessSystemPromptEnabledChanged',
-      payload: config.harnessSystemPromptEnabled !== false
+      type: 'settings/tatsuSystemPromptEnabledChanged',
+      payload: config.tatsuSystemPromptEnabled !== false
     })
     return true
   })
 
-  transport.onRequest('config:setHarnessSystemPrompt', (_ctx, prompt: string) => {
+  transport.onRequest('config:setTatsuSystemPrompt', (_ctx, prompt: string) => {
     const trimmed = prompt.trim()
-    if (!trimmed || trimmed === DEFAULT_HARNESS_SYSTEM_PROMPT) {
-      delete config.harnessSystemPrompt
+    if (!trimmed || trimmed === DEFAULT_TATSU_SYSTEM_PROMPT) {
+      delete config.tatsuSystemPrompt
     } else {
-      config.harnessSystemPrompt = prompt
+      config.tatsuSystemPrompt = prompt
     }
     saveConfig(config)
     store.dispatch({
-      type: 'settings/harnessSystemPromptChanged',
-      payload: config.harnessSystemPrompt || DEFAULT_HARNESS_SYSTEM_PROMPT
+      type: 'settings/tatsuSystemPromptChanged',
+      payload: config.tatsuSystemPrompt || DEFAULT_TATSU_SYSTEM_PROMPT
     })
     return true
   })
 
-  transport.onRequest('config:setHarnessSystemPromptMain', (_ctx, prompt: string) => {
+  transport.onRequest('config:setTatsuSystemPromptMain', (_ctx, prompt: string) => {
     const trimmed = prompt.trim()
-    if (!trimmed || trimmed === DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN) {
-      delete config.harnessSystemPromptMain
+    if (!trimmed || trimmed === DEFAULT_TATSU_SYSTEM_PROMPT_MAIN) {
+      delete config.tatsuSystemPromptMain
     } else {
-      config.harnessSystemPromptMain = prompt
+      config.tatsuSystemPromptMain = prompt
     }
     saveConfig(config)
     store.dispatch({
-      type: 'settings/harnessSystemPromptMainChanged',
-      payload: config.harnessSystemPromptMain || DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN
+      type: 'settings/tatsuSystemPromptMainChanged',
+      payload: config.tatsuSystemPromptMain || DEFAULT_TATSU_SYSTEM_PROMPT_MAIN
     })
     return true
   })
@@ -1707,22 +1707,22 @@ function registerIpcHandlers(): void {
     return true
   })
 
-  transport.onRequest('config:setHarnessMcpEnabled', (_ctx, enabled: boolean) => {
+  transport.onRequest('config:setTatsuMcpEnabled', (_ctx, enabled: boolean) => {
     if (enabled) {
-      delete config.harnessMcpEnabled
+      delete config.tatsuMcpEnabled
     } else {
-      config.harnessMcpEnabled = false
+      config.tatsuMcpEnabled = false
     }
     saveConfig(config)
     store.dispatch({
-      type: 'settings/harnessMcpEnabledChanged',
-      payload: config.harnessMcpEnabled !== false
+      type: 'settings/tatsuMcpEnabledChanged',
+      payload: config.tatsuMcpEnabled !== false
     })
     return true
   })
 
   transport.onRequest('mcp:prepareForTerminal', (_ctx, terminalId: string): string | null => {
-    if (config.harnessMcpEnabled === false) return null
+    if (config.tatsuMcpEnabled === false) return null
     if (!terminalId) return null
     return writeMcpConfigForTerminal(terminalId, resolveCallerScope(terminalId))
   })
@@ -2262,7 +2262,7 @@ function registerIpcHandlers(): void {
       invalidateTokenCache()
       await resolveGitHubToken()
       store.dispatch({ type: 'settings/githubAuthSourceChanged', payload: getTokenSource() })
-      await refreshHarnessStarState()
+      await refreshTatsuStarState()
       return { ok: true }
     }
     // Validate the token first by hitting /user
@@ -2274,7 +2274,7 @@ function registerIpcHandlers(): void {
     await resolveGitHubToken()
     store.dispatch({ type: 'settings/githubAuthSourceChanged', payload: getTokenSource() })
     void refreshViewerLogin()
-    await refreshHarnessStarState()
+    await refreshTatsuStarState()
     return { ok: true, username: test.username }
   })
 
@@ -2285,18 +2285,18 @@ function registerIpcHandlers(): void {
     await resolveGitHubToken()
     store.dispatch({ type: 'settings/githubAuthSourceChanged', payload: getTokenSource() })
     void refreshViewerLogin()
-    await refreshHarnessStarState()
+    await refreshTatsuStarState()
     return true
   })
 
-  transport.onRequest('settings:setHarnessStarred', async (_ctx, starred: boolean) => {
+  transport.onRequest('settings:setTatsuStarred', async (_ctx, starred: boolean) => {
     const token = getCachedToken()
     if (!token) return { ok: false, error: 'No GitHub token' }
     const result = starred
-      ? await starRepo(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
-      : await unstarRepo(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
+      ? await starRepo(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
+      : await unstarRepo(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
     if (result.ok) {
-      store.dispatch({ type: 'settings/harnessStarredChanged', payload: starred })
+      store.dispatch({ type: 'settings/tatsuStarredChanged', payload: starred })
     }
     return result
   })
@@ -2305,7 +2305,7 @@ function registerIpcHandlers(): void {
   // clients (web client, multi-backend Electron remotes) ask for it.
   // Reads from package.json / VERSION rather than Electron's
   // app.getVersion() so the headless server can answer without an `app`.
-  transport.onRequest('updater:getVersion', (_ctx) => getHarnessVersion())
+  transport.onRequest('updater:getVersion', (_ctx) => getTatsuVersion())
 
   // updater:checkForUpdates / updater:quitAndInstall: the real
   // implementations live in desktop-shell.ts (they drive electron-updater
@@ -3131,7 +3131,7 @@ async function runBoot(): Promise<void> {
     prPoller.start()
     void prPoller.refreshAll()
 
-    await refreshHarnessStarState()
+    await refreshTatsuStarState()
   })()
 
   announcementsPoller.start()

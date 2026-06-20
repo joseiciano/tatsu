@@ -5,7 +5,7 @@ import {
   type AppState,
   type WireSnapshotState
 } from './index'
-import { EMPTY_CUSTOM_THEMES } from './settings'
+import { EMPTY_CUSTOM_THEMES, type SettingsState } from './settings'
 
 describe('mergeWireSnapshot', () => {
   it('fills in a recently-added field missing from an older servers settings', () => {
@@ -69,3 +69,36 @@ describe('mergeWireSnapshot', () => {
     expect(merged.settings.customThemes).toEqual([])
   })
 })
+
+  it('maps legacy harness* field names to tatsu* in settings slice', () => {
+    const wire: WireSnapshotState = {
+      settings: {
+        themeMode: 'dark' as const,
+        themeLight: 'solarized-light',
+        themeDark: 'dark',
+        // Old field names from a pre-name-change server
+        harnessMcpEnabled: false,
+        harnessStarred: true,
+        harnessSystemPromptEnabled: false,
+        harnessSystemPrompt: 'old prompt',
+        harnessSystemPromptMain: 'old main'
+      } as Record<string, unknown> as Partial<SettingsState>
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.tatsuMcpEnabled).toBe(false)
+    expect(merged.settings.tatsuStarred).toBe(true)
+    expect(merged.settings.tatsuSystemPromptEnabled).toBe(false)
+    expect(merged.settings.tatsuSystemPrompt).toBe('old prompt')
+    expect(merged.settings.tatsuSystemPromptMain).toBe('old main')
+  })
+
+  it('prefers new tatsu* field names over legacy harness* when both present', () => {
+    const wire: WireSnapshotState = {
+      settings: {
+        tatsuMcpEnabled: false,
+        harnessMcpEnabled: true // legacy, should be ignored
+      } as Record<string, unknown> as Partial<SettingsState>
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.tatsuMcpEnabled).toBe(false)
+  })

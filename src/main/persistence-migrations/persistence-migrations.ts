@@ -194,7 +194,26 @@ export const migrations: Migration[] = [
       c.themeDark = legacy
     }
     delete c.theme
-  }
+  },
+
+  // v7 → v8: rename harness-* config keys to tatsu-* (app rename).
+  // Each key is renamed if the new key is not already present.
+  // Old keys are always cleaned up regardless.
+  (c) => {
+    const renames: Array<[string, string]> = [
+      ['harnessMcpEnabled', 'tatsuMcpEnabled'],
+      ['harnessSystemPromptEnabled', 'tatsuSystemPromptEnabled'],
+      ['harnessSystemPrompt', 'tatsuSystemPrompt'],
+      ['harnessSystemPromptMain', 'tatsuSystemPromptMain'],
+      ['harnessAutoStarred', 'tatsuAutoStarred']
+    ]
+    for (const [oldKey, newKey] of renames) {
+      if (oldKey in c) {
+        if (!(newKey in c)) c[newKey] = c[oldKey]
+        delete c[oldKey]
+      }
+    }
+  },
 ]
 
 function flatPanesToTree(panes: PersistedPane[]): PersistedPaneNode {

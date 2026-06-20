@@ -1,14 +1,14 @@
 import type { Worktree } from '../../shared/state/worktrees'
 import {
-  DEFAULT_HARNESS_SYSTEM_PROMPT,
-  DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN
+  DEFAULT_TATSU_SYSTEM_PROMPT,
+  DEFAULT_TATSU_SYSTEM_PROMPT_MAIN
 } from '../persistence'
 
 export interface ClaudeLaunchConfig {
   claudeModel?: string
-  harnessSystemPrompt?: string
-  harnessSystemPromptEnabled?: boolean
-  harnessSystemPromptMain?: string
+  tatsuSystemPrompt?: string
+  tatsuSystemPromptEnabled?: boolean
+  tatsuSystemPromptMain?: string
   claudeTuiFullscreen?: boolean
   nameClaudeSessions?: boolean
 }
@@ -35,11 +35,11 @@ export function buildClaudeLaunchSettings(input: {
   const isMain = wt?.isMain ?? false
 
   let systemPrompt: string | undefined
-  if (config.harnessSystemPromptEnabled !== false) {
-    const base = config.harnessSystemPrompt || DEFAULT_HARNESS_SYSTEM_PROMPT
+  if (config.tatsuSystemPromptEnabled !== false) {
+    const base = config.tatsuSystemPrompt || DEFAULT_TATSU_SYSTEM_PROMPT
     if (isMain) {
       const mainAddition =
-        config.harnessSystemPromptMain || DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN
+        config.tatsuSystemPromptMain || DEFAULT_TATSU_SYSTEM_PROMPT_MAIN
       systemPrompt = `${base}\n\n${mainAddition}`
     } else {
       systemPrompt = base

@@ -50,7 +50,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { type GroupKey } from '../worktree-sort'
 import { useViewport } from '../hooks/useViewport'
 import { MobileApp } from '../components/MobileApp'
-import { harnessReleaseNotesUrl } from '../../shared/constants'
+import { tatsuReleaseNotesUrl } from '../../shared/constants'
 
 function isPendingId(id: string | null | undefined): id is string {
   return typeof id === 'string' && id.startsWith('pending:')
@@ -1163,7 +1163,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
         <div className="bg-success/15 border-b border-success/30 pl-20 pr-4 py-2.5 drag-region flex items-center gap-3 shrink-0">
           <span className="text-success text-sm flex-1">
             <a
-              onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+              onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
               className="underline hover:text-success cursor-pointer no-drag"
             >
               Tatsu {updaterStatus.version}

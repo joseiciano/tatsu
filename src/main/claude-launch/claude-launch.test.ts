@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { buildClaudeLaunchSettings } from '.'
 import {
-  DEFAULT_HARNESS_SYSTEM_PROMPT,
-  DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN
+  DEFAULT_TATSU_SYSTEM_PROMPT,
+  DEFAULT_TATSU_SYSTEM_PROMPT_MAIN
 } from '../persistence'
 import type { Worktree } from '../../shared/state/worktrees'
 
@@ -20,14 +20,14 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
 }
 
 describe('buildClaudeLaunchSettings', () => {
-  it('returns the base harness system prompt for a non-main worktree', () => {
+  it('returns the base tatsu system prompt for a non-main worktree', () => {
     const wt = makeWorktree()
     const out = buildClaudeLaunchSettings({
       cwd: wt.path,
       worktrees: [wt],
       config: {}
     })
-    expect(out.systemPrompt).toBe(DEFAULT_HARNESS_SYSTEM_PROMPT)
+    expect(out.systemPrompt).toBe(DEFAULT_TATSU_SYSTEM_PROMPT)
   })
 
   it('appends the main-worktree addition when isMain', () => {
@@ -38,29 +38,29 @@ describe('buildClaudeLaunchSettings', () => {
       config: {}
     })
     expect(out.systemPrompt).toBe(
-      `${DEFAULT_HARNESS_SYSTEM_PROMPT}\n\n${DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN}`
+      `${DEFAULT_TATSU_SYSTEM_PROMPT}\n\n${DEFAULT_TATSU_SYSTEM_PROMPT_MAIN}`
     )
   })
 
-  it('honors custom harnessSystemPrompt + harnessSystemPromptMain overrides', () => {
+  it('honors custom tatsuSystemPrompt + tatsuSystemPromptMain overrides', () => {
     const wt = makeWorktree({ isMain: true, path: '/tmp/repo' })
     const out = buildClaudeLaunchSettings({
       cwd: wt.path,
       worktrees: [wt],
       config: {
-        harnessSystemPrompt: 'BASE',
-        harnessSystemPromptMain: 'MAIN'
+        tatsuSystemPrompt: 'BASE',
+        tatsuSystemPromptMain: 'MAIN'
       }
     })
     expect(out.systemPrompt).toBe('BASE\n\nMAIN')
   })
 
-  it('omits systemPrompt entirely when harnessSystemPromptEnabled is false', () => {
+  it('omits systemPrompt entirely when tatsuSystemPromptEnabled is false', () => {
     const wt = makeWorktree()
     const out = buildClaudeLaunchSettings({
       cwd: wt.path,
       worktrees: [wt],
-      config: { harnessSystemPromptEnabled: false }
+      config: { tatsuSystemPromptEnabled: false }
     })
     expect(out.systemPrompt).toBeUndefined()
   })
@@ -70,7 +70,7 @@ describe('buildClaudeLaunchSettings', () => {
     const out = buildClaudeLaunchSettings({
       cwd: wt.path,
       worktrees: [wt],
-      config: { harnessSystemPrompt: '   ', harnessSystemPromptMain: '   ' }
+      config: { tatsuSystemPrompt: '   ', tatsuSystemPromptMain: '   ' }
     })
     expect(out.systemPrompt).toBeUndefined()
   })

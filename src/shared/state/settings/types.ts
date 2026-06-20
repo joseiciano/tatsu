@@ -72,7 +72,7 @@ export interface SettingsState {
   claudeEnvVars: Record<string, string>
   codexEnvVars: Record<string, string>
   opencodeEnvVars: Record<string, string>
-  harnessMcpEnabled: boolean
+  tatsuMcpEnabled: boolean
   nameClaudeSessions: boolean
   terminalFontFamily: string
   terminalFontSize: number
@@ -91,11 +91,11 @@ export interface SettingsState {
    *  sidebar to bucket PRs you didn't author into the Reviewing group;
    *  null until resolved or when the token is missing/invalid. */
   viewerLogin: string | null
-  harnessStarred: boolean | null
+  tatsuStarred: boolean | null
   autoUpdateEnabled: boolean
-  harnessSystemPromptEnabled: boolean
-  harnessSystemPrompt: string
-  harnessSystemPromptMain: string
+  tatsuSystemPromptEnabled: boolean
+  tatsuSystemPrompt: string
+  tatsuSystemPromptMain: string
   claudeTuiFullscreen: boolean
   wsTransportEnabled: boolean
   wsTransportPort: number
@@ -188,7 +188,7 @@ export type SettingsEvent =
   | { type: 'settings/claudeEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/codexEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/opencodeEnvVarsChanged'; payload: Record<string, string> }
-  | { type: 'settings/harnessMcpEnabledChanged'; payload: boolean }
+  | { type: 'settings/tatsuMcpEnabledChanged'; payload: boolean }
   | { type: 'settings/nameClaudeSessionsChanged'; payload: boolean }
   | { type: 'settings/terminalFontFamilyChanged'; payload: string }
   | { type: 'settings/terminalFontSizeChanged'; payload: number }
@@ -200,14 +200,14 @@ export type SettingsEvent =
   | { type: 'settings/hasGithubTokenChanged'; payload: boolean }
   | { type: 'settings/githubAuthSourceChanged'; payload: 'pat' | 'gh-cli' | null }
   | { type: 'settings/viewerLoginChanged'; payload: string | null }
-  | { type: 'settings/harnessStarredChanged'; payload: boolean | null }
+  | { type: 'settings/tatsuStarredChanged'; payload: boolean | null }
   | { type: 'settings/claudeModelChanged'; payload: string | null }
   | { type: 'settings/codexModelChanged'; payload: string | null }
   | { type: 'settings/opencodeModelChanged'; payload: string | null }
   | { type: 'settings/autoUpdateEnabledChanged'; payload: boolean }
-  | { type: 'settings/harnessSystemPromptEnabledChanged'; payload: boolean }
-  | { type: 'settings/harnessSystemPromptChanged'; payload: string }
-  | { type: 'settings/harnessSystemPromptMainChanged'; payload: string }
+  | { type: 'settings/tatsuSystemPromptEnabledChanged'; payload: boolean }
+  | { type: 'settings/tatsuSystemPromptChanged'; payload: string }
+  | { type: 'settings/tatsuSystemPromptMainChanged'; payload: string }
   | { type: 'settings/claudeTuiFullscreenChanged'; payload: boolean }
   | { type: 'settings/wsTransportEnabledChanged'; payload: boolean }
   | { type: 'settings/wsTransportPortChanged'; payload: number }

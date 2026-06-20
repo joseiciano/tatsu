@@ -25,8 +25,8 @@ import {
   DEFAULT_WORKTREE_BASE,
   DEFAULT_MERGE_STRATEGY,
   DEFAULT_WORKTREE_DETAIL,
-  DEFAULT_HARNESS_SYSTEM_PROMPT,
-  DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
+  DEFAULT_TATSU_SYSTEM_PROMPT,
+  DEFAULT_TATSU_SYSTEM_PROMPT_MAIN,
   type Config
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
@@ -90,7 +90,7 @@ export function buildInitialAppState(
       claudeEnvVars: config.claudeEnvVars || {},
       codexEnvVars: config.codexEnvVars || {},
       opencodeEnvVars: config.opencodeEnvVars || {},
-      harnessMcpEnabled: config.harnessMcpEnabled !== false,
+      tatsuMcpEnabled: config.tatsuMcpEnabled !== false,
       nameClaudeSessions: config.nameClaudeSessions ?? false,
       terminalFontFamily: config.terminalFontFamily || DEFAULT_TERMINAL_FONT_FAMILY,
       terminalFontSize: config.terminalFontSize || DEFAULT_TERMINAL_FONT_SIZE,
@@ -104,9 +104,9 @@ export function buildInitialAppState(
       hasGithubToken: opts.hasGithubToken,
       autoUpdateEnabled: config.autoUpdateEnabled !== false,
       shareClaudeSettings: config.shareClaudeSettings !== false,
-      harnessSystemPromptEnabled: config.harnessSystemPromptEnabled !== false,
-      harnessSystemPrompt: config.harnessSystemPrompt || DEFAULT_HARNESS_SYSTEM_PROMPT,
-      harnessSystemPromptMain: config.harnessSystemPromptMain || DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
+      tatsuSystemPromptEnabled: config.tatsuSystemPromptEnabled !== false,
+      tatsuSystemPrompt: config.tatsuSystemPrompt || DEFAULT_TATSU_SYSTEM_PROMPT,
+      tatsuSystemPromptMain: config.tatsuSystemPromptMain || DEFAULT_TATSU_SYSTEM_PROMPT_MAIN,
       claudeTuiFullscreen: config.claudeTuiFullscreen !== false,
       wsTransportEnabled: config.wsTransportEnabled === true,
       wsTransportPort: config.wsTransportPort ?? 37291,

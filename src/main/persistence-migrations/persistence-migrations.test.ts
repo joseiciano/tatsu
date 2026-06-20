@@ -436,3 +436,76 @@ describe('v6 → v7: legacy theme → themeMode + themeLight/themeDark', () => {
     expect(c.theme).toBeUndefined()
   })
 })
+
+describe('v7 → v8: harness* → tatsu* config keys', () => {
+  it('renames all harness-* config keys to tatsu-*', () => {
+    const c: AnyConfig = {
+      harnessMcpEnabled: false,
+      harnessSystemPromptEnabled: true,
+      harnessSystemPrompt: 'custom',
+      harnessSystemPromptMain: 'main hint',
+      harnessAutoStarred: true,
+      schemaVersion: 7
+    }
+    runOne(7, c)
+    expect(c.tatsuMcpEnabled).toBe(false)
+    expect(c.tatsuSystemPromptEnabled).toBe(true)
+    expect(c.tatsuSystemPrompt).toBe('custom')
+    expect(c.tatsuSystemPromptMain).toBe('main hint')
+    expect(c.tatsuAutoStarred).toBe(true)
+    expect(c.harnessMcpEnabled).toBeUndefined()
+    expect(c.harnessSystemPromptEnabled).toBeUndefined()
+    expect(c.harnessSystemPrompt).toBeUndefined()
+    expect(c.harnessSystemPromptMain).toBeUndefined()
+    expect(c.harnessAutoStarred).toBeUndefined()
+  })
+
+  it('does not overwrite existing tatsu-* keys with old harness-* values', () => {
+    const c: AnyConfig = {
+      tatsuMcpEnabled: false,
+      harnessMcpEnabled: true,
+      schemaVersion: 7
+    }
+    runOne(7, c)
+    expect(c.tatsuMcpEnabled).toBe(false)
+    expect(c.harnessMcpEnabled).toBeUndefined()
+  })
+
+  it('is a no-op when no legacy keys are present', () => {
+    const c: AnyConfig = {
+      repoRoots: ['/a/repo'],
+      schemaVersion: 7
+    }
+    const snapshot = JSON.parse(JSON.stringify(c))
+    runOne(7, c)
+    expect(c).toEqual(snapshot)
+  })
+
+  it('preserves unrelated keys', () => {
+    const c: AnyConfig = {
+      claudeCommand: 'claude',
+      harnessMcpEnabled: false,
+      schemaVersion: 7
+    }
+    runOne(7, c)
+    expect(c.claudeCommand).toBe('claude')
+    expect(c.tatsuMcpEnabled).toBe(false)
+    expect(c.harnessMcpEnabled).toBeUndefined()
+  })
+
+  it('end-to-end: harness-* keys survive the full migration chain', () => {
+    const c: AnyConfig = {
+      harnessMcpEnabled: false,
+      harnessSystemPrompt: 'legacy',
+      harnessAutoStarred: true,
+      repoRoots: ['/a/repo']
+    }
+    runMigrations(c)
+    expect(c.tatsuMcpEnabled).toBe(false)
+    expect(c.tatsuSystemPrompt).toBe('legacy')
+    expect(c.tatsuAutoStarred).toBe(true)
+    expect(c.harnessMcpEnabled).toBeUndefined()
+    expect(c.harnessSystemPrompt).toBeUndefined()
+    expect(c.harnessAutoStarred).toBeUndefined()
+  })
+})

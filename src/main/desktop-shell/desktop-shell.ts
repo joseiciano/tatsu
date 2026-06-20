@@ -44,7 +44,7 @@ import { registerWindowControlHandlers } from '../window-controls'
 import { sealAllActive } from '../activity'
 import { log, getLogFilePath } from '../debug'
 import { isManualUpdateInstallType } from '../manual-update'
-import { HARNESS_REPO_URL } from '../../shared/constants'
+import { TATSU_REPO_URL } from '../../shared/constants'
 import { resolveRepoPath } from '../repo-resolve'
 import { registerRepoRoot } from '../repo-roots'
 import type { AddRepoResult } from '../../shared/repo-pick'
@@ -213,7 +213,7 @@ export function startDesktopShell(deps: DesktopShellStartDeps): DesktopShellStar
         payload: {
           state: 'available',
           version: info.version,
-          releaseUrl: `${HARNESS_REPO_URL}/releases/tag/v${info.version}`,
+          releaseUrl: `${TATSU_REPO_URL}/releases/tag/v${info.version}`,
           manualInstallRequired
         }
       })
