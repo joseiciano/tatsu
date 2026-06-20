@@ -40,7 +40,7 @@ export function Install() {
       <div className="mt-12 p-6 bg-ink-950 border border-ink-800 rounded-xl">
         <div className="text-sm font-semibold text-ink-300 mb-3">After install</div>
         <ol className="text-sm text-ink-500 space-y-2 list-decimal pl-5">
-          <li>Pick a git repository when Harness asks.</li>
+          <li>Pick a git repository when Tatsu asks.</li>
           <li>
             Click the gear icon to paste a GitHub personal access token (optional, needed for PR
             status).

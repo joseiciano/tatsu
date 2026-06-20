@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Release script for Harness.
+# Release script for Tatsu.
 #
 # Usage: ./scripts/release.sh <version>
 # Example: ./scripts/release.sh 1.0.1
@@ -119,7 +119,7 @@ ok "claude CLI is available"
 
 # Confirm before proceeding
 echo
-echo "${BOLD}Ready to prepare Harness v${VERSION}${RESET}"
+echo "${BOLD}Ready to prepare Tatsu v${VERSION}${RESET}"
 echo "  Commit: $(git rev-parse --short HEAD)"
 echo "  Tag:    $TAG"
 echo
@@ -286,7 +286,7 @@ if [ -s "$CONTRIBUTORS_FILE" ]; then
 fi
 
 cat > "$RELEASE_NOTES_FILE" <<EOF
-## Harness ${TAG}
+## Tatsu ${TAG}
 
 ### Changes
 ${CHANGES}${CONTRIBUTORS_SECTION}

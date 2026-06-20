@@ -63,7 +63,7 @@ jobs:
             echo "Release $TAG already exists — skipping create (re-run scenario)."
           else
             gh release create "$TAG" \
-              --title "Harness $TAG" \
+              --title "Tatsu $TAG" \
               --notes-file "$NOTES"
           fi
 

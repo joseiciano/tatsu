@@ -303,3 +303,8 @@ Every remaining hit should be classified as one of:
 3. `Update package identity for Tatsu`
 4. `Add Tatsu runtime names with Harness compatibility`
 5. `Rename internal Harness identifiers to Tatsu`
+
+## Follow Ups
+
+- Update production domain from `harness.mikelyons.org` to new Tatsu domain once decided (affects `site/public/CNAME`, all site/README URL references, OG image URLs).
+- Update GitHub repo references from `frenchie4111/harness` to new repo owner/name once decided (affects `scripts/release.sh`, `scripts/install-headless.sh`, README links, site components, package.json publish config).

@@ -2,7 +2,7 @@
 // Manual smoke test for the WS transport.
 //
 // Usage:
-//   1. Start Harness with the WS transport on: HARNESS_WS_TRANSPORT=1 npm run dev
+//   1. Start Tatsu with the WS transport on: HARNESS_WS_TRANSPORT=1 npm run dev
 //   2. Copy the token the main process logs to stdout.
 //   3. node scripts/ws-smoke.mjs <token> [port]
 //

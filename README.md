@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/public/icon.png" alt="Harness" width="128" height="128" />
+  <img src="site/public/icon.png" alt="Tatsu" width="128" height="128" />
 </p>
 
 <h1 align="center">Run a team of agents.</h1>
@@ -21,18 +21,18 @@
   <a href="https://harness.mikelyons.org/guide.html">Guide</a>
 </p>
 
-![Harness](site/public/harness-demo-poster.jpg)
+![Tatsu](site/public/harness-demo-poster.jpg)
 
 <table>
   <tr>
     <td width="50%" valign="top">
       <h3>Mobile mode</h3>
-      <img src="site/public/screenshot-mobile.svg" alt="Harness running on a phone, with sidebar of agents and a terminal pane" />
+      <img src="site/public/screenshot-mobile.svg" alt="Tatsu running on a phone, with sidebar of agents and a terminal pane" />
       <p>Control your agents from your phone. Guaranteed to be better than Claude's shitty remote UI.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Browser control</h3>
-      <img src="site/public/screenshot-browser.png" alt="Harness with an embedded browser tab the agent is driving" />
+      <img src="site/public/screenshot-browser.png" alt="Tatsu with an embedded browser tab the agent is driving" />
       <p>Give agents control of your browser. Useful for testing your code locally, or just ordering groceries.</p>
     </td>
   </tr>
@@ -52,12 +52,12 @@ Grab the latest release from the [releases page](https://github.com/frenchie4111
 ### macOS
 
 1. Download the `.dmg` for your Mac architecture from the links above.
-2. Open the `.dmg` and drag **Harness** into your Applications folder.
-3. Launch Harness from Applications. The app is signed and notarized, so it should open without any Gatekeeper warnings.
+2. Open the `.dmg` and drag **Tatsu** into your Applications folder.
+3. Launch Tatsu from Applications. The app is signed and notarized, so it should open without any Gatekeeper warnings.
 4. On first launch:
    - Pick a git repository when prompted.
    - Click the ⚙ gear icon in the sidebar and paste a [GitHub personal access token](https://github.com/settings/tokens?type=beta) (fine-grained or classic, with `repo` scope). This is optional but required for the PR status panel and checks.
-   - When the hooks consent banner appears, click **Enable** so Harness can install status-tracking hooks globally at `~/.claude/settings.json`. One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the bash command built by `makeHookCommand` — it appends one line of JSON per event to `/tmp/harness-status/<id>.ndjson`) and [`src/main/agents/claude.ts`](src/main/agents/claude.ts) (where the install/uninstall logic lives).
+   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally at `~/.claude/settings.json`. One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the bash command built by `makeHookCommand` — it appends one line of JSON per event to `/tmp/harness-status/<id>.ndjson`) and [`src/main/agents/claude.ts`](src/main/agents/claude.ts) (where the install/uninstall logic lives).
 
 ### Linux
 
@@ -95,13 +95,13 @@ sudo sysctl --system
 
 ### Network access
 
-Harness makes outbound network calls to two places: `api.github.com` (for PR status, check runs, and review state on worktrees that have an open PR) and this project's own GitHub releases feed (for auto-updates via `electron-updater`). If you have the [`gh`](https://cli.github.com) CLI installed and authenticated, Harness will optionally pick up your token from it instead of requiring you to paste a PAT.
+Tatsu makes outbound network calls to two places: `api.github.com` (for PR status, check runs, and review state on worktrees that have an open PR) and this project's own GitHub releases feed (for auto-updates via `electron-updater`). If you have the [`gh`](https://cli.github.com) CLI installed and authenticated, Tatsu will optionally pick up your token from it instead of requiring you to paste a PAT.
 
 The optional remote-control WebSocket transport (used by the web client) is off by default, bearer-token-authed, and bound to `127.0.0.1` when enabled; opting in to LAN access (binding to `0.0.0.0`) is a separate explicit config flag.
 
 ## Headless server
 
-Run Harness on a remote dev box and connect from a local browser, mobile phone, or the Electron app. The headless server is a single tarball (no host Node, no other deps) that ships an embedded Node, the bundled `claude` binary, the web client, and the MCP bridge.
+Run Tatsu on a remote dev box and connect from a local browser, mobile phone, or the Electron app. The headless server is a single tarball (no host Node, no other deps) that ships an embedded Node, the bundled `claude` binary, the web client, and the MCP bridge.
 
 Install with one command:
 
@@ -131,15 +131,15 @@ Re-running the install script bumps the version. There's no in-place self-update
 
 ### Connecting the Electron app to a remote server
 
-Once `harness-server` is running on a remote machine, you can drive it from your local Electron Harness alongside the local backend. Open the Harness sidebar's backend chip strip (or `File → Add Backend…`), paste the connection link the host's Settings shows (`http://host:port/?token=...`), and click "Test & save". The link's the same one the browser web client uses; Harness parses out the token, validates the connection, and persists the backend.
+Once `harness-server` is running on a remote machine, you can drive it from your local Electron Tatsu alongside the local backend. Open the Tatsu sidebar's backend chip strip (or `File → Add Backend…`), paste the connection link the host's Settings shows (`http://host:port/?token=...`), and click "Test & save". The link's the same one the browser web client uses; Tatsu parses out the token, validates the connection, and persists the backend.
 
 Once added, the chip appears at the bottom of the sidebar. Click to switch — `Cmd+Shift+1..9` jumps directly to the Nth backend (Local is always 1). Each backend has its own worktrees, terminals, browser tabs, and settings; switching changes which backend's UI is rendered, and inactive backends keep streaming so notifications still work. The connections list is encrypted (tokens in `secrets.enc`) and persists across restarts.
 
 ## Uninstallation
 
-1. **Remove the Claude Code hooks** (do this while Harness is still running). Open Settings → **Agent** → **Status hooks** and click **Remove hooks**. This strips Harness's entries from `~/.claude/settings.json` and leaves any user-authored hooks intact.
+1. **Remove the Claude Code hooks** (do this while Tatsu is still running). Open Settings → **Agent** → **Status hooks** and click **Remove hooks**. This strips Tatsu's entries from `~/.claude/settings.json` and leaves any user-authored hooks intact.
 
-2. **Quit Harness** with ⌘Q.
+2. **Quit Tatsu** with ⌘Q.
 
 3. **Delete the app:**
 
@@ -159,9 +159,9 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    rm -rf ~/Library/Logs/Harness
    ```
 
-5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open `~/.claude/settings.json` and delete any hook entries whose object contains `"_marker": "__claude_harness__"` — every Harness-managed hook is tagged with that marker, so they're safe to identify and remove.
+5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open `~/.claude/settings.json` and delete any hook entries whose object contains `"_marker": "__claude_harness__"` — every Tatsu-managed hook is tagged with that marker, so they're safe to identify and remove.
 
-6. **Optional — clean up worktrees.** Harness may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
+6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
 
    ```sh
    cd <your-repo>
@@ -176,14 +176,14 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 - **Multi-agent** — run Claude Code or Codex in the same window, one harness for both
 - **Multi-repo** — manage multiple repos in a single window, switch between them or see everything at once
 - **Live PR status** — see open PRs and CI checks for every worktree, auto-sorted by urgency
-- **Embedded editor** — full Monaco-powered editor for tweaking files without leaving Harness
+- **Embedded editor** — full Monaco-powered editor for tweaking files without leaving Tatsu
 - **Full code review tool** — side-by-side syntax-highlighted diffs for every changed file in a worktree
 - **Status at a glance** — sidebar dots show which agent is working, waiting, or needs approval (powered by Claude Code hooks)
 - **Command center** — bird's-eye grid of every worktree with mini activity timelines
 - **Tabs + vertical split panes** — Claude, shells, and editor/diff tabs scoped to each checkout, splittable side-by-side
 - **9 themes** — dark, dracula, nord, gruvbox, tokyo night, catppuccin, one dark, solarized dark/light
 - **Configurable hotkeys** — ⌘1–⌘9 to jump between worktrees, all rebindable
-- **MCP: Claude controls Harness** — a built-in MCP server lets Claude create and list worktrees on its own
+- **MCP: Claude controls Tatsu** — a built-in MCP server lets Claude create and list worktrees on its own
 
 ## Why did I build this
 
