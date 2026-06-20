@@ -62,7 +62,7 @@ async function getFirstTagContaining(worktreePath: string, sha: string): Promise
 async function doFetch(url: string, token: string | null): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'Harness',
+    'User-Agent': 'Tatsu',
     'X-GitHub-Api-Version': '2022-11-28'
   }
   if (token) headers.Authorization = `Bearer ${token}`
@@ -236,7 +236,7 @@ ${PR_FRAGMENT}`
     method: 'POST',
     headers: {
       Accept: 'application/vnd.github+json',
-      'User-Agent': 'Harness',
+      'User-Agent': 'Tatsu',
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
@@ -448,7 +448,7 @@ export async function isRepoStarred(token: string, owner: string, repo: string):
     const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'Harness',
+        'User-Agent': 'Tatsu',
         Authorization: `Bearer ${token}`
       }
     })
@@ -466,7 +466,7 @@ export async function unstarRepo(token: string, owner: string, repo: string): Pr
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'Harness',
+        'User-Agent': 'Tatsu',
         Authorization: `Bearer ${token}`,
         'X-GitHub-Api-Version': '2022-11-28'
       }
@@ -484,7 +484,7 @@ export async function starRepo(token: string, owner: string, repo: string): Prom
       method: 'PUT',
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'Harness',
+        'User-Agent': 'Tatsu',
         Authorization: `Bearer ${token}`,
         'X-GitHub-Api-Version': '2022-11-28',
         'Content-Length': '0'
@@ -515,7 +515,7 @@ export async function mergePR(
       method: 'PUT',
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'Harness',
+        'User-Agent': 'Tatsu',
         'X-GitHub-Api-Version': '2022-11-28',
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -639,7 +639,7 @@ export async function testToken(token: string): Promise<{ ok: boolean; username?
     const res = await trackedFetch('https://api.github.com/user', {
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'Harness',
+        'User-Agent': 'Tatsu',
         Authorization: `Bearer ${token}`
       }
     })

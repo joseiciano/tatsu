@@ -21,7 +21,7 @@ vi.mock('../debug', () => ({
 }))
 
 vi.mock('../hooks', () => ({
-  // Match the real shape — every Harness hook command embeds the
+  // Match the real shape — every Tatsu hook command embeds the
   // status-dir path. That substring is what dedup recognizes.
   makeHookCommand: (event: string) =>
     `bash -c 'd=/tmp/harness-status; printf "${event}" >> "$d/$h.ndjson"'`

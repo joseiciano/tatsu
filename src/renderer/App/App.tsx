@@ -849,10 +849,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
             <div className="text-center mb-6">
               <img
                 src={iconUrl}
-                alt="Harness"
+                alt="Tatsu"
                 className="w-16 h-16 mx-auto rounded-2xl mb-4 brand-glow-amber"
               />
-              <h1 className="gradient-text text-3xl font-extrabold tracking-tight mb-2">Harness</h1>
+              <h1 className="gradient-text text-3xl font-extrabold tracking-tight mb-2">Tatsu</h1>
               <p className="text-fg text-sm leading-relaxed max-w-md mx-auto">
                 Run many coding agents in parallel — one window, isolated git worktrees,
                 clear status on who needs you.
@@ -1052,7 +1052,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                   <div className="flex-1 min-w-0">
                     <div className="text-fg-bright text-sm font-medium">Install status hooks</div>
                     <div className="text-xs text-dim mt-0.5">
-                      Adds a small hook at <code className="bg-app/50 px-1 rounded">~/.claude/settings.json</code> (and the Codex equivalent) so Harness can tell when an agent is{' '}
+                      Adds a small hook at <code className="bg-app/50 px-1 rounded">~/.claude/settings.json</code> (and the Codex equivalent) so Tatsu can tell when an agent is{' '}
                       <span className="inline-flex items-center gap-1 whitespace-nowrap">
                         <span className="w-1.5 h-1.5 rounded-full bg-success" />
                         <span className="text-fg">working</span>
@@ -1064,7 +1064,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                       <span className="inline-flex items-center gap-1 whitespace-nowrap">
                         <span className="w-1.5 h-1.5 rounded-full bg-danger" />
                         <span className="text-fg">asking for approval</span>
-                      </span>. Only fires for sessions Harness launches — others are untouched.
+                      </span>. Only fires for sessions Tatsu launches — others are untouched.
                     </div>
                   </div>
                 </div>
@@ -1111,7 +1111,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-fg-bright text-sm font-medium">Open a git repository</div>
-                    <div className="text-xs text-dim mt-0.5">Harness creates worktrees inside a sibling folder — your original repo stays untouched.</div>
+                    <div className="text-xs text-dim mt-0.5">Tatsu creates worktrees inside a sibling folder — your original repo stays untouched.</div>
                   </div>
                 </div>
                 <div className="ml-8 flex items-center gap-3 flex-wrap">
@@ -1166,7 +1166,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
               onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
               className="underline hover:text-success cursor-pointer no-drag"
             >
-              Harness {updaterStatus.version}
+              Tatsu {updaterStatus.version}
             </a>{' '}
             is ready to install. Restart to update.
           </span>
@@ -1192,7 +1192,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
         !manualUpdateBannerDismissed && (
           <div className="bg-info/15 border-b border-info/30 pl-20 pr-4 py-2.5 drag-region flex items-center gap-3 shrink-0">
             <span className="text-info text-sm flex-1">
-              Harness {updaterStatus.version} is available. Download the new package from
+              Tatsu {updaterStatus.version} is available. Download the new package from
               GitHub Releases to update.
             </span>
             <button
@@ -1268,16 +1268,16 @@ const setQuestStep = useCallback((next: QuestStep) => {
         </div>
       )}
 
-      {/* Hooks consent banner — one-time prompt at first launch. Harness
+      {/* Hooks consent banner — one-time prompt at first launch. Tatsu
           installs agent status hooks at ~/.claude/settings.json (+ Codex
           equivalent). The hook command is gated on $HARNESS_TERMINAL_ID
-          so sessions spawned outside Harness are unaffected. */}
+          so sessions spawned outside Tatsu are unaffected. */}
       {hooksConsent === 'pending' && (
         <div className="bg-warning/15 border-b border-warning/30 pl-20 pr-4 py-2.5 drag-region flex items-center gap-3 shrink-0">
           <span className="text-warning text-sm flex-1">
-            Harness installs status hooks at <code className="text-xs">~/.claude/settings.json</code> to detect
+            Tatsu installs status hooks at <code className="text-xs">~/.claude/settings.json</code> to detect
             agent state (waiting, processing, needs approval). They only fire for agents you
-            launch inside Harness and can be removed at any time from Settings.
+            launch inside Tatsu and can be removed at any time from Settings.
           </span>
           <button
             onClick={handleAcceptHooks}

@@ -811,9 +811,9 @@ const autoSleepMonitor = new AutoSleepMonitor(store, panesFSM)
 /** Install agent status hooks at the user-scope settings file for both
  *  supported agents. Called once when consent flips to 'accepted'. The
  *  hook command is env-gated on $HARNESS_TERMINAL_ID, so it no-ops for
- *  sessions started outside Harness. */
+ *  sessions started outside Tatsu. */
 function installHooksGlobally(): void {
-  // installHooks() is idempotent — it strips any existing Harness entries
+  // installHooks() is idempotent — it strips any existing Tatsu entries
   // before writing a fresh one — so calling it unconditionally also
   // collapses duplicate entries left by earlier buggy install passes.
   for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
@@ -2357,7 +2357,7 @@ function registerIpcHandlers(): void {
 
   // Hooks. Install/uninstall happen once at user scope — the hook command
   // is env-gated on $HARNESS_TERMINAL_ID so sessions spawned outside
-  // Harness are unaffected.
+  // Tatsu are unaffected.
   transport.onRequest('hooks:accept', (_ctx) => {
     installHooksGlobally()
     config.hooksConsent = 'accepted'

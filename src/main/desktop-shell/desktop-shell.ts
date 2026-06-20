@@ -18,7 +18,7 @@
 // Construction split:
 //   - `createDesktopShell` runs synchronously, before anything that
 //     reads `userDataDir()` is touched. It applies the dev-mode userData
-//     override (so persistence/secrets/debug all see "Harness (Dev)"),
+//     override (so persistence/secrets/debug all see "Tatsu (Dev)"),
 //     creates the BrowserManager, and wires the ElectronServerTransport.
 //   - `startDesktopShell` is called after index.ts has registered all
 //     mode-agnostic IPC handlers. It registers the desktop-only
@@ -96,7 +96,7 @@ export function resolveWebClientDir(): string {
  *  (which only runs later, once the store + config exist). */
 export function applyDevModeOverride(): void {
   if (!app.isPackaged) {
-    app.setPath('userData', join(app.getPath('appData'), 'Harness (Dev)'))
+    app.setPath('userData', join(app.getPath('appData'), 'Tatsu (Dev)'))
   }
 }
 
@@ -272,7 +272,7 @@ export function startDesktopShell(deps: DesktopShellStartDeps): DesktopShellStar
       width: bounds.width,
       height: bounds.height,
       ...(bounds.x != null ? { x: bounds.x, y: bounds.y } : {}),
-      title: 'Harness',
+      title: 'Tatsu',
       // nativeImage path so reads work from inside app.asar and the WM
       // gets a real pixel buffer for _NET_WM_ICON on Linux. A bare string
       // path here silently fails when the file is asar-bundled.

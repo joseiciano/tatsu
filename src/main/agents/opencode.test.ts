@@ -125,12 +125,12 @@ describe('hook install / dedup', () => {
     expect(hooksInstalled()).toBe(false)
   })
 
-  it('hooksInstalled() returns true when Harness plugin file exists', () => {
+  it('hooksInstalled() returns true when Tatsu plugin file exists', () => {
     fsState.files.set(PLUGIN_PATH, '// harness-opencode-plugin')
     expect(hooksInstalled()).toBe(true)
   })
 
-  it('hooksInstalled() returns false when a non-Harness plugin file exists', () => {
+  it('hooksInstalled() returns false when a non-Tatsu plugin file exists', () => {
     fsState.files.set(PLUGIN_PATH, '// some other plugin')
     expect(hooksInstalled()).toBe(false)
   })
@@ -150,7 +150,7 @@ describe('hook install / dedup', () => {
     expect(content).toContain('harness-opencode-plugin')
   })
 
-  it('uninstallHooks() removes only the Harness plugin file', () => {
+  it('uninstallHooks() removes only the Tatsu plugin file', () => {
     installHooks()
     expect(fsState.files.has(PLUGIN_PATH)).toBe(true)
     uninstallHooks()
@@ -162,7 +162,7 @@ describe('hook install / dedup', () => {
     expect(fsState.files.has(PLUGIN_PATH)).toBe(false)
   })
 
-  it('uninstallHooks() preserves non-Harness plugin files', () => {
+  it('uninstallHooks() preserves non-Tatsu plugin files', () => {
     fsState.files.set(PLUGIN_PATH, '// some other plugin')
     uninstallHooks()
     expect(fsState.files.has(PLUGIN_PATH)).toBe(true)

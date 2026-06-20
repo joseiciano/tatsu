@@ -4,8 +4,8 @@ export interface AgentInfo {
   kind: AgentKind
   displayName: string
   vendor: string
-  /** If true, Harness generates a session ID and passes it to the CLI on
-   * first spawn. If false, the agent assigns its own ID and Harness
+  /** If true, Tatsu generates a session ID and passes it to the CLI on
+   * first spawn. If false, the agent assigns its own ID and Tatsu
    * discovers it from the first hook event. */
   assignsSessionId: boolean
 }

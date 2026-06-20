@@ -92,7 +92,7 @@ interface TerminalPanelProps {
    *  empty space above the right column (which sits 40px down from the top).
    *  Set per-leaf by WorkspaceView to the topmost-right leaf only. */
   topBarTrailingExtendPx?: number
-  /** Render the "Harness" app title at the start of the tab bar. Set true
+  /** Render the "Tatsu" app title at the start of the tab bar. Set true
    *  on the top-left leaf only so the title appears once per workspace. */
   showAppTitle?: boolean
 }
@@ -488,7 +488,7 @@ export function TerminalPanel({
       >
         {showAppTitle && (
           <div className="shrink-0 flex items-center h-full px-3 text-xs font-semibold whitespace-nowrap">
-            <span className="gradient-text">Harness</span>
+            <span className="gradient-text">Tatsu</span>
             {import.meta.env.DEV && __HARNESS_DEV_BRANCH__ && (
               <span className="text-faint font-normal ml-1">({__HARNESS_DEV_BRANCH__})</span>
             )}
