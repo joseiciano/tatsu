@@ -11,17 +11,17 @@ export function Install() {
       </p>
 
       <a
-        href={`https://github.com/frenchie4111/harness/releases/latest/download/Harness-${VERSION}-arm64.dmg`}
+        href={`https://github.com/frenchie4111/harness/releases/latest/download/Tatsu-${VERSION}-arm64.dmg`}
         className="block p-8 bg-white hover:bg-ink-200 text-ink-950 rounded-xl transition-colors group text-center"
       >
         <div className="text-xs text-ink-500 mb-2 uppercase tracking-wider">M1 / M2 / M3 / M4</div>
         <div className="text-3xl font-bold mb-2">Download for Apple Silicon</div>
-        <div className="text-xs text-ink-500 font-mono">Harness-arm64.dmg</div>
+        <div className="text-xs text-ink-500 font-mono">Tatsu-arm64.dmg</div>
       </a>
 
       <div className="mt-4 text-center">
         <a
-          href={`https://github.com/frenchie4111/harness/releases/latest/download/Harness-${VERSION}.dmg`}
+          href={`https://github.com/frenchie4111/harness/releases/latest/download/Tatsu-${VERSION}.dmg`}
           className="text-sm text-ink-500 hover:text-ink-300 underline transition-colors"
         >
           On an Intel Mac? Download the x86_64 build

@@ -7,9 +7,9 @@
 // binary by editing one file, and we don't depend on a single-binary
 // packer that sometimes lags Node releases.
 //
-// Layout of the staged tarball (extracted under ~/.harness-server/):
-//   harness-server-<version>-<platform>/
-//     bin/harness-server                            shell shim
+// Layout of the staged tarball (extracted under ~/.tatsu-server/):
+//   tatsu-server-<version>-<platform>/
+//     bin/tatsu-server                            shell shim
 //     VERSION
 //     lib/
 //       node                                        pinned Node binary
@@ -172,7 +172,7 @@ async function main() {
   const { platform, nodeDist } = detectPlatform()
   const pkg = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8'))
   const version = pkg.version
-  const stageRootName = `harness-server-${version}-${platform}`
+  const stageRootName = `tatsu-server-${version}-${platform}`
   const releaseDir = join(repoRoot, 'release', 'headless')
   const stageDir = join(releaseDir, stageRootName)
 
@@ -225,7 +225,7 @@ esac
 
 exec "$DIR/lib/node" "$DIR/lib/main/index.js" "$@"
 `
-  const shimPath = join(stageDir, 'bin', 'harness-server')
+  const shimPath = join(stageDir, 'bin', 'tatsu-server')
   await writeFile(shimPath, shim, 'utf8')
   await chmod(shimPath, 0o755)
 

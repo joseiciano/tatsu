@@ -47,10 +47,10 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: harness-mac
+          name: tatsu-mac
           path: |
-            release/Harness-*.dmg
-            release/Harness-*-mac.zip
-            release/Harness-*.blockmap
+            release/Tatsu-*.dmg
+            release/Tatsu-*-mac.zip
+            release/Tatsu-*.blockmap
             release/latest-mac.yml
           if-no-files-found: error

@@ -19,7 +19,7 @@
 # committed in step 5) followed by three parallel build jobs
 # (build-mac / build-linux / build-headless) that all depend on the
 # create. dmg/zip/blockmap/latest-mac.yml + AppImage/deb/latest-linux.yml
-# + harness-server tarballs all attach to the same release.
+# + tatsu-server tarballs all attach to the same release.
 #
 # Recovery if a build job fails after tag push:
 #   - Single job failed (e.g. flaky notarization)? Re-run that job from
@@ -182,7 +182,7 @@ const files = ['README.md'];
 for (const f of files) {
   if (!fs.existsSync(f)) continue;
   let content = fs.readFileSync(f, 'utf-8');
-  content = content.replace(/Harness-\d+\.\d+\.\d+/g, \`Harness-\${v}\`);
+  content = content.replace(/Tatsu-\d+\.\d+\.\d+/g, \`Tatsu-\${v}\`);
   content = content.replace(/releases\/download\/v\d+\.\d+\.\d+/g, \`releases/download/v\${v}\`);
   fs.writeFileSync(f, content);
 }
@@ -293,10 +293,10 @@ ${CHANGES}${CONTRIBUTORS_SECTION}
 
 ### Installing
 
-- **Apple Silicon:** \`Harness-${VERSION}-arm64.dmg\`
-- **Intel:** \`Harness-${VERSION}.dmg\`
+- **Apple Silicon:** \`Tatsu-${VERSION}-arm64.dmg\`
+- **Intel:** \`Tatsu-${VERSION}.dmg\`
 
-Drag \`Harness.app\` to Applications, then launch it. Existing installs will auto-update.
+Drag \`Tatsu.app\` to Applications, then launch it. Existing installs will auto-update.
 EOF
 
 rm -f "$CONTRIBUTORS_FILE"

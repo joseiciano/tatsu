@@ -50,8 +50,8 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: harness-server-${{ matrix.platform }}
+          name: tatsu-server-${{ matrix.platform }}
           path: |
-            release/headless/harness-server-*-${{ matrix.platform }}.tar.gz
-            release/headless/harness-server-*-${{ matrix.platform }}.tar.gz.sha256
+            release/headless/tatsu-server-*-${{ matrix.platform }}.tar.gz
+            release/headless/tatsu-server-*-${{ matrix.platform }}.tar.gz.sha256
           if-no-files-found: error

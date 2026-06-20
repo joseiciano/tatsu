@@ -40,9 +40,9 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: harness-linux
+          name: tatsu-linux
           path: |
-            release/Harness-*.AppImage
-            release/Harness-*.deb
+            release/Tatsu-*.AppImage
+            release/Tatsu-*.deb
             release/latest-linux.yml
           if-no-files-found: error
