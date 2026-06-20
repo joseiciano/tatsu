@@ -22,9 +22,9 @@ Options:
   --help             Print this help and exit
 
 Environment:
-  HARNESS_WS_HOST    Same as --host (CLI flag wins)
-  HARNESS_WS_PORT    Same as --port (CLI flag wins)
-  HARNESS_DATA_DIR   Where config + auth tokens live (default: ~/.harness)
+  TATSU_WS_HOST      Same as --host (CLI flag wins; HARNESS_WS_HOST as deprecated alias)
+  TATSU_WS_PORT      Same as --port (CLI flag wins; HARNESS_WS_PORT as deprecated alias)
+  TATSU_DATA_DIR     Where config + auth tokens live (default: ~/.tatsu; HARNESS_DATA_DIR as deprecated alias)
 
 Examples:
   harness-server                                    # localhost only

@@ -12,7 +12,9 @@
 // boot block — by the time anything in this module runs it has already
 // been applied.
 //
-// Headless mode: use $HARNESS_DATA_DIR, defaulting to ~/.harness. The
+// Headless mode: use $TATSU_DATA_DIR (preferred) or $HARNESS_DATA_DIR
+// (deprecated fallback), defaulting to ~/.tatsu. If ~/.tatsu does not
+// exist but ~/.harness does, we use ~/.harness for backward compat.
 // directory is created on first use with mode 0700 so secrets dropped
 // alongside config can't be world-readable.
 //
@@ -58,8 +60,10 @@ export function userDataDir(): string {
   if (detectRuntime() === 'electron') {
     cachedUserDataDir = loadElectronApp().getPath('userData')
   } else {
-    const fromEnv = process.env['HARNESS_DATA_DIR']
-    const dir = fromEnv && fromEnv.trim() ? fromEnv : join(homedir(), '.harness')
+    const fromEnv = process.env['TATSU_DATA_DIR'] || process.env['HARNESS_DATA_DIR']
+    const tatsuDir = join(homedir(), '.tatsu')
+    const harnessDir = join(homedir(), '.harness')
+    const dir = fromEnv && fromEnv.trim() ? fromEnv : (existsSync(tatsuDir) ? tatsuDir : (existsSync(harnessDir) ? harnessDir : tatsuDir))
     cachedUserDataDir = ensureDir(dir)
   }
   return cachedUserDataDir
@@ -73,7 +77,7 @@ export function isPackaged(): boolean {
 }
 
 /** Reset the cached directory. Tests use this to get a fresh resolution
- *  after mutating $HARNESS_DATA_DIR between cases. Production code
+ *  after mutating $TATSU_DATA_DIR (or $HARNESS_DATA_DIR) between cases. Production code
  *  should never need it. */
 export function resetPathsForTests(): void {
   cachedUserDataDir = null

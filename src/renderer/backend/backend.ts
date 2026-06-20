@@ -30,6 +30,8 @@ declare global {
   interface Window {
     /** Preload-only Electron helpers (webUtils.getPathForFile,
      *  ipcRenderer-backed window controls). Null in the web client. */
+    __tatsu_electron_helpers?: ElectronOnlyHelpers
+    /** @deprecated Use __tatsu_electron_helpers */
     __harness_electron_helpers?: ElectronOnlyHelpers
   }
 }
@@ -38,7 +40,7 @@ export function initBackend(opts: {
   getActiveTransport: () => LocalTransportHandle
   getLocalTransport: () => LocalTransportHandle
 }): void {
-  const electronHelpers = window.__harness_electron_helpers ?? null
+  const electronHelpers = (window.__tatsu_electron_helpers ?? window.__harness_electron_helpers) ?? null
   backend = buildBackend(opts.getActiveTransport, opts.getLocalTransport, electronHelpers)
 }
 

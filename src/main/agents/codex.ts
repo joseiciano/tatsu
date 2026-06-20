@@ -11,8 +11,11 @@ function shellQuote(s: string): string {
 
 // Codex strips unknown fields when it normalizes hooks.json, so dedup
 // recognizes our entries by the status-dir path baked into the hook
-// command instead of a sidecar marker.
-const HARNESS_HOOK_COMMAND_SIGNATURE = '/tmp/harness-status'
+// command instead of a sidecar marker. We recognize both the current
+// /tmp/tatsu-status path and the legacy /tmp/harness-status path so old
+// installed entries can still be uninstalled cleanly.
+const HARNESS_HOOK_COMMAND_SIGNATURE = '/tmp/tatsu-status'
+const LEGACY_HOOK_COMMAND_SIGNATURE = '/tmp/harness-status'
 
 export const defaultCommand = 'codex'
 export const assignsSessionId = false
@@ -64,7 +67,10 @@ function makeHarnessHookEntry(command: string): CodexHookEntry {
 
 function isHarnessHookEntry(entry: CodexHookEntry): boolean {
   return !!entry.hooks?.some(
-    (h) => typeof h.command === 'string' && h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE)
+    (h) =>
+      typeof h.command === 'string' &&
+      (h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE) ||
+        h.command.includes(LEGACY_HOOK_COMMAND_SIGNATURE))
   )
 }
 

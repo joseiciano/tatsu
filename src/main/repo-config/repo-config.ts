@@ -5,18 +5,25 @@ import { DEFAULT_HIDDEN_RIGHT_PANELS, type RepoConfig } from '../../shared/state
 
 export type { RepoConfig }
 
-const REPO_CONFIG_FILENAME = '.harness.json'
+const TATSU_CONFIG_FILENAME = '.tatsu.json'
+const HARNESS_CONFIG_FILENAME = '.harness.json'
 const cache = new Map<string, RepoConfig>()
 
-function configPath(repoRoot: string): string {
-  return join(repoRoot, REPO_CONFIG_FILENAME)
+function tatsuConfigPath(repoRoot: string): string {
+  return join(repoRoot, TATSU_CONFIG_FILENAME)
+}
+
+function harnessConfigPath(repoRoot: string): string {
+  return join(repoRoot, HARNESS_CONFIG_FILENAME)
 }
 
 export function loadRepoConfig(repoRoot: string): RepoConfig {
   if (!repoRoot) return {}
   const cached = cache.get(repoRoot)
   if (cached) return cached
-  const path = configPath(repoRoot)
+  const tatsuPath = tatsuConfigPath(repoRoot)
+  const harnessPath = harnessConfigPath(repoRoot)
+  const path = existsSync(tatsuPath) ? tatsuPath : harnessPath
   if (!existsSync(path)) {
     cache.set(repoRoot, {})
     return {}
@@ -59,7 +66,7 @@ export function saveRepoConfig(repoRoot: string, next: RepoConfig): RepoConfig {
   }
 
   const hasAny = Object.keys(cleaned).some((k) => k !== 'version')
-  const path = configPath(repoRoot)
+  const path = tatsuConfigPath(repoRoot)
   try {
     if (!hasAny) {
       if (existsSync(path)) unlinkSync(path)

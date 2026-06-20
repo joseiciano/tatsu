@@ -19,7 +19,7 @@
     "build": "electron-vite build && vite build --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts",
     "build:headless": "vite build --config vite.headless.config.ts && vite build --config vite.headless-web.config.ts",
-    "dev:headless": "pnpm run build:headless && HARNESS_DATA_DIR=./.headless-data HARNESS_WS_HOST=${HARNESS_WS_HOST:-127.0.0.1} node dist-headless/main/index.js",
+    "dev:headless": "pnpm run build:headless && TATSU_DATA_DIR=./.headless-data TATSU_WS_HOST=${TATSU_WS_HOST:-${HARNESS_WS_HOST:-127.0.0.1}} node dist-headless/main/index.js",
     "pack:headless": "node scripts/pack-headless.mjs",
     "pack:headless:all": "echo 'Cross-platform packaging happens in CI. Run pack:headless to build for the current host.'",
     "preview": "electron-vite preview",

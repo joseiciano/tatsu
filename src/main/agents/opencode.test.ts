@@ -140,7 +140,7 @@ describe('hook install / dedup', () => {
     expect(fsState.files.has(PLUGIN_PATH)).toBe(true)
     const content = fsState.files.get(PLUGIN_PATH) as string
     expect(content).toContain('harness-opencode-plugin')
-    expect(content).toContain('/tmp/harness-status')
+    expect(content).toContain('/tmp/tatsu-status')
   })
 
   it('installHooks() overwrites an existing plugin file', () => {

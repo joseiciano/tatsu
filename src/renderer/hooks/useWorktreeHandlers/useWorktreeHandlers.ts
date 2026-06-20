@@ -20,7 +20,7 @@ interface UseWorktreeHandlersArgs {
 /** Worktree + repo + pending-creation handlers. Repo add/remove,
  * worktree creation FSM dispatch (runPending/retry/dismiss/continue),
  * single-path delete + bulk delete. Also subscribes to external-create
- * events from the harness-control MCP and routes focus to the new path. */
+ * events from the tatsu-control MCP and routes focus to the new path. */
 export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
   const {
     worktrees,
@@ -123,7 +123,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
     setRepoAddPrompt(null)
   }, [])
 
-  // External worktree creation (from the harness-control MCP). Main
+  // External worktree creation (from the tatsu-control MCP). Main
   // refreshes the store list AND seeds default panes (with the prompt
   // embedded) before emitting this event, so we just focus the new path.
   useEffect(() => {

@@ -1375,8 +1375,11 @@ export async function runWorktreeScript(
         cwd: ctx.worktreePath,
         env: {
           ...process.env,
+          TATSU_WORKTREE_PATH: ctx.worktreePath,
           HARNESS_WORKTREE_PATH: ctx.worktreePath,
+          TATSU_BRANCH: ctx.branch,
           HARNESS_BRANCH: ctx.branch,
+          TATSU_REPO_ROOT: ctx.repoRoot,
           HARNESS_REPO_ROOT: ctx.repoRoot
         }
       })

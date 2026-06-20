@@ -44,7 +44,7 @@ function showBootError(err: unknown): void {
   // eslint-disable-next-line no-console
   console.error('[harness] boot failed', err)
   const message = err instanceof Error ? err.message : String(err)
-  const isRemote = window.__HARNESS_WEB__ === true
+  const isRemote = window.__TATSU_WEB__ === true || window.__HARNESS_WEB__ === true
   const root = document.getElementById('root')
   if (!root) return
   root.innerHTML = ''

@@ -185,11 +185,11 @@ export function CommandCenter({
   // Shares the same localStorage key as the sidebar toggle so the user's
   // preference stays consistent across views.
   const [unifiedRepos, setUnifiedRepos] = useState<boolean>(() => {
-    const saved = localStorage.getItem('harness:unifiedRepos')
+    const saved = localStorage.getItem('tatsu:unifiedRepos') ?? localStorage.getItem('harness:unifiedRepos')
     return saved === null ? true : saved === '1'
   })
   useEffect(() => {
-    localStorage.setItem('harness:unifiedRepos', unifiedRepos ? '1' : '0')
+    localStorage.setItem('tatsu:unifiedRepos', unifiedRepos ? '1' : '0')
   }, [unifiedRepos])
 
   // Group cards. In unified mode we pass the full worktree list through

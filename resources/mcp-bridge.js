@@ -6,22 +6,22 @@
 const http = require('http')
 const readline = require('readline')
 
-const PORT = process.env.HARNESS_PORT
-const TOKEN = process.env.HARNESS_TOKEN
-const TERMINAL_ID = process.env.HARNESS_TERMINAL_ID || ''
+const PORT = process.env.TATSU_PORT || process.env.TATSU_PORT || process.env.HARNESS_PORT
+const TOKEN = process.env.TATSU_TOKEN || process.env.TATSU_TOKEN || process.env.HARNESS_TOKEN
+const TERMINAL_ID = process.env.TATSU_TERMINAL_ID || process.env.TATSU_TERMINAL_ID || process.env.HARNESS_TERMINAL_ID || ''
 
 // Scope set at spawn by src/main/mcp-config.ts. The server re-resolves
 // scope from TERMINAL_ID on every call (authoritative), so these are a
 // best-effort hint used to customize the advertised tool list/descriptions
 // for feature-worktree callers. Can go stale if the session teleports.
 const SCOPE = {
-  worktreeId: process.env.HARNESS_WORKTREE_ID || '',
-  repoRoot: process.env.HARNESS_REPO_ROOT || '',
-  isMain: process.env.HARNESS_IS_MAIN === '1'
+  worktreeId: process.env.TATSU_WORKTREE_ID || process.env.TATSU_WORKTREE_ID || process.env.HARNESS_WORKTREE_ID || ''
+  repoRoot: process.env.TATSU_REPO_ROOT || process.env.TATSU_REPO_ROOT || process.env.HARNESS_REPO_ROOT || ''
+  isMain: (process.env.TATSU_IS_MAIN || process.env.TATSU_IS_MAIN || process.env.HARNESS_IS_MAIN) === '1'
 }
 
 if (!PORT || !TOKEN) {
-  process.stderr.write('harness-mcp: HARNESS_PORT and HARNESS_TOKEN required\n')
+  process.stderr.write('tatsu-mcp: TATSU_PORT and TATSU_TOKEN required\n')
   process.exit(1)
 }
 
@@ -30,7 +30,7 @@ function send(msg) {
 }
 
 function logErr(...args) {
-  process.stderr.write('[harness-mcp] ' + args.join(' ') + '\n')
+  process.stderr.write('[tatsu-mcp] ' + args.join(' ') + '\n')
 }
 
 function callControl(method, path, body) {
@@ -45,6 +45,8 @@ function callControl(method, path, body) {
         headers: {
           Authorization: 'Bearer ' + TOKEN,
           'Content-Type': 'application/json',
+          'X-Tatsu-Terminal-Id': TERMINAL_ID,
+          'X-Tatsu-Terminal-Id': TERMINAL_ID,
           'X-Harness-Terminal-Id': TERMINAL_ID,
           ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {})
         }
@@ -676,7 +678,7 @@ async function handle(msg) {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'harness-control', version: '1.0.0' }
+          serverInfo: { name: 'tatsu-control', version: '1.0.0' }
         }
       }
     }

@@ -345,10 +345,10 @@ export function subscribeActiveTransportReconnect(
 }
 
 export async function initStore(): Promise<void> {
-  const localTransport = window.__harness_local_transport
+  const localTransport = window.__tatsu_local_transport ?? window.__harness_local_transport
   if (!localTransport) {
     throw new Error(
-      'preload did not expose __harness_local_transport — Tier 1 multi-backend wiring missing'
+      'preload did not expose __tatsu_local_transport — Tier 1 multi-backend wiring missing'
     )
   }
   // Wire the local backend first; for v1 it's the only one in the
@@ -356,11 +356,11 @@ export async function initStore(): Promise<void> {
   // chip-strip controller in a later commit.
   //
   // The connection's `kind` follows the runtime: in the browser web
-  // client, `__HARNESS_WEB__` is true and the underlying transport is
+  // client, `__TATSU_WEB__` is true and the underlying transport is
   // a WebSocketClientTransport — semantically remote, even though the
   // registry id is still `local` (it's the always-present default the
   // user can't remove). UI gating reads `kind`, not the id.
-  const isWeb = typeof window !== 'undefined' && window.__HARNESS_WEB__ === true
+  const isWeb = typeof window !== 'undefined' && (window.__TATSU_WEB__ === true || window.__HARNESS_WEB__ === true)
   const localConnection: BackendConnection = {
     id: LOCAL_BACKEND_ID,
     label: 'Local',
@@ -393,7 +393,7 @@ export async function initStore(): Promise<void> {
   // ever stuck on the wrong controller, grep console for
   // `[take-control]` — every roster event hitting the local backend's
   // store is logged with the post-reducer controllerClientId.
-  localTransport.onStateEvent((event) => {
+  localTransport.onStateEvent((event: StateEvent) => {
     const e = event as StateEvent
     if (
       e.type === 'terminals/controlTaken' ||

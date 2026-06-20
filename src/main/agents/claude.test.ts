@@ -24,7 +24,7 @@ vi.mock('../hooks', () => ({
   // Match the real shape — every Tatsu hook command embeds the
   // status-dir path. That substring is what dedup recognizes.
   makeHookCommand: (event: string) =>
-    `bash -c 'd=/tmp/harness-status; printf "${event}" >> "$d/$h.ndjson"'`
+    `bash -c 'd=/tmp/tatsu-status; printf "${event}" >> "$d/$h.ndjson"'`
 }))
 
 import { homedir } from 'os'
@@ -77,7 +77,7 @@ describe('hook install / dedup', () => {
               {
                 type: 'command',
                 command:
-                  "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+                  "bash -c 'd=/tmp/tatsu-status; printf hi >> \"$d/$h.ndjson\"'",
                 timeout: 5
               }
             ]
@@ -110,7 +110,7 @@ describe('hook install / dedup', () => {
     for (const event of hookEvents) {
       const entries = settings.hooks[event]
       expect(entries).toHaveLength(1)
-      expect(entries[0].hooks[0].command).toContain('/tmp/harness-status')
+      expect(entries[0].hooks[0].command).toContain('/tmp/tatsu-status')
     }
   })
 
@@ -123,7 +123,7 @@ describe('hook install / dedup', () => {
         {
           type: 'command',
           command:
-            "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+            "bash -c 'd=/tmp/tatsu-status; printf hi >> \"$d/$h.ndjson\"'",
           timeout: 5
         }
       ]
@@ -142,7 +142,7 @@ describe('hook install / dedup', () => {
     }
   })
 
-  it('installHooks() preserves user-authored hooks (commands not pointing at /tmp/harness-status)', () => {
+  it('installHooks() preserves user-authored hooks (commands not pointing at /tmp/tatsu-status)', () => {
     const userHook = {
       hooks: [{ type: 'command', command: 'echo user hook', timeout: 10 }]
     }
@@ -166,7 +166,7 @@ describe('hook install / dedup', () => {
     expect(after.hooks.PreToolUse).toContainEqual(userHook)
     for (const event of hookEvents) {
       const harnessEntries = (after.hooks[event] as Array<{ hooks: { command: string }[] }>).filter(
-        (e) => e.hooks.some((h) => h.command.includes('/tmp/harness-status'))
+        (e) => e.hooks.some((h) => h.command.includes('/tmp/tatsu-status'))
       )
       expect(harnessEntries).toHaveLength(1)
     }
@@ -191,3 +191,46 @@ describe('hook install / dedup', () => {
     expect(final.hooks?.PreToolUse).toBeUndefined()
   })
 })
+  it('hooksInstalled() recognizes legacy /tmp/harness-status entries for backward compat', () => {
+    const settings = {
+      hooks: {
+        UserPromptSubmit: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command:
+                  "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+                timeout: 5
+              }
+            ]
+          }
+        ]
+      }
+    }
+    fsState.files.set(SETTINGS_PATH, JSON.stringify(settings))
+    expect(hooksInstalled()).toBe(true)
+  })
+
+  it('uninstallHooks() removes legacy /tmp/harness-status entries', () => {
+    const legacyEntry = {
+      hooks: [
+        {
+          type: 'command',
+          command:
+            "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+          timeout: 5
+        }
+      ]
+    }
+    const settings: { hooks: Record<string, unknown[]> } = { hooks: {} }
+    for (const event of hookEvents) {
+      settings.hooks[event] = [legacyEntry]
+    }
+    fsState.files.set(SETTINGS_PATH, JSON.stringify(settings))
+
+    uninstallHooks()
+
+    const after = JSON.parse(fsState.files.get(SETTINGS_PATH) as string)
+    expect(after.hooks).toBeUndefined()
+  })

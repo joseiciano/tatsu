@@ -7,7 +7,7 @@
 //
 // Two things only get exposed via contextBridge:
 //
-//   1. `window.__harness_local_transport` — a duck-typed
+//   1. `window.__tatsu_local_transport` — a duck-typed
 //      ClientTransport for the in-process local backend. Wraps
 //      ipcRenderer (which is preload-only). The renderer's
 //      BackendsRegistry wires it to the local backend's mirrored
@@ -15,14 +15,14 @@
 //      always-local concerns (connections list, menu signals,
 //      window controls).
 //
-//   2. `window.__harness_electron_helpers` — Electron-only APIs
+//   2. `window.__tatsu_electron_helpers` — Electron-only APIs
 //      that genuinely can't live in the renderer (webUtils for
 //      drag-drop file paths, ipcRenderer.send for window controls
 //      that target the local BrowserWindow).
 //
-// Plus `window.__HARNESS_PLATFORM__` (process.platform — used by
+// Plus `window.__TATSU_PLATFORM__` (process.platform — used by
 // renderer to render Linux-only window controls) and
-// `window.__HARNESS_WEB__ = false` (legacy flag, kept until renderer
+// `window.__TATSU_WEB__ = false` (legacy flag, kept until renderer
 // boot-error UI is migrated).
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -57,3 +57,11 @@ contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.electronHelpers, electronHelpers
 
 contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.web, false)
 contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.platform, process.platform)
+
+// Backward-compat aliases: expose old "harness" globals for any renderer
+// code that hasn't migrated yet. Both old and new names point to the same
+// underlying object / value so reads are interchangeable.
+;(window as any).__harness_local_transport = (window as any).__tatsu_local_transport
+;(window as any).__harness_electron_helpers = (window as any).__tatsu_electron_helpers
+;(window as any).__HARNESS_WEB__ = (window as any).__TATSU_WEB__
+;(window as any).__HARNESS_PLATFORM__ = (window as any).__TATSU_PLATFORM__

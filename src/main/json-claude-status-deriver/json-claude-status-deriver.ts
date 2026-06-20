@@ -1,7 +1,7 @@
 // Mirrors json-claude session state into terminals/statusChanged so the
 // sidebar + tab-bar dots light up the same way they do for xterm-backed
 // agent tabs. We can't piggyback on the user-scope status hooks (we
-// scrub HARNESS_TERMINAL_ID from the json-claude subprocess env so they
+// scrub TATSU_TERMINAL_ID and HARNESS_TERMINAL_ID from the json-claude subprocess env so they
 // don't fire), so derive the status here from busy + pendingApprovals +
 // session.state on every jsonClaude/* event.
 //

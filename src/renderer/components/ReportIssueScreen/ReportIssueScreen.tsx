@@ -73,7 +73,7 @@ function truncateLog(log: string, approxBudget: number): string {
   return `... log truncated, run \`pnpm log\` to see the full log\n${clean}`
 }
 
-const REPORT_ISSUE_EVENT = 'harness:open-report-issue'
+const REPORT_ISSUE_EVENT = 'tatsu:open-report-issue'
 
 export interface OpenReportIssueDetail {
   kind?: IssueKind

@@ -273,11 +273,11 @@ export class PlaywrightBrowserManager implements BrowserManagerLike {
 
     this.launching = (async () => {
       const { chromium } = loadPlaywright()
-      const explicit = process.env['HARNESS_PLAYWRIGHT_BROWSER']
+      const explicit = process.env['TATSU_PLAYWRIGHT_BROWSER'] || process.env['HARNESS_PLAYWRIGHT_BROWSER']
       const launchErrors: string[] = []
       try {
         if (explicit && explicit.trim()) {
-          log('browser-playwright', `launching browser via HARNESS_PLAYWRIGHT_BROWSER=${explicit}`)
+          log('browser-playwright', `launching browser via TATSU_PLAYWRIGHT_BROWSER=${explicit}`)
           return await chromium.launch({ headless: true, executablePath: explicit.trim() })
         }
         log('browser-playwright', 'launching system Chrome via channel:chrome')
@@ -285,7 +285,7 @@ export class PlaywrightBrowserManager implements BrowserManagerLike {
       } catch (err) {
         launchErrors.push(err instanceof Error ? err.message : String(err))
         throw new Error(
-          'Playwright browser not found. Install Chrome or set HARNESS_PLAYWRIGHT_BROWSER ' +
+          'Playwright browser not found. Install Chrome or set TATSU_PLAYWRIGHT_BROWSER ' +
             'to a Chromium executable path. Underlying error: ' +
             launchErrors.join('; ')
         )

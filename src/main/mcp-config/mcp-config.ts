@@ -21,11 +21,11 @@ function sanitize(id: string): string {
 
 /**
  * Write a per-terminal MCP config file pointing Claude Code at the bundled
- * harness-control MCP server. Returns the absolute path, or null if the
+ * tatsu-control MCP server. Returns the absolute path, or null if the
  * control server isn't running.
  *
- * Injects scope env vars (HARNESS_WORKTREE_ID, HARNESS_REPO_ROOT,
- * HARNESS_IS_MAIN, HARNESS_SESSION_ID) so the bridge can advertise
+ * Injects scope env vars (TATSU_WORKTREE_ID, TATSU_REPO_ROOT,
+ * TATSU_IS_MAIN, TATSU_SESSION_ID) so the bridge can advertise
  * scope-appropriate tool descriptions at tools/list time. The server side
  * still re-resolves scope from the terminal id on every call — the env
  * vars are a hint, not the source of truth.
@@ -45,19 +45,28 @@ export function writeMcpConfigForTerminal(
   const configPath = join(getConfigDir(), `${sanitize(terminalId)}.json`)
   const env: Record<string, string> = {
     ELECTRON_RUN_AS_NODE: '1',
+    TATSU_PORT: String(info.port),
+    TATSU_TOKEN: info.token,
+    TATSU_TERMINAL_ID: terminalId,
+    TATSU_SESSION_ID: terminalId,
+    // backward-compat aliases for old control-server/bridge versions
     HARNESS_PORT: String(info.port),
     HARNESS_TOKEN: info.token,
     HARNESS_TERMINAL_ID: terminalId,
     HARNESS_SESSION_ID: terminalId
   }
   if (scope) {
+    env.TATSU_WORKTREE_ID = scope.worktreePath
+    env.TATSU_REPO_ROOT = scope.repoRoot
+    if (scope.isMain) env.TATSU_IS_MAIN = '1'
+    // backward-compat aliases
     env.HARNESS_WORKTREE_ID = scope.worktreePath
     env.HARNESS_REPO_ROOT = scope.repoRoot
     if (scope.isMain) env.HARNESS_IS_MAIN = '1'
   }
   const config = {
     mcpServers: {
-      'harness-control': {
+      'tatsu-control': {
         command: process.execPath,
         args: [getBridgeScriptPath()],
         env

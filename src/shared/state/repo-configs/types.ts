@@ -29,7 +29,7 @@ export interface RepoConfig {
 
 export interface RepoConfigsState {
   /** Per-repo config keyed by repoRoot. Hydrated at boot from each repo's
-   * .harness.json file and updated whenever a setRepoConfig call commits. */
+   * .tatsu.json file (falling back to .harness.json) and updated whenever a setRepoConfig call commits. */
   byRepo: Record<string, RepoConfig>
 }
 

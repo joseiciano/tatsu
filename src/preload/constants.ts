@@ -1,8 +1,8 @@
 export const PRELOAD_GLOBALS = {
-  localTransport: '__harness_local_transport',
-  electronHelpers: '__harness_electron_helpers',
-  web: '__HARNESS_WEB__',
-  platform: '__HARNESS_PLATFORM__'
+  localTransport: '__tatsu_local_transport',
+  electronHelpers: '__tatsu_electron_helpers',
+  web: '__TATSU_WEB__',
+  platform: '__TATSU_PLATFORM__'
 } as const
 
 export const IPC_CHANNELS = {

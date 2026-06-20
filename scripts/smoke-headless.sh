@@ -15,11 +15,11 @@
 
 set -euo pipefail
 
-# Isolated data dir so we don't touch ~/.harness on a dev box or the
+# Isolated data dir so we don't touch ~/.tatsu on a dev box or the
 # runner's $HOME in CI.
-LOG="${HARNESS_SMOKE_LOG:-/tmp/harness-server.log}"
-HARNESS_DATA_DIR="$(mktemp -d)"
-export HARNESS_DATA_DIR
+LOG="${TATSU_SMOKE_LOG:-${HARNESS_SMOKE_LOG:-/tmp/tatsu-server.log}}"
+TATSU_DATA_DIR="${TATSU_DATA_DIR:-$(mktemp -d)}"
+export TATSU_DATA_DIR
 
 node dist-headless/main/index.js --port 0 --host 127.0.0.1 > "$LOG" 2>&1 &
 SERVER_PID=$!

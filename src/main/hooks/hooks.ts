@@ -17,7 +17,7 @@ import { log } from '../debug'
 // HARNESS_HOOK_COMMAND_SIGNATURE in src/main/agents/{claude,codex}.ts
 // to match, or older installed entries become unrecognizable and
 // re-installs will append duplicates.
-const STATUS_DIR = '/tmp/harness-status'
+const STATUS_DIR = '/tmp/tatsu-status'
 
 export interface PendingTool {
   name: string
@@ -25,12 +25,12 @@ export interface PendingTool {
 }
 
 // Emit a bash command that appends one NDJSON line per event to the
-// terminal's log file at /tmp/harness-status/<id>.ndjson. The line wraps
+// terminal's log file at /tmp/tatsu-status/<id>.ndjson. The line wraps
 // the full stdin payload Claude Code sends to the hook, so the main process
 // has access to the raw event and can do all classification in TypeScript.
 //
-// Gated on $HARNESS_TERMINAL_ID / $CLAUDE_HARNESS_ID — these are only set
-// by PtyManager when it spawns a terminal on our behalf. Sessions started
+// Gated on $TATSU_TERMINAL_ID / $HARNESS_TERMINAL_ID / $CLAUDE_HARNESS_ID — these
+// are only set by PtyManager when it spawns a terminal on our behalf. Sessions started
 // outside Tatsu (plain `claude` in a terminal, CI, etc.) hit the exit 0
 // on the first line and do nothing. That inert-by-default behavior is why
 // a global user-scope install is safe.
@@ -41,8 +41,8 @@ export interface PendingTool {
 // guaranteed atomic vs. other O_APPEND writers on POSIX.
 export function makeHookCommand(event: string): string {
   const inner =
-    `h="${'$HARNESS_TERMINAL_ID'}"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; ` +
-    `d=${STATUS_DIR}; mkdir -p "$d"; ` +
+    `h="${'$TATSU_TERMINAL_ID'}"; [ -z "$h" ] && h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; ` +
+    `d=/tmp/tatsu-status; mkdir -p "$d"; ` +
     `p=$(cat); [ -z "$p" ] && p=null; ` +
     `printf "{\\"event\\":\\"${event}\\",\\"ts\\":%s,\\"payload\\":%s}\\n" ` +
     `"$(date +%s)" "$p" >> "$d/$h.ndjson"`
@@ -228,7 +228,7 @@ function tailLog(terminalId: string, store: Store): void {
 export function watchStatusDir(store: Store): () => void {
   mkdirSync(STATUS_DIR, { recursive: true })
 
-  log('hooks', `watching status dir: ${STATUS_DIR}`)
+  log('hooks', `watching status dirs: ${STATUS_DIR}, /tmp/harness-status`)
 
   const watcher = watch(STATUS_DIR, (_eventType, filename) => {
     if (!filename || !filename.endsWith('.ndjson')) return
@@ -240,8 +240,19 @@ export function watchStatusDir(store: Store): () => void {
       log('hooks', `tail failed for ${terminalId}`, err instanceof Error ? err.message : err)
     }
   })
+  mkdirSync('/tmp/harness-status', { recursive: true })
+  const legacyWatcher = watch('/tmp/harness-status', (_eventType, filename) => {
+    if (!filename || !filename.endsWith('.ndjson')) return
+    if (filename.startsWith('.')) return
+    const terminalId = filename.replace(/\.ndjson$/, '')
+    try {
+      tailLog(terminalId, store)
+    } catch (err) {
+      log('hooks', `tail failed for ${terminalId}`, err instanceof Error ? err.message : err)
+    }
+  })
 
-  return () => watcher.close()
+  return () => { watcher.close(); legacyWatcher.close() }
 }
 
 /** Called on terminal death — drop the log file and reset tailing state. */
@@ -252,6 +263,11 @@ export function cleanupTerminalLog(terminalId: string): void {
   sessionIdDiscovered.delete(terminalId)
   try {
     unlinkSync(join(STATUS_DIR, `${terminalId}.ndjson`))
+  } catch {
+    // file may not exist; ignore
+  }
+  try {
+    unlinkSync(join('/tmp/harness-status', `${terminalId}.ndjson`))
   } catch {
     // file may not exist; ignore
   }

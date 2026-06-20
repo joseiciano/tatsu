@@ -25,7 +25,7 @@ vi.mock('../debug', () => ({
 
 vi.mock('../hooks', () => ({
   makeHookCommand: (event: string) =>
-    `bash -c 'd=/tmp/harness-status; printf "${event}" >> "$d/$h.ndjson"'`
+    `bash -c 'd=/tmp/tatsu-status; printf "${event}" >> "$d/$h.ndjson"'`
 }))
 
 import { homedir } from 'os'
@@ -48,7 +48,7 @@ describe('codex hook install / dedup', () => {
               {
                 type: 'command',
                 command:
-                  "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+                  "bash -c 'd=/tmp/tatsu-status; printf hi >> \"$d/$h.ndjson\"'",
                 timeout: 5
               }
             ]
@@ -81,7 +81,7 @@ describe('codex hook install / dedup', () => {
     for (const event of hookEvents) {
       const entries = data.hooks[event]
       expect(entries).toHaveLength(1)
-      expect(entries[0].hooks[0].command).toContain('/tmp/harness-status')
+      expect(entries[0].hooks[0].command).toContain('/tmp/tatsu-status')
     }
   })
 
@@ -91,7 +91,7 @@ describe('codex hook install / dedup', () => {
         {
           type: 'command',
           command:
-            "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+            "bash -c 'd=/tmp/tatsu-status; printf hi >> \"$d/$h.ndjson\"'",
           timeout: 5
         }
       ]
@@ -128,7 +128,7 @@ describe('codex hook install / dedup', () => {
     expect(after.hooks.PreToolUse).toContainEqual(userHook)
     for (const event of hookEvents) {
       const harnessEntries = (after.hooks[event] as Array<{ hooks: { command: string }[] }>).filter(
-        (e) => e.hooks.some((h) => h.command.includes('/tmp/harness-status'))
+        (e) => e.hooks.some((h) => h.command.includes('/tmp/tatsu-status'))
       )
       expect(harnessEntries).toHaveLength(1)
     }
@@ -151,3 +151,46 @@ describe('codex hook install / dedup', () => {
     expect(final.hooks?.PreToolUse).toBeUndefined()
   })
 })
+  it('hooksInstalled() recognizes legacy /tmp/harness-status entries for backward compat', () => {
+    const data = {
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command:
+                  "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+                timeout: 5
+              }
+            ]
+          }
+        ]
+      }
+    }
+    fsState.files.set(HOOKS_PATH, JSON.stringify(data))
+    expect(hooksInstalled()).toBe(true)
+  })
+
+  it('uninstallHooks() removes legacy /tmp/harness-status entries', () => {
+    const legacyEntry = {
+      hooks: [
+        {
+          type: 'command',
+          command:
+            "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+          timeout: 5
+        }
+      ]
+    }
+    const data: { hooks: Record<string, unknown[]> } = { hooks: {} }
+    for (const event of hookEvents) {
+      data.hooks[event] = [legacyEntry]
+    }
+    fsState.files.set(HOOKS_PATH, JSON.stringify(data))
+
+    uninstallHooks()
+
+    const after = JSON.parse(fsState.files.get(HOOKS_PATH) as string)
+    expect(after.hooks).toBeUndefined()
+  })

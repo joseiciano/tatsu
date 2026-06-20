@@ -13,7 +13,7 @@
 // reparse — that's the property the regression test pins down.
 //
 // JSON-mode tabs don't fire Claude's Stop hook (we scrub the
-// HARNESS_TERMINAL_ID env var so user-scope hooks stay inert under
+// TATSU_TERMINAL_ID (and legacy HARNESS_TERMINAL_ID) env var so user-scope hooks stay inert under
 // `claude -p`). Instead, we subscribe to the store and trigger the same
 // reparse on `jsonClaude/busyChanged` transitions to false (the boundary
 // JsonClaudeManager dispatches when claude emits a `result` event), and

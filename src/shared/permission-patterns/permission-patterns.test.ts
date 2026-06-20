@@ -155,7 +155,21 @@ describe('suggestPermissionPatterns', () => {
     ).toEqual([{ toolName: 'WebFetch' }])
   })
 
-  it('MCP tool yields a single bare-name suggestion', () => {
+  it('MCP tool (tatsu-control) yields a single bare-name suggestion', () => {
+    const out = suggestPermissionPatterns(
+      'mcp__tatsu-control__create_worktree',
+      { foo: 'bar' }
+    )
+    expect(out).toEqual([
+      {
+        rule: { toolName: 'mcp__tatsu-control__create_worktree' },
+        label: 'mcp__tatsu-control__create_worktree',
+        scope: 'narrow'
+      }
+    ])
+  })
+
+  it('MCP tool (harness-control backward compat) yields a single bare-name suggestion', () => {
     const out = suggestPermissionPatterns(
       'mcp__harness-control__create_worktree',
       { foo: 'bar' }

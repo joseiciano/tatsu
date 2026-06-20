@@ -309,15 +309,15 @@ const browserManager: BrowserManagerLike =
 //
 // Headless mode always starts the WS transport (it's the ONLY way for a
 // client to reach the server). Electron mode honors the existing toggle
-// — enable via wsTransportEnabled in config.json, or HARNESS_WS_TRANSPORT=1.
+// — enable via wsTransportEnabled in config.json, or TATSU_WS_TRANSPORT=1 (HARNESS_WS_TRANSPORT=1 as deprecated alias).
 const wsEnabled =
   runtime === 'node' ||
   config.wsTransportEnabled === true ||
-  process.env['HARNESS_WS_TRANSPORT'] === '1'
+  process.env['TATSU_WS_TRANSPORT'] === '1' || process.env['HARNESS_WS_TRANSPORT'] === '1'
 // CLI flag > env var > config > default. --port 0 picks an ephemeral
 // port (the existing wsTransport.listen path handles it). cliFlags is
 // already populated above (gated on headless runtime).
-const envPort = Number.parseInt(process.env['HARNESS_WS_PORT'] ?? '', 10)
+const envPort = Number.parseInt(process.env['TATSU_WS_PORT'] ?? process.env['HARNESS_WS_PORT'] ?? '', 10)
 const wsPort =
   cliFlags.port != null && cliFlags.port >= 0
     ? cliFlags.port
@@ -326,7 +326,7 @@ const wsPort =
       : (config.wsTransportPort ?? 37291)
 const wsHost =
   cliFlags.host ||
-  process.env['HARNESS_WS_HOST'] ||
+  process.env['TATSU_WS_HOST'] || process.env['HARNESS_WS_HOST'] ||
   config.wsTransportHost ||
   '127.0.0.1'
 
@@ -3106,7 +3106,7 @@ async function runBoot(): Promise<void> {
     reconcileBrowserViews()
   })()
 
-  // Seed per-repo config slice from each repo's .harness.json file.
+  // Seed per-repo config slice from each repo's .tatsu.json file (falling back to .harness.json).
   const initialRepoConfigsMap: Record<string, RepoConfig> = {}
   for (const root of config.repoRoots || []) {
     initialRepoConfigsMap[root] = loadRepoConfig(root)

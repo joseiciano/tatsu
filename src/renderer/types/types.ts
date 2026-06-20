@@ -620,6 +620,8 @@ export type { LocalTransportHandle } from '../../shared/transport/transport'
 
 declare global {
   interface Window {
+    __tatsu_local_transport?: import('../../shared/transport/transport').LocalTransportHandle
+    /** @deprecated Use __tatsu_local_transport */
     __harness_local_transport?: import('../../shared/transport/transport').LocalTransportHandle
   }
 }

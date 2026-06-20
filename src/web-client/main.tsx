@@ -3,11 +3,11 @@
 //
 // All it does:
 //   1. Open the WS to the harness-server we were served from.
-//   2. Expose the WS as `window.__harness_local_transport` so the
+//   2. Expose the WS as `window.__tatsu_local_transport` so the
 //      renderer's BackendsRegistry can wire it as the (only) backend.
-//   3. Mark `window.__HARNESS_WEB__ = true` for the few legacy paths
+//   3. Mark `window.__TATSU_WEB__ = true` for the few legacy paths
 //      that still read it (boot-error UI).
-//   4. Skip `window.__harness_electron_helpers` — drag-drop file
+//   4. Skip `window.__tatsu_electron_helpers` — drag-drop file
 //      paths and window controls are no-ops in the browser.
 //   5. Dynamic-import the renderer; `initStore()` then calls
 //      `initBackend()` which builds the renderer's backend singleton
@@ -17,6 +17,7 @@
 
 import '../renderer/styles.css'
 import type { ProfilerOnRenderCallback } from 'react'
+import type { LocalTransportHandle } from '../renderer/types'
 import { WebSocketClientTransport } from '../shared/transport/transport-websocket'
 
 declare global {
@@ -24,11 +25,10 @@ declare global {
     /** True when the renderer is running in the WS-connected web client
      *  (vs. the Electron preload). Components can branch on this to hide
      *  Electron-only affordances. */
-    __HARNESS_WEB__?: boolean
-    /** Local-backend transport handle, exposed by the preload (or the
-     *  web-client shim). Plain-object duck-typed ClientTransport — the
-     *  renderer's BackendsRegistry wires it directly to the local
-     *  backend's mirrored ClientStore. */
+    __TATSU_WEB__?: boolean
+    /** Primary local-backend transport handle name. @deprecated __harness_local_transport kept for compat. */
+    __tatsu_local_transport?: import('../renderer/types').LocalTransportHandle
+    /** @deprecated Use __tatsu_local_transport */
     __harness_local_transport?: import('../renderer/types').LocalTransportHandle
   }
 }
@@ -58,6 +58,7 @@ async function boot(): Promise<void> {
   // handshake.
   await transport.connect()
 
+  window.__TATSU_WEB__ = true
   window.__HARNESS_WEB__ = true
   // Web client is always single-backend — it talks to one server (the
   // one it was served from). Expose that WS transport as the registry's
@@ -65,7 +66,7 @@ async function boot(): Promise<void> {
   // initStore) builds the backend singleton over it. Same shape, same code path
   // as Electron — just with a WS transport in place of the local IPC
   // handle.
-  window.__harness_local_transport = {
+  const localTransport: LocalTransportHandle = {
     getStateSnapshot: () => transport.getStateSnapshot(),
     onStateEvent: (cb) => transport.onStateEvent((event, seq) => cb(event, seq)),
     request: (name, ...args) => transport.request(name, ...args),
@@ -74,9 +75,12 @@ async function boot(): Promise<void> {
     getClientId: () => transport.getClientId(),
     onReconnect: (cb) => transport.onReconnect(cb)
   }
+  window.__tatsu_local_transport = localTransport
   // No Electron helpers in the browser — the renderer's build-backend
   // gracefully no-ops drag-drop file paths and window controls when
   // this is absent.
+  window.__harness_local_transport = window.__tatsu_local_transport
+  window.__tatsu_electron_helpers = undefined
   window.__harness_electron_helpers = undefined
 
   // Dynamic-import the renderer modules so initStore (which builds
