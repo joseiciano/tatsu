@@ -1,15 +1,21 @@
-# Harness — repo overview for Claude
+# Tatsu - Agentic Harness Swarm AGENTS.md
 
-This file is read automatically by Claude Code at the start of every session.
-It documents the project structure and the conventions used here.
+This is the project-wide AGENTS.md for Tatsu - the agentic harness swarm controller.
+
+It documents the project structure and coding conventions.
 
 ## What this app is
 
-Harness is a macOS Electron app that manages multiple Claude Code instances
-across git worktrees. The user runs many parallel Claude sessions, and Harness
-gives them a single window with a sidebar of worktrees, terminal tabs per
-worktree (Claude + raw shells), changed-files panel, PR status, and hotkey
-navigation.
+Tatsu is an Electron App that manages multiple Agentic CLI instances across git worktrees. The user is able to run multiple harness sessions in parallel sessions. Tatsu gives the user a single window to control multiple worktrees. Tatsu also supports the following: sidebar showing worktrees, terminal tabs per worktree, changed-files panel, PR status, hotkey navigation.
+
+**Currently Supported Operating Systems**:
+- macOS desktop
+- Linux headless / packaged release artifacts
+
+**Currently Supported Agent Harnesses**:
+- Claude Code
+- Opencode
+- Codex
 
 ## Stack
 
@@ -24,10 +30,12 @@ navigation.
 
 ## Architecture (read this before touching state)
 
-This app went through a large refactor where **the main process owns all
-shared state**, the renderer is a thin view layer, and a single transport
-(currently Electron IPC, future: WebSocket) carries both state events
-and side-effect signals. If you find yourself adding a `useState` to
+Currently the app is structured as follows:
+- **Main process owns all shared state**
+- Renderer is a thin view layer
+- A shared transport abstraction carries requests, state events, and side-effect signals over Electron IPC or WebSocket.
+
+**Note**: If you find yourself adding a `useState` to
 hold a value that any other client of this workspace would also want,
 you're doing it wrong — that value belongs in a slice.
 
@@ -42,26 +50,37 @@ Each slice package has:
 
 Current slices: `settings`, `prs`, `onboarding`, `hooks`, `worktrees`,
 `terminals` (which also owns `panes` and `lastActive`), `updater`,
-`repoConfigs`. Adding a new piece of shared state means picking the
-right slice (or making a new one) and editing the reducer + event union.
+`repoConfigs`, `costs`, `browser`, `snooze`, `announcements`,
+`scratchpad`, and `json-claude`. `json-claude-todos` lives nearby as a
+TodoWrite helper package, not an `AppState` slice. Adding a new piece of
+shared state means picking the right slice (or making a new one) and
+editing the reducer + event union.
 
 ### How a state mutation flows end-to-end
 
-1. **Renderer**: user clicks something. The handler calls a thin IPC
-   method like `window.api.setTheme('solarized')`.
-2. **Main / preload**: the IPC handler in `src/main/index.ts` does the
-   side effect (validation, writing to disk, etc.) and **dispatches a
-   typed event** through the store: `store.dispatch({type: 'settings/themeChanged', payload: 'solarized'})`.
-3. **Main / store**: `src/main/store/store.ts` runs the dispatched event
+1. **Renderer**: user clicks something. The handler calls a thin backend
+   method like `useBackend().setTheme('solarized')`.
+2. **Renderer / transport**: `src/renderer/build-backend/build-backend.ts`
+   routes the request through the active backend transport from
+   `BackendsRegistry`: local Electron preload handle, or remote
+   `WebSocketClientTransport`. `connections:*` requests always route to
+   the local backend.
+3. **Main / transport**: the Electron IPC transport, WebSocket transport,
+   or `TransportCompound` receives the request via its generic
+   `onRequest` handler, routes it to the registered request processor in
+   `src/main/index.ts`, which does the side effect (validation, writing to
+   disk, etc.) and **dispatches a typed event** through the store:
+   `store.dispatch({type: 'settings/themeChanged', payload: 'solarized'})`.
+4. **Main / store**: `src/main/store/store.ts` runs the dispatched event
    through the shared `rootReducer`, updates its in-memory `AppState`,
    bumps a monotonic `seq`, and notifies subscribers.
-4. **Main / transport**: `src/main/transport-electron/transport-electron.ts` subscribes to
-   the store and forwards every event over the `state:event` IPC channel
-   to all `BrowserWindow`s.
-5. **Renderer / client store**: `src/renderer/store/store.ts` listens on
-   `state:event`, applies the **same** shared `rootReducer` to its local
-   mirror, and bumps its own seq.
-6. **Renderer / hooks**: `useSyncExternalStore` notifies any component
+5. **Main / transport**: each transport forwards the event over its own
+   event channel: Electron `state:event` IPC for desktop windows, or WS
+   frames for headless/web/remote clients.
+6. **Renderer / client store**: `src/renderer/store/store.ts` wires each
+   transport's `onStateEvent` directly to that backend's `ClientStore`,
+   which applies the **same** shared `rootReducer` to its local mirror.
+7. **Renderer / hooks**: `useSyncExternalStore` notifies any component
    reading via `useSettings()` (or the slice-specific hook). React
    re-renders.
 
@@ -83,6 +102,32 @@ The test for "is this slice or renderer state": **would a second client
 connecting to the same workspace want to see the same value?** If yes,
 slice. If no, renderer.
 
+### Package layout and import surface
+
+Most of the `src/` tree uses package-style directories. A moved module
+lives in a folder with the same stem as its implementation file:
+
+```
+src/main/store/
+├── index.ts          # public exports
+├── store.ts          # implementation
+└── store.test.ts     # tests, when present
+```
+
+Package rules:
+- Every package-style directory has an `index.ts` barrel and a same-stem implementation file.
+- `types.ts` and `constants.ts` exist only when the package has real shared
+  types or constants worth extracting.
+- Tests move with their package; don't create empty test/type/constants files.
+- Imports outside a package should use the package barrel (`./store`,
+  `../store`, `../../shared/state/prs`), not deep implementation paths like
+  `./store/store` or `../../shared/state/prs/prs`.
+- Tests inside a package should prefer the barrel when practical. Use local
+  relative imports only when clearly simpler and still inside the package.
+- Behavior-preserving package moves should stay mechanical: move files, add
+  barrels, update imports, then verify typecheck/build/tests and audit for
+  stale deep imports.
+
 ### Key files
 
 ```
@@ -101,19 +146,47 @@ src/
 │   ├── onboarding/                # quest step
 │   ├── hooks/                     # consent + justInstalled
 │   ├── updater/                   # status (checking/available/downloading/…)
-│   └── repo-configs/              # byRepo: per-repo .harness.json contents
+│   ├── repo-configs/              # byRepo: per-repo .harness.json contents
+│   ├── costs/                     # session usage + cost rollups
+│   ├── browser/                   # browser pane state
+│   ├── snooze/                    # snoozed worktree/session timers
+│   ├── announcements/             # fetched announcement state
+│   ├── scratchpad/                # per-worktree notes
+│   ├── json-claude/               # ACP/chat sessions, turns, approvals
+│   └── json-claude-todos/         # TodoWrite helper package; not an AppState slice
+│
+├── shared/                        # Shared packages imported by main/preload/renderer
+│   ├── state/                     # Root state + slice packages
+│   ├── transport/                 # Transport contracts and client helpers
+│   │   ├── transport/             # Shared LocalTransportHandle contracts
+│   │   ├── transport-websocket/   # Browser/remote WS client transport
+│   │   └── parse-connection-url/  # Backend connection URL parser
+│   ├── agent-registry/            # Agent metadata helpers
+│   ├── cost-summary/              # Cost summary types/helpers
+│   ├── github-types/              # GitHub-facing shared types
+│   ├── perf-types/                # Perf sample/metric types
+│   ├── pricing/                   # Model pricing helpers
+│   ├── repo-pick/                 # Repository picker contracts
+│   ├── weekly-stats/              # Weekly stats contracts
+│   ├── constants/                  # Shared runtime constants
+│   └── permission-patterns/        # Permission pattern definitions
 │
 ├── main/
 │   ├── index.ts                   # IPC handlers, menu, autoUpdater, store init
+│   ├── build-initial-state/       # Hydrates initial AppState from config/runtime inputs
 │   ├── store/                     # The authoritative Store class
 │   │   ├── index.ts               # Public exports
 │   │   ├── store.ts               # Implementation
 │   │   └── store.test.ts          # Tests, when present
 │   ├── transport-electron/        # Forwards store events to all windows via state:event IPC
+│   ├── transport-websocket/       # Headless/websocket transport
+│   ├── transport-compound/        # Composes transport surfaces
 │   ├── pr-poller/                 # Background PR polling, focus refresh, dedup
 │   ├── worktrees-fsm/             # Pending-creation FSM (addWorktree → setup script → outcome)
+│   ├── worktree-deletion-fsm/     # Pending-deletion FSM
 │   ├── panes-fsm/                 # Every pane/tab mutation (addTab, closeTab, splitPane, …)
 │   ├── activity-deriver/          # Subscribes to store, derives + records activity transitions
+│   ├── json-claude-status-deriver/# Derives chat status from PTY/tool state
 │   ├── pty-manager/               # node-pty lifecycle, dispatches statuses to store
 │   ├── hooks/                     # Installs Claude Code hooks, dispatches statuses to store
 │   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
@@ -122,30 +195,98 @@ src/
 │   │   └── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
 │   ├── worktree/                  # git worktree CRUD primitives
 │   ├── github/                    # GitHub REST API calls
+│   ├── github-auth/               # GitHub token resolution
 │   ├── repo-config/               # Per-repo .harness.json read/write
 │   ├── persistence/               # JSON config at userData/config.json
 │   ├── secrets/                   # safeStorage-encrypted secrets
-│   └── debug/                     # File-based debug logger
+│   ├── control-server/            # Headless control server
+│   ├── web-client-server/         # Web client serving for headless mode
+│   ├── browser-manager/           # Desktop browser pane manager
+│   ├── browser-manager-playwright/# Headless browser manager
+│   ├── perf-monitor/              # Event-loop/render/store perf aggregation
+│   ├── perf-log/                  # File-based perf trace logger
+│   ├── path-fix/                  # macOS login-shell PATH capture
+│   ├── debug/                     # File-based debug logger
+│   ├── agents/                    # Agent-specific hook installation (Claude, Opencode, Codex)
+│   ├── editor/                    # External editor integration
+│   ├── git-ops-state/             # Pending git operations per worktree
+│   ├── github-recorder/           # GitHub API response recording for offline access
+│   ├── claude-launch/             # Claude process launch utilities
+│   ├── claude-auth/               # Claude authentication state
+│   ├── agent-kind/                # Agent kind detection
+│   ├── fs-listing/                # Filesystem listing helpers
+│   ├── repo-resolve/              # Repository resolution logic
+│   ├── repo-roots/                # Repository root management
+│   ├── repo-create/               # Repository creation
+│   ├── worktree-watcher/          # Watches worktree directories
+│   ├── snooze-timer/              # Snoozed worktree/session timer management
+│   ├── cli-args/                  # CLI argument parsing for headless mode
+│   ├── cost-tracker/              # Per-session cost tracking
+│   ├── cost-aggregator/           # Cost aggregation
+│   ├── mcp-config/                # MCP server configuration injection
+│   ├── shell-quote/               # Shell quoting utilities
+│   ├── auto-approver/             # Auto-approval of agent actions
+│   ├── json-claude-attachments/   # Chat attachment handling
+│   ├── jsonl-fold/                # JSONL fold/wrap utilities
+│   ├── user-shell/                # User shell management
+│   ├── weekly-stats/              # Weekly statistics computation
+│   ├── manual-update/             # Manual app update trigger
+│   ├── browser-manager-types/     # Browser manager type contracts
+│   ├── auto-sleep-monitor/        # User inactivity monitoring
+│   ├── announcements-poller/      # Announcements fetching
+│   ├── ws-token/                  # WebSocket token management
+│   ├── activity/                  # Activity recording primitives
+│   ├── window-controls/           # Native window control IPC
+│   ├── desktop-shell/             # Desktop shell integration
+│   ├── themes-loader/             # Theme file loading
+│   ├── persistence-migrations/    # Config migration utilities
+│   ├── browser-screenshot/        # Browser screenshot capture
+│   └── paths/                     # Platform path utilities
 │
-├── preload/index.ts               # contextBridge — exposes window.api
+├── preload/
+│   ├── index.ts                   # contextBridge shell helpers + local transport handle
+│   ├── constants.ts               # Preload channel constants
+│   └── transport-electron/        # Electron IPC client transport
+│
+├── web-client/                    # Browser client entrypoint for headless/WebSocket mode
+│   ├── main.tsx                   # Wires WS transport into the shared renderer App
+│   ├── index.html                 # Web client HTML shell
+│   └── public/                    # PWA icons + manifest
 │
 └── renderer/
     ├── App/                       # Root component, per-client UI focus + JSX
+    ├── main/                      # Renderer entrypoint
     ├── store/                     # Client mirror + useSettings/usePrs/usePanes/etc. hooks
+    ├── build-backend/             # Builds active backend API from transport registry
+    ├── backend/                   # getBackend() / useBackend()
     ├── types/                     # ElectronAPI interface (re-exports shared types)
     ├── hotkeys/                   # Hotkey definitions, parsing, formatting
     ├── worktree-sort/             # Group worktrees by PR status
+    ├── themes/                    # Renderer theme definitions
+    ├── theme-apply/               # Applies selected theme to document
+    ├── syntax/                    # Highlight.js syntax helpers
+    ├── worktree-detail-override/  # Per-view worktree detail override helpers
+    ├── pending-tool/              # Pending tool display helpers
+    ├── branch-name/               # Branch name formatting helpers
+    ├── fuzzy/                     # Fuzzy matching helpers
+    ├── monaco-setup/              # Monaco worker/config setup
+    ├── render-metrics/            # React render performance reporting
     ├── components/                # React components
     └── hooks/
         ├── useHotkeys/            # Keyboard event subscription
         ├── useMetaHeld/           # Meta key detection
+        ├── useActiveTheme/        # Active theme resolution
+        ├── useSystemColorScheme/  # OS color-scheme subscription
+        ├── useViewport/           # Viewport size subscription
+        ├── useWatchedQuery/       # Polled async query helper
+        ├── useJsonClaudeApprovals/# Json Claude approval helpers
         ├── useTailLineBuffer/     # Rolling tail-line cache for CommandCenter
         ├── useTabHandlers/        # All pane/tab mutation handlers (addTab, splitPane, …)
         ├── useWorktreeHandlers/   # All worktree+repo+pending-creation handlers
         └── useHotkeyHandlers/     # Sidebar-aware hotkey action map + keystroke binding
 ```
 
-### Adding a new piece of shared state — the 5-file checklist
+### Adding a new piece of shared state — the checklist
 
 This is more ceremony than just adding a `useState`, but the payoff is
 that any future client (web/mobile/another window) gets the value for
@@ -156,20 +297,30 @@ free. Pattern is the same for every slice:
    - Add an `Event` variant for mutations
    - Add a reducer case
    - Update `initial<Slice>`
-2. **Seed it in main** (`src/main/index.ts`, in the `new Store({...})` block)
-3. **Add the IPC mutation handler** (in `main/index.ts` `registerIpcHandlers`):
+2. **Wire the root state** (`src/shared/state/index.ts`):
+   - Add the slice to `AppState`
+   - Add the event type to `StateEvent`
+   - Add the slice to `initialState`
+   - Add the `rootReducer` routing case
+   - Add the slice to `mergeWireSnapshot` so old-server/new-renderer skew is safe
+3. **Seed persisted/config-backed values** in
+   `src/main/build-initial-state/build-initial-state.ts` when the slice needs
+   boot-time config. `src/main/index.ts` constructs `new Store(buildInitialAppState(...))`.
+4. **Add the transport mutation handler** (usually in `main/index.ts`):
    ```ts
-   ipcMain.handle('myslice:setX', (_, value) => {
+   transport.onRequest('myslice:setX', async (_ctx, value) => {
      // …validation, persist…
      store.dispatch({type: 'myslice/xChanged', payload: value})
      return true
    })
    ```
-4. **Expose in preload + types**:
-   - `src/preload/index.ts`: `setX: (v) => ipcRenderer.invoke('myslice:setX', v)`
-   - `src/renderer/types/types.ts`: add to `ElectronAPI` interface
-5. **Add a reducer test** in `src/shared/state/<slice>/<slice>.test.ts` (one
-   test per new event variant)
+5. **Expose in renderer types** — add the method signature to the `ElectronAPI`
+   interface in `src/renderer/types/types.ts`. The preload (`src/preload/index.ts`) no longer
+   needs per-method wiring — it exposes a single generic `LocalTransportHandle`, and
+   `src/renderer/build-backend/build-backend.ts` auto-builds the full `window.api` surface
+   from the transport's `request()` method.
+6. **Add reducer and wire-merge tests** in `src/shared/state/<slice>/<slice>.test.ts`
+   (one per new event variant) and `src/shared/state/wire-merge.test.ts` (new slices or persisted fields).
 
 The renderer reads the value via the existing `useSettings()` /
 `usePrs()` / etc. hook automatically — no new subscription code.
@@ -181,8 +332,8 @@ trigger React re-renders. This is fine for events that fire a few times
 per second.
 
 PTY data is **not** a state event — it's a side-effect signal. It flows
-through its own `terminal:data` IPC channel directly to xterm.js via
-`window.api.onTerminalData`. If we put it through the reducer, every
+through its own `terminal:data` signal channel directly to xterm.js via
+`backend.onTerminalData`. If we put it through the reducer, every
 byte from a noisy build would re-render the world. The same conceptual
 distinction applies for any future high-frequency stream.
 
@@ -209,6 +360,19 @@ Some main-side modules subscribe to the store and react to events:
   `main/index.ts` that listens for `worktrees/listChanged` and
   `hooks/consentChanged`, installs hooks into any new worktree if
   consent is `'accepted'`.
+- **`WorktreeDeletionFSM`** — runs the pending-deletion state machine.
+  Dispatches `worktrees/*` events.
+- **`JsonClaudeStatusDeriver`** — derives chat status from PTY/tool state.
+- **`AnnouncementsPoller`** — fetches and dispatches announcement state.
+- **`AutoSleepMonitor`** — monitors user inactivity and dispatches sleep events.
+- **`SnoozeTimer`** — manages snoozed worktree/session timers.
+- **`CostTracker`** — tracks per-session usage costs.
+- **`WorktreeWatcher`** — watches worktree directories for changes.
+- **`GitOpsState`** — tracks pending git operations (fetch/push/etc.) per worktree.
+- **`GithubRecorder`** — records GitHub API responses for offline access.
+- **`ClaudeAuth`** — manages claude authentication state.
+- **`AutoApprover`** — manages auto-approval of agent actions.
+- **`McpConfig`** — manages MCP server configuration injection.
 
 Construction order in `main/index.ts` matters: `PanesFSM` is constructed
 **before** `WorktreesFSM` because the latter's `onWorktreeCreated`
@@ -267,9 +431,10 @@ anti-pattern #1 first.
 const settings = useSettings()
 const theme = settings.theme
 
-// Mutate — fire-and-forget IPC. The store dispatches and the read
-// above re-renders automatically.
-window.api.setTheme('solarized')
+// Mutate — calls through the active backend transport. The store dispatches
+// and the read above re-renders automatically.
+const backend = useBackend()
+backend.setTheme('solarized')
 ```
 
 The renderer **never holds a local copy of shared state**. There's no
@@ -297,12 +462,12 @@ event type if you're trying to find where something happens.
 
 ## How status detection works
 
-The reliable status (processing / waiting / needs-approval) comes from
-**Claude Code hooks** that we install into each worktree's
-`.claude/settings.local.json`. The hooks write a status JSON to
-`/tmp/harness-status/<terminal-id>.json` and the main process watches that
-directory via `fs.watch`. The hook script uses `$CLAUDE_HARNESS_ID` env var
-which the PtyManager sets when spawning each terminal.
+**agent-specific hooks** (per agent in `src/main/agents/`) that we install into each worktree's
+configuration (`.claude/settings.local.json` for Claude, `~/.config/opencode/plugins/` for
+Opencode, etc.). The hooks write status events as NDJSON to
+`/tmp/harness-status/<terminal-id>.ndjson` and the main process watches that
+directory via `fs.watch`. The hook scripts use `$HARNESS_TERMINAL_ID` env var
+(set by the PtyManager) with `$CLAUDE_HARNESS_ID` as a legacy fallback.
 
 ## How performance debugging works
 
@@ -356,10 +521,10 @@ reported timestamp.
 
 The user pastes a GitHub personal access token into Settings. It's encrypted
 via `safeStorage` and stored in `userData/secrets.enc`. All GitHub data
-(PR status, check runs, statuses) goes through `src/main/github/github.ts` using
+(PR status, check runs, statuses) goes through the `src/main/github/` package using
 `fetch()` against the REST API.
 
-Token resolution lives in `src/main/github-auth/github-auth.ts` and runs once at boot
+Token resolution lives in the `src/main/github-auth/` package and runs once at boot
 (re-runs on a 401): an explicit PAT in `secrets.enc` or `GITHUB_TOKEN` wins,
 then `gh auth token` (spawned through a login zsh so Homebrew's `gh` is on
 PATH), then nothing. The `gh` CLI is an **optional** auto-detect convenience
@@ -369,22 +534,18 @@ hard dependency on `gh`.
 
 ## Important quirks
 
-- **Worktree dep installs** — fresh git worktrees under
-  `claude-harness-worktrees/` start with no `node_modules`. Run
-  `pnpm install` once before building.
-- **node-pty rebuild** — `node-pty` is a native module compiled against a
-  specific Electron version. After running `pnpm pack` or `pnpm dist*`,
-  the postdist hook runs `electron-rebuild -f -w node-pty` so dev mode keeps
-  working. If dev mode ever errors with `posix_spawnp failed`, run
+- **Worktree dep installs** — For fresh git worktrees, always run `pnpm install` once before building. 
+- **node-pty rebuild** — `node-pty` compiles against a specific Electron version. 
+  After running `pnpm pack` or `pnpm dist*`, the postdist hook runs `electron-rebuild -f -w node-pty` to 
+  keep dev mode working. If dev mode ever errors with `posix_spawnp failed`, run
   `pnpm rebuild:dev` manually.
-- **Hooks consent** — first time a user activates a worktree, we show a
-  banner asking permission to install the hooks. We never write to user
-  files without that consent.
+- **Hooks consent** — The first time a user activates a worktree, we show a banner 
+  asking for permission to install hooks. Never write to user files without permission. 
 - **Login shell wrapping** — the PtyManager spawns `/bin/zsh -ilc <command>`
   instead of running the command directly, so the user's full PATH is loaded
   (homebrew binaries, nvm, etc.).
 - **Login-shell PATH fix at boot** — at boot we run the user's login shell once
-  via `src/main/path-fix/path-fix.ts` to capture its PATH and **merge** into `process.env.PATH`.
+  via the `src/main/path-fix/` package to capture its PATH and **merge** into `process.env.PATH`.
   Without this, the bundled claude (spawned directly, not via shell) inherits
   whatever stripped PATH Harness was launched with and can't find homebrew/
   nvm/pyenv tools. The fix runs in both Electron-local boots (Finder/Dock
@@ -410,80 +571,50 @@ hard dependency on `gh`.
   message. The headless renderer (web client) renders a polled JPEG
   via `RemoteBrowserView` instead of a native overlay — live screencast
   is a follow-up.
-- **Multi-backend (Tier 1)** — a single Electron Harness can connect
+- **Multi-backend (Tier 1)** — 1 Electron instance can connect to 
   to N backends (the in-process local one + remote `harness-server`
-  instances), with a chip strip at the bottom of the sidebar to switch.
-  See `plans/tier-1-multi-backend-ux.md` for the full design.
-  Architecturally: `src/renderer/store/store.ts` holds a `BackendsRegistry`
-  of `(transport, ClientStore)` pairs; the local entry uses
-  `ElectronClientTransport` (via the preload's `__harness_local_transport`
-  handle), remotes use `WebSocketClientTransport` directly in renderer
-  context. Each transport's `onStateEvent` is wired to its own store at
-  registration time, so there's no central event router — per-backend
-  channels are naturally segregated. `window.api` is built in the
-  RENDERER (`src/renderer/build-backend/build-backend.ts`, exported via
-  `src/renderer/backend/backend.ts` as `getBackend()` / `useBackend()`),
-  with each method calling `registry.getActiveTransport().request(...)`
-  lazily. For local active that's the preload-bridged handle (1
-  contextBridge crossing); for remote active it's the WS transport
-  directly (0 crossings — same wire path as the standalone web client).
-  The preload itself is tiny — only exposes the local transport handle
-  and a few electron-only helpers (`webUtils.getPathForFile`, window
-  controls). `connections:*` methods always go to the local transport
-  (renderer-shell-owned per design §C/§G). Menu signals
-  (`onOpenSettings`, etc.) likewise bind to the local transport since
-  only the local Electron has a Menu. The legacy `HARNESS_REMOTE_URL`
-  env-var mode was removed in Tier 1 — adding a remote backend now
-  happens via the chip strip's `+` button (or `File → Add Backend…`
-  if/when wired). Tokens encrypted in `secrets.enc` keyed
-  `backend-token:<id>`; connections list lives in `userData/config.json`.
+  instances), with a button at the end of the sidebar to swap. 
+    - Full design is at `plans/tier-1-multi-backend-ux.md`. 
 - **Terminal tabs vs ACP chat tabs** — **Terminal tabs** (internally
-  xterm-hosted) spawn `/bin/zsh -ilc claude` so the user's PATH `claude`
-  is what runs (lets bleeding-edge / beta testers stay on their own
-  build). **Chat tabs** still use the `jsonClaude:*` transport surface,
+  xterm-hosted) spawn `/bin/zsh -ilc (cli)` so the user's PATH is what runs.
+    - This allows multiple CLI agents (`claude`, `opencode`, etc.) to be integrated.
+  **Chat tabs** still use the `jsonClaude:*` transport surface,
   but main routes those calls through `ChatRuntimeRegistry` into
   `ClaudeAcpRuntime`, which uses `@anthropic-ai/claude-agent-sdk`'s
-  `query()` API. The runtime resolves bundled platform-native `claude`
-  executable from `@anthropic-ai/claude-agent-sdk-<platform>-<arch>` via
-  `createRequire`, rewrites `app.asar` paths to `app.asar.unpacked`, and
-  keeps `persistSession: false` so Harness-owned slice state remains
-  source of truth for visible chat lifecycle. Terminal tabs and chat tabs
-  still share `~/.claude/` for auth + MCP config.
+  `query()` API. 
 
 ## Workflow conventions
 
-These are how the user wants Claude to behave when working on this repo:
+This is how you are to behave when working on this repo. 
 
-1. **Commit as you go.** When a coherent change is done and the build is
-   clean, commit it with a descriptive message. Don't batch multiple
-   features into one commit.
+### General Guidelines
+
+1. **Commit as you go.** All changes are to use a descriptive commit message. Do not batch multiple feature in one commit. 
 
 2. **Push after every commit.** Always run `git push origin <branch>`
-   immediately after a commit succeeds. The user does not want commits
-   piling up locally.
+   immediately after a commit succeeds. 
 
 3. **Verify before committing.** After any TS/TSX change, run both:
-   - `pnpm typecheck` — catches type errors across main + renderer via
+   - `pnpm typecheck` — catch type errors across main + renderer via
      project references. `electron-vite build` does NOT run `tsc`, so the
      build alone will miss type errors.
-   - `npx electron-vite build` — catches missing imports, asset resolution,
-     and other bundler-level issues.
+   - `pnpm build` — catches missing imports, asset resolution, desktop bundle,
+     renderer bundle, and web-client bundle issues.
    Run `npx vitest run` too if the change could affect reducer/FSM behavior.
-   PR-time CI (`.github/workflows/ci.yml`) runs all three on every PR as a
-   safety net, but the local pre-commit ritual still catches issues before
-   you push.
+   Catch issues before the PR-time CI check (`.github/workflows/ci.yml`) does.
 
 4. **Don't add comments unless asked.** Code should explain itself; comments
    are reserved for non-obvious "why" notes. The exception is the comment
-   blocks already present in `src/main/store/store.ts`, `src/main/index.ts`
-   (around the panesFSM/worktreesFSM construction), `src/shared/state/index.ts`,
-   `src/renderer/store/store.ts`, and `src/main/activity-deriver/activity-deriver.ts` — those
-   document the load-bearing architecture decisions and should be
-   preserved/updated rather than removed.
+   blocks already present in:
+    - `src/main/store/store.ts`
+    - `src/main/index.ts` (around the panesFSM/worktreesFSM construction)
+    - `src/shared/state/index.ts` 
+    - `src/renderer/store/store.ts`
+    - `src/main/activity-deriver/activity-deriver.ts`
+   These sections document architectural decisions and should be preserved.
 
-5. **State changes go through slices, not `useState`.** If you're tempted
-   to add `const [x, setX] = useState(...)` in the renderer for a value
-   that should survive a reload or be visible to other clients, stop.
+5. **State changes go through slices, not `useState`.** Do not add `const [x, setX] = useState(...)` 
+   in the renderer for a value that should survive a reload or be visible to other clients.
    Add it to a slice instead — see "Adding a new piece of shared state"
    above. Per-client UI focus / modal visibility / sidebar widths stay
    as `useState` in `src/renderer/App/App.tsx`; everything else is a slice.
@@ -491,24 +622,21 @@ These are how the user wants Claude to behave when working on this repo:
 6. **Don't write planning/decision documents.** Work from conversation
    context. Don't create scratch markdown files or design docs.
 
-7. **Surface secrets concerns.** If the user pastes a token or password
-   in chat (often via .env reminders the harness sends), warn them once
-   that it's now in conversation history and tell them to rotate.
+7. **Surface secrets concerns.** Warn the user once if they paste 
+    a token or password that is in now in conversation history
+    and should be rotated.
 
 8. **Don't put boxes around screenshots on the marketing site.** No
    `border`, no `border-radius` wrapper, no glow `box-shadow` framing.
    The dark background on `site/public/*.html` is already the frame;
    adding a border to an `<img>` makes it look enclosed in a card it
    isn't part of. Plain `<img>` (width 100%, `display: block`) is the
-   right default. The user has had to undo this on multiple sessions —
-   if a task brief asks for a border around a screenshot, push back
-   before shipping it.
+   right default. 
 
 9. **GitHub comments use a standard signature.** You're authorized to leave
    comments on issues and PRs (via the `gh` CLI or the GitHub REST/GraphQL
-   API) without re-confirming each time, provided the comment ends with a
-   one-line signature so readers know the comment came from an agent acting
-   on the user's behalf, not the user themselves:
+   API) without re-confirming each time. Make sure these comments end
+   with the following signature:
 
    ```
    _Comment left on behalf of @<github-username> by <agent-name> via [Harness](https://github.com/frenchie4111/harness)._
@@ -526,63 +654,7 @@ These are how the user wants Claude to behave when working on this repo:
    closing PRs, force-pushing, deleting branches or releases, etc. When in
    doubt, ask.
 
-10. **When reviewing a PR from a contributor's fork inside a Harness
-    PR-review worktree, push cleanup commits back to THEIR branch — not
-    to upstream `origin` and not to a new branch on the reviewer's fork.**
-    `CONTRIBUTING.md` promises contributors that the reviewer's agent
-    will handle small nitpicks and styling fixes during review. For that
-    promise to hold, the commits must land on the contributor's PR
-    branch so the PR itself updates.
-
-    **The trap.** When Harness opens a PR for review, it fetches
-    `refs/pull/<N>/head` from `origin` (the upstream repo) into a local
-    branch named after the PR's head ref. It does **not** add the
-    contributor's fork as a remote, and the local branch has **no
-    upstream configured**. That means:
-
-    - `git push` with no args fails ("no upstream") — fine, it just
-      makes you stop and think.
-    - `git push -u origin <branch>` *silently succeeds* by creating a
-      new branch on the **upstream repo** (e.g. `frenchie4111/harness`),
-      because the reviewer has write access there. The PR — which
-      references `contributor:<branch>`, not `frenchie4111:<branch>` —
-      does **not** update. This is the most common failure mode.
-    - Creating a new branch like `review-fix/foo` on the reviewer's own
-      fork and opening a parallel PR is also wrong: fragments the
-      change history, confuses the contributor, forces manual
-      cherry-picking.
-
-    **The fix.** Inside the Harness-created worktree, run
-    `gh pr checkout <num>` once before pushing. `gh` is idempotent on a
-    branch that already exists at the right SHA — it just adds the
-    contributor's fork as a remote (named after the fork owner) and
-    sets the branch's upstream to point at it. After that, plain
-    `git push` does the right thing:
-
-    ```sh
-    # inside the Harness PR-review worktree
-    gh pr checkout <num>   # patches up remote + upstream config;
-                           # safe no-op on the existing local branch
-    # …make the fix, commit…
-    git push               # pushes to the contributor's fork; PR updates
-    ```
-
-    Then leave a PR comment with the standard signature (§9) noting
-    what you cleaned up, so the contributor isn't surprised by the new
-    commit.
-
-    **Fallback when `git push` fails with a permissions error.** The
-    contributor disabled "Allow edits by maintainers" on their PR
-    (default is ON, but it can be turned off). In that case post a PR
-    comment with the suggested diff as a code block — do **not** open
-    a parallel PR.
-
-    **Tripwire.** If you find yourself about to run
-    `git checkout -b review-fix/...`, `git push -u origin <branch>`,
-    or `gh pr create` against a PR you're reviewing, stop. You're on
-    the wrong path — go back and `gh pr checkout <num>` first.
-
-11. **Use the canonical text and icon sizes so the UI scales together.**
+10. **Use the canonical text and icon sizes so the UI scales together.**
     The renderer's root `html` font-size is driven by the `uiScale`
     setting, so every `rem`-based size (Tailwind `text-*` and the `w-N` /
     `h-N` grid) shifts in lockstep. Inline pixel sizes do NOT scale and
@@ -630,6 +702,7 @@ These are how the user wants Claude to behave when working on this repo:
     inline styles inside Monaco view zones, and non-icon components
     that legitimately take a pixel size (e.g. `<QRCodeSVG size={128} />`).
 
+
 ## Releasing
 
 End-to-end release is automated via `pnpm release <version>`:
@@ -646,6 +719,9 @@ build/sign/notarize, tag/push, release notes from `git log`, and
 Linux release builds now produce both `.deb` (Ubuntu/Debian) and
 `.AppImage` (every distro) — both attached to the GitHub release
 automatically by `.github/workflows/build-linux.yml` on tag push.
+macOS release builds are handled by `.github/workflows/build-mac.yml`.
+`.github/workflows/release.yml` orchestrates the full release flow.
+`.github/workflows/deploy-site.yml` deploys the marketing site.
 
 ### Headless smoke test on every PR
 
@@ -683,7 +759,7 @@ matching the `actions/setup-node` step in the workflow.
 | `pnpm log:clear` | Clear the debug log |
 | `pnpm log:perf` | Tail the perf trace log (append-only across sessions) |
 | `pnpm log:perf:clear` | Clear the perf trace log (use before a fresh repro) |
-| `pnpm build` | Build all three (main, preload, renderer) to `out/` |
+| `pnpm build` | Build desktop bundles (main, preload, renderer) plus web client |
 | `pnpm pack` | Build + package without distribution (no signing) |
 | `pnpm dist:mac` | Full signed + notarized macOS build |
 | `pnpm rebuild:dev` | Rebuild node-pty for dev Electron |
