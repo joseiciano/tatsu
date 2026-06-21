@@ -128,7 +128,7 @@ async function handleRequest(
         if (roots.length === 1) {
           repoRoot = roots[0]
         } else if (roots.length === 0) {
-          return sendJson(res, 400, { error: 'no repos open in Harness' })
+          return sendJson(res, 400, { error: 'no repos open in Tatsu' })
         } else {
           return sendJson(res, 400, {
             error: 'repoRoot required when multiple repos are open',
@@ -222,13 +222,13 @@ async function handleRequest(
     const perms = deps.getBrowserPerms()
     if (!perms.enabled) {
       return sendJson(res, 403, {
-        error: 'browser tools are disabled in Harness settings'
+        error: 'browser tools are disabled in Tatsu settings'
       })
     }
     if (perms.mode === 'view' && FULL_CONTROL_BROWSER_PATHS.has(path)) {
       return sendJson(res, 403, {
         error:
-          'browser tools are set to View Only in Harness settings — click/type/scroll/cursor are unavailable'
+          'browser tools are set to View Only in Tatsu settings — click/type/scroll/cursor are unavailable'
       })
     }
     const callerWorktree = scope.worktreePath

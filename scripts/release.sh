@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Release script for Harness.
+# Release script for Tatsu.
 #
 # Usage: ./scripts/release.sh <version>
 # Example: ./scripts/release.sh 1.0.1
@@ -119,7 +119,7 @@ ok "claude CLI is available"
 
 # Confirm before proceeding
 echo
-echo "${BOLD}Ready to prepare Harness v${VERSION}${RESET}"
+echo "${BOLD}Ready to prepare Tatsu v${VERSION}${RESET}"
 echo "  Commit: $(git rev-parse --short HEAD)"
 echo "  Tag:    $TAG"
 echo
@@ -182,7 +182,7 @@ const files = ['README.md'];
 for (const f of files) {
   if (!fs.existsSync(f)) continue;
   let content = fs.readFileSync(f, 'utf-8');
-  content = content.replace(/Harness-\d+\.\d+\.\d+/g, \`Harness-\${v}\`);
+  content = content.replace(/Tatsu-\d+\.\d+\.\d+/g, \`Tatsu-\${v}\`);
   content = content.replace(/releases\/download\/v\d+\.\d+\.\d+/g, \`releases/download/v\${v}\`);
   fs.writeFileSync(f, content);
 }
@@ -286,17 +286,17 @@ if [ -s "$CONTRIBUTORS_FILE" ]; then
 fi
 
 cat > "$RELEASE_NOTES_FILE" <<EOF
-## Harness ${TAG}
+## Tatsu ${TAG}
 
 ### Changes
 ${CHANGES}${CONTRIBUTORS_SECTION}
 
 ### Installing
 
-- **Apple Silicon:** \`Harness-${VERSION}-arm64.dmg\`
-- **Intel:** \`Harness-${VERSION}.dmg\`
+- **Apple Silicon:** \`Tatsu-${VERSION}-arm64.dmg\`
+- **Intel:** \`Tatsu-${VERSION}.dmg\`
 
-Drag \`Harness.app\` to Applications, then launch it. Existing installs will auto-update.
+Drag \`Tatsu.app\` to Applications, then launch it. Existing installs will auto-update.
 EOF
 
 rm -f "$CONTRIBUTORS_FILE"
