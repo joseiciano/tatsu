@@ -97,6 +97,9 @@ class SafeStorageBackend implements SecretsBackend {
 }
 
 class KeytarBackend implements SecretsBackend {
+  // Keep as 'harness' — renaming would orphan existing users' stored GitHub
+  // tokens in the macOS Keychain / Linux secret service. This is a permanent
+  // backward-compatibility hold.
   private static readonly SERVICE = 'harness'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly keytar: any

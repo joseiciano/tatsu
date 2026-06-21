@@ -134,7 +134,7 @@ function readVar(name: string, fallback: string): string {
   return v || fallback
 }
 
-export function defineHarnessTheme(): void {
+export function defineTatsuTheme(): void {
   const bg = readVar('--color-app', '#0b0d10')
   const panel = readVar('--color-panel', '#12151a')
   const fg = readVar('--color-fg', '#e6e6e6')
@@ -142,7 +142,7 @@ export function defineHarnessTheme(): void {
   const faint = readVar('--color-faint', '#6b7280')
   const border = readVar('--color-border', '#1f242c')
 
-  monaco.editor.defineTheme('harness', {
+  monaco.editor.defineTheme('tatsu', {
     base: 'vs-dark',
     inherit: true,
     rules: [
@@ -173,7 +173,7 @@ export function defineHarnessTheme(): void {
       'diffEditor.removedLineBackground': '#5c1a2a1a'
     }
   })
-  monaco.editor.setTheme('harness')
+  monaco.editor.setTheme('tatsu')
 }
 
 // Map common file extensions to Monaco language ids. Monaco ships with

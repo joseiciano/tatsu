@@ -41,7 +41,7 @@ export function MonacoEditor({
       value,
       language: detectMonacoLanguage(filePath),
       readOnly,
-      theme: 'harness',
+      theme: 'tatsu',
       fontFamily: fontFamily || undefined,
       fontSize: fontSize || 13,
       automaticLayout: true,

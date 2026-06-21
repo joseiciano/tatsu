@@ -57,11 +57,11 @@ contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.electronHelpers, electronHelpers
 
 contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.web, false)
 contextBridge.exposeInMainWorld(PRELOAD_GLOBALS.platform, process.platform)
+contextBridge.exposeInMainWorld('__harness_local_transport', localTransportHandle)
+contextBridge.exposeInMainWorld('__harness_electron_helpers', electronHelpers)
+contextBridge.exposeInMainWorld('__HARNESS_WEB__', false)
+contextBridge.exposeInMainWorld('__HARNESS_PLATFORM__', process.platform)
 
 // Backward-compat aliases: expose old "harness" globals for any renderer
 // code that hasn't migrated yet. Both old and new names point to the same
 // underlying object / value so reads are interchangeable.
-;(window as any).__harness_local_transport = (window as any).__tatsu_local_transport
-;(window as any).__harness_electron_helpers = (window as any).__tatsu_electron_helpers
-;(window as any).__HARNESS_WEB__ = (window as any).__TATSU_WEB__
-;(window as any).__HARNESS_PLATFORM__ = (window as any).__TATSU_PLATFORM__

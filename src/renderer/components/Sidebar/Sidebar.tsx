@@ -258,7 +258,7 @@ export function Sidebar({
     >
       <svg width="0" height="0" className="absolute" aria-hidden="true">
         <defs>
-          <linearGradient id="harness-add-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="tatsu-add-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#f59e0b" />
             <stop offset="50%" stopColor="#ef4444" />
             <stop offset="100%" stopColor="#a855f7" />
@@ -477,7 +477,7 @@ export function Sidebar({
                 >
                   <span className="absolute left-0 top-0 bottom-0 w-0.5 brand-gradient-flow-bar opacity-0 group-hover:opacity-100 transition-opacity" />
                   <Plus
-                    className="icon-sm shrink-0 text-dim group-hover:[stroke:url(#harness-add-gradient)] transition-colors"
+                    className="icon-sm shrink-0 text-dim group-hover:[stroke:url(#tatsu-add-gradient)] transition-colors"
                   />
                   <span className="text-sm font-medium brand-gradient-flow-text-hover">
                     Add worktree

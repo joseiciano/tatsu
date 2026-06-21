@@ -911,11 +911,11 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
     defaultClaudeTabType
   } = useSettings()
   const cameFromTerminalDefault = defaultClaudeTabType === 'xterm'
+  const platform = typeof window !== 'undefined'
+    ? window.__TATSU_PLATFORM__ ?? window.__HARNESS_PLATFORM__
+    : undefined
   const isMac =
-    typeof window !== 'undefined' &&
-    (window.__HARNESS_PLATFORM__
-      ? window.__HARNESS_PLATFORM__ === 'darwin'
-      : /Mac|iPhone|iPad/.test(navigator.platform || ''))
+    typeof window !== 'undefined' && (platform ? platform === 'darwin' : /Mac|iPhone|iPad/.test(navigator.platform || ''))
   const modKeySymbol = isMac ? '⌘' : 'Ctrl+'
   const modKeyWord = isMac ? 'Cmd' : 'Ctrl'
   const sendHotkeyLabel = sendOnEnter

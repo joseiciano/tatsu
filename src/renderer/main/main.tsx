@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import App from '../App'
 import { initStore } from '../store'
 import { getBackend } from '../backend'
-import { defineHarnessTheme } from '../monaco-setup'
+import { defineTatsuTheme } from '../monaco-setup'
 import { renderMetrics } from '../render-metrics'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { LinuxWindowControls } from '../components/LinuxWindowControls'
@@ -20,7 +20,7 @@ const onRender: ProfilerOnRenderCallback = (id, phase, actualDuration) => {
 
 initStore()
   .then(() => {
-    defineHarnessTheme()
+    defineTatsuTheme()
     createRoot(document.getElementById('root')!).render(
       <ErrorBoundary label="app:root" showReload>
         <Profiler id="app" onRender={onRender}>
@@ -42,7 +42,7 @@ initStore()
 
 function showBootError(err: unknown): void {
   // eslint-disable-next-line no-console
-  console.error('[harness] boot failed', err)
+  console.error('[tatsu] boot failed', err)
   const message = err instanceof Error ? err.message : String(err)
   const isRemote = window.__TATSU_WEB__ === true || window.__HARNESS_WEB__ === true
   const root = document.getElementById('root')
@@ -58,7 +58,7 @@ function showBootError(err: unknown): void {
   const body = document.createElement('p')
   body.style.cssText = 'margin:0 0 16px 0;line-height:1.5;'
   body.textContent = isRemote
-    ? 'Could not reach the remote harness-server. Check that the server is running and the URL/token are correct, then restart the app.'
+    ? 'Could not reach the remote tatsu-server. Check that the server is running and the URL/token are correct, then restart the app.'
     : 'The local Tatsu backend did not respond. Check the debug log and restart the app.'
   wrap.appendChild(body)
   const details = document.createElement('pre')

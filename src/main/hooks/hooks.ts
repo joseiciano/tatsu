@@ -5,7 +5,8 @@ import {
   readSync,
   closeSync,
   unlinkSync,
-  mkdirSync
+  mkdirSync,
+  existsSync
 } from 'fs'
 import { join } from 'path'
 import type { PtyStatus } from '../pty-manager'
@@ -14,7 +15,7 @@ import { log } from '../debug'
 
 // This path is also the signature we use to recognize Tatsu-installed
 // hook entries when deduping at install time. If you change it, update
-// HARNESS_HOOK_COMMAND_SIGNATURE in src/main/agents/{claude,codex}.ts
+// TATSU_HOOK_COMMAND_SIGNATURE in src/main/agents/{claude,codex}.ts
 // to match, or older installed entries become unrecognizable and
 // re-installs will append duplicates.
 const STATUS_DIR = '/tmp/tatsu-status'
@@ -152,8 +153,8 @@ function emitStopIfRelevant(terminalId: string, ev: HookEvent): void {
   }
 }
 
-function tailLog(terminalId: string, store: Store): void {
-  const path = join(STATUS_DIR, `${terminalId}.ndjson`)
+function tailLog(terminalId: string, store: Store, dir: string = STATUS_DIR): void {
+  const path = join(dir, `${terminalId}.ndjson`)
   let fd: number
   try {
     fd = openSync(path, 'r')
@@ -228,7 +229,7 @@ function tailLog(terminalId: string, store: Store): void {
 export function watchStatusDir(store: Store): () => void {
   mkdirSync(STATUS_DIR, { recursive: true })
 
-  log('hooks', `watching status dirs: ${STATUS_DIR}, /tmp/harness-status`)
+  log('hooks', `watching status dir: ${STATUS_DIR}` + (existsSync('/tmp/harness-status') ? ', /tmp/harness-status' : ''))
 
   const watcher = watch(STATUS_DIR, (_eventType, filename) => {
     if (!filename || !filename.endsWith('.ndjson')) return
@@ -240,19 +241,21 @@ export function watchStatusDir(store: Store): () => void {
       log('hooks', `tail failed for ${terminalId}`, err instanceof Error ? err.message : err)
     }
   })
-  mkdirSync('/tmp/harness-status', { recursive: true })
-  const legacyWatcher = watch('/tmp/harness-status', (_eventType, filename) => {
-    if (!filename || !filename.endsWith('.ndjson')) return
-    if (filename.startsWith('.')) return
-    const terminalId = filename.replace(/\.ndjson$/, '')
-    try {
-      tailLog(terminalId, store)
-    } catch (err) {
-      log('hooks', `tail failed for ${terminalId}`, err instanceof Error ? err.message : err)
-    }
-  })
+  const legacyDir = '/tmp/harness-status'
+  const legacyWatcher = existsSync(legacyDir)
+    ? watch(legacyDir, (_eventType, filename) => {
+        if (!filename || !filename.endsWith('.ndjson')) return
+        if (filename.startsWith('.')) return
+        const terminalId = filename.replace(/\.ndjson$/, '')
+        try {
+          tailLog(terminalId, store, legacyDir)
+        } catch (err) {
+          log('hooks', `tail failed for ${terminalId}`, err instanceof Error ? err.message : err)
+        }
+      })
+    : null
 
-  return () => { watcher.close(); legacyWatcher.close() }
+  return () => { watcher.close(); legacyWatcher?.close() }
 }
 
 /** Called on terminal death — drop the log file and reset tailing state. */

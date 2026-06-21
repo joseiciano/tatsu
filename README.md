@@ -124,7 +124,7 @@ The tarballs are not Apple-signed. On macOS you may need to `xattr -d com.apple.
 To pin a specific version:
 
 ```sh
-HARNESS_SERVER_VERSION=2.6.1 sh -c 'curl -fsSL https://raw.githubusercontent.com/frenchie4111/harness/main/scripts/install-headless.sh | sh'
+TATSU_SERVER_VERSION=2.6.1 sh -c 'curl -fsSL https://raw.githubusercontent.com/frenchie4111/tatsu/main/scripts/install-headless.sh | sh'
 ```
 
 Re-running the install script bumps the version. There's no in-place self-update yet.
@@ -153,9 +153,9 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 
    ```sh
    rm -rf ~/Library/Application\ Support/Tatsu
-   rm -rf ~/Library/Preferences/org.mikelyons.harness.plist
-   rm -rf ~/Library/Saved\ Application\ State/org.mikelyons.harness.savedState
-   rm -rf ~/Library/Caches/org.mikelyons.harness
+   rm -rf ~/Library/Preferences/org.mikelyons.tatsu.plist
+   rm -rf ~/Library/Saved\ Application\ State/org.mikelyons.tatsu.savedState
+   rm -rf ~/Library/Caches/org.mikelyons.tatsu
    rm -rf ~/Library/Logs/Tatsu
    ```
 
@@ -226,7 +226,7 @@ Common commands:
 | `pnpm pack` | Build an unsigned `.app` for local smoke testing (fast — skips codesigning and notarization) |
 | `pnpm dist:mac` | Full signed + notarized macOS build (requires `.env` with Apple creds) |
 | `pnpm rebuild:dev` | Rebuild `node-pty` against the dev Electron version — run this if dev mode errors with `posix_spawnp failed` |
-| `pnpm log` | Tail the debug log at `~/Library/Application Support/harness/debug.log` |
+| `pnpm log` | Tail the debug log at `~/Library/Application Support/Tatsu/debug.log` |
 
 After `pnpm pack`, you can launch the unsigned build with:
 
@@ -242,4 +242,4 @@ xattr -cr release/mac-arm64/Tatsu.app
 
 # Contributing
 
-We absolutely love contributors. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, PR conventions, and pointers into the architecture docs.
+We welcome contributors. Please see the [AGENTS.md](AGENTS.md) for architecture and coding conventions.

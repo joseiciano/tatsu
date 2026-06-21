@@ -56,7 +56,7 @@ export default defineConfig({
   renderer: {
     plugins: [react(), tailwindcss()],
     define: {
-      __HARNESS_DEV_BRANCH__: JSON.stringify(DEV_BRANCH)
+      __TATSU_DEV_BRANCH__: JSON.stringify(DEV_BRANCH)
     },
     build: {
       ssr: false

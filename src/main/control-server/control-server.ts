@@ -63,7 +63,7 @@ function resolveScope(
   req: IncomingMessage,
   deps: ControlServerDeps
 ): { scope: CallerScope | null; terminalId: string } {
-  const terminalId = String(req.headers['x-tatsu-terminal-id'] || req.headers['x-tatsu-terminal-id'] || req.headers['x-harness-terminal-id'] || '')
+  const terminalId = String(req.headers['x-tatsu-terminal-id'] || req.headers['x-harness-terminal-id'] || '')
   if (!terminalId) return { scope: null, terminalId: '' }
   return { scope: deps.resolveCallerScope(terminalId), terminalId }
 }

@@ -9,7 +9,7 @@ const SWEEP_INTERVAL_MS = 60_000
  *  have been sitting at the yellow 'waiting' dot longer than the
  *  configured threshold. A periodic timer is used (not a store
  *  subscription) so streaming events don't fan-out a sweep per token —
- *  see CLAUDE.md anti-pattern #1. */
+ *  see AGENTS.md anti-pattern #1. */
 export class AutoSleepMonitor {
   private store: Store
   private panesFSM: PanesFSM

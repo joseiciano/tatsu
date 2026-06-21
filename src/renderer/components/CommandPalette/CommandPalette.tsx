@@ -40,8 +40,18 @@ function loadRecents(worktreePath: string): string[] {
 }
 
 function loadPaletteRecents(): PaletteRecent[] {
+  const LEGACY_KEY = 'harness:commandPalette:recents'
   try {
-    const raw = localStorage.getItem(PALETTE_RECENTS_KEY)
+    let raw = localStorage.getItem(PALETTE_RECENTS_KEY)
+    // Migrate from old namespace if new key is empty
+    if (!raw) {
+      const legacy = localStorage.getItem(LEGACY_KEY)
+      if (legacy) {
+        localStorage.setItem(PALETTE_RECENTS_KEY, legacy)
+        localStorage.removeItem(LEGACY_KEY)
+        raw = legacy
+      }
+    }
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []

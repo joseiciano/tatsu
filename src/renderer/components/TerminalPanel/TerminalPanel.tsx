@@ -233,8 +233,8 @@ function SortableTab({ tab, isActive, status, shellActivity, showClose, onSelect
       const ce = e as CustomEvent<{ tabId?: string }>
       if (ce.detail?.tabId === tab.id) startEditing()
     }
-    window.addEventListener('harness:rename-tab', handler)
-    return () => window.removeEventListener('harness:rename-tab', handler)
+    window.addEventListener('tatsu:rename-tab', handler)
+    return () => window.removeEventListener('tatsu:rename-tab', handler)
   }, [tab.id, startEditing])
   return (
     <div
@@ -489,8 +489,8 @@ export function TerminalPanel({
         {showAppTitle && (
           <div className="shrink-0 flex items-center h-full px-3 text-xs font-semibold whitespace-nowrap">
             <span className="gradient-text">Tatsu</span>
-            {import.meta.env.DEV && __HARNESS_DEV_BRANCH__ && (
-              <span className="text-faint font-normal ml-1">({__HARNESS_DEV_BRANCH__})</span>
+            {import.meta.env.DEV && __TATSU_DEV_BRANCH__ && (
+              <span className="text-faint font-normal ml-1">({__TATSU_DEV_BRANCH__})</span>
             )}
           </div>
         )}

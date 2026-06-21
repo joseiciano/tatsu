@@ -4,7 +4,7 @@ import type { Action } from '../../hotkeys'
 export const FILE_CACHE_TTL_MS = 10_000
 export const MAX_FILE_RESULTS = 100
 export const RECENTS_LIMIT = 20
-export const PALETTE_RECENTS_KEY = 'harness:commandPalette:recents'
+export const PALETTE_RECENTS_KEY = 'tatsu:commandPalette:recents'
 export const PALETTE_RECENTS_LIMIT = 3
 
 export const STATUS_COLORS: Record<PtyStatus | 'merged', string> = {

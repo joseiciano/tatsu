@@ -810,7 +810,7 @@ const autoSleepMonitor = new AutoSleepMonitor(store, panesFSM)
 
 /** Install agent status hooks at the user-scope settings file for both
  *  supported agents. Called once when consent flips to 'accepted'. The
- *  hook command is env-gated on $HARNESS_TERMINAL_ID, so it no-ops for
+ *  hook command is env-gated on $TATSU_TERMINAL_ID, so it no-ops for
  *  sessions started outside Tatsu. */
 function installHooksGlobally(): void {
   // installHooks() is idempotent — it strips any existing Tatsu entries
@@ -2356,7 +2356,7 @@ function registerIpcHandlers(): void {
   )
 
   // Hooks. Install/uninstall happen once at user scope — the hook command
-  // is env-gated on $HARNESS_TERMINAL_ID so sessions spawned outside
+  // is env-gated on $TATSU_TERMINAL_ID so sessions spawned outside
   // Tatsu are unaffected.
   transport.onRequest('hooks:accept', (_ctx) => {
     installHooksGlobally()

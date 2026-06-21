@@ -1179,12 +1179,12 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     // Brief highlight ring so the user can spot the destination after
     // the scroll lands. Toggled via a class — animation lives in
-    // styles.css (see `.harness-settings-flash`).
-    el.classList.remove('harness-settings-flash')
+    // styles.css (see `.tatsu-settings-flash`).
+    el.classList.remove('tatsu-settings-flash')
     // Force reflow so re-adding the class restarts the animation.
     void el.offsetHeight
-    el.classList.add('harness-settings-flash')
-    window.setTimeout(() => el.classList.remove('harness-settings-flash'), 1600)
+    el.classList.add('tatsu-settings-flash')
+    window.setTimeout(() => el.classList.remove('tatsu-settings-flash'), 1600)
   }, [])
 
   return (
@@ -2576,7 +2576,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       <GitPullRequest size={13} className="text-success shrink-0" />
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium text-fg-bright truncate">feature/example-branch</div>
-                        <div className="text-xs text-faint truncate">harness/feature-example-branch</div>
+                        <div className="text-xs text-faint truncate">tatsu/feature-example-branch</div>
                       </div>
                       {worktreeDetail === 'diff' && (
                         <span className="text-[10px] font-mono shrink-0 leading-none group-hover:hidden" title="+42 additions, −7 deletions">

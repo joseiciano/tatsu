@@ -1,3 +1,3 @@
 /// <reference types="vite/client" />
 
-declare const __HARNESS_DEV_BRANCH__: string
+declare const __TATSU_DEV_BRANCH__: string

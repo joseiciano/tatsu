@@ -12,11 +12,11 @@ declare global {
     __TATSU_WEB__?: boolean
     __TATSU_PLATFORM__?: NodeJS.Platform
     /** @deprecated Use __tatsu_local_transport */
-    __harness_local_transport?: import('../../shared/transport/transport').LocalTransportHandle
+    __harness_local_transport?: import('../shared/transport/transport').LocalTransportHandle
     /** @deprecated Use __tatsu_electron_helpers */
-    __harness_electron_helpers?: import('../../shared/transport/transport').ElectronOnlyHelpers
-    __tatsu_local_transport?: import('../../shared/transport/transport').LocalTransportHandle
-    __tatsu_electron_helpers?: import('../../shared/transport/transport').ElectronOnlyHelpers
+    __harness_electron_helpers?: import('../shared/transport/transport').ElectronOnlyHelpers
+    __tatsu_local_transport?: import('../shared/transport/transport').LocalTransportHandle
+    __tatsu_electron_helpers?: import('../shared/transport/transport').ElectronOnlyHelpers
   }
   namespace JSX {
     type Element = ReactJSX.Element

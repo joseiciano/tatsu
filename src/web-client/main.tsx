@@ -26,10 +26,15 @@ declare global {
      *  (vs. the Electron preload). Components can branch on this to hide
      *  Electron-only affordances. */
     __TATSU_WEB__?: boolean
+    /** @deprecated Use __TATSU_WEB__ */
+    __HARNESS_WEB__?: boolean
     /** Primary local-backend transport handle name. @deprecated __harness_local_transport kept for compat. */
     __tatsu_local_transport?: import('../renderer/types').LocalTransportHandle
     /** @deprecated Use __tatsu_local_transport */
     __harness_local_transport?: import('../renderer/types').LocalTransportHandle
+    __tatsu_electron_helpers?: import('../shared/transport/transport').ElectronOnlyHelpers
+    /** @deprecated Use __tatsu_electron_helpers */
+    __harness_electron_helpers?: import('../shared/transport/transport').ElectronOnlyHelpers
   }
 }
 
@@ -101,7 +106,7 @@ async function boot(): Promise<void> {
     ])
 
   await storeMod.initStore()
-  monacoMod.defineHarnessTheme()
+  monacoMod.defineTatsuTheme()
 
   const onRender: ProfilerOnRenderCallback = (_id, _phase, actualDuration) => {
     metricsMod.renderMetrics.record(actualDuration)
@@ -123,7 +128,7 @@ async function boot(): Promise<void> {
 
 void boot().catch((err) => {
   // eslint-disable-next-line no-console
-  console.error('[harness-web] boot failed', err)
+  console.error('[tatsu-web] boot failed', err)
   document.body.innerHTML =
     '<pre style="padding:24px;color:#fff;background:#400;font-family:monospace;">' +
     `Tatsu web client failed to boot: ${String(err?.message ?? err)}</pre>`

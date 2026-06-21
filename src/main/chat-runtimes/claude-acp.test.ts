@@ -101,10 +101,10 @@ describe('resolveClaudeAgentSdkExecutablePath', () => {
     const path = resolveClaudeAgentSdkExecutablePath({
       platform: 'darwin',
       arch: 'arm64',
-      resolveFromSdk: () => '/Applications/Harness.app/Contents/Resources/app.asar/node_modules/pkg/package.json'
+      resolveFromSdk: () => '/Applications/Tatsu.app/Contents/Resources/app.asar/node_modules/pkg/package.json'
     })
 
-    expect(path).toBe('/Applications/Harness.app/Contents/Resources/app.asar.unpacked/node_modules/pkg/claude')
+    expect(path).toBe('/Applications/Tatsu.app/Contents/Resources/app.asar.unpacked/node_modules/pkg/claude')
   })
 })
 

@@ -15,7 +15,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 
-const ATTACHMENT_DIR = join(tmpdir(), 'harness-attachments')
+const ATTACHMENT_DIR = join(tmpdir(), 'tatsu-attachments')
 
 const EXT_BY_MEDIA_TYPE: Record<string, string> = {
   'image/png': 'png',

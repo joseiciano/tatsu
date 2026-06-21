@@ -26,7 +26,7 @@ async function probeBrowser(): Promise<{ ok: true } | { ok: false; reason: strin
   try {
     const dynamicRequire = createRequire(__filename)
     const { chromium } = dynamicRequire('playwright-core') as typeof import('playwright-core')
-    const explicit = process.env['HARNESS_PLAYWRIGHT_BROWSER']
+    const explicit = process.env['TATSU_PLAYWRIGHT_BROWSER'] || process.env['HARNESS_PLAYWRIGHT_BROWSER']
     const browser =
       explicit && explicit.trim()
         ? await chromium.launch({ headless: true, executablePath: explicit.trim() })
@@ -50,7 +50,7 @@ describe('PlaywrightBrowserManager', () => {
       // eslint-disable-next-line no-console
       console.warn(
         '[PlaywrightBrowserManager test] skipping — could not launch a browser. ' +
-          'Install Chrome or set HARNESS_PLAYWRIGHT_BROWSER. Error:',
+          'Install Chrome or set TATSU_PLAYWRIGHT_BROWSER. Error:',
         probeResult.reason
       )
       return

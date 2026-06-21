@@ -262,7 +262,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
         const tabId = activeTabId[activeWorktreeId]
         if (!tabId) return
         window.dispatchEvent(
-          new CustomEvent('harness:rename-tab', { detail: { tabId } })
+          new CustomEvent('tatsu:rename-tab', { detail: { tabId } })
         )
       },
       newWorktree: () => setShowNewWorktree(true),

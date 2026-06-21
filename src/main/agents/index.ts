@@ -28,7 +28,7 @@ export interface AgentModule {
   /** Install status hooks at the agent's user-scope settings file
    *  (~/.claude/settings.json for Claude, ~/.codex/hooks.json for Codex,
    *   ~/.config/opencode/plugins/ for Opencode).
-   *  The hook command is gated on $HARNESS_TERMINAL_ID so sessions spawned
+   *  The hook command is gated on $TATSU_TERMINAL_ID so sessions spawned
    *  outside Tatsu are untouched. */
   installHooks(): void
   hooksInstalled(): boolean

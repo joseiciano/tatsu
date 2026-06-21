@@ -56,7 +56,7 @@ function buildBody(params: {
       ].join('\n')
     )
   }
-  sections.push(`---\nHarness v${version} on ${navigator.platform || 'macOS'}`)
+  sections.push(`---\nTatsu v${version} on ${navigator.platform || 'macOS'}`)
   return sections.join('\n\n')
 }
 

@@ -84,7 +84,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
     // client where there's no native dialog at all). Open the in-app
     // RemoteFilePicker instead and let it call repo:addAtPath when the
     // user selects. Per design §L: gate on per-backend kind, not the
-    // legacy process-wide __HARNESS_WEB__ flag.
+    // legacy process-wide __TATSU_WEB__ flag.
     if (activeBackend.kind === 'remote') {
       setRepoPickerOpen(true)
       return

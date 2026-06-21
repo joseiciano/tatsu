@@ -5,7 +5,7 @@ import { useBackend } from '../../backend'
 
 type GitignorePreset = 'none' | 'node' | 'python' | 'macos'
 
-const LAST_PARENT_DIR_KEY = 'harness:newProjectLastParentDir'
+const LAST_PARENT_DIR_KEY = 'tatsu:newProjectLastParentDir'
 
 interface NewProjectScreenProps {
   onCancel: () => void

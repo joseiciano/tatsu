@@ -276,7 +276,7 @@ export async function continueWorktree(
   const dirty = await isWorktreeDirty(worktreePath)
   let stashed = false
   if (dirty) {
-    const stashMsg = `harness-continue ${newBranchName} ${Date.now()}`
+    const stashMsg = `tatsu-continue ${newBranchName} ${Date.now()}`
     await execFileAsync('git', ['stash', 'push', '--include-untracked', '-m', stashMsg], {
       cwd: worktreePath
     })
@@ -1021,7 +1021,7 @@ export async function prepareMainForMerge(repoRoot: string): Promise<MainWorktre
     log('worktree', `stashing dirty changes in main worktree ${status.path}`)
     await execFileAsync(
       'git',
-      ['stash', 'push', '--include-untracked', '-m', 'harness: auto-stash before local merge'],
+      ['stash', 'push', '--include-untracked', '-m', 'tatsu: auto-stash before local merge'],
       { cwd: status.path }
     )
   }

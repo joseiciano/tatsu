@@ -42,7 +42,7 @@ export function QuestCard({ step, onDismiss, onFinish }: QuestCardProps): JSX.El
     // finale
     return {
       icon: <PartyPopper className="icon-base text-accent" />,
-      eyebrow: 'Harnessed up',
+      eyebrow: 'Tatsu\'d up',
       title: 'You just ran two agents in parallel.',
       body: 'Do it with ten next time. Tatsu is happiest when it has a lot to juggle — the status dots keep you honest so nothing slips.',
       hint: null

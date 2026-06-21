@@ -53,7 +53,7 @@ export function MonacoDiffEditor({
     const modifiedModel = monaco.editor.createModel(modified, language)
 
     const editor = monaco.editor.createDiffEditor(hostRef.current, {
-      theme: 'harness',
+      theme: 'tatsu',
       renderSideBySide: false,
       readOnly,
       originalEditable: false,

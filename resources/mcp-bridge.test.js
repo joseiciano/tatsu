@@ -21,6 +21,7 @@ function startStub(handler) {
           url: req.url,
           auth: req.headers.authorization,
           terminalId: req.headers['x-tatsu-terminal-id'],
+          harnessTerminalId: req.headers['x-harness-terminal-id'],
           body
         })
         try {
@@ -131,6 +132,7 @@ describe('mcp-bridge create_worktree', () => {
     expect(postCall).toBeDefined()
     expect(postCall.auth).toBe('Bearer secret-token')
     expect(postCall.terminalId).toBe('test-terminal')
+    expect(postCall.harnessTerminalId).toBe('test-terminal')
     expect(postCall.body.prNumber).toBe(47)
     expect(postCall.body.initialPrompt).toBe('review please')
   })

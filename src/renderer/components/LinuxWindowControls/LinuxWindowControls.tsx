@@ -12,7 +12,7 @@ export function LinuxWindowControls(): JSX.Element | null {
   // the renderer, so React's rules-of-hooks invariant still holds.
   const backend = useBackend()
   if (typeof window === 'undefined') return null
-  if (window.__HARNESS_PLATFORM__ !== 'linux') return null
+  if ((window.__TATSU_PLATFORM__ ?? window.__HARNESS_PLATFORM__) !== 'linux') return null
 
   const button =
     'no-drag w-5 h-5 rounded flex items-center justify-center text-muted hover:text-fg-bright hover:bg-panel-raised transition-colors cursor-pointer'

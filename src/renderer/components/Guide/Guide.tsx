@@ -138,7 +138,7 @@ claude`}</CodeBlock>
 
           {/* Section 4 */}
           <Section icon={Eye} title="What Tatsu does for you">
-            <HarnessMockup />
+            <TatsuMockup />
             <ul className="space-y-3 list-none pl-0">
               <Bullet title="One-click worktrees">
                 Create and delete them from the sidebar. Tatsu runs the{' '}
@@ -444,7 +444,7 @@ function CollisionDiagram(): JSX.Element {
 }
 
 /** Miniature preview of the Tatsu sidebar with status dots and PR badges. */
-function HarnessMockup(): JSX.Element {
+function TatsuMockup(): JSX.Element {
   const rows = [
     { name: 'feature/onboarding', status: 'needs', pr: 'open', checks: 'pass' },
     { name: 'bug/login-flash', status: 'waiting', pr: 'open', checks: 'pending' },

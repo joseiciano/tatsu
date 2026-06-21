@@ -434,7 +434,7 @@ export async function initStore(): Promise<void> {
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[harness] failed to hydrate remote backends', err)
+    console.warn('[tatsu] failed to hydrate remote backends', err)
   }
 }
 
@@ -457,7 +457,7 @@ export async function hydrateRemoteBackend(
     const token = await backend.connectionsGetToken(conn.id)
     if (!token) {
       // eslint-disable-next-line no-console
-      console.warn(`[harness] no token stored for backend ${conn.id} — skipping`)
+      console.warn(`[tatsu] no token stored for backend ${conn.id} — skipping`)
       return
     }
     // BackendConnection.url is the wire URL with ws://-or-wss:// prefix
@@ -493,7 +493,7 @@ export async function hydrateRemoteBackend(
     await ws.connect()
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn(`[harness] failed to connect to backend ${conn.id}`, err)
+    console.warn(`[tatsu] failed to connect to backend ${conn.id}`, err)
     // Drop the half-registered entry so it can't poison active-backend
     // selection. Without this, the outer hydration loop's
     // `if (registry.has(savedActive)) setActive(savedActive)` would pin

@@ -280,6 +280,8 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       cwd: worktreePath,
       env: {
         ...process.env,
+        // Keep 'harness' — the Claude Agent SDK may use this to identify
+        // the calling application. Needs SDK-level testing before renaming.
         CLAUDE_AGENT_SDK_CLIENT_APP: 'harness'
       },
       abortController,

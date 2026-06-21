@@ -164,6 +164,7 @@ export function AddBackendModal({ isOpen, onClose }: AddBackendModalProps): JSX.
           <p className="text-xs text-dim leading-relaxed">
             Paste the connection link the host machine shows under{' '}
             <span className="text-fg">Settings → Server</span>, or the URL{' '}
+            {/* TODO: update to tatsu-server after Phase 3 binary rename */}
             <code className="bg-app/40 px-1 rounded text-xs">harness-server</code>{' '}
             prints on startup.
           </p>

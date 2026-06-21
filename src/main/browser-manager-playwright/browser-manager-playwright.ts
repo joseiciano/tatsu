@@ -13,11 +13,11 @@
 // own BrowserContext so cookies / localStorage stay isolated, matching
 // the per-worktree session-partition split the Electron impl uses.
 //
-// Browser binary resolution: try `HARNESS_PLAYWRIGHT_BROWSER` first,
-// then `channel: 'chrome'` (Playwright's auto-discovery of system
-// Chrome). If neither resolves, the first create call throws with a
-// message that tells the user how to fix it. We deliberately don't
-// bundle a Chromium download — the headless build stays small.
+// Browser binary resolution: try `TATSU_PLAYWRIGHT_BROWSER` first (falling
+// back to `HARNESS_PLAYWRIGHT_BROWSER`), then `channel: 'chrome'` (Playwright's
+// auto-discovery of system Chrome). If neither resolves, the first create call
+// throws with a message that tells the user how to fix it. We deliberately
+// don't bundle a Chromium download — the headless build stays small.
 
 import { createRequire } from 'module'
 import type { Browser, BrowserContext, Page } from 'playwright-core'
