@@ -15,7 +15,7 @@ interface AddBackendModalProps {
   onClose: () => void
 }
 
-/** Modal for adding a remote `harness-server` to the chip strip. The
+/** Modal for adding a remote `tatsu-server` to the chip strip. The
  *  user pastes the link Settings displays on the host machine
  *  (`http://host:port/?token=...`); we parse, validate the connection
  *  by opening a WebSocket and fetching a snapshot, persist via main,
