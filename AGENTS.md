@@ -582,6 +582,9 @@ hard dependency on `gh`.
   but main routes those calls through `ChatRuntimeRegistry` into
   `ClaudeAcpRuntime`, which uses `@anthropic-ai/claude-agent-sdk`'s
   `query()` API. 
+- **External Name vs Internal Name**: Externally, the app is to be shown as "Tatsu" (External Readme, App components). 
+  Internally, there are parts that mention the old name "Harness". These parts are more critical and changing it can break things. 
+  For now, refer to these parts as Harness if you see it, but keep any customer facing parts showing the new name. 
 
 ## Workflow conventions
 

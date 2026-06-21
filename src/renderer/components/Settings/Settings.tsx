@@ -820,19 +820,19 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   // The WS server is only constructed at app launch, so any divergence
   // between config and the live wsInfo surfaces as "relaunch required".
   const wsNeedsRestart = ((): string | null => {
-    if (wsTransportEnabled && !wsInfo) return 'Quit and relaunch Harness to start the server.'
-    if (!wsTransportEnabled && wsInfo) return 'Server is still running — quit and relaunch Harness to stop it.'
+    if (wsTransportEnabled && !wsInfo) return 'Quit and relaunch Tatsu to start the server.'
+    if (!wsTransportEnabled && wsInfo) return 'Server is still running — quit and relaunch Tatsu to stop it.'
     if (wsInfo && wsTransportEnabled) {
-      if (wsInfo.port !== wsTransportPort) return `Quit and relaunch Harness to switch to port ${wsTransportPort}.`
-      if (wsInfo.host !== wsTransportHost) return 'Quit and relaunch Harness to rebind the server.'
-      if (wsTokenRotated) return 'Token rotated — quit and relaunch Harness. Any pinned/bookmarked URLs will need to be replaced.'
+      if (wsInfo.port !== wsTransportPort) return `Quit and relaunch Tatsu to switch to port ${wsTransportPort}.`
+      if (wsInfo.host !== wsTransportHost) return 'Quit and relaunch Tatsu to rebind the server.'
+      if (wsTokenRotated) return 'Token rotated — quit and relaunch Tatsu. Any pinned/bookmarked URLs will need to be replaced.'
     }
     return null
   })()
 
   const handleRotateWsToken = useCallback(async () => {
     const ok = window.confirm(
-      'Rotate the web-client auth token?\n\nAll existing URLs — bookmarks, home-screen pins, open browser tabs — will stop working after you quit and relaunch Harness. You will need to re-share the new URL with any device you want to reconnect.'
+      'Rotate the web-client auth token?\n\nAll existing URLs — bookmarks, home-screen pins, open browser tabs — will stop working after you quit and relaunch Tatsu. You will need to re-share the new URL with any device you want to reconnect.'
     )
     if (!ok) return
     await backend.rotateWsToken()
@@ -1081,7 +1081,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
                 className="underline hover:text-fg-bright cursor-pointer"
               >
-                Harness {updaterStatus.version}
+                Tatsu {updaterStatus.version}
               </a>{' '}
               available — downloading...
             </span>
@@ -1097,7 +1097,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
                 className="underline hover:text-fg-bright cursor-pointer"
               >
-                Harness {updaterStatus.version}
+                Tatsu {updaterStatus.version}
               </a>
               ... {Math.round(updaterStatus.percent)}%
             </span>
@@ -1113,7 +1113,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
                   className="underline hover:text-fg-bright cursor-pointer"
                 >
-                  Harness {updaterStatus.version}
+                  Tatsu {updaterStatus.version}
                 </a>{' '}
                 ready to install
               </span>
@@ -1651,7 +1651,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             <section ref={(el) => { sectionRefs.current.agent = el }} id="agent">
               <h2 className="text-lg font-semibold text-fg-bright mb-1">Agent</h2>
               <p className="text-sm text-dim mb-4">
-                Choose which AI coding agent Harness launches in new tabs.
+                Choose which AI coding agent Tatsu launches in new tabs.
               </p>
 
               {/* ── General subsection ── */}
@@ -1699,13 +1699,13 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               </h3>
               <div className="bg-panel-raised border border-border rounded-lg p-4">
                 <p className="text-xs text-dim mb-3">
-                  Harness installs a small hook at{' '}
+                  Tatsu installs a small hook at{' '}
                   <code className="bg-panel px-1 rounded">~/.claude/settings.json</code>,{' '}
                   <code className="bg-panel px-1 rounded">~/.codex/hooks.json</code>, and{' '}
                   <code className="bg-panel px-1 rounded">~/.config/opencode/plugins/</code> so it can
                   detect when each agent tab is processing, waiting, or awaiting approval.
                   The hook only emits when <code className="bg-panel px-1 rounded">$HARNESS_TERMINAL_ID</code>{' '}
-                  is set — sessions you launch outside Harness are untouched.
+                  is set — sessions you launch outside Tatsu are untouched.
                 </p>
                 <div className="flex items-center gap-2">
                   {hooksConsent === 'accepted' ? (
@@ -1769,7 +1769,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div className="bg-panel-raised border border-border rounded-lg p-4">
                 <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
                 <p className="text-xs text-dim mb-2">
-                  Harness appends <code className="bg-panel px-1 rounded">--session-id &lt;uuid&gt;</code> so each tab has its own stable, resumable session.
+                  Tatsu appends <code className="bg-panel px-1 rounded">--session-id &lt;uuid&gt;</code> so each tab has its own stable, resumable session.
                 </p>
                 <textarea
                   value={claudeCommandDraft}
@@ -1801,7 +1801,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input type="checkbox" checked={harnessMcpEnabled} onChange={(e) => handleToggleHarnessMcp(e.target.checked)} className="mt-0.5 cursor-pointer icon-base" />
                     <div className="flex-1">
-                      <div className="text-sm text-fg-bright">Enable Harness MCP</div>
+                      <div className="text-sm text-fg-bright">Enable Tatsu MCP</div>
                       <div className="text-xs text-dim mt-0.5">
                         Injects <code className="bg-panel px-1 rounded text-xs">harness-control</code> MCP server via <code className="bg-panel px-1 rounded text-xs">--mcp-config</code>.
                       </div>
@@ -2083,7 +2083,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div className="bg-panel-raised border border-border rounded-lg p-4">
                 <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
                 <p className="text-xs text-dim mb-2">
-                  The Codex CLI command. Harness manages session resume automatically.
+                  The Codex CLI command. Tatsu manages session resume automatically.
                 </p>
                 <textarea
                   value={codexCommandDraft}
@@ -2175,7 +2175,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div className="bg-panel-raised border border-border rounded-lg p-4">
                 <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
                 <p className="text-xs text-dim mb-2">
-                  The Opencode CLI command. Harness manages session resume automatically.
+                  The Opencode CLI command. Tatsu manages session resume automatically.
                 </p>
                 <textarea
                   value={opencodeCommandDraft}
@@ -2255,9 +2255,9 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     onChange={(e) => { void backend.setHarnessSystemPromptEnabled(e.target.checked) }}
                     className="mt-0.5 cursor-pointer icon-base" />
                   <div className="flex-1">
-                    <div className="text-sm text-fg-bright">Inject Harness context into Claude sessions</div>
+                    <div className="text-sm text-fg-bright">Inject Tatsu context into Claude sessions</div>
                     <div className="text-xs text-dim mt-0.5">
-                      Appends <code className="bg-panel px-1 rounded text-xs">--append-system-prompt</code> with context about Harness and MCP tools.
+                      Appends <code className="bg-panel px-1 rounded text-xs">--append-system-prompt</code> with context about Tatsu and MCP tools.
                     </div>
                   </div>
                 </label>
@@ -2754,7 +2754,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             <section ref={(el) => { sectionRefs.current.editor = el }} id="editor">
               <h2 className="text-lg font-semibold text-fg-bright mb-1">Editor</h2>
               <p className="text-sm text-dim mb-4">
-                Your preferred code editor. Harness uses this when you click
+                Your preferred code editor. Tatsu uses this when you click
                 "Open in editor" on a worktree, or click the edit icon on a
                 changed file. The editor's CLI must be installed and on your
                 shell PATH.
@@ -2780,7 +2780,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 })}
               </div>
               <p className="text-xs text-faint">
-                Harness spawns the editor via a login shell (<code className="bg-panel-raised px-1 rounded text-xs">zsh -ilc</code>)
+                Tatsu spawns the editor via a login shell (<code className="bg-panel-raised px-1 rounded text-xs">zsh -ilc</code>)
                 so homebrew and nvm paths are picked up automatically. If nothing
                 happens when you click "Open in editor", check that the selected
                 editor's CLI is installed (e.g. VS Code's{' '}
@@ -2798,7 +2798,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <>
               <h2 className={`text-lg font-semibold mb-1 ${!authed ? 'text-info' : 'text-fg-bright'}`}>GitHub</h2>
               <p className={`text-sm mb-4 ${!authed ? 'text-info/80' : 'text-dim'}`}>
-                Harness fetches PR status and check results from GitHub. If you have the
+                Tatsu fetches PR status and check results from GitHub. If you have the
                 {' '}<code className="bg-panel-raised px-1 rounded">gh</code> CLI installed and authenticated,
                 it'll be used automatically. Otherwise, paste a personal access token below — it'll be
                 encrypted and stored locally using your macOS keychain.
@@ -2814,7 +2814,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   <Star
                     className={`icon-sm ${harnessStarred ? 'text-warning fill-warning shrink-0' : 'text-warning shrink-0'}`} />
                   <span className="text-sm text-fg group-hover:text-fg-bright transition-colors">
-                    Star Harness on GitHub
+                    Star Tatsu on GitHub
                   </span>
                 </label>
               )}
@@ -3031,7 +3031,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <h2 className="text-lg font-semibold text-fg-bright mb-1">Updates</h2>
               <p className="text-sm text-dim mb-4">
                 {autoUpdateEnabled
-                  ? 'Harness checks for updates automatically on startup and every 10 minutes.'
+                  ? 'Tatsu checks for updates automatically on startup and every 10 minutes.'
                   : 'Automatic update checks are disabled. Use the button below to check manually.'}
               </p>
 
@@ -3097,7 +3097,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <div className="flex-1">
                       <div className="text-sm text-fg-bright">Check for updates automatically</div>
                       <div className="text-xs text-dim mt-0.5">
-                        When enabled, Harness checks for new releases on startup and every
+                        When enabled, Tatsu checks for new releases on startup and every
                         10 minutes. Disable to only check when you press the button above.
                       </div>
                     </div>
@@ -3142,13 +3142,13 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               </div>
 
               <p className="mt-3 text-xs text-dim">
-                Opens a prefilled GitHub issue in your browser. No data is sent from Harness directly.
+                Opens a prefilled GitHub issue in your browser. No data is sent from Tatsu directly.
               </p>
 
               <div className="mt-6 bg-panel-raised border border-border rounded-lg p-4">
                 <label className="block text-sm font-medium text-fg mb-1">Diagnostics</label>
                 <p className="text-xs text-dim mb-3">
-                  Open the Harness debug log in your default editor. Useful when reporting issues or
+                  Open the Tatsu debug log in your default editor. Useful when reporting issues or
                   diagnosing flaky behavior.
                 </p>
                 <div className="flex gap-2">
@@ -3417,7 +3417,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                         ) : (
                           <p className="text-xs text-dim italic">
                             QR code will appear here after you relaunch
-                            Harness with the server enabled.
+                            Tatsu with the server enabled.
                           </p>
                         )}
                       </div>
