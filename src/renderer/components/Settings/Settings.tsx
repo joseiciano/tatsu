@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect, useId } from 'react'
 import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { HARNESS_ISSUES_URL, HARNESS_RELEASES_URL, harnessReleaseNotesUrl } from '../../../shared/constants'
 import { useSettings, useUpdater, useRepoConfigs, useHooks } from '../../store'
 import { useBackend } from '../../backend'
-import type { UpdaterStatus, MergeStrategy, RepoConfig, WorktreeDetail } from '../../types'
+import type { UpdaterStatus, MergeStrategy, RepoConfig, WorktreeDetail, AgentKind } from '../../types'
 import { DEFAULT_HOTKEYS, ACTION_LABELS, ACTION_CATEGORIES, bindingToString, eventToBinding, formatBindingGlyphs, resolveHotkeys, type Action, type HotkeyBinding } from '../../hotkeys'
 import { Tooltip } from '../Tooltip'
-import { AGENT_REGISTRY, agentDisplayName, CLAUDE_MODELS, CODEX_MODELS } from '../../../shared/agent-registry'
+import { AGENT_REGISTRY, agentDisplayName, CLAUDE_MODELS, CODEX_MODELS, type ModelOption } from '../../../shared/agent-registry'
 import { AgentIcon } from '../AgentIcon'
 import { InterfaceToggle } from '../InterfaceToggle'
 import { BUILT_IN_THEMES_BY_MODE, type ThemeOption } from '../../themes'
@@ -57,37 +57,45 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
-  { id: 'appearance', label: 'Appearance', icon: Palette, children: [
-    { id: 'appearance-theme', label: 'Theme' },
-    { id: 'appearance-custom-themes', label: 'Custom themes' },
-    { id: 'appearance-ui-size', label: 'UI size' },
-    { id: 'appearance-terminal-font', label: 'Terminal font' }
-  ]},
-  { id: 'agent', label: 'Agent', icon: TerminalIcon, children: [
-    { id: 'agent-general', label: 'General' },
-    { id: 'agent-claude', label: 'Claude' },
-    { id: 'agent-codex', label: 'Codex' },
-    { id: 'agent-opencode', label: 'Opencode' }
-  ]},
+  {
+    id: 'appearance', label: 'Appearance', icon: Palette, children: [
+      { id: 'appearance-theme', label: 'Theme' },
+      { id: 'appearance-custom-themes', label: 'Custom themes' },
+      { id: 'appearance-ui-size', label: 'UI size' },
+      { id: 'appearance-terminal-font', label: 'Terminal font' }
+    ]
+  },
+  {
+    id: 'agent', label: 'Agent', icon: TerminalIcon, children: [
+      { id: 'agent-general', label: 'General' },
+      { id: 'agent-claude', label: 'Claude' },
+      { id: 'agent-codex', label: 'Codex' },
+      { id: 'agent-opencode', label: 'Opencode' }
+    ]
+  },
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
   { id: 'editor', label: 'Editor', icon: Code2 },
   { id: 'github', label: 'GitHub', icon: GitPullRequest },
-  { id: 'hotkeys', label: 'Hotkeys', icon: Keyboard, children: [
-    { id: 'hotkeys-navigation', label: 'Worktree navigation' },
-    { id: 'hotkeys-backends', label: 'Backends' },
-    { id: 'hotkeys-worktree-mgmt', label: 'Worktree management' },
-    { id: 'hotkeys-tabs', label: 'Tabs & panes' },
-    { id: 'hotkeys-layout', label: 'Window layout' },
-    { id: 'hotkeys-commands', label: 'Search & commands' },
-    { id: 'hotkeys-overlays', label: 'App overlays' },
-    { id: 'hotkeys-external', label: 'External actions' }
-  ]},
+  {
+    id: 'hotkeys', label: 'Hotkeys', icon: Keyboard, children: [
+      { id: 'hotkeys-navigation', label: 'Worktree navigation' },
+      { id: 'hotkeys-backends', label: 'Backends' },
+      { id: 'hotkeys-worktree-mgmt', label: 'Worktree management' },
+      { id: 'hotkeys-tabs', label: 'Tabs & panes' },
+      { id: 'hotkeys-layout', label: 'Window layout' },
+      { id: 'hotkeys-commands', label: 'Search & commands' },
+      { id: 'hotkeys-overlays', label: 'App overlays' },
+      { id: 'hotkeys-external', label: 'External actions' }
+    ]
+  },
   { id: 'updates', label: 'Updates', icon: DownloadCloud },
   { id: 'support', label: 'Support', icon: LifeBuoy },
-  { id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
-    { id: 'experimental-browser-control', label: 'Browser control' },
-    { id: 'experimental-web-mobile', label: 'Web & mobile' }
-  ]}
+  {
+    id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
+      { id: 'experimental-browser-control', label: 'Browser control' },
+      { id: 'experimental-web-mobile', label: 'Web & mobile' }
+    ]
+  }
 ]
 
 interface SearchItem {
@@ -1282,61 +1290,58 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             </div>
           ) : (
             SECTIONS.map((section) => {
-            const Icon = section.icon
-            const isActive = activeSection === section.id
-            const needsAttention = section.id === 'github' && !hasToken && authSource !== 'gh-cli'
-            const className = needsAttention
-              ? `flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
-                  isActive ? 'bg-info/25 text-info' : 'bg-info/10 text-info hover:bg-info/20'
+              const Icon = section.icon
+              const isActive = activeSection === section.id
+              const needsAttention = section.id === 'github' && !hasToken && authSource !== 'gh-cli'
+              const className = needsAttention
+                ? `flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors cursor-pointer ${isActive ? 'bg-info/25 text-info' : 'bg-info/10 text-info hover:bg-info/20'
                 }`
-              : `flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
-                  isActive
-                    ? 'bg-surface text-fg-bright'
-                    : 'text-muted hover:bg-panel-raised hover:text-fg-bright'
+                : `flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors cursor-pointer ${isActive
+                  ? 'bg-surface text-fg-bright'
+                  : 'text-muted hover:bg-panel-raised hover:text-fg-bright'
                 }`
-            return (
-              <div key={section.id}>
-                <button
-                  data-nav=""
-                  onClick={() => scrollToSection(section.id)}
-                  className={`w-full ${className} focus:bg-surface outline-none`}
-                >
-                  <Icon className="icon-sm shrink-0" />
-                  <span>{section.label}</span>
-                </button>
-                {section.children && (
-                  <div
-                    className="overflow-hidden transition-all duration-200"
-                    style={{
-                      maxHeight: isActive ? `${section.children.length * 36}px` : '0px',
-                      opacity: isActive ? 1 : 0
-                    }}
+              return (
+                <div key={section.id}>
+                  <button
+                    data-nav=""
+                    onClick={() => scrollToSection(section.id)}
+                    className={`w-full ${className} focus:bg-surface outline-none`}
                   >
-                    {section.children.map((child) => {
-                      const isSubActive = activeSubSection === child.id
-                      return (
-                        <button
-                          key={child.id}
-                          // Only navigable when the parent is expanded —
-                          // hidden subsections shouldn't trap arrow focus.
-                          data-nav={isActive ? '' : undefined}
-                          tabIndex={isActive ? 0 : -1}
-                          onClick={() => scrollToSubSection(child.id)}
-                          className={`w-full pl-9 pr-3 py-1.5 text-left text-xs transition-colors cursor-pointer focus:bg-surface focus:text-fg-bright outline-none ${
-                            isSubActive
+                    <Icon className="icon-sm shrink-0" />
+                    <span>{section.label}</span>
+                  </button>
+                  {section.children && (
+                    <div
+                      className="overflow-hidden transition-all duration-200"
+                      style={{
+                        maxHeight: isActive ? `${section.children.length * 36}px` : '0px',
+                        opacity: isActive ? 1 : 0
+                      }}
+                    >
+                      {section.children.map((child) => {
+                        const isSubActive = activeSubSection === child.id
+                        return (
+                          <button
+                            key={child.id}
+                            // Only navigable when the parent is expanded —
+                            // hidden subsections shouldn't trap arrow focus.
+                            data-nav={isActive ? '' : undefined}
+                            tabIndex={isActive ? 0 : -1}
+                            onClick={() => scrollToSubSection(child.id)}
+                            className={`w-full pl-9 pr-3 py-1.5 text-left text-xs transition-colors cursor-pointer focus:bg-surface focus:text-fg-bright outline-none ${isSubActive
                               ? 'text-fg-bright bg-surface/60'
                               : 'text-muted hover:text-fg-bright hover:bg-panel-raised'
-                          }`}
-                        >
-                          {child.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          }))}
+                              }`}
+                          >
+                            {child.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }))}
 
           <div className="mt-auto border-t border-border px-3 py-2">
             <span className="text-xs font-medium text-dim">HELP</span>
@@ -1383,11 +1388,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     return (
                       <label
                         key={opt.id}
-                        className={`px-3 py-2 rounded-lg border text-sm text-center cursor-pointer transition-colors ${
-                          isActive
-                            ? 'bg-surface text-fg-bright border-fg'
-                            : 'bg-panel-raised text-muted border-border hover:text-fg hover:border-border-strong'
-                        }`}
+                        className={`px-3 py-2 rounded-lg border text-sm text-center cursor-pointer transition-colors ${isActive
+                          ? 'bg-surface text-fg-bright border-border'
+                          : 'bg-panel-raised text-muted border-border hover:text-fg hover:border-border-strong'
+                          }`}
                       >
                         <input
                           type="radio"
@@ -1429,7 +1433,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div ref={(el) => { subSectionRefs.current['appearance-custom-themes'] = el }} id="appearance-custom-themes" className="mt-8">
                 <h3 className="text-sm font-semibold text-fg-bright mb-1">Custom themes</h3>
                 <p className="text-xs text-dim mb-3">
-                  Drop <code className="text-fg">{'<name>.json'}</code> files into your themes folder. They show up in the pickers above, filtered by their <code className="text-fg">mode</code>. {customThemes.length === 0 ? 'None loaded yet.' : `${customThemes.length} loaded.`}
+                  Drop <code className="text-fg">{'<name>.json'}</code> files into your themes folder. Custom themes end up added in the options above.
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -1487,9 +1491,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                           key={s.id}
                           type="button"
                           onClick={() => handleSelectUiScale(s.id)}
-                          className={`cursor-pointer transition-colors ${
-                            draftUiScale === s.id ? 'text-fg-bright' : 'hover:text-fg'
-                          }`}
+                          className={`cursor-pointer transition-colors ${draftUiScale === s.id ? 'text-fg-bright' : 'hover:text-fg'
+                            }`}
                         >
                           {s.label}
                         </button>
@@ -1588,13 +1591,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <div ref={(el) => { subSectionRefs.current['appearance-terminal-font'] = el }} id="appearance-terminal-font" />
               <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-1">Terminal font</h3>
               <p className="text-xs text-dim mb-3">
-                Used by every Claude and shell tab. Provide any CSS font-family value
-                — install the font on your system first (e.g.{' '}
-                <code className="bg-panel-raised px-1 rounded">Hack</code>,{' '}
-                <code className="bg-panel-raised px-1 rounded">'JetBrains Mono'</code>,{' '}
-                <code className="bg-panel-raised px-1 rounded">'Fira Code'</code>).
-                Changes apply immediately to all open terminals.
-              </p>
+                Used by every shell tab. Font must be installed on your system.               </p>
 
               <div className="bg-panel-raised border border-border rounded-lg p-4 space-y-4">
                 <div>
@@ -1656,31 +1653,18 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
               {/* ── General subsection ── */}
               <div ref={(el) => { subSectionRefs.current['agent-general'] = el }} id="agent-general">
-              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-6">
-                <label className="block text-sm font-medium text-fg mb-3">Default agent</label>
-                <div className="flex gap-2">
-                  {AGENT_REGISTRY.map((agent) => (
-                    <button
-                      key={agent.kind}
-                      onClick={() => backend.setDefaultAgent(agent.kind)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors cursor-pointer ${
-                        defaultAgent === agent.kind
-                          ? 'bg-surface text-fg-bright border border-fg'
-                          : 'bg-panel border border-border text-dim hover:text-fg hover:border-border-strong'
-                      }`}
-                    >
-                      <AgentIcon kind={agent.kind} className="icon-sm" />
-                      {agent.displayName}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-faint">
+                <h3 className="text-sm font-semibold text-fg-bright mb-1">Default agent</h3>
+                <p className="text-xs text-dim mb-3">
                   New agent tabs will use the selected default. Existing tabs are unaffected.
                 </p>
+                <DefaultAgentPicker
+                  activeKind={defaultAgent}
+                  onSelect={(kind) => { void backend.setDefaultAgent(kind) }}
+                />
 
                 {defaultAgent === 'claude' && (
-                  <div className="mt-4 pt-4 border-t border-border pl-4 border-l-2 border-l-border ml-1">
-                    <label className="block text-sm font-medium text-fg mb-2">Interface</label>
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
                     <p className="text-xs text-dim mb-3">
                       Which interface new Claude tabs spawn in. Switch any
                       existing tab from its right-click menu or the chip in
@@ -1692,555 +1676,528 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     />
                   </div>
                 )}
-              </div>
 
-              <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-3">
-                Status hooks
-              </h3>
-              <div className="bg-panel-raised border border-border rounded-lg p-4">
-                <p className="text-xs text-dim mb-3">
-                  Tatsu installs a small hook at{' '}
-                  <code className="bg-panel px-1 rounded">~/.claude/settings.json</code>,{' '}
-                  <code className="bg-panel px-1 rounded">~/.codex/hooks.json</code>, and{' '}
-                  <code className="bg-panel px-1 rounded">~/.config/opencode/plugins/</code> so it can
-                  detect when each agent tab is processing, waiting, or awaiting approval.
-                  The hook only emits when <code className="bg-panel px-1 rounded">$HARNESS_TERMINAL_ID</code>{' '}
-                  is set — sessions you launch outside Tatsu are untouched.
-                </p>
-                <div className="flex items-center gap-2">
-                  {hooksConsent === 'accepted' ? (
-                    <>
-                      <span className="text-xs text-success flex items-center gap-1"><Check className="icon-xs" />Installed</span>
-                      <button
-                        onClick={() => void backend.uninstallHooks()}
-                        className="ml-auto px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"
-                      >
-                        Remove hooks
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xs text-dim">
-                        {hooksConsent === 'declined' ? 'Declined' : 'Not installed'}
-                      </span>
-                      <button
-                        onClick={() => void backend.acceptHooks()}
-                        className="ml-auto px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"
-                      >
-                        Install hooks
-                      </button>
-                    </>
-                  )}
+                <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-3">
+                  Status hooks
+                </h3>
+                <div className="bg-panel-raised border border-border rounded-lg p-4">
+                  <p className="text-xs text-dim mb-3">
+                    Tatsu installs a small hook at{' '}
+                    <code className="bg-panel px-1 rounded">~/.claude/settings.json</code>,{' '}
+                    <code className="bg-panel px-1 rounded">~/.codex/hooks.json</code>, and{' '}
+                    <code className="bg-panel px-1 rounded">~/.config/opencode/plugins/</code> so it can
+                    detect when each agent tab is processing, waiting, or awaiting approval.
+                    The hook only emits when <code className="bg-panel px-1 rounded">$HARNESS_TERMINAL_ID</code>{' '}
+                    is set — sessions you launch outside Tatsu are untouched.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {hooksConsent === 'accepted' ? (
+                      <>
+                        <span className="text-xs text-success flex items-center gap-1"><Check className="icon-xs" />Installed</span>
+                        <button
+                          onClick={() => void backend.uninstallHooks()}
+                          className="ml-auto px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"
+                        >
+                          Remove hooks
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs text-dim">
+                          {hooksConsent === 'declined' ? 'Declined' : 'Not installed'}
+                        </span>
+                        <button
+                          onClick={() => void backend.acceptHooks()}
+                          className="ml-auto px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"
+                        >
+                          Install hooks
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
               </div>
 
               {/* ── Claude subsection ── */}
               <div ref={(el) => { subSectionRefs.current['agent-claude'] = el }} id="agent-claude" className="mt-8">
-              <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
-                Claude Code
-                {defaultAgent === 'claude' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
-              </h3>
+                <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
+                  Claude Code
+                  {defaultAgent === 'claude' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+                </h3>
 
-              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
-                <label className="block text-sm font-medium text-fg mb-1">Model</label>
-                <p className="text-xs text-dim mb-2">
-                  Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Leave on default to let the CLI choose.
-                </p>
-                <select
-                  value={claudeModel || ''}
-                  onChange={(e) => { void backend.setClaudeModel(e.target.value || null) }}
-                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg cursor-pointer"
-                >
-                  <option value="">(Default — let CLI choose)</option>
-                  <optgroup label="Current">
-                    {CLAUDE_MODELS.filter((m) => m.tier === 'current').map((m) => (
-                      <option key={m.id} value={m.id}>{m.displayName}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Legacy">
-                    {CLAUDE_MODELS.filter((m) => m.tier === 'legacy').map((m) => (
-                      <option key={m.id} value={m.id}>{m.displayName}</option>
-                    ))}
-                  </optgroup>
-                </select>
-              </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Model</label>
+                  <p className="text-xs text-dim mb-2">
+                    Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Leave on default to let the CLI choose.
+                  </p>
+                  <ModelPicker
+                    activeId={claudeModel}
+                    options={CLAUDE_MODELS}
+                    onSelect={(id) => { void backend.setClaudeModel(id) }}
+                  />
+                </div>
 
-              <div className="bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
-                <p className="text-xs text-dim mb-2">
-                  Tatsu appends <code className="bg-panel px-1 rounded">--session-id &lt;uuid&gt;</code> so each tab has its own stable, resumable session.
-                </p>
-                <textarea
-                  value={claudeCommandDraft}
-                  onChange={(e) => setClaudeCommandDraft(e.target.value)}
-                  rows={2}
-                  spellCheck={false}
-                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
-                  placeholder={defaultClaudeCommand}
-                />
-                <div className="flex items-center gap-2 mt-3">
-                  <button onClick={handleSaveClaudeCommand} disabled={!claudeCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
-                  {claudeCommandDraft !== defaultClaudeCommand && defaultClaudeCommand && (
-                    <button onClick={handleResetClaudeCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                <div className="bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
+                  <p className="text-xs text-dim mb-2">
+                    Tatsu appends <code className="bg-panel px-1 rounded">--session-id &lt;uuid&gt;</code> so each tab has its own stable, resumable session.
+                  </p>
+                  <textarea
+                    value={claudeCommandDraft}
+                    onChange={(e) => setClaudeCommandDraft(e.target.value)}
+                    rows={2}
+                    spellCheck={false}
+                    className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
+                    placeholder={defaultClaudeCommand}
+                  />
+                  <div className="flex items-center gap-2 mt-3">
+                    <button onClick={handleSaveClaudeCommand} disabled={!claudeCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                    {claudeCommandDraft !== defaultClaudeCommand && defaultClaudeCommand && (
+                      <button onClick={handleResetClaudeCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                    )}
+                  </div>
+                  {claudeSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${claudeSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {claudeSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{claudeSaveResult.message}
+                    </div>
+                  )}
+
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
+                    <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{commandPreview}</div>
+                    <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" checked={harnessMcpEnabled} onChange={(e) => handleToggleHarnessMcp(e.target.checked)} className="mt-0.5 cursor-pointer icon-base" />
+                      <div className="flex-1">
+                        <div className="text-sm text-fg-bright">Enable Tatsu MCP</div>
+                        <div className="text-xs text-dim mt-0.5">
+                          Injects <code className="bg-panel px-1 rounded text-xs">harness-control</code> MCP server via <code className="bg-panel px-1 rounded text-xs">--mcp-config</code>.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={nameClaudeSessions} onChange={(e) => { void backend.setNameClaudeSessions(e.target.checked) }} className="accent-current icon-base cursor-pointer" />
+                      <div>
+                        <span className="text-sm font-medium text-fg">Name sessions by worktree</span>
+                        <p className="text-xs text-dim mt-0.5">Passes <code className="bg-panel px-1 rounded">--name &quot;repo/branch&quot;</code> to Claude.</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" checked={claudeTuiFullscreen} onChange={(e) => { void backend.setClaudeTuiFullscreen(e.target.checked) }} className="mt-0.5 cursor-pointer icon-base" />
+                      <div className="flex-1">
+                        <div className="text-sm text-fg-bright">Fullscreen TUI by default</div>
+                        <div className="text-xs text-dim mt-0.5">
+                          Sets <code className="bg-panel px-1 rounded text-xs">CLAUDE_CODE_NO_FLICKER=1</code> so Claude runs in fullscreen TUI mode instead of taking over your scrollback.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Custom Claude API endpoint</label>
+                  <p className="text-xs text-dim mb-3">
+                    Point Claude at a LiteLLM proxy, AWS Bedrock proxy, or another OpenAI/Anthropic-compatible gateway. Sets the <code className="bg-panel px-1 rounded">ANTHROPIC_BASE_URL</code> and <code className="bg-panel px-1 rounded">ANTHROPIC_AUTH_TOKEN</code> env vars under the hood — leave blank to talk to Anthropic directly.
+                  </p>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-xs font-medium text-dim mb-1">Base URL</label>
+                      <input
+                        type="text"
+                        value={litellmBaseUrl}
+                        onChange={(e) => { setLitellmBaseUrl(e.target.value); setLitellmSaveResult(null) }}
+                        placeholder="http://localhost:4000"
+                        spellCheck={false}
+                        className="w-full bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-dim mb-1">Auth token <span className="text-faint">(optional)</span></label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type={litellmAuthRevealed ? 'text' : 'password'}
+                          value={litellmAuthToken}
+                          onChange={(e) => { setLitellmAuthToken(e.target.value); setLitellmSaveResult(null) }}
+                          placeholder="sk-..."
+                          spellCheck={false}
+                          className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
+                        />
+                        <Tooltip label={litellmAuthRevealed ? 'Hide token' : 'Reveal token'}>
+                          <button onClick={() => setLitellmAuthRevealed((v) => !v)} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">
+                            {litellmAuthRevealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}
+                          </button>
+                        </Tooltip>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <button onClick={handleSaveLitellm} disabled={!litellmBaseUrl.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save endpoint</button>
+                    {(claudeEnvVars['ANTHROPIC_BASE_URL'] || claudeEnvVars['ANTHROPIC_AUTH_TOKEN']) && (
+                      <button onClick={handleClearLitellm} className="px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer">Clear</button>
+                    )}
+                  </div>
+                  {litellmSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${litellmSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {litellmSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{litellmSaveResult.message}
+                  </div>
                   )}
                 </div>
-                {claudeSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${claudeSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {claudeSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{claudeSaveResult.message}
+
+                <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
+                  <p className="text-xs text-dim mb-3">
+                    Injected into Claude tabs. Use for <code className="bg-panel px-1 rounded">ANTHROPIC_API_KEY</code> etc.
+                  </p>
+                  {claudeEnvRows.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {claudeEnvRows.map((row, index) => {
+                        const revealed = revealedEnvRows.has(index)
+                        return (
+                          <div key={index} className="flex items-center gap-2">
+                            <input type="text" value={row.key} onChange={(e) => handleUpdateEnvRow(index, 'key', e.target.value)} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                            <span className="text-dim text-xs">=</span>
+                            <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => handleUpdateEnvRow(index, 'value', e.target.value)} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                            <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => handleToggleRevealEnvRow(index)} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
+                            <Tooltip label="Remove"><button onClick={() => handleRemoveEnvRow(index)} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button onClick={handleAddEnvRow} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
+                    <button onClick={handleSaveClaudeEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
                   </div>
-                )}
-
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
-                  <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{commandPreview}</div>
-                  <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={harnessMcpEnabled} onChange={(e) => handleToggleHarnessMcp(e.target.checked)} className="mt-0.5 cursor-pointer icon-base" />
-                    <div className="flex-1">
-                      <div className="text-sm text-fg-bright">Enable Tatsu MCP</div>
-                      <div className="text-xs text-dim mt-0.5">
-                        Injects <code className="bg-panel px-1 rounded text-xs">harness-control</code> MCP server via <code className="bg-panel px-1 rounded text-xs">--mcp-config</code>.
-                      </div>
+                  {envSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${envSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {envSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{envSaveResult.message}
                     </div>
-                  </label>
+                  )}
                 </div>
 
+                {/* Chat interface settings — only relevant when running
+                  Chat tabs, but always visible so the controls are findable. */}
+                <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Chat interface</label>
+                  <p className="text-xs text-dim mb-3">
+                    Behavior for Claude tabs running the Chat interface
+                    (inline tool cards, approval flows). No effect on
+                    Terminal tabs.
+                  </p>
 
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={nameClaudeSessions} onChange={(e) => { void backend.setNameClaudeSessions(e.target.checked) }} className="accent-current icon-base cursor-pointer" />
-                    <div>
-                      <span className="text-sm font-medium text-fg">Name sessions by worktree</span>
-                      <p className="text-xs text-dim mt-0.5">Passes <code className="bg-panel px-1 rounded">--name &quot;repo/branch&quot;</code> to Claude.</p>
+                  <div className="pt-3 border-t border-border">
+                    <label className="block text-xs font-medium text-fg mb-1">
+                      Default permission mode for new chats
+                    </label>
+                    <div className="text-xs text-dim mb-2">
+                      New Chat tabs start in this mode. Change per-chat
+                      anytime via the statusline picker.
                     </div>
-                  </label>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={claudeTuiFullscreen} onChange={(e) => { void backend.setClaudeTuiFullscreen(e.target.checked) }} className="mt-0.5 cursor-pointer icon-base" />
-                    <div className="flex-1">
-                      <div className="text-sm text-fg-bright">Fullscreen TUI by default</div>
-                      <div className="text-xs text-dim mt-0.5">
-                        Sets <code className="bg-panel px-1 rounded text-xs">CLAUDE_CODE_NO_FLICKER=1</code> so Claude runs in fullscreen TUI mode instead of taking over your scrollback.
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Custom Claude API endpoint</label>
-                <p className="text-xs text-dim mb-3">
-                  Point Claude at a LiteLLM proxy, AWS Bedrock proxy, or another OpenAI/Anthropic-compatible gateway. Sets the <code className="bg-panel px-1 rounded">ANTHROPIC_BASE_URL</code> and <code className="bg-panel px-1 rounded">ANTHROPIC_AUTH_TOKEN</code> env vars under the hood — leave blank to talk to Anthropic directly.
-                </p>
-                <div className="space-y-2">
-                  <div>
-                    <label className="block text-xs font-medium text-dim mb-1">Base URL</label>
-                    <input
-                      type="text"
-                      value={litellmBaseUrl}
-                      onChange={(e) => { setLitellmBaseUrl(e.target.value); setLitellmSaveResult(null) }}
-                      placeholder="http://localhost:4000"
-                      spellCheck={false}
-                      className="w-full bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
-                    />
+                    <select
+                      value={jsonModeDefaultPermissionMode}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        void backend.setJsonModeDefaultPermissionMode(
+                          v === 'default' || v === 'plan' ? v : 'acceptEdits'
+                        )
+                      }}
+                      className="bg-panel border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-fg cursor-pointer"
+                    >
+                      <option value="acceptEdits">
+                        Accept edits — auto-allow Edit/Write, ask for Bash and other tools
+                      </option>
+                      <option value="default">
+                        Ask every time — surface every tool call for approval
+                      </option>
+                      <option value="plan">
+                        Plan mode — read-only, the agent proposes but doesn't act
+                      </option>
+                    </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-dim mb-1">Auth token <span className="text-faint">(optional)</span></label>
+
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="block text-xs font-medium text-fg mb-1">
+                      Auto-sleep idle chats after
+                    </label>
+                    <div className="text-xs text-dim mb-2">
+                      A Chat tab waiting for your reply for this long
+                      (yellow dot) gets its subprocess torn down to free
+                      RAM. Click the tab to wake — history is intact. Set
+                      to 0 to disable.
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
-                        type={litellmAuthRevealed ? 'text' : 'password'}
-                        value={litellmAuthToken}
-                        onChange={(e) => { setLitellmAuthToken(e.target.value); setLitellmSaveResult(null) }}
-                        placeholder="sk-..."
-                        spellCheck={false}
-                        className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
+                        type="number"
+                        min={0}
+                        max={24 * 60}
+                        step={1}
+                        value={autoSleepDraft}
+                        onChange={(e) => setAutoSleepDraft(e.target.value)}
+                        onBlur={commitAutoSleepMinutes}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        className="bg-panel border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-fg w-24"
                       />
-                      <Tooltip label={litellmAuthRevealed ? 'Hide token' : 'Reveal token'}>
-                        <button onClick={() => setLitellmAuthRevealed((v) => !v)} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">
-                          {litellmAuthRevealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}
-                        </button>
-                      </Tooltip>
+                      <span className="text-xs text-dim">minutes</span>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <button onClick={handleSaveLitellm} disabled={!litellmBaseUrl.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save endpoint</button>
-                  {(claudeEnvVars['ANTHROPIC_BASE_URL'] || claudeEnvVars['ANTHROPIC_AUTH_TOKEN']) && (
-                    <button onClick={handleClearLitellm} className="px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer">Clear</button>
-                  )}
-                </div>
-                {litellmSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${litellmSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {litellmSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{litellmSaveResult.message}
-                  </div>
-                )}
-              </div>
 
-              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
-                <p className="text-xs text-dim mb-3">
-                  Injected into Claude tabs. Use for <code className="bg-panel px-1 rounded">ANTHROPIC_API_KEY</code> etc.
-                </p>
-                {claudeEnvRows.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {claudeEnvRows.map((row, index) => {
-                      const revealed = revealedEnvRows.has(index)
-                      return (
-                        <div key={index} className="flex items-center gap-2">
-                          <input type="text" value={row.key} onChange={(e) => handleUpdateEnvRow(index, 'key', e.target.value)} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
-                          <span className="text-dim text-xs">=</span>
-                          <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => handleUpdateEnvRow(index, 'value', e.target.value)} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
-                          <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => handleToggleRevealEnvRow(index)} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
-                          <Tooltip label="Remove"><button onClick={() => handleRemoveEnvRow(index)} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="block text-xs font-medium text-fg mb-1">
+                      Chat density
+                    </label>
+                    <div
+                      className="text-xs text-dim mb-2"
+                      title="Larger text and padding, intended for new users or screen-sharing."
+                    >
+                      Larger text and padding for new users or
+                      screen-sharing.
+                    </div>
+                    <div className="inline-flex rounded border border-border-strong overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void backend.setJsonModeChatDensity('compact')
+                        }}
+                        className={`px-3 py-1 text-xs cursor-pointer transition-colors ${jsonModeChatDensity === 'compact'
+                          ? 'bg-accent/20 text-fg-bright'
+                          : 'bg-panel text-muted hover:bg-panel-raised'
+                          }`}
+                      >
+                        Compact
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void backend.setJsonModeChatDensity('comfy')
+                        }}
+                        className={`px-3 py-1 text-xs cursor-pointer transition-colors border-l border-border-strong ${jsonModeChatDensity === 'comfy'
+                          ? 'bg-accent/20 text-fg-bright'
+                          : 'bg-panel text-muted hover:bg-panel-raised'
+                          }`}
+                      >
+                        Comfy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={jsonModeSendOnEnter}
+                        onChange={(e) => {
+                          void backend.setJsonModeSendOnEnter(e.target.checked)
+                        }}
+                        className="mt-0.5 cursor-pointer icon-base" />
+                      <div className="flex-1">
+                        <div className="text-sm text-fg-bright">
+                          Send messages with Enter
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <button onClick={handleAddEnvRow} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
-                  <button onClick={handleSaveClaudeEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
-                </div>
-                {envSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${envSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {envSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{envSaveResult.message}
-                  </div>
-                )}
-              </div>
-
-              {/* Chat interface settings — only relevant when running
-                  Chat tabs, but always visible so the controls are findable. */}
-              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Chat interface</label>
-                <p className="text-xs text-dim mb-3">
-                  Behavior for Claude tabs running the Chat interface
-                  (inline tool cards, approval flows). No effect on
-                  Terminal tabs.
-                </p>
-
-                <div className="pt-3 border-t border-border">
-                  <label className="block text-xs font-medium text-fg mb-1">
-                    Default permission mode for new chats
-                  </label>
-                  <div className="text-xs text-dim mb-2">
-                    New Chat tabs start in this mode. Change per-chat
-                    anytime via the statusline picker.
-                  </div>
-                  <select
-                    value={jsonModeDefaultPermissionMode}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      void backend.setJsonModeDefaultPermissionMode(
-                        v === 'default' || v === 'plan' ? v : 'acceptEdits'
-                      )
-                    }}
-                    className="bg-panel border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-fg cursor-pointer"
-                  >
-                    <option value="acceptEdits">
-                      Accept edits — auto-allow Edit/Write, ask for Bash and other tools
-                    </option>
-                    <option value="default">
-                      Ask every time — surface every tool call for approval
-                    </option>
-                    <option value="plan">
-                      Plan mode — read-only, the agent proposes but doesn't act
-                    </option>
-                  </select>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="block text-xs font-medium text-fg mb-1">
-                    Auto-sleep idle chats after
-                  </label>
-                  <div className="text-xs text-dim mb-2">
-                    A Chat tab waiting for your reply for this long
-                    (yellow dot) gets its subprocess torn down to free
-                    RAM. Click the tab to wake — history is intact. Set
-                    to 0 to disable.
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      max={24 * 60}
-                      step={1}
-                      value={autoSleepDraft}
-                      onChange={(e) => setAutoSleepDraft(e.target.value)}
-                      onBlur={commitAutoSleepMinutes}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.currentTarget.blur()
-                        }
-                      }}
-                      className="bg-panel border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-fg w-24"
-                    />
-                    <span className="text-xs text-dim">minutes</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="block text-xs font-medium text-fg mb-1">
-                    Chat density
-                  </label>
-                  <div
-                    className="text-xs text-dim mb-2"
-                    title="Larger text and padding, intended for new users or screen-sharing."
-                  >
-                    Larger text and padding for new users or
-                    screen-sharing.
-                  </div>
-                  <div className="inline-flex rounded border border-border-strong overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void backend.setJsonModeChatDensity('compact')
-                      }}
-                      className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
-                        jsonModeChatDensity === 'compact'
-                          ? 'bg-accent/20 text-fg-bright'
-                          : 'bg-panel text-muted hover:bg-panel-raised'
-                      }`}
-                    >
-                      Compact
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void backend.setJsonModeChatDensity('comfy')
-                      }}
-                      className={`px-3 py-1 text-xs cursor-pointer transition-colors border-l border-border-strong ${
-                        jsonModeChatDensity === 'comfy'
-                          ? 'bg-accent/20 text-fg-bright'
-                          : 'bg-panel text-muted hover:bg-panel-raised'
-                      }`}
-                    >
-                      Comfy
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-border">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={jsonModeSendOnEnter}
-                      onChange={(e) => {
-                        void backend.setJsonModeSendOnEnter(e.target.checked)
-                      }}
-                      className="mt-0.5 cursor-pointer icon-base" />
-                    <div className="flex-1">
-                      <div className="text-sm text-fg-bright">
-                        Send messages with Enter
+                        <div className="text-xs text-dim mt-0.5">
+                          Plain Enter sends; Shift+Enter inserts a newline. When
+                          off, Cmd/Ctrl+Enter sends.
+                        </div>
                       </div>
-                      <div className="text-xs text-dim mt-0.5">
-                        Plain Enter sends; Shift+Enter inserts a newline. When
-                        off, Cmd/Ctrl+Enter sends.
-                      </div>
-                    </div>
-                  </label>
+                    </label>
+                  </div>
                 </div>
-              </div>
 
               </div>
 
               {/* ── Codex subsection ── */}
               <div ref={(el) => { subSectionRefs.current['agent-codex'] = el }} id="agent-codex" className="mt-8">
-              <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
-                Codex
-                {defaultAgent === 'codex' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
-              </h3>
+                <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
+                  Codex
+                  {defaultAgent === 'codex' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+                </h3>
 
-              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
-                <label className="block text-sm font-medium text-fg mb-1">Model</label>
-                <p className="text-xs text-dim mb-2">
-                  Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Leave on default to let the CLI choose.
-                </p>
-                <select
-                  value={codexModel || ''}
-                  onChange={(e) => { void backend.setCodexModel(e.target.value || null) }}
-                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg cursor-pointer"
-                >
-                  <option value="">(Default — let CLI choose)</option>
-                  <optgroup label="Current">
-                    {CODEX_MODELS.filter((m) => m.tier === 'current').map((m) => (
-                      <option key={m.id} value={m.id}>{m.displayName}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Legacy">
-                    {CODEX_MODELS.filter((m) => m.tier === 'legacy').map((m) => (
-                      <option key={m.id} value={m.id}>{m.displayName}</option>
-                    ))}
-                  </optgroup>
-                </select>
-              </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Model</label>
+                  <p className="text-xs text-dim mb-2">
+                    Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Leave on default to let the CLI choose.
+                  </p>
+                  <ModelPicker
+                    activeId={codexModel}
+                    options={CODEX_MODELS}
+                    onSelect={(id) => { void backend.setCodexModel(id) }}
+                  />
+                </div>
 
-              <div className="bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
-                <p className="text-xs text-dim mb-2">
-                  The Codex CLI command. Tatsu manages session resume automatically.
-                </p>
-                <textarea
-                  value={codexCommandDraft}
-                  onChange={(e) => setCodexCommandDraft(e.target.value)}
-                  rows={2}
-                  spellCheck={false}
-                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
-                  placeholder="codex"
-                />
-                <div className="flex items-center gap-2 mt-3">
-                  <button onClick={handleSaveCodexCommand} disabled={!codexCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
-                  {codexCommandDraft !== 'codex' && (
-                    <button onClick={handleResetCodexCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                <div className="bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
+                  <p className="text-xs text-dim mb-2">
+                    The Codex CLI command. Tatsu manages session resume automatically.
+                  </p>
+                  <textarea
+                    value={codexCommandDraft}
+                    onChange={(e) => setCodexCommandDraft(e.target.value)}
+                    rows={2}
+                    spellCheck={false}
+                    className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
+                    placeholder="codex"
+                  />
+                  <div className="flex items-center gap-2 mt-3">
+                    <button onClick={handleSaveCodexCommand} disabled={!codexCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                    {codexCommandDraft !== 'codex' && (
+                      <button onClick={handleResetCodexCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                    )}
+                  </div>
+                  {codexSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${codexSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {codexSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{codexSaveResult.message}
+                    </div>
+                  )}
+                  {(() => {
+                    const effectiveCodexCommand = codexCommandDraft.trim() || 'codex'
+                    const codexModelPart = codexModel && !effectiveCodexCommand.includes('--model') && !effectiveCodexCommand.includes('-m ') ? ` --model ${codexModel}` : ''
+                    const codexPreviewInner = `${effectiveCodexCommand}${codexModelPart}`
+                    return (
+                      <div className="mt-4 pt-3 border-t border-border">
+                        <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
+                        <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{`<shell> -ilc "${codexPreviewInner}"`}</div>
+                        <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
+                  <p className="text-xs text-dim mb-3">
+                    Injected into Codex tabs. Use for <code className="bg-panel px-1 rounded">OPENAI_API_KEY</code> etc.
+                  </p>
+                  {codexEnvRows.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {codexEnvRows.map((row, index) => {
+                        const revealed = codexRevealedEnvRows.has(index)
+                        return (
+                          <div key={index} className="flex items-center gap-2">
+                            <input type="text" value={row.key} onChange={(e) => { setCodexEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, key: e.target.value } : r))); setCodexEnvSaveResult(null) }} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                            <span className="text-dim text-xs">=</span>
+                            <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setCodexEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setCodexEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                            <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setCodexRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
+                            <Tooltip label="Remove"><button onClick={() => { setCodexEnvRows((prev) => prev.filter((_, i) => i !== index)); setCodexEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setCodexEnvRows((prev) => [...prev, { key: '', value: '' }]); setCodexEnvSaveResult(null) }} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
+                    <button onClick={handleSaveCodexEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                  </div>
+                  {codexEnvSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${codexEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {codexEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{codexEnvSaveResult.message}
+                    </div>
                   )}
                 </div>
-                {codexSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${codexSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {codexSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{codexSaveResult.message}
-                  </div>
-                )}
-                {(() => {
-                  const effectiveCodexCommand = codexCommandDraft.trim() || 'codex'
-                  const codexModelPart = codexModel && !effectiveCodexCommand.includes('--model') && !effectiveCodexCommand.includes('-m ') ? ` --model ${codexModel}` : ''
-                  const codexPreviewInner = `${effectiveCodexCommand}${codexModelPart}`
-                  return (
-                    <div className="mt-4 pt-3 border-t border-border">
-                      <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
-                      <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{`<shell> -ilc "${codexPreviewInner}"`}</div>
-                      <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
-                    </div>
-                  )
-                })()}
-              </div>
-
-              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
-                <p className="text-xs text-dim mb-3">
-                  Injected into Codex tabs. Use for <code className="bg-panel px-1 rounded">OPENAI_API_KEY</code> etc.
-                </p>
-                {codexEnvRows.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {codexEnvRows.map((row, index) => {
-                      const revealed = codexRevealedEnvRows.has(index)
-                      return (
-                        <div key={index} className="flex items-center gap-2">
-                          <input type="text" value={row.key} onChange={(e) => { setCodexEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, key: e.target.value } : r))); setCodexEnvSaveResult(null) }} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
-                          <span className="text-dim text-xs">=</span>
-                          <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setCodexEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setCodexEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
-                          <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setCodexRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
-                          <Tooltip label="Remove"><button onClick={() => { setCodexEnvRows((prev) => prev.filter((_, i) => i !== index)); setCodexEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { setCodexEnvRows((prev) => [...prev, { key: '', value: '' }]); setCodexEnvSaveResult(null) }} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
-                  <button onClick={handleSaveCodexEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
-                </div>
-                {codexEnvSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${codexEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {codexEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{codexEnvSaveResult.message}
-                  </div>
-                )}
-              </div>
               </div>
 
               {/* ── Opencode subsection ── */}
               <div ref={(el) => { subSectionRefs.current['agent-opencode'] = el }} id="agent-opencode" className="mt-8">
-              <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
-                Opencode
-                {defaultAgent === 'opencode' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
-              </h3>
+                <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
+                  Opencode
+                  {defaultAgent === 'opencode' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+                </h3>
 
-              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
-                <label className="block text-sm font-medium text-fg mb-1">Model</label>
-                <p className="text-xs text-dim mb-2">
-                  Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Enter a provider/model string (e.g. <code className="bg-panel px-1 rounded">openai/gpt-4</code>). Leave empty to let the CLI choose.
-                </p>
-                <input
-                  type="text"
-                  value={opencodeModel || ''}
-                  onChange={(e) => { void backend.setOpencodeModel(e.target.value || null) }}
-                  placeholder="provider/model"
-                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg font-mono"
-                />
-              </div>
+                <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Model</label>
+                  <p className="text-xs text-dim mb-2">
+                    Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Enter a provider/model string (e.g. <code className="bg-panel px-1 rounded">openai/gpt-4</code>). Leave empty to let the CLI choose.
+                  </p>
+                  <input
+                    type="text"
+                    value={opencodeModel || ''}
+                    onChange={(e) => { void backend.setOpencodeModel(e.target.value || null) }}
+                    placeholder="provider/model"
+                    className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg font-mono"
+                  />
+                </div>
 
-              <div className="bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
-                <p className="text-xs text-dim mb-2">
-                  The Opencode CLI command. Tatsu manages session resume automatically.
-                </p>
-                <textarea
-                  value={opencodeCommandDraft}
-                  onChange={(e) => setOpencodeCommandDraft(e.target.value)}
-                  rows={2}
-                  spellCheck={false}
-                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
-                  placeholder="opencode"
-                />
-                <div className="flex items-center gap-2 mt-3">
-                  <button onClick={handleSaveOpencodeCommand} disabled={!opencodeCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
-                  {opencodeCommandDraft !== 'opencode' && (
-                    <button onClick={handleResetOpencodeCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                <div className="bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
+                  <p className="text-xs text-dim mb-2">
+                    The Opencode CLI command. Tatsu manages session resume automatically.
+                  </p>
+                  <textarea
+                    value={opencodeCommandDraft}
+                    onChange={(e) => setOpencodeCommandDraft(e.target.value)}
+                    rows={2}
+                    spellCheck={false}
+                    className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
+                    placeholder="opencode"
+                  />
+                  <div className="flex items-center gap-2 mt-3">
+                    <button onClick={handleSaveOpencodeCommand} disabled={!opencodeCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                    {opencodeCommandDraft !== 'opencode' && (
+                      <button onClick={handleResetOpencodeCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                    )}
+                  </div>
+                  {opencodeSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${opencodeSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {opencodeSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{opencodeSaveResult.message}
+                    </div>
+                  )}
+                  {(() => {
+                    const effectiveOpencodeCommand = opencodeCommandDraft.trim() || 'opencode'
+                    const opencodeModelPart = opencodeModel && !effectiveOpencodeCommand.includes('--model') && !effectiveOpencodeCommand.includes('-m ') ? ` --model ${opencodeModel}` : ''
+                    const opencodePreviewInner = `${effectiveOpencodeCommand}${opencodeModelPart}`
+                    return (
+                      <div className="mt-4 pt-3 border-t border-border">
+                        <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
+                        <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{`<shell> -ilc "${opencodePreviewInner}"`}</div>
+                        <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                  <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
+                  <p className="text-xs text-dim mb-3">
+                    Injected into Opencode tabs.
+                  </p>
+                  {opencodeEnvRows.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {opencodeEnvRows.map((row, index) => {
+                        const revealed = opencodeRevealedEnvRows.has(index)
+                        return (
+                          <div key={index} className="flex items-center gap-2">
+                            <input type="text" value={row.key} onChange={(e) => { setOpencodeEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, key: e.target.value } : r))); setOpencodeEnvSaveResult(null) }} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                            <span className="text-dim text-xs">=</span>
+                            <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setOpencodeEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setOpencodeEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                            <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setOpencodeRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
+                            <Tooltip label="Remove"><button onClick={() => { setOpencodeEnvRows((prev) => prev.filter((_, i) => i !== index)); setOpencodeEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setOpencodeEnvRows((prev) => [...prev, { key: '', value: '' }]); setOpencodeEnvSaveResult(null) }} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
+                    <button onClick={handleSaveOpencodeEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                  </div>
+                  {opencodeEnvSaveResult && (
+                    <div className={`mt-3 text-xs flex items-center gap-1.5 ${opencodeEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                      {opencodeEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{opencodeEnvSaveResult.message}
+                    </div>
                   )}
                 </div>
-                {opencodeSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${opencodeSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {opencodeSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{opencodeSaveResult.message}
-                  </div>
-                )}
-                {(() => {
-                  const effectiveOpencodeCommand = opencodeCommandDraft.trim() || 'opencode'
-                  const opencodeModelPart = opencodeModel && !effectiveOpencodeCommand.includes('--model') && !effectiveOpencodeCommand.includes('-m ') ? ` --model ${opencodeModel}` : ''
-                  const opencodePreviewInner = `${effectiveOpencodeCommand}${opencodeModelPart}`
-                  return (
-                    <div className="mt-4 pt-3 border-t border-border">
-                      <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
-                      <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{`<shell> -ilc "${opencodePreviewInner}"`}</div>
-                      <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
-                    </div>
-                  )
-                })()}
-              </div>
-
-              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
-                <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
-                <p className="text-xs text-dim mb-3">
-                  Injected into Opencode tabs.
-                </p>
-                {opencodeEnvRows.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {opencodeEnvRows.map((row, index) => {
-                      const revealed = opencodeRevealedEnvRows.has(index)
-                      return (
-                        <div key={index} className="flex items-center gap-2">
-                          <input type="text" value={row.key} onChange={(e) => { setOpencodeEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, key: e.target.value } : r))); setOpencodeEnvSaveResult(null) }} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
-                          <span className="text-dim text-xs">=</span>
-                          <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setOpencodeEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setOpencodeEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
-                          <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setOpencodeRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
-                          <Tooltip label="Remove"><button onClick={() => { setOpencodeEnvRows((prev) => prev.filter((_, i) => i !== index)); setOpencodeEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { setOpencodeEnvRows((prev) => [...prev, { key: '', value: '' }]); setOpencodeEnvSaveResult(null) }} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
-                  <button onClick={handleSaveOpencodeEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
-                </div>
-                {opencodeEnvSaveResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${opencodeEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {opencodeEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{opencodeEnvSaveResult.message}
-                  </div>
-                )}
-              </div>
               </div>
 
               {/* ── System prompt subsection ── */}
@@ -2329,11 +2286,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   <div className="flex flex-wrap gap-1 bg-panel-raised border border-border rounded p-1">
                     <button
                       onClick={() => setScopeRepoRoot(null)}
-                      className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                        scopeRepoRoot === null
-                          ? 'bg-surface text-fg-bright'
-                          : 'text-dim hover:text-fg'
-                      }`}
+                      className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${scopeRepoRoot === null
+                        ? 'bg-surface text-fg-bright'
+                        : 'text-dim hover:text-fg'
+                        }`}
                     >
                       Global
                     </button>
@@ -2341,11 +2297,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       <button
                         key={r}
                         onClick={() => setScopeRepoRoot(r)}
-                        className={`px-2.5 py-1 rounded text-xs font-mono transition-colors cursor-pointer ${
-                          scopeRepoRoot === r
-                            ? 'bg-surface text-fg-bright'
-                            : 'text-dim hover:text-fg'
-                        }`}
+                        className={`px-2.5 py-1 rounded text-xs font-mono transition-colors cursor-pointer ${scopeRepoRoot === r
+                          ? 'bg-surface text-fg-bright'
+                          : 'text-dim hover:text-fg'
+                          }`}
                         title={r}
                       >
                         {repoBasename(r)}
@@ -2360,47 +2315,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 </div>
               )}
               {scopeRepoRoot === null && (
-              <div className="space-y-2">
-                {(
-                  [
-                    {
-                      id: 'remote' as const,
-                      label: 'Branch from the latest remote main',
-                      description:
-                        'Fetches origin before creating the worktree so you start from the tip of the remote default branch. Falls back to local HEAD if the fetch fails (e.g. offline).'
-                    },
-                    {
-                      id: 'local' as const,
-                      label: 'Branch from the current local HEAD',
-                      description:
-                        "Uses whatever is checked out in the main repo right now. Fastest, but you'll inherit any stale local main or unpushed commits."
-                    }
-                  ]
-                ).map((opt) => {
-                  const isActive = worktreeBase === opt.id
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => handleSelectWorktreeBase(opt.id)}
-                      className={`w-full text-left rounded border px-3 py-2 transition-colors cursor-pointer ${
-                        isActive
-                          ? 'border-accent bg-panel-raised'
-                          : 'border-border hover:border-border-strong'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-3 h-3 rounded-full border ${
-                            isActive ? 'border-accent bg-accent' : 'border-border-strong'
-                          }`}
-                        />
-                        <span className="text-sm text-fg-bright">{opt.label}</span>
-                      </div>
-                      <p className="text-xs text-dim mt-1 ml-5">{opt.description}</p>
-                    </button>
-                  )
-                })}
-              </div>
+                <WorktreeBasePicker
+                  activeId={worktreeBase}
+                  onSelect={(mode) => { void handleSelectWorktreeBase(mode) }}
+                />
               )}
 
               <div className="flex items-center justify-between mt-6 mb-1">
@@ -2420,70 +2338,33 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 )}
               </div>
               <p className="text-xs text-dim mb-3">
-                Used when you run "Merge locally" on a worktree. The dropdown on
-                that button also writes back to this setting so your most recent
-                choice becomes the new default.
+                Set merge strategy to be ran on worktrees.
               </p>
-              <div className="space-y-2">
-                {(
-                  [
-                    {
-                      id: 'squash' as const,
-                      label: 'Squash',
-                      description:
-                        "Combine all branch commits into one commit on the base branch. GitHub's \"Squash and merge\"."
-                    },
-                    {
-                      id: 'merge-commit' as const,
-                      label: 'Merge commit',
-                      description:
-                        'Always create a merge commit (--no-ff), preserving the branch as a visible bubble in history.'
-                    },
-                    {
-                      id: 'fast-forward' as const,
-                      label: 'Fast-forward only',
-                      description:
-                        'Only merge if the base can fast-forward (--ff-only). Fails on divergent history.'
-                    }
-                  ]
-                ).map((opt) => {
-                  const isActive = displayedMergeStrategy === opt.id
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => handleSelectMergeStrategy(opt.id)}
-                      className={`w-full text-left rounded border px-3 py-2 transition-colors cursor-pointer ${
-                        isActive
-                          ? 'border-accent bg-panel-raised'
-                          : 'border-border hover:border-border-strong'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-3 h-3 rounded-full border ${
-                            isActive ? 'border-accent bg-accent' : 'border-border-strong'
-                          }`}
-                        />
-                        <span className="text-sm text-fg-bright">{opt.label}</span>
-                      </div>
-                      <p className="text-xs text-dim mt-1 ml-5">{opt.description}</p>
-                    </button>
-                  )
-                })}
-              </div>
+              <MergeStrategyPicker
+                activeId={displayedMergeStrategy}
+                onSelect={(strategy) => { void handleSelectMergeStrategy(strategy) }}
+              />
 
               <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-1">Setup & teardown scripts</h3>
               <p className="text-xs text-dim mb-3">
-                Optional shell commands run via a login shell
-                (<code className="bg-panel-raised px-1 rounded text-xs">zsh -ilc</code>) with
-                the worktree as <code className="bg-panel-raised px-1 rounded text-xs">cwd</code>.
-                Setup runs after a worktree is created; teardown runs before it's removed.
-                The env vars{' '}
-                <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_WORKTREE_PATH</code>,{' '}
-                <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_BRANCH</code>, and{' '}
-                <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_REPO_ROOT</code>{' '}
-                are available to the command.
+                Insert any extra optional commands. Setup runs after a worktree is created; teardown runs after
+                it is removed.
               </p>
+
+              <div className="bg-panel-raised border border-border rounded-lg p-4">
+              {/* <p className="text-xs text-dim mb-3"> */}
+
+              {/* <p className="text-xs text-dim mb-3"> */}
+              {/*   Optional shell commands run via a login shell */}
+              {/*   (<code className="bg-panel-raised px-1 rounded text-xs">zsh -ilc</code>) with */}
+              {/*   the worktree as <code className="bg-panel-raised px-1 rounded text-xs">cwd</code>. */}
+              {/*   Setup runs after a worktree is created; teardown runs before it's removed. */}
+              {/*   The env vars{' '} */}
+              {/*   <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_WORKTREE_PATH</code>,{' '} */}
+              {/*   <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_BRANCH</code>, and{' '} */}
+              {/*   <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_REPO_ROOT</code>{' '} */}
+              {/*   are available to the command. */}
+              {/* </p> */}
 
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs text-dim">Setup command</label>
@@ -2558,6 +2439,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <p className="mt-2 text-xs text-faint">
                 Failures are logged but don't block the worktree operation. Leave blank to disable.
               </p>
+              </div>
 
               {scopeRepoRoot === null && (
                 <>
@@ -2609,55 +2491,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       </span>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    {(
-                      [
-                        {
-                          id: 'diff' as const,
-                          label: 'Diff stat',
-                          description: 'Show added/removed line counts from the PR'
-                        },
-                        {
-                          id: 'age' as const,
-                          label: 'Age',
-                          description: 'Show how long the worktree has existed'
-                        },
-                        {
-                          id: 'pr' as const,
-                          label: 'Pull Request',
-                          description: 'Show assignee avatar, milestone, and PR number'
-                        },
-                        {
-                          id: 'none' as const,
-                          label: 'Nothing',
-                          description: 'Hide the extra detail'
-                        }
-                      ]
-                    ).map((opt) => {
-                      const isActive = worktreeDetail === opt.id
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => handleSelectWorktreeDetail(opt.id)}
-                          className={`w-full text-left rounded border px-3 py-2 transition-colors cursor-pointer ${
-                            isActive
-                              ? 'border-accent bg-panel-raised'
-                              : 'border-border hover:border-border-strong'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`w-3 h-3 rounded-full border ${
-                                isActive ? 'border-accent bg-accent' : 'border-border-strong'
-                              }`}
-                            />
-                            <span className="text-sm text-fg-bright">{opt.label}</span>
-                          </div>
-                          <p className="text-xs text-dim mt-1 ml-5">{opt.description}</p>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <WorktreeDetailPicker
+                    activeId={worktreeDetail}
+                    onSelect={(detail) => { void handleSelectWorktreeDetail(detail) }}
+                  />
                 </>
               )}
 
@@ -2710,6 +2547,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     with <code className="bg-panel-raised px-1 rounded text-xs">prNumber</code> and no explicit
                     prompt). You can edit the prompt per-PR from the New Worktree screen.
                   </p>
+                  <div className="bg-panel-raised border border-border rounded-lg p-4">
                   <textarea
                     value={prReviewPromptDraft}
                     onChange={(e) => setPrReviewPromptDraft(e.target.value)}
@@ -2737,6 +2575,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       {prReviewPromptSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{prReviewPromptSaveResult.message}
                     </div>
                   )}
+                  </div>
                 </>
               )}
 
@@ -2759,27 +2598,12 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 changed file. The editor's CLI must be installed and on your
                 shell PATH.
               </p>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {availableEditors.map((ed) => {
-                  const isActive = editorId === ed.id
-                  return (
-                    <button
-                      key={ed.id}
-                      onClick={() => handleSelectEditor(ed.id)}
-                      className={`flex items-center gap-2 text-left rounded border px-3 py-2 text-sm transition-colors cursor-pointer ${
-                        isActive
-                          ? 'border-accent bg-panel-raised text-fg-bright'
-                          : 'border-border hover:border-border-strong text-muted hover:text-fg'
-                      }`}
-                    >
-                      <Code2 className={`icon-sm ${isActive ? 'text-accent' : 'text-faint'}`} />
-                      <span className="flex-1">{ed.name}</span>
-                      {isActive && <Check className="icon-xs text-accent" />}
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-faint">
+              <EditorPicker
+                editors={availableEditors}
+                activeId={editorId}
+                onSelect={(id) => { void handleSelectEditor(id) }}
+              />
+              <p className="text-xs text-faint mt-3">
                 Tatsu spawns the editor via a login shell (<code className="bg-panel-raised px-1 rounded text-xs">zsh -ilc</code>)
                 so homebrew and nvm paths are picked up automatically. If nothing
                 happens when you click "Open in editor", check that the selected
@@ -2795,130 +2619,130 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               {(() => {
                 const authed = hasToken || authSource === 'gh-cli'
                 return (
-              <>
-              <h2 className={`text-lg font-semibold mb-1 ${!authed ? 'text-info' : 'text-fg-bright'}`}>GitHub</h2>
-              <p className={`text-sm mb-4 ${!authed ? 'text-info/80' : 'text-dim'}`}>
-                Tatsu fetches PR status and check results from GitHub. If you have the
-                {' '}<code className="bg-panel-raised px-1 rounded">gh</code> CLI installed and authenticated,
-                it'll be used automatically. Otherwise, paste a personal access token below — it'll be
-                encrypted and stored locally using your macOS keychain.
-              </p>
+                  <>
+                    <h2 className={`text-lg font-semibold mb-1 ${!authed ? 'text-info' : 'text-fg-bright'}`}>GitHub</h2>
+                    <p className={`text-sm mb-4 ${!authed ? 'text-info/80' : 'text-dim'}`}>
+                      Tatsu fetches PR status and check results from GitHub. If you have the{' '}
+                      <code className="bg-panel-raised px-1 rounded">gh</code> CLI installed and authenticated,
+                      it'll be used automatically. Otherwise, paste a personal access token below — it'll be
+                      encrypted and stored locally using your macOS keychain.
+                    </p>
 
-              {authed && harnessStarred !== null && (
-                <label className="mb-4 flex items-center gap-2 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={harnessStarred}
-                    onChange={(e) => { void backend.setHarnessStarred(e.target.checked) }}
-                    className="icon-base accent-warning cursor-pointer" />
-                  <Star
-                    className={`icon-sm ${harnessStarred ? 'text-warning fill-warning shrink-0' : 'text-warning shrink-0'}`} />
-                  <span className="text-sm text-fg group-hover:text-fg-bright transition-colors">
-                    Star Tatsu on GitHub
-                  </span>
-                </label>
-              )}
+                    {authed && harnessStarred !== null && (
+                      <label className="mb-4 flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={harnessStarred}
+                          onChange={(e) => { void backend.setHarnessStarred(e.target.checked) }}
+                          className="icon-base accent-warning cursor-pointer" />
+                        <Star
+                          className={`icon-sm ${harnessStarred ? 'text-warning fill-warning shrink-0' : 'text-warning shrink-0'}`} />
+                        <span className="text-sm text-fg group-hover:text-fg-bright transition-colors">
+                          Star Tatsu on GitHub
+                        </span>
+                      </label>
+                    )}
 
-              {authSource === 'gh-cli' && !hasToken && (
-                <div className="mb-4 rounded-lg p-4 border bg-success/10 border-success/30">
-                  <div className="flex items-center gap-2 text-sm text-success">
-                    <Check className="icon-sm" />
-                    <span>Using <code className="bg-panel-raised px-1 rounded">gh</code> CLI token (auto-detected)</span>
-                  </div>
-                  {!showPatForm && (
-                    <button
-                      onClick={() => setShowPatForm(true)}
-                      className="mt-3 text-xs text-muted hover:text-fg-bright underline cursor-pointer"
-                    >
-                      Use a personal access token instead
-                    </button>
-                  )}
-                </div>
-              )}
+                    {authSource === 'gh-cli' && !hasToken && (
+                      <div className="mb-4 rounded-lg p-4 border bg-success/10 border-success/30">
+                        <div className="flex items-center gap-2 text-sm text-success">
+                          <Check className="icon-sm" />
+                          <span>Using <code className="bg-panel-raised px-1 rounded">gh</code> CLI token (auto-detected)</span>
+                        </div>
+                        {!showPatForm && (
+                          <button
+                            onClick={() => setShowPatForm(true)}
+                            className="mt-3 text-xs text-muted hover:text-fg-bright underline cursor-pointer"
+                          >
+                            Use a personal access token instead
+                          </button>
+                        )}
+                      </div>
+                    )}
 
-              {(authSource !== 'gh-cli' || hasToken || showPatForm) && (
-              <div className={`rounded-lg p-4 border ${!authed ? 'bg-info/10 border-info/30' : 'bg-panel-raised border-border'}`}>
-                <label className="block text-sm font-medium text-fg mb-2">
-                  Personal Access Token
-                </label>
+                    {(authSource !== 'gh-cli' || hasToken || showPatForm) && (
+                      <div className={`rounded-lg p-4 border ${!authed ? 'bg-info/10 border-info/30' : 'bg-panel-raised border-border'}`}>
+                        <label className="block text-sm font-medium text-fg mb-2">
+                          Personal Access Token
+                        </label>
 
-                {hasToken && (
-                  <div className="flex items-center gap-2 mb-3 text-xs text-success">
-                    <Check className="icon-sm" />
-                    <span>A token is currently saved {authSource === 'pat' ? '(in use)' : ''}</span>
-                  </div>
-                )}
+                        {hasToken && (
+                          <div className="flex items-center gap-2 mb-3 text-xs text-success">
+                            <Check className="icon-sm" />
+                            <span>A token is currently saved {authSource === 'pat' ? '(in use)' : ''}</span>
+                          </div>
+                        )}
 
-                <div className="relative mb-3">
-                  <input
-                    type={showToken ? 'text' : 'password'}
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder={hasToken ? 'Enter a new token to replace the existing one' : 'ghp_... or github_pat_...'}
-                    className="w-full bg-panel border border-border-strong rounded px-3 py-2 pr-10 text-sm text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
-                  />
-                  <button
-                    onClick={() => setShowToken(!showToken)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-dim hover:text-fg transition-colors cursor-pointer"
-                  >
-                    {showToken ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}
-                  </button>
-                </div>
+                        <div className="relative mb-3">
+                          <input
+                            type={showToken ? 'text' : 'password'}
+                            value={token}
+                            onChange={(e) => setToken(e.target.value)}
+                            placeholder={hasToken ? 'Enter a new token to replace the existing one' : 'ghp_... or github_pat_...'}
+                            className="w-full bg-panel border border-border-strong rounded px-3 py-2 pr-10 text-sm text-fg-bright placeholder-faint outline-none focus:border-fg font-mono"
+                          />
+                          <button
+                            onClick={() => setShowToken(!showToken)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-dim hover:text-fg transition-colors cursor-pointer"
+                          >
+                            {showToken ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}
+                          </button>
+                        </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || !token.trim()}
-                    className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer"
-                  >
-                    {saving ? 'Validating...' : 'Save'}
-                  </button>
-                  {hasToken && (
-                    <button
-                      onClick={handleClear}
-                      className="px-3 py-1.5 text-sm text-danger hover:text-danger transition-colors cursor-pointer"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleSave}
+                            disabled={saving || !token.trim()}
+                            className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer"
+                          >
+                            {saving ? 'Validating...' : 'Save'}
+                          </button>
+                          {hasToken && (
+                            <button
+                              onClick={handleClear}
+                              className="px-3 py-1.5 text-sm text-danger hover:text-danger transition-colors cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
 
-                {tokenResult && (
-                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${tokenResult.ok ? 'text-success' : 'text-danger'}`}>
-                    {tokenResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}
-                    {tokenResult.message}
-                  </div>
-                )}
-              </div>
-              )}
+                        {tokenResult && (
+                          <div className={`mt-3 text-xs flex items-center gap-1.5 ${tokenResult.ok ? 'text-success' : 'text-danger'}`}>
+                            {tokenResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}
+                            {tokenResult.message}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-              {(authSource !== 'gh-cli' || hasToken || showPatForm) && (
-              <div className="mt-4 text-xs text-dim space-y-2">
-                <p>
-                  Create a token at{' '}
-                  <a
-                    onClick={() => backend.openExternal('https://github.com/settings/tokens?type=beta')}
-                    className="text-muted hover:text-fg-bright underline cursor-pointer"
-                  >
-                    github.com/settings/tokens
-                  </a>
-                  {' '}(fine-grained) or{' '}
-                  <a
-                    onClick={() => backend.openExternal('https://github.com/settings/tokens')}
-                    className="text-muted hover:text-fg-bright underline cursor-pointer"
-                  >
-                    classic tokens
-                  </a>
-                  .
-                </p>
-                <p>
-                  Required scopes: <code className="bg-panel-raised px-1 rounded">repo</code> for private repos,
-                  or <code className="bg-panel-raised px-1 rounded">public_repo</code> for public only.
-                </p>
-              </div>
-              )}
+                    {(authSource !== 'gh-cli' || hasToken || showPatForm) && (
+                      <div className="mt-4 text-xs text-dim space-y-2">
+                        <p>
+                          Create a token at{' '}
+                          <a
+                            onClick={() => backend.openExternal('https://github.com/settings/tokens?type=beta')}
+                            className="text-muted hover:text-fg-bright underline cursor-pointer"
+                          >
+                            github.com/settings/tokens
+                          </a>
+                          {' '}(fine-grained) or{' '}
+                          <a
+                            onClick={() => backend.openExternal('https://github.com/settings/tokens')}
+                            className="text-muted hover:text-fg-bright underline cursor-pointer"
+                          >
+                            classic tokens
+                          </a>
+                          .
+                        </p>
+                        <p>
+                          Required scopes: <code className="bg-panel-raised px-1 rounded">repo</code> for private repos,
+                          or <code className="bg-panel-raised px-1 rounded">public_repo</code> for public only.
+                        </p>
+                      </div>
+                    )}
 
-              </>
+                  </>
                 )
               })()}
             </section>
@@ -2962,11 +2786,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                         )}
                         <button
                           onClick={() => setRebindingAction(isRebinding ? null : action)}
-                          className={`min-w-[100px] px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-                            isRebinding
-                              ? 'bg-warning/20 text-warning border border-warning/50 animate-pulse'
-                              : 'bg-panel text-fg border border-border-strong hover:border-fg'
-                          }`}
+                          className={`min-w-[100px] px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${isRebinding
+                            ? 'bg-warning/20 text-warning border border-warning/50 animate-pulse'
+                            : 'bg-panel text-fg border border-border-strong hover:border-fg'
+                            }`}
                         >
                           {isRebinding ? 'Press keys...' : formatBindingGlyphs(bindingToString(binding))}
                         </button>
@@ -3509,7 +3332,11 @@ function ThemeRow({
   isActive,
   onSelect,
   onCopy,
-  copied
+  copied,
+  trailing,
+  buttonClassName,
+  ariaExpanded,
+  ariaControls
 }: {
   id: string
   label: string
@@ -3519,14 +3346,19 @@ function ThemeRow({
   onSelect: (id: string) => void
   onCopy?: () => void
   copied?: boolean
+  trailing?: JSX.Element
+  buttonClassName?: string
+  ariaExpanded?: boolean
+  ariaControls?: string
 }): JSX.Element {
   return (
     <button
       type="button"
       onClick={() => onSelect(id)}
-      className={`group w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${
-        isActive ? 'bg-surface' : 'hover:bg-surface/60'
-      }`}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      className={`group w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${buttonClassName ?? ''} ${isActive ? 'bg-surface' : 'hover:bg-surface/60'
+        }`}
     >
       <div className="flex gap-1 shrink-0">
         {swatches.length === 0 ? (
@@ -3552,17 +3384,25 @@ function ThemeRow({
             tabIndex={0}
             onClick={(e) => { e.stopPropagation(); onCopy() }}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCopy() } }}
-            className={`shrink-0 text-dim hover:text-fg transition-opacity cursor-pointer p-1 ${
-              copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
-            }`}
+            className={`shrink-0 text-dim hover:text-fg transition-opacity cursor-pointer p-1 ${copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+              }`}
           >
             {copied ? <CopyCheck className="icon-sm" /> : <Copy className="icon-sm" />}
           </span>
         </Tooltip>
       )}
       {isActive && <Check className="icon-sm text-success shrink-0" />}
+      {trailing}
     </button>
   )
+}
+
+type ThemeChoice = {
+  id: string
+  label: string
+  description: string
+  swatches: Swatch[]
+  builtIn?: ThemeOption
 }
 
 function ThemeModePicker({
@@ -3574,13 +3414,53 @@ function ThemeModePicker({
   disabled,
   onSelect
 }: ThemeModePickerProps): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const menuId = `${title.toLowerCase().replace(/\s+/g, '-')}-theme-menu`
+  const choices: ThemeChoice[] = [
+    ...builtIns.map((opt) => ({
+      id: opt.id,
+      label: opt.label,
+      description: opt.description,
+      swatches: builtInSwatches(opt),
+      builtIn: opt
+    })),
+    ...customs.map((c) => ({
+      id: c.id,
+      label: c.name,
+      description: `Custom theme · ${c.id}`,
+      swatches: customSwatches(c)
+    }))
+  ]
+  const activeChoice = choices.find((choice) => choice.id === activeId)
+  const triggerChoice: ThemeChoice | undefined = activeChoice ?? (activeId ? {
+    id: activeId,
+    label: activeId,
+    description: 'Theme unavailable',
+    swatches: []
+  } : choices[0])
   useEffect(() => {
     return () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
     }
   }, [])
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
   const handleCopy = (opt: ThemeOption): void => {
     const json = readBuiltInThemeJson(opt)
     void navigator.clipboard.writeText(json)
@@ -3591,36 +3471,594 @@ function ThemeModePicker({
       copiedTimerRef.current = null
     }, 1500)
   }
+  const handleSelect = (id: string): void => {
+    onSelect(id)
+    setIsOpen(false)
+  }
+  const renderChoice = (choice: ThemeChoice): JSX.Element => (
+    <ThemeRow
+      key={choice.id}
+      id={choice.id}
+      label={choice.label}
+      description={choice.description}
+      swatches={choice.swatches}
+      isActive={activeId === choice.id}
+      onSelect={handleSelect}
+      onCopy={choice.builtIn ? () => handleCopy(choice.builtIn!) : undefined}
+      copied={copiedId === choice.id}
+    />
+  )
   return (
-    <div className={disabled ? 'opacity-50' : ''}>
+    <div ref={pickerRef} className={`relative ${disabled ? 'opacity-50' : ''}`}>
       <h3 className="text-sm font-semibold text-fg-bright mb-1">{title}</h3>
       <p className="text-xs text-dim mb-2">{hint}</p>
-      <div className="bg-panel-raised border border-border rounded-lg divide-y divide-border">
-        {builtIns.map((opt) => (
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        {triggerChoice ? (
           <ThemeRow
-            key={opt.id}
-            id={opt.id}
-            label={opt.label}
-            description={opt.description}
-            swatches={builtInSwatches(opt)}
-            isActive={activeId === opt.id}
-            onSelect={onSelect}
-            onCopy={() => handleCopy(opt)}
-            copied={copiedId === opt.id}
+            id={triggerChoice.id}
+            label={triggerChoice.label}
+            description={triggerChoice.description}
+            swatches={triggerChoice.swatches}
+            isActive={false}
+            onSelect={() => setIsOpen((open) => !open)}
+            onCopy={triggerChoice.builtIn ? () => handleCopy(triggerChoice.builtIn!) : undefined}
+            copied={copiedId === triggerChoice.id}
+            buttonClassName="hover:bg-surface/80"
+            ariaExpanded={isOpen}
+            ariaControls={menuId}
+            trailing={<>{activeChoice && <Check className="icon-sm text-success shrink-0" />}<ChevronDown className={`icon-sm text-dim shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} /></>}
           />
-        ))}
-        {customs.map((c) => (
-          <ThemeRow
-            key={c.id}
-            id={c.id}
-            label={c.name}
-            description={`Custom theme · ${c.id}`}
-            swatches={customSwatches(c)}
-            isActive={activeId === c.id}
-            onSelect={onSelect}
-          />
-        ))}
+        ) : (
+          <div className="px-4 py-3 text-sm text-dim">No themes available</div>
+        )}
       </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {choices.map(renderChoice)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EditorPicker({
+  editors,
+  activeId,
+  onSelect
+}: {
+  editors: { id: string; name: string }[]
+  activeId: string
+  onSelect: (id: string) => void
+}): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const menuId = 'editor-picker-menu'
+  const activeEditor = editors.find((ed) => ed.id === activeId)
+  const triggerEditor = activeEditor ?? { id: activeId, name: activeId }
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+  const handleSelect = (id: string): void => {
+    onSelect(id)
+    setIsOpen(false)
+  }
+  const renderRow = (ed: { id: string; name: string }): JSX.Element => {
+    const isActive = activeId === ed.id
+    return (
+      <button
+        key={ed.id}
+        type="button"
+        onClick={() => handleSelect(ed.id)}
+        className={`group w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'
+          }`}
+      >
+        <Code2 className={`icon-sm ${isActive ? 'text-accent' : 'text-faint'}`} />
+        <span className="flex-1 text-sm text-fg">{ed.name}</span>
+        {isActive && <Check className="icon-sm text-success shrink-0" />}
+      </button>
+    )
+  }
+  return (
+    <div ref={pickerRef} className="relative">
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        {editors.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setIsOpen((open) => !open)}
+            aria-expanded={isOpen}
+            aria-controls={menuId}
+            className="group w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-surface/80"
+          >
+            <Code2 className={`icon-sm ${activeEditor ? 'text-accent' : 'text-faint'}`} />
+            <span className="flex-1 text-sm text-fg">{triggerEditor.name}</span>
+            {activeEditor && <Check className="icon-sm text-success shrink-0" />}
+            <ChevronDown className={`icon-sm text-dim shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        ) : (
+          <div className="px-4 py-3 text-sm text-dim">No editors detected</div>
+        )}
+      </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {editors.map(renderRow)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const MERGE_STRATEGY_OPTIONS: { id: MergeStrategy; label: string; description: string }[] = [
+  {
+    id: 'squash',
+    label: 'Squash',
+    description:
+      "Combine all branch commits into one commit on the base branch. GitHub's \"Squash and merge\"."
+  },
+  {
+    id: 'merge-commit',
+    label: 'Merge commit',
+    description:
+      'Always create a merge commit (--no-ff), preserving the branch as a visible bubble in history.'
+  },
+  {
+    id: 'fast-forward',
+    label: 'Fast-forward only',
+    description:
+      'Only merge if the base can fast-forward (--ff-only). Fails on divergent history.'
+  }
+]
+
+function MergeStrategyPicker({
+  activeId,
+  onSelect
+}: {
+  activeId: MergeStrategy
+  onSelect: (id: MergeStrategy) => void
+}): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const menuId = 'merge-strategy-menu'
+  const activeOption = MERGE_STRATEGY_OPTIONS.find((opt) => opt.id === activeId) ?? MERGE_STRATEGY_OPTIONS[0]
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+  const handleSelect = (id: MergeStrategy): void => {
+    onSelect(id)
+    setIsOpen(false)
+  }
+  const renderRow = (opt: { id: MergeStrategy; label: string; description: string }): JSX.Element => {
+    const isActive = activeId === opt.id
+    return (
+      <button
+        key={opt.id}
+        type="button"
+        onClick={() => handleSelect(opt.id)}
+        className={`group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'
+          }`}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-fg-bright">{opt.label}</span>
+          <p className="text-xs text-dim mt-0.5">{opt.description}</p>
+        </div>
+        {isActive && <Check className="icon-sm text-success shrink-0 mt-0.5" />}
+      </button>
+    )
+  }
+  return (
+    <div ref={pickerRef} className="relative">
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          className="group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-surface/80"
+        >
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-fg-bright">{activeOption?.label}</span>
+            <p className="text-xs text-dim mt-0.5">{activeOption?.description}</p>
+          </div>
+          <ChevronDown className={`icon-sm text-dim shrink-0 transition-transform mt-0.5 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {MERGE_STRATEGY_OPTIONS.map(renderRow)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const WORKTREE_BASE_OPTIONS: { id: 'remote' | 'local'; label: string; description: string }[] = [
+  {
+    id: 'remote',
+    label: 'Branch from the latest remote main',
+    description:
+      'Fetches origin before creating the worktree so you start from the tip of the remote default branch. Falls back to local HEAD if the fetch fails (e.g. offline).'
+  },
+  {
+    id: 'local',
+    label: 'Branch from the current local HEAD',
+    description:
+      "Uses whatever is checked out in the main repo right now. Fastest, but you'll inherit any stale local main or unpushed commits."
+  }
+]
+
+function WorktreeBasePicker({
+  activeId,
+  onSelect
+}: {
+  activeId: 'remote' | 'local'
+  onSelect: (id: 'remote' | 'local') => void
+}): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const menuId = 'worktree-base-menu'
+  const activeOption = WORKTREE_BASE_OPTIONS.find((opt) => opt.id === activeId) ?? WORKTREE_BASE_OPTIONS[0]
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+  const handleSelect = (id: 'remote' | 'local'): void => {
+    onSelect(id)
+    setIsOpen(false)
+  }
+  const renderRow = (opt: { id: 'remote' | 'local'; label: string; description: string }): JSX.Element => {
+    const isActive = activeId === opt.id
+    return (
+      <button
+        key={opt.id}
+        type="button"
+        onClick={() => handleSelect(opt.id)}
+        className={`group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'
+          }`}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-fg-bright">{opt.label}</span>
+          <p className="text-xs text-dim mt-0.5">{opt.description}</p>
+        </div>
+        {isActive && <Check className="icon-sm text-success shrink-0 mt-0.5" />}
+      </button>
+    )
+  }
+  return (
+    <div ref={pickerRef} className="relative">
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          className="group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-surface/80"
+        >
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-fg-bright">{activeOption?.label}</span>
+            <p className="text-xs text-dim mt-0.5">{activeOption?.description}</p>
+          </div>
+          <ChevronDown className={`icon-sm text-dim shrink-0 transition-transform mt-0.5 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {WORKTREE_BASE_OPTIONS.map(renderRow)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const WORKTREE_DETAIL_OPTIONS: { id: WorktreeDetail; label: string; description: string }[] = [
+  {
+    id: 'diff',
+    label: 'Diff stat',
+    description: 'Show added/removed line counts from the PR'
+  },
+  {
+    id: 'age',
+    label: 'Age',
+    description: 'Show how long the worktree has existed'
+  },
+  {
+    id: 'pr',
+    label: 'Pull Request',
+    description: 'Show assignee avatar, milestone, and PR number'
+  },
+  {
+    id: 'none',
+    label: 'Nothing',
+    description: 'Hide the extra detail'
+  }
+]
+
+function WorktreeDetailPicker({
+  activeId,
+  onSelect
+}: {
+  activeId: WorktreeDetail
+  onSelect: (id: WorktreeDetail) => void
+}): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const menuId = 'worktree-detail-menu'
+  const activeOption = WORKTREE_DETAIL_OPTIONS.find((opt) => opt.id === activeId) ?? WORKTREE_DETAIL_OPTIONS[0]
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+  const handleSelect = (id: WorktreeDetail): void => {
+    onSelect(id)
+    setIsOpen(false)
+  }
+  const renderRow = (opt: { id: WorktreeDetail; label: string; description: string }): JSX.Element => {
+    const isActive = activeId === opt.id
+    return (
+      <button
+        key={opt.id}
+        type="button"
+        onClick={() => handleSelect(opt.id)}
+        className={`group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'
+          }`}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-fg-bright">{opt.label}</span>
+          <p className="text-xs text-dim mt-0.5">{opt.description}</p>
+        </div>
+        {isActive && <Check className="icon-sm text-success shrink-0 mt-0.5" />}
+      </button>
+    )
+  }
+  return (
+    <div ref={pickerRef} className="relative">
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          className="group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-surface/80"
+        >
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-fg-bright">{activeOption?.label}</span>
+            <p className="text-xs text-dim mt-0.5">{activeOption?.description}</p>
+          </div>
+          <ChevronDown className={`icon-sm text-dim shrink-0 transition-transform mt-0.5 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {WORKTREE_DETAIL_OPTIONS.map(renderRow)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const AGENT_DESCRIPTIONS: Record<AgentKind, string> = {
+  claude: "Anthropic's CLI coding agent",
+  codex: "OpenAI's CLI coding agent",
+  opencode: 'Open-source terminal-based agent'
+}
+
+function DefaultAgentPicker({
+  activeKind,
+  onSelect
+}: {
+  activeKind: AgentKind
+  onSelect: (kind: AgentKind) => void
+}): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const menuId = 'default-agent-menu'
+  const activeAgent = AGENT_REGISTRY.find((a) => a.kind === activeKind) ?? AGENT_REGISTRY[0]
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+  const handleSelect = (kind: AgentKind): void => {
+    onSelect(kind)
+    setIsOpen(false)
+  }
+  const renderRow = (agent: typeof AGENT_REGISTRY[number]): JSX.Element => {
+    const isActive = activeKind === agent.kind
+    return (
+      <button
+        key={agent.kind}
+        type="button"
+        onClick={() => handleSelect(agent.kind)}
+        className={`group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'
+          }`}
+      >
+        <AgentIcon kind={agent.kind} className="icon-sm shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-fg-bright">{agent.displayName}</span>
+          <p className="text-xs text-dim mt-0.5">{AGENT_DESCRIPTIONS[agent.kind] ?? `By ${agent.vendor}`}</p>
+        </div>
+        {isActive && <Check className="icon-sm text-success shrink-0 mt-0.5" />}
+      </button>
+    )
+  }
+  return (
+    <div ref={pickerRef} className="relative">
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          className="group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-surface/80"
+        >
+          <AgentIcon kind={activeAgent.kind} className="icon-sm shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-fg-bright">{activeAgent.displayName}</span>
+            <p className="text-xs text-dim mt-0.5">{AGENT_DESCRIPTIONS[activeAgent.kind] ?? `By ${activeAgent.vendor}`}</p>
+          </div>
+          <ChevronDown className={`icon-sm text-dim shrink-0 transition-transform mt-0.5 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {AGENT_REGISTRY.map(renderRow)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ModelPicker({
+  activeId,
+  options,
+  onSelect
+}: {
+  activeId: string | null
+  options: ModelOption[]
+  onSelect: (id: string | null) => void
+}): JSX.Element {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const reactId = useId()
+  const menuId = `model-picker-${reactId}`
+  const activeOption = activeId ? options.find((m) => m.id === activeId) : null
+  const currentModels = options.filter((m) => m.tier === 'current')
+  const legacyModels = options.filter((m) => m.tier === 'legacy')
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+  const handleSelect = (id: string | null): void => {
+    onSelect(id)
+    setIsOpen(false)
+  }
+  const renderRow = (model: ModelOption): JSX.Element => {
+    const isActive = activeId === model.id
+    return (
+      <button
+        key={model.id}
+        type="button"
+        onClick={() => handleSelect(model.id)}
+        className={`group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'}`}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-fg-bright">{model.displayName}</span>
+        </div>
+        {isActive && <Check className="icon-sm text-success shrink-0 mt-0.5" />}
+      </button>
+    )
+  }
+  const renderDefaultRow = (): JSX.Element => {
+    const isActive = !activeId
+    return (
+      <button
+        key="__default"
+        type="button"
+        onClick={() => handleSelect(null)}
+        className={`group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${isActive ? 'bg-surface' : 'hover:bg-surface/60'}`}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-fg-bright">Default</span>
+          <p className="text-xs text-dim mt-0.5">Let CLI choose</p>
+        </div>
+        {isActive && <Check className="icon-sm text-success shrink-0 mt-0.5" />}
+      </button>
+    )
+  }
+  const renderGroupHeader = (label: string): JSX.Element => (
+    <div className="px-4 py-1.5 text-xs text-faint uppercase tracking-wide">{label}</div>
+  )
+  return (
+    <div ref={pickerRef} className="relative">
+      <div className="bg-panel-raised border border-border rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          aria-expanded={isOpen}
+          aria-controls={menuId}
+          className="group w-full flex items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-surface/80"
+        >
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-fg-bright">{activeOption?.displayName ?? 'Default'}</span>
+            <p className="text-xs text-dim mt-0.5">{activeOption ? (activeOption.tier === 'current' ? 'Current' : 'Legacy') : 'Let CLI choose'}</p>
+          </div>
+          <ChevronDown className={`icon-sm text-dim shrink-0 transition-transform mt-0.5 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {isOpen && (
+        <div id={menuId} className="absolute z-20 mt-2 w-full bg-panel-raised border border-border rounded-lg divide-y divide-border overflow-hidden shadow-xl">
+          {renderDefaultRow()}
+          {renderGroupHeader('Current')}
+          {currentModels.map(renderRow)}
+          {renderGroupHeader('Legacy')}
+          {legacyModels.map(renderRow)}
+        </div>
+      )}
     </div>
   )
 }
