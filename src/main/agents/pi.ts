@@ -176,7 +176,7 @@ export function latestSessionId(_cwd: string): string | null {
 export function buildSpawnArgs(opts: AgentSpawnOpts): string {
   let cmd = opts.command
 
-  if (opts.model && !opts.command.includes('--model')) {
+  if (opts.model && !opts.command.includes('--model') && !opts.command.includes('-m ')) {
     cmd += ` --model ${shellQuote(opts.model)}`
   }
 

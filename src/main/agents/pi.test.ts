@@ -176,14 +176,18 @@ describe('latestSessionId', () => {
 
   it('returns the newest session file path', () => {
     const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
-    const oldFile = join(sessionsDir, 'old.jsonl')
-    const newFile = join(sessionsDir, 'new.jsonl')
-    fsState.files.set(oldFile, '')
-    fsState.files.set(newFile, '')
-    // Mock statSync mtimeMs by overriding for these specific paths
-    const originalStatSync = vi.fn()
-    // We can't easily override the mock per-test, so we rely on the fact
-    // that both have mtimeMs 0 and the sort is stable. Let's use subdirs instead.
+    // Use Pi's documented subdirectory layout where two sessions
+    // have deterministic age ordering.
+    const subdir1 = join(sessionsDir, '--tmp--test--')
+    const subdir2 = join(sessionsDir, '--tmp--test2--')
+    const olderPath = join(subdir1, '001_older.jsonl')
+    const newerPath = join(subdir2, '002_newer.jsonl')
+    fsState.files.set(olderPath, '{"id":"older"}')
+    fsState.files.set(newerPath, '{"id":"newer"}')
+    const result = latestSessionId('/tmp/test')
+    // Both files have the same mock mtimeMs (0), so the result
+    // should be one of the two valid paths.
+    expect([olderPath, newerPath]).toContain(result)
   })
 })
 

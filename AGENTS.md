@@ -16,6 +16,7 @@ Tatsu is an Electron App that manages multiple Agentic CLI instances across git 
 - Claude Code
 - Opencode
 - Codex
+- Pi
 
 ## Stack
 
@@ -207,7 +208,7 @@ src/
 │   ├── perf-log/                  # File-based perf trace logger
 │   ├── path-fix/                  # macOS login-shell PATH capture
 │   ├── debug/                     # File-based debug logger
-│   ├── agents/                    # Agent-specific hook installation (Claude, Opencode, Codex)
+│   ├── agents/                    # Agent-specific hook installation (Claude, Opencode, Codex, Pi)
 │   ├── editor/                    # External editor integration
 │   ├── git-ops-state/             # Pending git operations per worktree
 │   ├── github-recorder/           # GitHub API response recording for offline access
