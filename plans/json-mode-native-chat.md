@@ -182,8 +182,8 @@ chaotic. Want: nest child entries under the parent Task tool card.
 Renderer-side grouping is ready to consume this — only the manager/
 slice plumbing for `parent_tool_use_id` is still missing: persist the
 field on `JsonClaudeChatEntry` (or on each assistant entry) in
-`src/shared/state/json-claude.ts`, populate it in
-`src/main/json-claude-manager.ts` from the stream-json
+`src/shared/state/json-claude/json-claude.ts`, populate it in
+`src/main/chat-runtimes/claude-acp.ts` from the stream-json
 `parent_tool_use_id` field, and the JsonModeChat grouping pass can
 bucket child entries under the parent Task card.
 
@@ -317,7 +317,7 @@ is shipped.
   against the bundled `@anthropic-ai/claude-code` (currently 2.1.126,
   pinned in `package.json`) so a global `npm i -g` of a breaking version
   can't surprise users. The integration test in
-  `src/main/approval-bridge.test.ts` exercises the round trip on every
+  `src/main/chat-runtimes/claude-acp.ts` exercises the round trip on every
   vitest run; a future CI workflow can run that against the pinned dep
   to gate dep bumps. xterm tabs still hit the user's PATH `claude` and
   carry the same risk for that surface.
@@ -333,17 +333,17 @@ is shipped.
 
 | Concern | File(s) |
 |---|---|
-| Subprocess lifecycle, stdin/stdout pump, session jsonl seed | `src/main/json-claude-manager.ts` |
+| Subprocess lifecycle, stdin/stdout pump, session jsonl seed | `src/main/chat-runtimes/claude-acp.ts` |
 | Permission MCP server (CommonJS, in resources/) | `resources/permission-prompt-mcp.js` |
-| Per-session Unix socket bridge | `src/main/approval-bridge.ts` |
-| Slice (sessions + pending approvals + permission mode + entries) | `src/shared/state/json-claude.ts` |
-| Renderer chat UI + per-tool cards + statusline | `src/renderer/components/JsonModeChat.tsx` |
-| Approval card | `src/renderer/components/JsonClaudeApprovalCard.tsx` |
-| Approvals hook | `src/renderer/hooks/useJsonClaudeApprovals.ts` |
-| Tab-type wiring (panes/persistence/types) | `src/main/panes-fsm.ts`, `src/main/persistence-migrations.ts`, `src/shared/state/terminals.ts` |
-| Feature flag | `src/shared/state/settings.ts` (`jsonModeClaudeTabs`) |
+| Per-session ACP approval flow | `src/main/chat-runtimes/claude-acp.ts` |
+| Slice (sessions + pending approvals + permission mode + entries) | `src/shared/state/json-claude/json-claude.ts` |
+| Renderer chat UI + per-tool cards + statusline | `src/renderer/components/JsonModeChat/JsonModeChat.tsx` |
+| Approval card | `src/renderer/components/JsonClaudeApprovalCard/JsonClaudeApprovalCard.tsx` |
+| Approvals hook | `src/renderer/hooks/useJsonClaudeApprovals/useJsonClaudeApprovals.ts` |
+| Tab-type wiring (panes/persistence/types) | `src/main/panes-fsm/panes-fsm.ts`, `src/main/persistence-migrations/persistence-migrations.ts`, `src/shared/state/terminals/terminals.ts` |
+| Feature flag | `src/shared/state/settings/settings.ts` (`jsonModeClaudeTabs`) |
 | Markdown CSS | `src/renderer/styles.css` (`.markdown` scope) |
-| Integration test | `src/main/approval-bridge.test.ts` |
+| Integration test | `src/main/approval-bridge/approval-bridge.test.ts` |
 | Diagnostic log | `/tmp/harness-permission-mcp.log` (tail to verify MCP wire) |
 
 ## Rewind
@@ -357,12 +357,12 @@ new response.
 ### Where the conversation lives
 
 Two synced copies: **Slice (RAM)** at
-`JsonClaudeSession.entries` (`src/shared/state/json-claude.ts:134`) —
+`JsonClaudeSession.entries` (`src/shared/state/json-claude/types.ts:134`) —
 stripped from the wire snapshot (`stripJsonClaudeEntries`, `:366`),
 lazy-fetched via `jsonClaude:getEntries` (`src/main/index.ts:2588`).
 **Session jsonl (disk, claude-code-owned)** at
 `~/.claude/projects/<cwd-encoded>/<sessionId>.jsonl`
-(`src/main/json-claude-manager.ts:230`, `:429`) — the source
+(`src/main/chat-runtimes/claude-acp.ts`) — the source
 `--resume <sessionId>` rehydrates from, replayed into the slice by
 `seedFromTranscript` (`:225`). Each turn-line carries
 `{uuid, parentUuid, type, message}`; bookkeeping types
@@ -384,7 +384,7 @@ multi-block turns into one entry while the jsonl can't.
 
 ### Subprocess lifecycle
 
-`JsonClaudeManager` (`src/main/json-claude-manager.ts:197`) owns one
+`JsonClaudeManager` (`src/main/json-claude-manager/json-claude-manager.ts:197`) owns one
 instance per session id. `create()` (`:364`) spawns with
 `--resume <id>` if the jsonl exists (`:432`), else `--session-id <id>`.
 `kill()` (`:792`) ends stdin + SIGTERM. No first-class restart —
@@ -428,9 +428,9 @@ renders them) and pass through the cut when they predate it.
 | In-flight | Where | Cleanup |
 |---|---|---|
 | Streaming assistant (`busy`, `partial != null`) | `JsonClaudeManager.partial` (`:49`, `:1328`) | `interrupt()` (`:759`); wait ≤1500ms for next `result` |
-| Pending approval round-trip | `ApprovalBridge.pendingResponses` (`src/main/approval-bridge.ts:78`) | New `cancelPendingForSession(sessionId)` — same loop as `stopSession` (`:122`), without tearing the server down |
+| Pending approval round-trip | `ApprovalBridge.pendingResponses` (`src/main/approval-bridge/approval-bridge.ts:78`) | New `cancelPendingForSession(sessionId)` — same loop as `stopSession` (`:122`), without tearing the server down |
 | Tool running through MCP (approved, awaiting result) | Untracked; lives inside the subprocess agent loop | Subsumed by interrupt; long-running Bash etc. completes inside the subprocess, result discarded after `kill()` |
-| Queued user messages (`isQueued`) | `entries[i].isQueued` (`src/shared/state/json-claude.ts:73`) | Already on stdin; absorbed by the truncation pass |
+| Queued user messages (`isQueued`) | `entries[i].isQueued` (`src/shared/state/json-claude/types.ts:73`) | Already on stdin; absorbed by the truncation pass |
 
 Order: **interrupt → await `result` (≤1500ms) → deny pendings →
 kill → truncate jsonl → respawn**. The wait guarantees a quiesced
@@ -440,7 +440,7 @@ jsonl.
 
 1. User right-clicks an assistant message.
 2. Inline context menu pops (positioned `<div>` like
-   `src/renderer/components/TerminalPanel.tsx:199-207`). One
+   `src/renderer/components/TerminalPanel/TerminalPanel.tsx:199-207`). One
    destructive item, `RotateCcw` icon: "Rewind to here · drops
    this message + everything after."
 3. Click. No confirm — Phase 2's Undo affordance is the safety net.
@@ -468,7 +468,7 @@ the slice for the prior design but is unused now. `entriesSeeded`
 
 ### UI surface
 
-In `src/renderer/components/JsonModeChat.tsx:540-810`, the entry
+In `src/renderer/components/JsonModeChat/JsonModeChat.tsx:540-810`, the entry
 render loop emits multiple rows per assistant entry (text, thinking
 cards, tool cards). The top-level `groupedItems.map` wraps each
 item in a div that only carries `onContextMenu` when the source row

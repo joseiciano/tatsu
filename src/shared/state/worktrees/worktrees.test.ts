@@ -49,6 +49,91 @@ describe('worktreesReducer', () => {
     expect(next.list.map((w) => w.path)).toEqual(['/c'])
   })
 
+  it('worktree entries with no container reduce unchanged', () => {
+    const worktree = stubWorktree({ path: '/tmp/wt/plain' })
+    const start: WorktreesState = {
+      ...initialWorktrees,
+      list: [worktree]
+    }
+    const next = apply(start, {
+      type: 'worktrees/listChanged',
+      payload: [worktree]
+    })
+    expect(next.list[0].container).toBeUndefined()
+  })
+
+  it('containerUpdated patches one worktree and preserves others by reference', () => {
+    const a = stubWorktree({ path: '/tmp/wt/a' })
+    const b = stubWorktree({ path: '/tmp/wt/b' })
+    const c = stubWorktree({ path: '/tmp/wt/c' })
+    const start: WorktreesState = {
+      ...initialWorktrees,
+      list: [a, b, c]
+    }
+    const next = apply(start, {
+      type: 'worktrees/containerUpdated',
+      payload: {
+        path: '/tmp/wt/b',
+        container: {
+          id: 'abc123',
+          name: 'harness-repo-feature',
+          image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+          workdir: '/workspace',
+          shell: '/bin/bash',
+          status: 'running'
+        }
+      }
+    })
+    expect(next.list).not.toBe(start.list)
+    expect(next.list[0]).toBe(a)
+    expect(next.list[2]).toBe(c)
+    expect(next.list[1]).not.toBe(b)
+    expect(next.list[1].container?.status).toBe('running')
+  })
+
+  it('containerUpdated removes container metadata when cleared', () => {
+    const start: WorktreesState = {
+      ...initialWorktrees,
+      list: [
+        stubWorktree({
+          path: '/tmp/wt/a',
+          container: {
+            id: 'abc123',
+            name: 'harness-repo-feature',
+            image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+            workdir: '/workspace',
+            shell: '/bin/bash',
+            status: 'running'
+          }
+        })
+      ]
+    }
+
+    const next = apply(start, {
+      type: 'worktrees/containerUpdated',
+      payload: { path: '/tmp/wt/a' }
+    })
+
+    expect('container' in next.list[0]).toBe(false)
+  })
+
+
+  it('containerUpdated is a no-op when clearing missing container metadata', () => {
+    const worktree = stubWorktree({ path: '/tmp/wt/a' })
+    const start: WorktreesState = {
+      ...initialWorktrees,
+      list: [worktree]
+    }
+
+    const next = apply(start, {
+      type: 'worktrees/containerUpdated',
+      payload: { path: '/tmp/wt/a' }
+    })
+
+    expect(next).toBe(start)
+    expect(next.list[0]).toBe(worktree)
+  })
+
   it('reposChanged replaces the repoRoots array', () => {
     const next = apply(initialWorktrees, {
       type: 'worktrees/reposChanged',

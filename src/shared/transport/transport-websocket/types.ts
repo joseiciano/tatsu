@@ -11,9 +11,12 @@ export type ServerFrame =
   | { t: 'res'; id: string; ok: boolean; value?: unknown; error?: string }
   | { t: 'sig'; name: string; args: unknown[] }
 
+export type WebSocketTokenTransport = 'query' | 'authorizationHeader'
+
 export interface WebSocketClientTransportOptions {
   url: string
   token: string
+  tokenTransport?: WebSocketTokenTransport
   /** Callback fired after each successful (re)connect, once the client
    *  has finished refetching the snapshot. The callee is expected to
    *  reset its local mirror to `snapshot`. */

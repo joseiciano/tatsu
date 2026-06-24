@@ -41,6 +41,7 @@ type SubSectionId =
   | 'hotkeys-commands'
   | 'hotkeys-overlays'
   | 'hotkeys-external'
+  | 'experimental-worktree-containers'
   | 'experimental-browser-control'
   | 'experimental-web-mobile'
 
@@ -90,12 +91,11 @@ const SECTIONS: Section[] = [
   },
   { id: 'updates', label: 'Updates', icon: DownloadCloud },
   { id: 'support', label: 'Support', icon: LifeBuoy },
-  {
-    id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
-      { id: 'experimental-browser-control', label: 'Browser control' },
-      { id: 'experimental-web-mobile', label: 'Web & mobile' }
-    ]
-  }
+  { id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
+    { id: 'experimental-worktree-containers', label: 'Worktree containers' },
+    { id: 'experimental-browser-control', label: 'Browser control' },
+    { id: 'experimental-web-mobile', label: 'Web & mobile' }
+  ]}
 ]
 
 interface SearchItem {
@@ -167,6 +167,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     'hotkeys-commands': null,
     'hotkeys-overlays': null,
     'hotkeys-external': null,
+    'experimental-worktree-containers': null,
     'experimental-browser-control': null,
     'experimental-web-mobile': null
   })
@@ -334,6 +335,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     worktreeBase,
     mergeStrategy,
     worktreeDetail,
+    enableWorktreeContainers,
     hasGithubToken: settingsHasToken,
     githubAuthSource: authSource,
     harnessStarred,
@@ -775,6 +777,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
   const handleToggleHarnessMcp = useCallback(async (enabled: boolean) => {
     await backend.setHarnessMcpEnabled(enabled)
+  }, [])
+
+  const handleToggleWorktreeContainers = useCallback(async (enabled: boolean) => {
+    await backend.setEnableWorktreeContainers(enabled)
   }, [])
 
   const handleToggleAutoUpdate = useCallback(async (enabled: boolean) => {
@@ -3039,6 +3045,37 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 </a>{' '}
                 if something breaks.
               </p>
+
+              <div
+                ref={(el) => { subSectionRefs.current['experimental-worktree-containers'] = el }}
+                id="experimental-worktree-containers"
+                className="bg-panel-raised border border-warning/30 rounded-lg p-4 mb-4"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-fg-bright">Worktree containers</h3>
+                  <span className="text-xs font-medium text-warning bg-warning/10 border border-warning/30 rounded px-1.5 py-0.5">
+                    Experimental
+                  </span>
+                </div>
+                <p className="text-xs text-dim mb-3">
+                  New worktrees run setup scripts and terminals inside a dedicated Docker
+                  container. Existing worktrees are unchanged.
+                </p>
+
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableWorktreeContainers}
+                    onChange={(e) => { void handleToggleWorktreeContainers(e.target.checked) }}
+                    className="mt-0.5 cursor-pointer icon-base" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fg-bright">Enable worktree containers</div>
+                    <div className="text-xs text-dim mt-0.5">
+                      Docker availability is checked when creating the next worktree.
+                    </div>
+                  </div>
+                </label>
+              </div>
 
               {/* Browser control sub-card */}
               <div

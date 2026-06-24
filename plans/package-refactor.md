@@ -104,7 +104,7 @@ This phase is intentionally out of scope for first pass.
 
 ## Batching plan
 
-Remember, the phases are meant to be done on each bach in a separate phase (i.e. If I prompt to implement phase 1 on batch 1, you should only implement changes on the directory/files in batch 1. At most, update imports from other files not in batch 1 to use the new imports we made from changing batch 1's structure.)
+Remember, the phases are meant to be done on each batch in a separate phase (i.e. If I prompt to implement phase 1 on batch 1, you should only implement changes on the directory/files in batch 1. At most, update imports from other files not in batch 1 to use the new imports we made from changing batch 1's structure.)
 
 
 **Batch 1**: `src/main/`

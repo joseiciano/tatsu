@@ -13,6 +13,8 @@ import { loadRepoConfig } from '../repo-config'
 import { log } from '../debug'
 import type { Store } from '../store'
 import type { Worktree, PendingWorktree } from '../../shared/state/worktrees'
+import { hydratePersistedWorktreeContainers } from '../build-initial-state'
+import type { PersistedWorktreeContainer } from '../persistence'
 
 /** Sanitize a PR's head branch into a name that's safe as both a git
  *  branch (we're not strict here since git accepts most things) and a
@@ -52,6 +54,7 @@ export type PendingOutcome =
 
 interface WorktreesFSMOptions {
   getRepoRoots: () => string[]
+  getPersistedWorktreeContainers?: () => Record<string, PersistedWorktreeContainer> | undefined
   getWorktreeSetupCmd: () => string
   getWorktreeBaseMode: () => 'remote' | 'local'
   /** Called after a worktree has been created on disk (and its setup
@@ -92,7 +95,10 @@ export class WorktreesFSM {
         })
       )
     )
-    const flat = results.flat()
+    const flat = hydratePersistedWorktreeContainers(
+      results.flat(),
+      this.opts.getPersistedWorktreeContainers?.()
+    )
     this.store.dispatch({ type: 'worktrees/listChanged', payload: flat })
     return flat
   }

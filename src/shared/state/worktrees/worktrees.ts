@@ -7,6 +7,19 @@ export function worktreesReducer(
   switch (event.type) {
     case 'worktrees/listChanged':
       return { ...state, list: event.payload }
+    case 'worktrees/containerUpdated': {
+      const i = state.list.findIndex((w) => w.path === event.payload.path)
+      if (i === -1) return state
+      const current = state.list[i]
+      const patched = event.payload.container
+        ? { ...current, container: event.payload.container }
+        : withoutContainer(current)
+      if (patched === current) return state
+      return {
+        ...state,
+        list: [...state.list.slice(0, i), patched, ...state.list.slice(i + 1)]
+      }
+    }
     case 'worktrees/reposChanged':
       return { ...state, repoRoots: event.payload }
     case 'worktrees/pendingAdded':
@@ -60,4 +73,11 @@ export function worktreesReducer(
       return state
     }
   }
+}
+
+function withoutContainer(worktree: WorktreesState['list'][number]): WorktreesState['list'][number] {
+  if (!worktree.container) return worktree
+  const { container: _container, ...rest } = worktree
+  void _container
+  return rest
 }

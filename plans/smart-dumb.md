@@ -142,43 +142,43 @@ Coverage rule: every file below is in scope. Primary component files follow thei
 ## Current renderer map
 
 ### Infrastructure layer — keep outside dumb layer
-- `store.ts`
-- `backend.ts`
-- `build-backend.ts`
-- `hooks/useTabHandlers.ts`
-- `hooks/useWorktreeHandlers.ts`
-- `hooks/useHotkeyHandlers.ts`
-- `hooks/useHotkeys.ts`
-- `hooks/useTailLineBuffer.ts`
-- `hooks/useMetaHeld.ts`
-- `hooks/useViewport.ts`
-- `hooks/useActiveTheme.ts`
-- `hooks/useSystemColorScheme.ts`
-- `hooks/useJsonClaudeApprovals.ts`
-- renderer utilities like `hotkeys.ts`, `worktree-sort.ts`, `theme-apply.ts`, `themes.ts`
+- `store/store.ts`
+- `backend/backend.ts`
+- `build-backend/build-backend.ts`
+- `hooks/useTabHandlers/useTabHandlers.ts`
+- `hooks/useWorktreeHandlers/useWorktreeHandlers.ts`
+- `hooks/useHotkeyHandlers/useHotkeyHandlers.ts`
+- `hooks/useHotkeys/useHotkeys.ts`
+- `hooks/useTailLineBuffer/useTailLineBuffer.ts`
+- `hooks/useMetaHeld/useMetaHeld.ts`
+- `hooks/useViewport/useViewport.ts`
+- `hooks/useActiveTheme/useActiveTheme.ts`
+- `hooks/useSystemColorScheme/useSystemColorScheme.ts`
+- `hooks/useJsonClaudeApprovals/useJsonClaudeApprovals.ts`
+- renderer utilities like `hotkeys/hotkeys.ts`, `worktree-sort/worktree-sort.ts`, `theme-apply/theme-apply.ts`, `themes/themes.ts`
 
 ### Already mostly dumb/presentational — use as reference shapes
-- `Tooltip.tsx`
-- `HotkeyBadge.tsx`
-- `AgentIcon.tsx`
-- `RepoIcon.tsx`
-- `SnoozeCalendar.tsx`
-- `ReviewSummaryBar.tsx`
-- `ReviewFileTree.tsx`
-- `MonacoEditor.tsx`
-- `MonacoDiffEditor.tsx`
+- `components/Tooltip/Tooltip.tsx`
+- `components/HotkeyBadge/HotkeyBadge.tsx`
+- `components/AgentIcon/AgentIcon.tsx`
+- `components/RepoIcon/RepoIcon.tsx`
+- `components/SnoozeCalendar/SnoozeCalendar.tsx`
+- `components/ReviewSummaryBar/ReviewSummaryBar.tsx`
+- `components/ReviewFileTree/ReviewFileTree.tsx`
+- `components/MonacoEditor/MonacoEditor.tsx`
+- `components/MonacoDiffEditor/MonacoDiffEditor.tsx`
 - most `components/json-mode-cards/*`
 
 ### Highest-value smart/dumb targets
-- `App.tsx`
-- `components/Settings.tsx`
-- `components/JsonModeChat.tsx`
-- `components/WorkspaceView.tsx`
-- `components/TerminalPanel.tsx`
-- `components/Sidebar.tsx`
-- `components/CommandCenter.tsx`
-- `components/ReviewScreen.tsx`
-- `components/RightColumn.tsx`
+- `App/App.tsx`
+- `components/Settings/Settings.tsx`
+- `components/JsonModeChat/JsonModeChat.tsx`
+- `components/WorkspaceView/WorkspaceView.tsx`
+- `components/TerminalPanel/TerminalPanel.tsx`
+- `components/Sidebar/Sidebar.tsx`
+- `components/CommandCenter/CommandCenter.tsx`
+- `components/ReviewScreen/ReviewScreen.tsx`
+- `components/RightColumn/RightColumn.tsx`
 
 ## Target structure
 
@@ -197,13 +197,12 @@ src/renderer/components/
 For root app shell:
 
 ```
-src/renderer/
-  App.tsx               # smart entry kept stable for existing import surface
-  app/
-    AppView.tsx         # dumb root layout
-    App.types.ts        # optional
+src/renderer/App/
+  index.ts              # public export for existing import surface
+  App.tsx               # smart root container
+  AppView.tsx           # dumb root layout
+  App.types.ts          # optional
 ```
-
 ## Package rules
 
 ### Required
@@ -248,9 +247,9 @@ After `*View.tsx` exists:
 
 ## Component-by-component seams
 
-### `App.tsx`
+### `App/App.tsx`
 Target split:
-- `App.tsx` stays smart root container
+- `App/App.tsx` stays smart root container
 - `app/AppView.tsx` becomes dumb desktop/mobile layout shell
 
 Move into smart layer:
@@ -272,10 +271,10 @@ Phase 0 notes:
 - stable prop boundary: derived layout props for sidebar, workspace, right column, overlays, onboarding, review state
 - first subviews: root layout shell, onboarding/welcome surface, stacked banners/overlays
 
-### `components/Sidebar.tsx`
+### `components/Sidebar/Sidebar.tsx`
 Target split:
-- `Sidebar.tsx` smart container
-- `SidebarView.tsx` dumb list/layout renderer
+- `Sidebar/Sidebar.tsx` smart container
+- `Sidebar/SidebarView.tsx` dumb list/layout renderer
 - optional `parts/SidebarGroup.tsx`, `parts/SidebarFooter.tsx`
 
 Keep smart:
@@ -298,10 +297,10 @@ Phase 0 notes:
 - stable prop boundary: grouped worktree/status/PR props plus action callbacks already passed into sidebar
 - first subviews: continue form, repo header, group header; keep `WorktreeTab` dumb
 
-### `components/TerminalPanel.tsx`
+### `components/TerminalPanel/TerminalPanel.tsx`
 Target split:
-- `TerminalPanel.tsx` smart container
-- `TerminalPanelView.tsx` dumb tab strip
+- `TerminalPanel/TerminalPanel.tsx` smart container
+- `TerminalPanel/TerminalPanelView.tsx` dumb tab strip
 - optional `parts/SortableTabView.tsx`
 
 Keep smart:
@@ -324,10 +323,10 @@ Phase 0 notes:
 - stable prop boundary: pane-local tabs, statuses, shell activity, selection/close/add callbacks
 - first subviews: sortable tab view, tab strip controls, scroll buttons, rename/menu surfaces
 
-### `components/WorkspaceView.tsx`
+### `components/WorkspaceView/WorkspaceView.tsx`
 Target split:
-- `WorkspaceView.tsx` smart container
-- `WorkspaceView.tsx` may stay mostly smart initially
+- `WorkspaceView/WorkspaceView.tsx` smart container
+- `WorkspaceView/WorkspaceView.tsx` may stay mostly smart initially
 - first extraction should be dumb recursive split renderer, likely `parts/WorkspaceSplitView.tsx`
 
 Keep smart:
@@ -348,10 +347,10 @@ Phase 0 notes:
 - stable prop boundary: pane tree, focused pane id, tab statuses/activity, pane callbacks
 - first subviews: recursive split renderer, pane shell wrapper, portal slot placement surface
 
-### `components/RightColumn.tsx`
+### `components/RightColumn/RightColumn.tsx`
 Target split:
-- `RightColumn.tsx` smart container
-- `RightColumnView.tsx` dumb ordered panel renderer
+- `RightColumn/RightColumn.tsx` smart container
+- `RightColumn/RightColumnView.tsx` dumb ordered panel renderer
 
 Keep smart:
 - `useBackend`
@@ -370,10 +369,10 @@ Phase 0 notes:
 - stable prop boundary: width, active worktree, PR data, refresh/open callbacks already enough for dumb renderer
 - first subviews: optional extracted panel switch renderer only if file needs more shrinking
 
-### `components/ReviewScreen.tsx`
+### `components/ReviewScreen/ReviewScreen.tsx`
 Target split:
-- `ReviewScreen.tsx` smart container
-- `ReviewScreenView.tsx` dumb review layout
+- `ReviewScreen/ReviewScreen.tsx` smart container
+- `ReviewScreen/ReviewScreenView.tsx` dumb review layout
 
 Keep smart:
 - changed-files fetch
@@ -392,10 +391,10 @@ Phase 0 notes:
 - stable prop boundary: repo/worktree identity, review mode, selected/reviewed/comment view models, callbacks
 - first subviews: already mostly `ReviewScreenView`; keep extraction focus on file tree and summary pieces if needed
 
-### `components/CommandCenter.tsx`
+### `components/CommandCenter/CommandCenter.tsx`
 Target split:
-- `CommandCenter.tsx` smart container
-- `CommandCenterView.tsx` dumb dashboard shell
+- `CommandCenter/CommandCenter.tsx` smart container
+- `CommandCenter/CommandCenterView.tsx` dumb dashboard shell
 - optional `parts/HistoryChart.tsx`, `parts/WorktreeStatusList.tsx`
 
 Keep smart:
@@ -416,10 +415,10 @@ Phase 0 notes:
 - stable prop boundary: section view models, chart/history data, selected-worktree callback props
 - first subviews: history chart, grouped status list, metric cards
 
-### `components/JsonModeChat.tsx`
+### `components/JsonModeChat/JsonModeChat.tsx`
 Target split:
-- `JsonModeChat.tsx` smart container
-- `JsonModeChatView.tsx` dumb shell
+- `JsonModeChat/JsonModeChat.tsx` smart container
+- `JsonModeChat/JsonModeChatView.tsx` dumb shell
 - expected parts: message list, composer, status/footer, attachment/mention UI shells
 
 Keep smart:
@@ -442,9 +441,9 @@ Phase 0 notes:
 - stable prop boundary: render-ready message rows, composer props, footer/status props, approval/banner/card props
 - first subviews: message list shell, composer shell, footer/status area, auth/rate-limit/thinking cards
 
-### `components/Settings.tsx`
+### `components/Settings/Settings.tsx`
 Target split:
-- `Settings.tsx` smart shell/container
+- `Settings/Settings.tsx` smart shell/container
 - section views under `components/Settings/parts/`
 
 Keep smart:
@@ -470,32 +469,32 @@ Phase 0 notes:
 ## Batching plan
 
 ### Batch 1 — establish pattern, low risk
-- `components/RightColumn.tsx`
-- `components/ReviewScreen.tsx`
-- `components/CommandCenter.tsx`
+- `components/RightColumn/RightColumn.tsx`
+- `components/ReviewScreen/ReviewScreen.tsx`
+- `components/CommandCenter/CommandCenter.tsx`
 
 Goal:
 - prove naming, folder, prop-boundary pattern
 - create reusable `*.types.ts` convention only where needed
 
 ### Batch 2 — medium
-- `components/Sidebar.tsx`
-- `components/TerminalPanel.tsx`
-- `components/WorkspaceView.tsx` first sub-extraction only
+- `components/Sidebar/Sidebar.tsx`
+- `components/TerminalPanel/TerminalPanel.tsx`
+- `components/WorkspaceView/WorkspaceView.tsx` first sub-extraction only
 
 Goal:
 - split stateful layout surfaces with visible UI but bounded blast radius
 
 ### Batch 3 — medium-high
-- `App.tsx`
+- `App/App.tsx`
 - mobile/desktop shared shell pieces touched by `App.tsx`
 
 Goal:
 - isolate renderer root orchestration from root layout JSX
 
 ### Batch 4 — highest risk
-- `components/JsonModeChat.tsx`
-- `components/Settings.tsx`
+- `components/JsonModeChat/JsonModeChat.tsx`
+- `components/Settings/Settings.tsx`
 
 Goal:
 - break giant mixed files after pattern already proven elsewhere
@@ -503,11 +502,11 @@ Goal:
 ## Known risk areas
 
 High risk because of size, fanout, or effect density:
-- `App.tsx`
-- `components/Settings.tsx`
-- `components/JsonModeChat.tsx`
-- `components/WorkspaceView.tsx`
-- `components/TerminalPanel.tsx`
+- `App/App.tsx`
+- `components/Settings/Settings.tsx`
+- `components/JsonModeChat/JsonModeChat.tsx`
+- `components/WorkspaceView/WorkspaceView.tsx`
+- `components/TerminalPanel/TerminalPanel.tsx`
 
 Specific watchouts:
 - do not move shared state out of slices into renderer-local state

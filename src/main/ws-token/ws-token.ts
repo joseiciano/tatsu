@@ -6,7 +6,7 @@
 // no-ops and we fall back to a fresh token on every boot, matching
 // the pre-persistence behavior.
 
-import { randomBytes } from 'crypto'
+import { randomBytes, timingSafeEqual } from 'crypto'
 import { getSecret, setSecret } from '../secrets'
 
 const SECRET_KEY = 'wsAuthToken'
@@ -21,4 +21,13 @@ export function rotateWsToken(): string {
   const token = randomBytes(32).toString('hex')
   setSecret(SECRET_KEY, token)
   return token
+}
+
+
+export function safeEqualToken(provided: unknown, expected: string): boolean {
+  if (typeof provided !== 'string') return false
+  const providedBuffer = Buffer.from(provided)
+  const expectedBuffer = Buffer.from(expected)
+  if (providedBuffer.length !== expectedBuffer.length) return false
+  return timingSafeEqual(providedBuffer, expectedBuffer)
 }

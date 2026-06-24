@@ -3,7 +3,7 @@
 This is the forward-looking plan for letting `main` run on a remote
 host (or just headlessly on the same machine) while the user drives it
 from a local Electron window or a browser. The architecture itself is
-documented in [CLAUDE.md](../CLAUDE.md); the WS transport that makes
+documented in [AGENTS.md](../AGENTS.md); the WS transport that makes
 this possible is documented in commits `f18f337` (transport) and
 `da87ee9` (web client). This doc is the **why**, the **what's already
 landed**, and the **what's next**.
@@ -42,7 +42,7 @@ The first slice toward all three shapes. Concretely:
 
 ### Runtime mode detection
 
-`src/main/paths.ts` is the seam. `process.versions.electron` decides
+`src/main/paths/paths.ts` is the seam. `process.versions.electron` decides
 which path to take — there's no env-var override or config file to
 fight with. Electron mode delegates to `app.getPath('userData')`
 (dynamically `require`'d to keep the static import out of headless
@@ -56,7 +56,7 @@ mode.
 
 ### Pluggable secrets backend
 
-`src/main/secrets.ts` exposes the same external API (`setSecret`,
+`src/main/secrets/secrets.ts` exposes the same external API (`setSecret`,
 `getSecret`, `hasSecret`, `deleteSecret`) but picks a backend at first
 call:
 
@@ -72,7 +72,7 @@ call:
 
 ### Desktop shell extraction
 
-`src/main/desktop-shell.ts` is the home for everything Electron-only:
+`src/main/desktop-shell/desktop-shell.ts` is the home for everything Electron-only:
 `BrowserWindow`, `dialog`, `Menu`, `screen`, `shell`, `electron-updater`,
 the `WebContentsView`-backed `BrowserManager`, the `app.whenReady`
 boot, the dev-mode userData override, and the IPC handlers that touch
@@ -102,8 +102,8 @@ polling without import-time coupling.
 
 ### HeadlessBrowserManager stub
 
-`src/main/headless-browser-manager.ts` satisfies a shared
-`BrowserManagerLike` interface (defined in `browser-manager-types.ts`)
+`src/main/browser-manager-playwright/browser-manager-playwright.ts` satisfies a shared
+`BrowserManagerLike` interface (defined in `src/main/browser-manager-types/browser-manager-types.ts`)
 that both the real and stub implementations conform to. Every method
 warns once + returns "no tabs / no URL / null". MCP browser tools and
 the control server's browser endpoints degrade cleanly instead of
@@ -206,7 +206,7 @@ Shape:
 - Connection metadata stored in the user's local config: `[{ name,
   host, port, token, lastConnected }]`. Tokens encrypted via the
   existing secrets backend.
-- A transport switcher in `src/renderer/store.ts` — today it's
+- A transport switcher in `src/renderer/store/store.ts` — today it's
   hardcoded to the IPC client; needs to accept a chosen target.
 - UI for "connecting…" / "disconnected" / "reconnecting" states.
   The web-client already handles snapshot-resync on reconnect; reuse

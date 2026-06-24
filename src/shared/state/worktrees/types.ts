@@ -1,3 +1,15 @@
+export type WorktreeContainerStatus = 'starting' | 'running' | 'stopped' | 'error'
+
+export interface WorktreeContainerMetadata {
+  id: string
+  name: string
+  image: string
+  workdir: string
+  shell: string
+  status: WorktreeContainerStatus
+  error?: string
+}
+
 export interface Worktree {
   path: string
   branch: string
@@ -8,6 +20,7 @@ export interface Worktree {
   createdAt: number
   /** Repo this worktree belongs to. Set after a cross-repo listWorktrees merge. */
   repoRoot: string
+  container?: WorktreeContainerMetadata
 }
 
 export type PendingStatus = 'creating' | 'setup' | 'setup-failed' | 'error'
@@ -67,6 +80,10 @@ export interface WorktreesState {
 
 export type WorktreesEvent =
   | { type: 'worktrees/listChanged'; payload: Worktree[] }
+  | {
+      type: 'worktrees/containerUpdated'
+      payload: { path: string; container?: WorktreeContainerMetadata }
+    }
   | { type: 'worktrees/reposChanged'; payload: string[] }
   | { type: 'worktrees/pendingAdded'; payload: PendingWorktree }
   | {

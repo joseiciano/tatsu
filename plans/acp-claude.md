@@ -52,8 +52,8 @@ UI should continue gating unsupported actions from capabilities instead of branc
 - `src/main/chat-runtimes/index.ts`
 - `src/main/chat-runtimes/types.ts`
 - `src/main/chat-runtimes/claude-acp.ts`
-- `src/shared/state/json-claude.ts`
-- `src/renderer/components/JsonModeChat.tsx`
+- `src/shared/state/json-claude/json-claude.ts`
+- `src/renderer/components/JsonModeChat/JsonModeChat.tsx`
 
 ## Follow-ups still open
 

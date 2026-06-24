@@ -785,6 +785,7 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
 
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
+  getPersistedWorktreeContainers: () => config.worktreeContainers,
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
   onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentKind, model }) => {
@@ -1718,6 +1719,18 @@ function registerIpcHandlers(): void {
       type: 'settings/harnessMcpEnabledChanged',
       payload: config.harnessMcpEnabled !== false
     })
+    return true
+  })
+
+  transport.onRequest('config:setEnableWorktreeContainers', (_ctx, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') return false
+    if (enabled) {
+      config.enableWorktreeContainers = true
+    } else {
+      delete config.enableWorktreeContainers
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/enableWorktreeContainersChanged', payload: enabled })
     return true
   })
 

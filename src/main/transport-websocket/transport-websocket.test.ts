@@ -125,6 +125,31 @@ describe('WebSocketServerTransport', () => {
     }
   })
 
+
+  it('uses separate capacity for high-volume terminal write signals', async () => {
+    const store = new Store()
+    const port = randomPort()
+    const server = new WebSocketServerTransport(store, { port, token: 'secret' })
+    server.start()
+    await new Promise((r) => setTimeout(r, 25))
+
+    const signalSpy = vi.fn()
+    server.onSignal('pty:write', signalSpy)
+
+    const ws = new WSClient(`ws://127.0.0.1:${port}?token=secret`)
+    await waitOpen(ws)
+    try {
+      for (let i = 0; i < 150; i += 1) {
+        ws.send(JSON.stringify({ t: 'send', name: 'pty:write', args: ['term-1', 'x'] }))
+      }
+
+      await vi.waitFor(() => expect(signalSpy).toHaveBeenCalledTimes(150), { timeout: 1500 })
+    } finally {
+      ws.close()
+      server.stop()
+    }
+  })
+
   // Regression guard for the tmux-style take-control flow. Two clients
   // share a terminal; the second clicks "take control". Both clients'
   // state mirrors must see the new controllerClientId so their UIs can

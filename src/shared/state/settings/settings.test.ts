@@ -103,6 +103,20 @@ describe('settingsReducer', () => {
     expect(off.expandedDiagnosticLoggingEnabled).toBe(false)
   })
 
+  it('enableWorktreeContainersChanged toggles containerized worktree flag', () => {
+    expect(initialSettings.enableWorktreeContainers).toBe(false)
+    const on = apply(initialSettings, {
+      type: 'settings/enableWorktreeContainersChanged',
+      payload: true
+    })
+    expect(on.enableWorktreeContainers).toBe(true)
+    const off = apply(on, {
+      type: 'settings/enableWorktreeContainersChanged',
+      payload: false
+    })
+    expect(off.enableWorktreeContainers).toBe(false)
+  })
+
   it('prReviewPromptChanged overrides the default review prompt', () => {
     expect(initialSettings.prReviewPrompt.length).toBeGreaterThan(0)
     const next = apply(initialSettings, {

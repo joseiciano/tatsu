@@ -141,7 +141,7 @@ src/
 │   │   ├── constants.ts           # Shared constants
 │   │   └── settings.test.ts       # Reducer tests
 │   ├── prs/                       # byPath PRStatus, mergedByPath, loading
-│   ├── worktrees/                 # list, repoRoots, pending FSM entries
+│   ├── worktrees/                 # list, repoRoots, pending FSM entries, container metadata
 │   ├── terminals/                 # statuses, pendingTools, shellActivity, panes, lastActive
 │   ├── onboarding/                # quest step
 │   ├── hooks/                     # consent + justInstalled
@@ -199,7 +199,7 @@ src/
 │   ├── repo-config/               # Per-repo .harness.json read/write
 │   ├── persistence/               # JSON config at userData/config.json
 │   ├── secrets/                   # safeStorage-encrypted secrets
-│   ├── control-server/            # Headless control server
+│   ├── control-server/            # Headless control server, rate limits, URL validation
 │   ├── web-client-server/         # Web client serving for headless mode
 │   ├── browser-manager/           # Desktop browser pane manager
 │   ├── browser-manager-playwright/# Headless browser manager
@@ -241,6 +241,7 @@ src/
 │   ├── themes-loader/             # Theme file loading
 │   ├── persistence-migrations/    # Config migration utilities
 │   ├── browser-screenshot/        # Browser screenshot capture
+│   ├── rate-limit/                # Token-bucket rate limiter for control server and WS transport
 │   └── paths/                     # Platform path utilities
 │
 ├── preload/

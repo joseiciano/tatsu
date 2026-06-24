@@ -28,8 +28,8 @@
 // history buffer server-side.
 //
 // Auth: a random 32-byte hex token is generated at start() and required
-// via `?token=…` on the WS upgrade. No TLS, no rate limiting, no token
-// rotation yet — these are deferred; see PR description for the list.
+// via Authorization: Bearer <token> or ?token=… on the WS upgrade. No TLS,
+// token rotation yet. Per-client frames use a small token-bucket rate limit.
 
 import { randomBytes, randomUUID } from 'crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -45,8 +45,15 @@ import type { Store } from '../store'
 import type { PerfMonitor } from '../perf-monitor'
 import { log } from '../debug'
 import { perfLog } from '../perf-log'
+import { consumeToken, createTokenBucket, type TokenBucket } from '../rate-limit'
+import { safeEqualToken } from '../ws-token'
 import type { ServerFrame, ClientFrame, WebSocketServerTransportOptions } from './types'
 import { SLOW_IPC_MS } from './constants'
+
+const WS_RATE_LIMIT_CAPACITY = 100
+const WS_RATE_LIMIT_REFILL_PER_SECOND = 100
+const WS_SIGNAL_RATE_LIMIT_CAPACITY = 1_000
+const WS_SIGNAL_RATE_LIMIT_REFILL_PER_SECOND = 1_000
 
 
 export class WebSocketServerTransport implements ServerTransport {
@@ -55,6 +62,8 @@ export class WebSocketServerTransport implements ServerTransport {
   private readonly sockets = new Set<WebSocket>()
   private readonly clientIdBySocket = new WeakMap<WebSocket, string>()
   private readonly requestHandlers = new Map<string, RequestHandler>()
+  private readonly rateLimitBuckets = new WeakMap<WebSocket, TokenBucket>()
+  private readonly signalRateLimitBuckets = new WeakMap<WebSocket, TokenBucket>()
   private readonly signalHandlers = new Map<string, SignalHandler>()
   private readonly disconnectCallbacks: Array<(id: string) => void> = []
   private readonly token: string
@@ -107,7 +116,7 @@ export class WebSocketServerTransport implements ServerTransport {
     this.wss.on('listening', () => {
       log(
         'ws-transport',
-        `listening on ws://${host}:${this.getPort()} (token=${this.token})`
+        `listening on ws://${host}:${this.getPort()} (token=<redacted>)`
       )
     })
 
@@ -177,7 +186,7 @@ export class WebSocketServerTransport implements ServerTransport {
         ? authHeader.slice(7)
         : null
     const provided = headerToken ?? queryToken
-    if (provided !== this.token) {
+    if (!safeEqualToken(provided, this.token)) {
       log('ws-transport', 'rejected unauth ws handshake')
       cb(false, 401, 'unauthorized')
       return
@@ -188,6 +197,8 @@ export class WebSocketServerTransport implements ServerTransport {
   private handleConnection(ws: WebSocket): void {
     const clientId = randomUUID()
     this.clientIdBySocket.set(ws, clientId)
+    this.rateLimitBuckets.set(ws, createTokenBucket(WS_RATE_LIMIT_CAPACITY))
+    this.signalRateLimitBuckets.set(ws, createTokenBucket(WS_SIGNAL_RATE_LIMIT_CAPACITY))
     this.sockets.add(ws)
     log('ws-transport', `client connected id=${clientId} (total=${this.sockets.size})`)
 
@@ -199,6 +210,7 @@ export class WebSocketServerTransport implements ServerTransport {
         log('ws-transport', 'dropped malformed frame')
         return
       }
+      if (!this.allowFrame(ws, frame)) return
       void this.handleClientFrame(ws, frame)
     })
 
@@ -211,6 +223,29 @@ export class WebSocketServerTransport implements ServerTransport {
     ws.on('error', (err) => {
       log('ws-transport', 'socket error', err.message)
     })
+  }
+
+  private allowFrame(ws: WebSocket, frame: ClientFrame): boolean {
+    const isSignal = frame.t === 'send'
+    const bucket = isSignal
+      ? this.signalRateLimitBuckets.get(ws)
+      : this.rateLimitBuckets.get(ws)
+    if (!bucket) return false
+    const capacity = isSignal ? WS_SIGNAL_RATE_LIMIT_CAPACITY : WS_RATE_LIMIT_CAPACITY
+    const refill = isSignal
+      ? WS_SIGNAL_RATE_LIMIT_REFILL_PER_SECOND
+      : WS_RATE_LIMIT_REFILL_PER_SECOND
+    if (consumeToken(bucket, capacity, refill)) {
+      return true
+    }
+    const frameName = frame.t === 'req' || frame.t === 'send' ? ` name=${frame.name}` : ''
+    log('ws-transport', `rate limited client frame type=${frame.t}${frameName}`)
+    if (frame.t === 'req') {
+      this.sendFrame(ws, { t: 'res', id: frame.id, ok: false, error: 'rate limit exceeded' })
+    } else if (frame.t === 'snapreq') {
+      this.sendFrame(ws, { t: 'snapres', id: frame.id, ok: false, error: 'rate limit exceeded' })
+    }
+    return false
   }
 
   private async handleClientFrame(ws: WebSocket, frame: ClientFrame): Promise<void> {

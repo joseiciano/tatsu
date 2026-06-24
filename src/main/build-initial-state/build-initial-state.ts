@@ -1,4 +1,5 @@
 import type { AppState } from '../../shared/state'
+import type { Worktree } from '../../shared/state/worktrees'
 import { initialPRs } from '../../shared/state/prs'
 import { initialOnboarding } from '../../shared/state/onboarding'
 import { initialHooks } from '../../shared/state/hooks'
@@ -27,7 +28,8 @@ import {
   DEFAULT_WORKTREE_DETAIL,
   DEFAULT_HARNESS_SYSTEM_PROMPT,
   DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
-  type Config
+  type Config,
+  type PersistedWorktreeContainer
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
 
@@ -47,6 +49,32 @@ function flattenScratchpadNotes(
     }
   }
   return out
+}
+
+export function hydratePersistedWorktreeContainers(
+  worktrees: Worktree[],
+  persisted: Record<string, PersistedWorktreeContainer> | undefined
+): Worktree[] {
+  if (!persisted || Object.keys(persisted).length === 0) return worktrees
+  let changed = false
+  const next = worktrees.map((worktree) => {
+    const container = persisted[worktree.path]
+    if (!container) return worktree
+    changed = true
+    return {
+      ...worktree,
+      container: {
+        id: container.id ?? '',
+        name: container.name,
+        image: container.image,
+        workdir: container.workdir,
+        shell: container.shell,
+        status: 'error' as const,
+        error: 'Container status has not been checked yet.'
+      }
+    }
+  })
+  return changed ? next : worktrees
 }
 
 export function buildInitialAppState(
@@ -98,6 +126,7 @@ export function buildInitialAppState(
       worktreeBase: config.worktreeBase || DEFAULT_WORKTREE_BASE,
       mergeStrategy: config.mergeStrategy || DEFAULT_MERGE_STRATEGY,
       worktreeDetail: config.worktreeDetail || DEFAULT_WORKTREE_DETAIL,
+      enableWorktreeContainers: config.enableWorktreeContainers === true,
       claudeModel: config.claudeModel || null,
       codexModel: config.codexModel || null,
       opencodeModel: config.opencodeModel || null,
