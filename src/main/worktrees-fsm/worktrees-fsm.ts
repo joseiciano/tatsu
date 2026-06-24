@@ -10,6 +10,7 @@ import {
 } from '../worktree'
 import { getPRMetadata } from '../github'
 import { loadRepoConfig } from '../repo-config'
+import type { WorktreeContainers, CreatedWorktreeContainer } from '../worktree-containers'
 import { log } from '../debug'
 import type { Store } from '../store'
 import type { Worktree, PendingWorktree } from '../../shared/state/worktrees'
@@ -57,6 +58,8 @@ interface WorktreesFSMOptions {
   getPersistedWorktreeContainers?: () => Record<string, PersistedWorktreeContainer> | undefined
   getWorktreeSetupCmd: () => string
   getWorktreeBaseMode: () => 'remote' | 'local'
+  getEnableWorktreeContainers?: () => boolean
+  containers?: WorktreeContainers
   /** Called after a worktree has been created on disk (and its setup
    * script has run, regardless of script outcome). The host wires this
    * to (a) PR poller refresh and (b) PanesFSM.ensureInitialized so the
@@ -139,10 +142,12 @@ export class WorktreesFSM {
       const created = await addWorktree(repoRoot, wtDir, branchName, {
         fetchRemote: mode === 'remote'
       })
+      const container = await this.maybeCreateContainer(id, repoRoot, created.path)
       return await this.finishCreate({
         id,
         repoRoot,
         created,
+        container,
         initialPrompt,
         teleportSessionId,
         agentKind,
@@ -199,12 +204,13 @@ export class WorktreesFSM {
       const wtDir = defaultWorktreeDir(repoRoot)
       const created = await addWorktree(repoRoot, wtDir, branchName, {
         checkoutExisting: true
-      })
-
+    })
+      const container = await this.maybeCreateContainer(id, repoRoot, created.path)
       return await this.finishCreate({
         id,
         repoRoot,
         created,
+        container,
         initialPrompt,
         agentKind,
         model
@@ -219,18 +225,44 @@ export class WorktreesFSM {
     }
   }
 
+  /** Check if containers enabled, repo config doesn't disable, then create container. */
+  private async maybeCreateContainer(
+    id: string,
+    repoRoot: string,
+    worktreePath: string
+  ): Promise<CreatedWorktreeContainer | undefined> {
+    if (!this.opts.getEnableWorktreeContainers?.() || !this.opts.containers) return undefined
+    const repoCfg = loadRepoConfig(repoRoot)
+    if (repoCfg.container?.disabled) return undefined
+
+    this.store.dispatch({
+      type: 'worktrees/pendingUpdated',
+      payload: { id, patch: { setupLog: 'Creating Docker container...' } }
+    })
+
+    log('worktrees-fsm', `Creating Docker container for ${worktreePath}`)
+    const config = this.opts.containers.resolveContainerConfig(repoRoot, worktreePath, repoCfg.container)
+    const container = await this.opts.containers.createForWorktree(repoRoot, worktreePath, config)
+    this.store.dispatch({
+      type: 'worktrees/containerUpdated',
+      payload: { path: worktreePath, container }
+    })
+    return container
+  }
+
   /** Shared post-creation steps: setup script + .claude symlink +
    * onWorktreeCreated callback + refreshList + final pending outcome. */
   private async finishCreate(args: {
     id: string
     repoRoot: string
     created: WorktreeInfo
+    container?: CreatedWorktreeContainer
     initialPrompt?: string
     teleportSessionId?: string
     agentKind?: 'claude' | 'codex' | 'opencode'
     model?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, created, initialPrompt, teleportSessionId, agentKind, model } = args
+    const { id, repoRoot, created, container, initialPrompt, teleportSessionId, agentKind, model } = args
 
     const setupCmd = this.resolveSetupCmd(repoRoot)
     let setupFailed = false
@@ -240,18 +272,44 @@ export class WorktreesFSM {
         payload: { id, patch: { status: 'setup', setupLog: '' } }
       })
       let buffered = ''
-      const result = await runWorktreeScript(
-        'setup',
-        setupCmd,
-        { worktreePath: created.path, branch: created.branch, repoRoot },
-        (_stream, chunk) => {
-          buffered += chunk
+      let result: { ok: boolean; exitCode: number; stdout: string; stderr: string }
+      if (container) {
+        const execResult = await this.opts.containers!.execInContainer(
+          container.id,
+          setupCmd,
+          { workdir: container.workdir, shell: container.shell }
+        )
+        result = { ok: execResult.exitCode === 0, exitCode: execResult.exitCode, stdout: execResult.stdout, stderr: execResult.stderr }
+        if (execResult.stdout) {
+          buffered = execResult.stdout
+          if (execResult.stderr) {
+            buffered += '\n' + execResult.stderr
+          }
+          this.store.dispatch({
+            type: 'worktrees/pendingUpdated',
+            payload: { id, patch: { setupLog: buffered } }
+          })
+        } else if (execResult.stderr) {
+          buffered = execResult.stderr
           this.store.dispatch({
             type: 'worktrees/pendingUpdated',
             payload: { id, patch: { setupLog: buffered } }
           })
         }
-      )
+      } else {
+        result = await runWorktreeScript(
+          'setup',
+          setupCmd,
+          { worktreePath: created.path, branch: created.branch, repoRoot },
+          (_stream, chunk) => {
+            buffered += chunk
+            this.store.dispatch({
+              type: 'worktrees/pendingUpdated',
+              payload: { id, patch: { setupLog: buffered } }
+            })
+          }
+        )
+      }
       setupFailed = !result.ok
       this.store.dispatch({
         type: 'worktrees/pendingUpdated',
@@ -269,6 +327,13 @@ export class WorktreesFSM {
       model
     })
     await this.refreshList()
+
+    if (container) {
+      this.store.dispatch({
+        type: 'worktrees/containerUpdated',
+        payload: { path: created.path, container: { ...container, status: 'running' as const } }
+      })
+    }
 
     if (setupFailed) {
       this.store.dispatch({
