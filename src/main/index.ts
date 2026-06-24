@@ -27,6 +27,7 @@ import { PerfMonitor } from './perf-monitor'
 import { setGitHubApiRecorder, setGitHubApiLoggingEnabled } from './github-recorder'
 import { PRPoller } from './pr-poller'
 import { WorktreesFSM } from './worktrees-fsm'
+import { createWorktreeContainers } from './worktree-containers'
 import { WorktreeDeletionFSM } from './worktree-deletion-fsm'
 import { PanesFSM, stripTransientTabFields } from './panes-fsm'
 import { ActivityDeriver } from './activity-deriver'
@@ -783,11 +784,14 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
   })
 }
 
+const worktreeContainers = createWorktreeContainers()
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
   getPersistedWorktreeContainers: () => config.worktreeContainers,
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
+  getEnableWorktreeContainers: () => store.getSnapshot().state.settings.enableWorktreeContainers,
+  containers: worktreeContainers,
   onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentKind, model }) => {
     void prPoller.refreshAll()
     panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentKind, model })
