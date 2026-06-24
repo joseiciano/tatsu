@@ -33,6 +33,7 @@ type SubSectionId =
   | 'agent-claude'
   | 'agent-codex'
   | 'agent-opencode'
+  | 'agent-pi'
   | 'hotkeys-navigation'
   | 'hotkeys-backends'
   | 'hotkeys-worktree-mgmt'
@@ -70,7 +71,8 @@ const SECTIONS: Section[] = [
       { id: 'agent-general', label: 'General' },
       { id: 'agent-claude', label: 'Claude' },
       { id: 'agent-codex', label: 'Codex' },
-      { id: 'agent-opencode', label: 'Opencode' }
+      { id: 'agent-opencode', label: 'Opencode' },
+      { id: 'agent-pi', label: 'Pi' }
     ]
   },
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
@@ -159,6 +161,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     'agent-claude': null,
     'agent-codex': null,
     'agent-opencode': null,
+    'agent-pi': null,
     'hotkeys-navigation': null,
     'hotkeys-backends': null,
     'hotkeys-worktree-mgmt': null,
@@ -328,6 +331,9 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     claudeModel,
     codexModel,
     opencodeModel,
+    piCommand,
+    piModel,
+    piEnvVars,
     terminalFontFamily,
     terminalFontSize,
     editor: editorId,
@@ -409,6 +415,15 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   )
   const [opencodeEnvSaveResult, setOpencodeEnvSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [opencodeRevealedEnvRows, setOpencodeRevealedEnvRows] = useState<Set<number>>(new Set())
+
+  const [piCommandDraft, setPiCommandDraft] = useState<string>(piCommand)
+  useEffect(() => { setPiCommandDraft(piCommand) }, [piCommand])
+  const [piSaveResult, setPiSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [piEnvRows, setPiEnvRows] = useState<{ key: string; value: string }[]>(() =>
+    Object.entries(piEnvVars).map(([key, value]) => ({ key, value }))
+  )
+  const [piEnvSaveResult, setPiEnvSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [piRevealedEnvRows, setPiRevealedEnvRows] = useState<Set<number>>(new Set())
 
   const [systemPromptDraft, setSystemPromptDraft] = useState<string>(harnessSystemPrompt)
   useEffect(() => { setSystemPromptDraft(harnessSystemPrompt) }, [harnessSystemPrompt])
@@ -1056,6 +1071,37 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     await backend.setOpencodeEnvVars(vars)
     setOpencodeEnvSaveResult({ ok: true, message: 'Saved · new Opencode tabs will see these' })
   }, [opencodeEnvRows])
+
+  const handleSavePiCommand = useCallback(async () => {
+    setPiSaveResult(null)
+    await backend.setPiCommand(piCommandDraft)
+    setPiSaveResult({ ok: true, message: 'Saved · new tabs will use this command' })
+  }, [piCommandDraft])
+
+  const handleResetPiCommand = useCallback(async () => {
+    setPiCommandDraft('pi')
+    await backend.setPiCommand('pi')
+    setPiSaveResult({ ok: true, message: 'Reset to default' })
+  }, [])
+
+  const handleSavePiEnvVars = useCallback(async () => {
+    const vars: Record<string, string> = {}
+    const seen = new Set<string>()
+    const invalidNames: string[] = []
+    const duplicates: string[] = []
+    for (const { key, value } of piEnvRows) {
+      const k = key.trim()
+      if (!k) continue
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) { invalidNames.push(k); continue }
+      if (seen.has(k)) { duplicates.push(k); continue }
+      seen.add(k)
+      vars[k] = value
+    }
+    if (invalidNames.length > 0) { setPiEnvSaveResult({ ok: false, message: `Invalid name(s): ${invalidNames.join(', ')}` }); return }
+    if (duplicates.length > 0) { setPiEnvSaveResult({ ok: false, message: `Duplicate name(s): ${duplicates.join(', ')}` }); return }
+    await backend.setPiEnvVars(vars)
+    setPiEnvSaveResult({ ok: true, message: 'Saved · new Pi tabs will see these' })
+  }, [piEnvRows])
 
   const isOverridden = (action: Action): boolean => {
     if (!hotkeyOverrides || !(action in hotkeyOverrides)) return false
@@ -2199,6 +2245,106 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   )}
                 </div>
               </div>
+
+              {/* ── Pi subsection ── */}
+              <div ref={(el) => { subSectionRefs.current['agent-pi'] = el }} id="agent-pi" className="mt-8">
+              <h3 className="text-sm font-semibold text-fg-bright mb-3 flex items-center gap-2">
+                Pi
+                {defaultAgent === 'pi' && <span className="text-xs font-normal text-dim bg-panel px-1.5 py-0.5 rounded">default</span>}
+              </h3>
+
+              <div className="bg-panel-raised border border-border rounded-lg p-4 mb-4">
+                <label className="block text-sm font-medium text-fg mb-1">Model</label>
+                <p className="text-xs text-dim mb-2">
+                  Appends <code className="bg-panel px-1 rounded">--model</code> to the launch command. Enter a provider/model string. Leave empty to let the CLI choose.
+                </p>
+                <input
+                  type="text"
+                  value={piModel || ''}
+                  onChange={(e) => { void backend.setPiModel(e.target.value || null) }}
+                  placeholder="e.g. claude-sonnet-4-6"
+                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg font-mono"
+                />
+              </div>
+
+              <div className="bg-panel-raised border border-border rounded-lg p-4">
+                <label className="block text-sm font-medium text-fg mb-1">Launch command</label>
+                <p className="text-xs text-dim mb-2">
+                  The Pi CLI command. Tatsu manages session resume automatically.
+                </p>
+                <textarea
+                  value={piCommandDraft}
+                  onChange={(e) => setPiCommandDraft(e.target.value)}
+                  rows={2}
+                  spellCheck={false}
+                  className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono resize-y"
+                  placeholder="pi"
+                />
+                <div className="flex items-center gap-2 mt-3">
+                  <button onClick={handleSavePiCommand} disabled={!piCommandDraft.trim()} className="px-3 py-1.5 bg-surface hover:bg-surface-hover disabled:opacity-40 rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                  {piCommandDraft !== 'pi' && (
+                    <button onClick={handleResetPiCommand} className="flex items-center gap-1 px-3 py-1.5 text-sm text-dim hover:text-fg transition-colors cursor-pointer"><RotateCcw className="icon-xs" />Reset</button>
+                  )}
+                </div>
+                {piSaveResult && (
+                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${piSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                    {piSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{piSaveResult.message}
+                  </div>
+                )}
+                {(() => {
+                  const effectivePiCommand = piCommandDraft.trim() || 'pi'
+                  const piModelPart = piModel && !effectivePiCommand.includes('--model') && !effectivePiCommand.includes('-m ') ? ` --model ${piModel}` : ''
+                  const piPreviewInner = `${effectivePiCommand}${piModelPart}`
+                  return (
+                    <div className="mt-4 pt-3 border-t border-border">
+                      <label className="block text-xs font-medium text-fg mb-1">Full command preview</label>
+                      <div className="bg-panel border border-border rounded px-3 py-2 text-xs text-fg-bright font-mono break-all">{`<shell> -ilc "${piPreviewInner}"`}</div>
+                      <p className="text-xs text-dim mt-1">where <code className="bg-panel px-1 rounded">{`<shell>`}</code> is your <code className="bg-panel px-1 rounded">$SHELL</code> (typically <code className="bg-panel px-1 rounded">/bin/bash</code> or <code className="bg-panel px-1 rounded">/bin/zsh</code>).</p>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="mt-4 bg-panel-raised border border-border rounded-lg p-4">
+                <label className="block text-sm font-medium text-fg mb-1">Environment variables</label>
+                <p className="text-xs text-dim mb-3">
+                  Injected into Pi tabs.
+                </p>
+                {piEnvRows.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {piEnvRows.map((row, index) => {
+                      const revealed = piRevealedEnvRows.has(index)
+                      return (
+                        <div key={index} className="flex items-center gap-2">
+                          <input type="text" value={row.key} onChange={(e) => { setPiEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, key: e.target.value } : r))); setPiEnvSaveResult(null) }} placeholder="NAME" spellCheck={false} className="w-44 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                          <span className="text-dim text-xs">=</span>
+                          <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setPiEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setPiEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
+                          <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setPiRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
+                          <Tooltip label="Remove"><button onClick={() => { setPiEnvRows((prev) => prev.filter((_, i) => i !== index)); setPiEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setPiEnvRows((prev) => [...prev, { key: '', value: '' }]); setPiEnvSaveResult(null) }} className="flex items-center gap-1 px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer"><Plus className="icon-xs" />Add variable</button>
+                  <button onClick={handleSavePiEnvVars} className="px-3 py-1.5 bg-surface hover:bg-surface-hover rounded text-sm text-fg-bright transition-colors cursor-pointer">Save</button>
+                </div>
+                {piEnvSaveResult && (
+                  <div className={`mt-3 text-xs flex items-center gap-1.5 ${piEnvSaveResult.ok ? 'text-success' : 'text-danger'}`}>
+                    {piEnvSaveResult.ok ? <Check className="icon-xs" /> : <X className="icon-xs" />}{piEnvSaveResult.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 text-xs text-dim leading-relaxed">
+                <p>Install: <code className="bg-panel px-1 rounded">npm install -g --ignore-scripts @earendil-works/pi-coding-agent</code></p>
+                <p className="mt-1">Auth: run pi, then /login, or set provider API key env vars</p>
+                <p className="mt-1">Sessions: <code className="bg-panel px-1 rounded">~/.pi/agent/sessions/</code></p>
+                <p className="mt-1">MCP: not enabled by Tatsu for Pi (first ship)</p>
+              </div>
+              </div>
+
 
               {/* ── System prompt subsection ── */}
               <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-3">
@@ -3883,7 +4029,8 @@ function WorktreeDetailPicker({
 const AGENT_DESCRIPTIONS: Record<AgentKind, string> = {
   claude: "Anthropic's CLI coding agent",
   codex: "OpenAI's CLI coding agent",
-  opencode: 'Open-source terminal-based agent'
+  opencode: 'Open-source terminal-based agent',
+  pi: 'Earendil terminal-based agent'
 }
 
 function DefaultAgentPicker({

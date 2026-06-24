@@ -26,7 +26,7 @@ export interface Config {
   windowBounds: { x: number; y: number; width: number; height: number } | null
   repoRoots: string[]
   hotkeys?: Record<string, string>
-  defaultAgent?: 'claude' | 'codex' | 'opencode'
+  defaultAgent?: 'claude' | 'codex' | 'opencode' | 'pi'
   claudeCommand?: string
   codexCommand?: string
   opencodeCommand?: string
@@ -36,6 +36,9 @@ export interface Config {
   opencodeModel?: string
   codexEnvVars?: Record<string, string>
   opencodeEnvVars?: Record<string, string>
+  piCommand?: string
+  piEnvVars?: Record<string, string>
+  piModel?: string
   harnessMcpEnabled?: boolean
   panes?: Record<string, Record<string, PersistedPaneNode>>
   legacyPanes?: Record<string, PersistedPane[]>

@@ -101,7 +101,7 @@ export function buildBackend(
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
       model?: string
     }) => req('worktrees:runPending', params),
     runPendingPRWorktree: (params: {
@@ -109,7 +109,7 @@ export function buildBackend(
       repoRoot: string
       prNumber: number
       initialPrompt?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
       model?: string
     }) => req('worktrees:runPendingPR', params),
     retryPendingWorktree: (id: string) => req('worktrees:retryPending', id),
@@ -228,6 +228,9 @@ export function buildBackend(
     setOpencodeCommand: (command: string) => req('config:setOpencodeCommand', command),
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
+    setPiCommand: (command: string) => req('config:setPiCommand', command),
+    setPiModel: (model: string | null) => req('config:setPiModel', model),
+    setPiEnvVars: (vars: Record<string, string>) => req('config:setPiEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
     setClaudeTuiFullscreen: (enabled: boolean) => req('config:setClaudeTuiFullscreen', enabled),
     setWsTransportEnabled: (enabled: boolean) => req('config:setWsTransportEnabled', enabled),

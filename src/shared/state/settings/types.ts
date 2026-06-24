@@ -9,7 +9,7 @@ export type MergeStrategy = 'squash' | 'merge-commit' | 'fast-forward'
 export type WorktreeBase = 'remote' | 'local'
 export type WorktreeDetail = 'diff' | 'age' | 'pr' | 'none'
 
-export type AgentKindSetting = 'claude' | 'codex' | 'opencode'
+export type AgentKindSetting = 'claude' | 'codex' | 'opencode' | 'pi'
 
 export type BrowserToolsMode = 'view' | 'full'
 
@@ -84,6 +84,9 @@ export interface SettingsState {
   claudeModel: string | null
   codexModel: string | null
   opencodeModel: string | null
+  piCommand: string
+  piEnvVars: Record<string, string>
+  piModel: string | null
   hasGithubToken: boolean
   githubAuthSource: 'pat' | 'gh-cli' | null
   /** GitHub login of the user whose token is configured. Resolved at
@@ -232,3 +235,6 @@ export type SettingsEvent =
   | { type: 'settings/prReviewPromptChanged'; payload: string }
   | { type: 'settings/announcementDismissed'; payload: string }
   | { type: 'settings/announcementsMutedChanged'; payload: boolean }
+  | { type: 'settings/piCommandChanged'; payload: string }
+  | { type: 'settings/piEnvVarsChanged'; payload: Record<string, string> }
+  | { type: 'settings/piModelChanged'; payload: string | null }

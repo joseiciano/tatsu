@@ -15,7 +15,7 @@ function runOne(from: number, config: AnyConfig): AnyConfig {
   return config
 }
 
-function tab(id: string, type: 'agent' | 'shell' = 'shell', agentKind?: 'claude' | 'codex' | 'opencode'): PersistedTab {
+function tab(id: string, type: 'agent' | 'shell' = 'shell', agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'): PersistedTab {
   return { id, type, label: id, agentKind: type === 'agent' ? (agentKind ?? 'claude') : undefined }
 }
 

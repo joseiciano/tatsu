@@ -24,9 +24,14 @@ describe('parseAgentKind', () => {
     expect(parseAgentKind('OPENCODE')).toEqual({ kind: 'opencode' })
   })
 
+  it('accepts pi', () => {
+    expect(parseAgentKind('pi')).toEqual({ kind: 'pi' })
+    expect(parseAgentKind('PI')).toEqual({ kind: 'pi' })
+  })
+
   it('rejects unknown agents', () => {
     expect(parseAgentKind('foo')).toEqual({
-      error: 'agentKind must be "claude", "codex", or "opencode"'
+      error: 'agentKind must be "claude", "codex", "opencode", or "pi"'
     })
   })
 })

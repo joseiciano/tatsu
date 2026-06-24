@@ -84,7 +84,7 @@ export interface ControlServerDeps {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
     model?: string
   }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
   resolveCallerScope: (terminalId: string) => CallerScope | null

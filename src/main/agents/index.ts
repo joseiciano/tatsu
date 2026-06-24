@@ -2,6 +2,7 @@ import type { AgentKind } from '../../shared/state/terminals'
 import * as claude from './claude'
 import * as codex from './codex'
 import * as opencode from './opencode'
+import * as pi from './pi'
 
 export type { AgentKind }
 
@@ -43,7 +44,7 @@ export interface AgentModule {
   buildSpawnArgs(opts: AgentSpawnOpts): string
 }
 
-const agents: Record<AgentKind, AgentModule> = { claude, codex, opencode }
+const agents: Record<AgentKind, AgentModule> = { claude, codex, opencode, pi }
 
 export function getAgent(kind: AgentKind): AgentModule {
   return agents[kind]

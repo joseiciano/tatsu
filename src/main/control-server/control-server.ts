@@ -16,10 +16,10 @@ export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
   if (typeof raw !== 'string') return { error: 'agentKind must be a string' }
   const lowered = raw.trim().toLowerCase()
-  if (lowered === 'claude' || lowered === 'codex' || lowered === 'opencode') {
+  if (lowered === 'claude' || lowered === 'codex' || lowered === 'opencode' || lowered === 'pi') {
     return { kind: lowered }
   }
-  return { error: 'agentKind must be "claude", "codex", or "opencode"' }
+  return { error: 'agentKind must be "claude", "codex", "opencode", or "pi"' }
 }
 
 

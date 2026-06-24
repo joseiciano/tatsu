@@ -76,6 +76,7 @@ import {
 } from '../shared/state/settings'
 import { watchStatusDir } from './hooks'
 import { getAgent, type AgentKind } from './agents'
+import { AGENT_REGISTRY } from '../shared/agent-registry'
 import { buildClaudeLaunchSettings } from './claude-launch'
 import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
@@ -816,14 +817,14 @@ function installHooksGlobally(): void {
   // installHooks() is idempotent — it strips any existing Harness entries
   // before writing a fresh one — so calling it unconditionally also
   // collapses duplicate entries left by earlier buggy install passes.
-  for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
-    agent.installHooks()
+  for (const { kind } of AGENT_REGISTRY) {
+    getAgent(kind).installHooks()
   }
 }
 
 function uninstallHooksGlobally(): void {
-  for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
-    agent.uninstallHooks()
+  for (const { kind } of AGENT_REGISTRY) {
+    getAgent(kind).uninstallHooks()
   }
 }
 
@@ -1010,7 +1011,7 @@ function registerIpcHandlers(): void {
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
       model?: string
     }) => {
       return worktreesFSM.runPending(params)
@@ -1025,7 +1026,7 @@ function registerIpcHandlers(): void {
         repoRoot: string
         prNumber: number
         initialPrompt?: string
-        agentKind?: 'claude' | 'codex' | 'opencode'
+        agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
         model?: string
       }
     ) => {
@@ -1539,6 +1540,43 @@ function registerIpcHandlers(): void {
     }
     saveConfig(config)
     store.dispatch({ type: 'settings/opencodeEnvVarsChanged', payload: config.opencodeEnvVars || {} })
+    return true
+  })
+
+  transport.onRequest('config:setPiCommand', (_ctx, command: string) => {
+    const trimmed = command.trim()
+    if (!trimmed || trimmed === 'pi') {
+      delete config.piCommand
+    } else {
+      config.piCommand = trimmed
+    }
+    saveConfig(config)
+    store.dispatch({
+      type: 'settings/piCommandChanged',
+      payload: config.piCommand || 'pi'
+    })
+    return true
+  })
+
+  transport.onRequest('config:setPiModel', (_ctx, model: string | null) => {
+    if (model) {
+      config.piModel = model
+    } else {
+      delete config.piModel
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/piModelChanged', payload: model })
+    return true
+  })
+
+  transport.onRequest('config:setPiEnvVars', (_ctx, vars: Record<string, string>) => {
+    if (!vars || Object.keys(vars).length === 0) {
+      delete config.piEnvVars
+    } else {
+      config.piEnvVars = vars
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/piEnvVarsChanged', payload: config.piEnvVars || {} })
     return true
   })
 
@@ -2219,11 +2257,15 @@ function registerIpcHandlers(): void {
         ? (config.claudeCommand || agent.defaultCommand)
         : kind === 'codex'
           ? (config.codexCommand || agent.defaultCommand)
-          : (config.opencodeCommand || agent.defaultCommand)
-      const mcpConfigPath = writeMcpConfigForTerminal(
-        opts.terminalId,
-        resolveCallerScope(opts.terminalId)
-      )
+          : kind === 'opencode'
+            ? (config.opencodeCommand || agent.defaultCommand)
+            : (config.piCommand || agent.defaultCommand)
+      const mcpConfigPath = kind === 'pi'
+        ? null
+        : writeMcpConfigForTerminal(
+            opts.terminalId,
+            resolveCallerScope(opts.terminalId)
+          )
 
       const override = opts.modelOverride && opts.modelOverride.trim() ? opts.modelOverride.trim() : undefined
       let systemPrompt: string | undefined
@@ -2241,8 +2283,10 @@ function registerIpcHandlers(): void {
         model = launch.model ?? null
       } else if (kind === 'codex') {
         model = override || config.codexModel || null
-      } else {
+      } else if (kind === 'opencode') {
         model = override || config.opencodeModel || null
+      } else {
+        model = override || config.piModel || null
       }
 
       return agent.buildSpawnArgs({ ...opts, command, mcpConfigPath, model, systemPrompt, tuiFullscreen })
@@ -2469,6 +2513,7 @@ function registerIpcHandlers(): void {
       const extraEnv = agentKind === 'claude' ? config.claudeEnvVars
         : agentKind === 'codex' ? config.codexEnvVars
         : agentKind === 'opencode' ? config.opencodeEnvVars
+        : agentKind === 'pi' ? config.piEnvVars
         : undefined
       const existed = ptyManager.hasTerminal(id)
       ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
@@ -3407,7 +3452,7 @@ async function runBoot(): Promise<void> {
           repoRoot: string
           worktree: { path: string }
           initialPrompt?: string
-          agentKind?: 'claude' | 'codex' | 'opencode'
+          agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
           model?: string
         }
         panesFSM.ensureInitialized(p.worktree.path, {
