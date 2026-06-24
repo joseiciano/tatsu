@@ -25,6 +25,18 @@ export interface RepoConfig {
    * DEFAULT_RIGHT_PANEL_ORDER (any key absent from the saved order is
    * appended to the end in canonical order). */
   rightPanelOrder?: RightPanelKey[]
+  container?: RepoContainerConfig
+}
+
+export interface RepoContainerConfig {
+  image?: string
+  dockerfile?: string
+  workdir?: string
+  shell?: string
+  env?: Record<string, string>
+  ports?: number[]
+  volumes?: Array<{ source: string; target: string }>
+  disabled?: boolean
 }
 
 export interface RepoConfigsState {
