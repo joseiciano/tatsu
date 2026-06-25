@@ -1,84 +1,89 @@
-import { describe, it, expect } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import { describe, it, expect, afterEach } from 'vitest'
+import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { loadRepoConfig, saveRepoConfig, invalidateRepoConfigCache } from './repo-config'
 import type { RepoConfig } from '../../shared/state/repo-configs'
 
-function ensureDir(path: string) { mkdirSync(path, { recursive: true }) }
-function cleanup(path: string) { try { rmSync(path, { recursive: true }) } catch { /* ignore */ } }
+const tempDirs: string[] = []
+
+function makeTempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix))
+  tempDirs.push(dir)
+  return dir
+}
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    try { rmSync(dir, { recursive: true }) } catch { /* ignore */ }
+  }
+  tempDirs.length = 0
+})
 
 describe('loadRepoConfig container parsing', () => {
   it('parses valid image config via save', () => {
-    ensureDir('/tmp/rc-test-image')
-    const saved = saveRepoConfig('/tmp/rc-test-image', { container: { image: 'node:20-alpine' } })
+    const dir = makeTempDir('rc-test-image-')
+    const saved = saveRepoConfig(dir, { container: { image: 'node:20-alpine' } })
     expect(saved.container).toEqual({ image: 'node:20-alpine' })
-    invalidateRepoConfigCache('/tmp/rc-test-image')
-    cleanup('/tmp/rc-test-image')
+    invalidateRepoConfigCache(dir)
   })
 
   it('rejects both image and dockerfile', () => {
-    ensureDir('/tmp/rc-test-both')
-    const saved = saveRepoConfig('/tmp/rc-test-both', { container: { image: 'n', dockerfile: './D' } })
+    const dir = makeTempDir('rc-test-both-')
+    const saved = saveRepoConfig(dir, { container: { image: 'n', dockerfile: './D' } })
     expect(saved.container).toBeUndefined()
-    invalidateRepoConfigCache('/tmp/rc-test-both')
-    cleanup('/tmp/rc-test-both')
+    invalidateRepoConfigCache(dir)
   })
 
   it('rejects invalid workdir', () => {
-    ensureDir('/tmp/rc-test-wd')
-    const saved = saveRepoConfig('/tmp/rc-test-wd', { container: { image: 'n', workdir: 'relative' } })
+    const dir = makeTempDir('rc-test-wd-')
+    const saved = saveRepoConfig(dir, { container: { image: 'n', workdir: 'relative' } })
     expect(saved.container).toBeUndefined()
-    invalidateRepoConfigCache('/tmp/rc-test-wd')
-    cleanup('/tmp/rc-test-wd')
+    invalidateRepoConfigCache(dir)
   })
 
   it('rejects invalid env key', () => {
-    ensureDir('/tmp/rc-test-env')
-    const saved = saveRepoConfig('/tmp/rc-test-env', { container: { image: 'n', env: { 'BAD KEY': 'v' } } })
+    const dir = makeTempDir('rc-test-env-')
+    const saved = saveRepoConfig(dir, { container: { image: 'n', env: { 'BAD KEY': 'v' } } })
     expect(saved.container).toBeUndefined()
-    invalidateRepoConfigCache('/tmp/rc-test-env')
-    cleanup('/tmp/rc-test-env')
+    invalidateRepoConfigCache(dir)
   })
 
   it('rejects unsafe volume target /', () => {
-    ensureDir('/tmp/rc-test-vol')
-    const saved = saveRepoConfig('/tmp/rc-test-vol', { container: { image: 'n', volumes: [{ source: '/h', target: '/' }] } })
+    const dir = makeTempDir('rc-test-vol-')
+    const saved = saveRepoConfig(dir, { container: { image: 'n', volumes: [{ source: '/h', target: '/' }] } })
     expect(saved.container).toBeUndefined()
-    invalidateRepoConfigCache('/tmp/rc-test-vol')
-    cleanup('/tmp/rc-test-vol')
+    invalidateRepoConfigCache(dir)
   })
 
   it('allows disabled without image or dockerfile', () => {
-    ensureDir('/tmp/rc-test-dis')
-    const saved = saveRepoConfig('/tmp/rc-test-dis', { container: { disabled: true } })
+    const dir = makeTempDir('rc-test-dis-')
+    const saved = saveRepoConfig(dir, { container: { disabled: true } })
     expect(saved.container).toEqual({ disabled: true })
-    invalidateRepoConfigCache('/tmp/rc-test-dis')
-    cleanup('/tmp/rc-test-dis')
+    invalidateRepoConfigCache(dir)
   })
 
   it('normalizes relative dockerfile on load', () => {
-    ensureDir('/tmp/rc-test-df')
-    writeFileSync('/tmp/rc-test-df/.harness.json', JSON.stringify({ container: { dockerfile: './Dockerfile' } }))
-    invalidateRepoConfigCache('/tmp/rc-test-df')
-    const loaded = loadRepoConfig('/tmp/rc-test-df')
-    expect(loaded.container?.dockerfile).toBe('/tmp/rc-test-df/Dockerfile')
-    cleanup('/tmp/rc-test-df')
+    const dir = makeTempDir('rc-test-df-')
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify({ container: { dockerfile: './Dockerfile' } }))
+    invalidateRepoConfigCache(dir)
+    const loaded = loadRepoConfig(dir)
+    expect(loaded.container?.dockerfile).toBe(join(dir, 'Dockerfile'))
   })
 
   it('normalizes relative volume source on load', () => {
-    ensureDir('/tmp/rc-test-vol2')
-    writeFileSync('/tmp/rc-test-vol2/.harness.json', JSON.stringify({ container: { image: 'n', volumes: [{ source: './data', target: '/data' }] } }))
-    invalidateRepoConfigCache('/tmp/rc-test-vol2')
-    const loaded = loadRepoConfig('/tmp/rc-test-vol2')
-    expect(loaded.container?.volumes).toEqual([{ source: '/tmp/rc-test-vol2/data', target: '/data' }])
-    cleanup('/tmp/rc-test-vol2')
+    const dir = makeTempDir('rc-test-vol2-')
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify({ container: { image: 'n', volumes: [{ source: './data', target: '/data' }] } }))
+    invalidateRepoConfigCache(dir)
+    const loaded = loadRepoConfig(dir)
+    expect(loaded.container?.volumes).toEqual([{ source: join(dir, 'data'), target: '/data' }])
   })
 
   it('strips invalid container on load', () => {
-    ensureDir('/tmp/rc-test-bad')
-    writeFileSync('/tmp/rc-test-bad/.harness.json', JSON.stringify({ container: { image: 'n', dockerfile: './D' } }))
-    invalidateRepoConfigCache('/tmp/rc-test-bad')
-    const loaded = loadRepoConfig('/tmp/rc-test-bad')
+    const dir = makeTempDir('rc-test-bad-')
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify({ container: { image: 'n', dockerfile: './D' } }))
+    invalidateRepoConfigCache(dir)
+    const loaded = loadRepoConfig(dir)
     expect(loaded.container).toBeUndefined()
-    cleanup('/tmp/rc-test-bad')
   })
 })

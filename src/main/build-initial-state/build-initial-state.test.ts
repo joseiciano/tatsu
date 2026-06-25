@@ -120,7 +120,7 @@ describe('buildInitialAppState', () => {
       image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
       workdir: '/workspace',
       shell: '/bin/bash',
-      status: 'error',
+      status: 'starting',
       error: 'Container status has not been checked yet.'
     })
   })

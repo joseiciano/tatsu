@@ -69,7 +69,7 @@ export function hydratePersistedWorktreeContainers(
         image: container.image,
         workdir: container.workdir,
         shell: container.shell,
-        status: 'error' as const,
+        status: 'starting' as const,
         error: 'Container status has not been checked yet.'
       }
     }

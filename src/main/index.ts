@@ -984,6 +984,27 @@ store.subscribe((event) => {
   }
 })
 
+store.subscribe((event) => {
+  if (event.type !== 'worktrees/containerUpdated') return
+  const { path, container } = event.payload
+  if (!config.worktreeContainers) config.worktreeContainers = {}
+  if (container) {
+    config.worktreeContainers[path] = {
+      id: container.id,
+      name: container.name,
+      image: container.image,
+      workdir: container.workdir,
+      shell: container.shell
+    }
+  } else {
+    delete config.worktreeContainers[path]
+  }
+  if (Object.keys(config.worktreeContainers).length === 0) {
+    delete config.worktreeContainers
+  }
+  saveConfig(config)
+})
+
 const snoozeTimer = new SnoozeTimer(store)
 snoozeTimer.start()
 

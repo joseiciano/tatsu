@@ -194,6 +194,7 @@ src/
 │   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
 │   │   └── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
 │   ├── worktree/                  # git worktree CRUD primitives
+│   ├── worktree-containers/      # Docker companion container lifecycle (create, exec, stop)
 │   ├── github/                    # GitHub REST API calls
 │   ├── github-auth/               # GitHub token resolution
 │   ├── repo-config/               # Per-repo .harness.json read/write
@@ -347,7 +348,7 @@ Some main-side modules subscribe to the store and react to events:
   events that should kick a refresh (focus, worktree add, manual
   refresh button).
 - **`WorktreesFSM`** — runs the pending-creation state machine
-  (addWorktree → setup script → outcome). Dispatches `worktrees/*`
+  (addWorktree → Docker container (if enabled) → setup script → outcome). Dispatches `worktrees/*`
   events. On success, fires an `onWorktreeCreated` callback that the
   host wires to (a) PR poller refresh and (b) `panesFSM.ensureInitialized`.
 - **`PanesFSM`** — owns every pane/tab mutation. Dispatches
@@ -470,6 +471,13 @@ Opencode, etc.). The hooks write status events as NDJSON to
 directory via `fs.watch`. The hook scripts use `$HARNESS_TERMINAL_ID` env var
 (set by the PtyManager) with `$CLAUDE_HARNESS_ID` as a legacy fallback.
 
+Container-based worktrees (when `enableWorktreeContainers` is on) track
+container lifecycle status via `WorktreeContainerMetadata` in the worktrees
+slice. The `worktrees/containerUpdated` event updates the status
+(`starting` → `running` → `stopped`/`error`) and a store subscriber
+persists stable identity fields to `config.worktreeContainers` so
+restarts can re-associate running containers.
+
 ## How performance debugging works
 
 Two log files in `userData`:
@@ -536,6 +544,13 @@ hard dependency on `gh`.
 ## Important quirks
 
 - **Worktree dep installs** — For fresh git worktrees, always run `pnpm install` once before building. 
+- **Worktree containers** — When `enableWorktreeContainers` is on (Settings →
+  Experimental), new worktrees get a companion Docker container. Setup scripts
+  and terminals run inside the container via `docker exec`. Container metadata
+  is persisted to `config.worktreeContainers` so restarts can re-associate
+  running containers. Repo-level `.harness.json` can override image, dockerfile,
+  volumes, env, ports, shell, workdir, and disabled. Ports bind to `127.0.0.1` only.
+  volumes, env, ports, and shell. Ports bind to `127.0.0.1` only.
 - **node-pty rebuild** — `node-pty` compiles against a specific Electron version. 
   After running `pnpm pack` or `pnpm dist*`, the postdist hook runs `electron-rebuild -f -w node-pty` to 
   keep dev mode working. If dev mode ever errors with `posix_spawnp failed`, run

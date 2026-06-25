@@ -80,6 +80,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/zsh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      stopContainer: vi.fn(),
+      getWorktreeId: vi.fn(() => 'abc'),
+      sanitizeContainerName: vi.fn(() => 'wt'),
     }
     const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
     await fsm.runPending({ id: 'p2', repoRoot: '/repo', branchName: 'test-branch' })
@@ -93,12 +96,16 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockRejectedValue(new Error('Docker fail')),
       execInContainer: vi.fn(),
+      stopContainer: vi.fn(),
+      getWorktreeId: vi.fn(() => 'abc'),
+      sanitizeContainerName: vi.fn(() => 'wt'),
     }
     const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
     const result = await fsm.runPending({ id: 'p3', repoRoot: '/repo', branchName: 'test-branch' })
     expect(result.outcome).toBe('error')
     const pending = store.getSnapshot().state.worktrees.pending.find((p) => p.id === 'p3')
     expect(pending?.setupLog).toBe('Creating Docker container...')
+    expect(onWorktreeCreated).not.toHaveBeenCalled()
   })
 
   it('setup failure retains container metadata', async () => {
@@ -108,6 +115,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: 'fail', exitCode: 1 }),
+      stopContainer: vi.fn(),
+      getWorktreeId: vi.fn(() => 'abc'),
+      sanitizeContainerName: vi.fn(() => 'wt'),
     }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
@@ -115,6 +125,6 @@ describe('WorktreesFSM container integration', () => {
     expect(result.outcome).toBe('setup-failed')
     const wt = store.getSnapshot().state.worktrees.list.find((w) => w.path === '/repo/wt/test-branch')
     expect(wt?.container).toBeDefined()
-    expect(wt?.container?.status).toBe('running')
+    expect(wt?.container?.status).toBe('error')
   })
 })

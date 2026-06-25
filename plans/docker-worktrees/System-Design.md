@@ -54,15 +54,14 @@ sessions.
 
 Each container gets stable labels:
 
-- `harness=true`
-- `harness.repoRoot=<repo root>`
-- `harness.worktreePath=<absolute host path>`
-- `harness.worktreeId=<derived id>`
+- `tatsu.worktree.id=<derived id>`
+- `tatsu.worktree.path=<absolute host path>`
+- `tatsu.repo.root=<repo root>`
 
 Name format:
 
 ```text
-harness-<repo-slug>-<branch-slug>-<short-hash>
+tatsu-wt-<basename>-<short-hash>
 ```
 
 Labels are authoritative. Name is for humans.
@@ -70,7 +69,7 @@ Labels are authoritative. Name is for humans.
 Containers start detached with idle entrypoint:
 
 ```text
-sleep infinity
+sh -c 'while true; do sleep 3600; done'
 ```
 
 Terminals then use `docker exec -it`.
@@ -80,29 +79,27 @@ Terminals then use `docker exec -it`.
 Add optional `container` object to `.harness.json` through `RepoConfig`:
 
 ```ts
-type WorktreeContainerConfig = {
-  enabled?: boolean
+type RepoContainerConfig = {
   image?: string
   dockerfile?: string
-  buildContext?: string
   workdir?: string
   shell?: string
   env?: Record<string, string>
-  volumes?: Array<{ source: string; target: string; readonly?: boolean }>
-  ports?: Array<{ container: number; host?: number }>
-  shareAgentConfig?: boolean
+  ports?: number[]
+  volumes?: Array<{ source: string; target: string }>
+  disabled?: boolean
 }
 ```
 
 Resolution order:
 
 1. Global Settings toggle must be on.
-2. Repo config can set `container.enabled: false` to opt out.
-3. Repo config can set `container.enabled: true`, but global toggle must also be on.
+2. Repo config can set `container.disabled: true` to opt out.
+3. Repo config can set `container.disabled: false` (or omit), but global toggle must also be on.
 4. Image selection:
    - `container.image` if set.
    - else build `container.dockerfile` if set.
-   - else use `mcr.microsoft.com/devcontainers/base:ubuntu`.
+   - else use `node:20-alpine`.
 
 First implementation reads these fields only from file-backed repo config. No
 Settings or repo-config editor UI fields.
@@ -110,12 +107,14 @@ Settings or repo-config editor UI fields.
 Schema rules:
 
 - `image` and `dockerfile` are mutually exclusive.
-- Relative `dockerfile`, `buildContext`, and extra volume `source` paths resolve
+- Relative `dockerfile` and extra volume `source` paths resolve
   from repo root.
 - Absolute volume `source` paths are allowed only after security validation.
 - `workdir` defaults to `/workspace` and must be an absolute container path.
-- `shell` defaults to `/bin/bash`. If missing inside image, show actionable
+- `shell` defaults to `/bin/sh`. If missing inside image, show actionable
   terminal/setup error. Do not silently fall back to host execution.
+- When building from a Dockerfile, `--build-arg WORKDIR=<workdir>` is passed
+  so Dockerfiles can use it to set up the working directory.
 - No environment variable interpolation in first slice. `container.env` values
   are literal strings.
 
@@ -416,24 +415,25 @@ Image path:
 ```text
 docker run -d \
   --name <name> \
-  --label harness=true \
-  --label harness.worktreePath=<path> \
+  --label tatsu.worktree.id=<id> \
+  --label tatsu.worktree.path=<path> \
+  --label tatsu.repo.root=<repo-root> \
   --workdir /workspace \
   -v <host-worktree>:/workspace \
   <env args> \
   <port args> \
   <image> \
-  sleep infinity
+  sh -c 'while true; do sleep 3600; done'
 ```
 
 Dockerfile path:
 
 ```text
 docker build -t <tag> -f <dockerfile> <context>
-docker run ... <tag> sleep infinity
+docker run ... <tag> sh -c 'while true; do sleep 3600; done'
 ```
 
-For image configs, run `docker image inspect <image>` first. If missing, run
+For image configs, run `docker inspect --type=image <image>` first. If missing, run
 `docker pull <image>` before `docker run`. Dockerfile builds skip pull.
 
 ### Exec command
@@ -466,11 +466,11 @@ config.
 
 Concrete validation rules:
 
-- container name slug: lowercase ASCII letters, digits, `_`, `.`, `-`; replace
+- container name slug: lowercase ASCII letters, digits, and `-`; replace
   all other chars with `-`; collapse repeated `-`; trim to 63 chars; append
   short hash.
 - label values can keep full repo/worktree paths, but reject NUL and newline.
-- `harness.worktreeId` is `sha256(<absolute worktree path>).slice(0, 12)`.
+- `tatsu.worktree.id` is `sha256(<absolute worktree path>).slice(0, 12)`.
 - resolve relative volume sources from repo root, then realpath.
 - reject paths outside repo root unless explicitly absolute and allowed.
 - reject extra volume targets `/`, `/workspace`, `/proc`, `/sys`, `/dev`,
@@ -478,7 +478,7 @@ Concrete validation rules:
 - reject symlink-resolved sources pointing to Docker socket, home directory, SSH
   agent socket, git credential files, or cloud credential directories unless
   explicit allowlist is added.
-- reject env keys that are empty or contain `=` or NUL.
+- reject env keys that do not match `^[A-Za-z_][A-Za-z0-9_]*$`.
 
 Default mounts:
 
@@ -494,7 +494,7 @@ Pass only:
 
 ## Resolved decisions
 
-1. Default image: `mcr.microsoft.com/devcontainers/base:ubuntu`; no
+1. Default image: `node:20-alpine`; no
    Harness-owned image first slice.
 2. Agent credentials: repo-config opt-in with `shareAgentConfig: true`; no
    Settings UI toggle first slice.

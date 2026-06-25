@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import { log } from '../debug'
 import { DEFAULT_HIDDEN_RIGHT_PANELS, type RepoConfig } from '../../shared/state/repo-configs'
@@ -12,16 +12,33 @@ function configPath(repoRoot: string): string {
   return join(repoRoot, REPO_CONFIG_FILENAME)
 }
 
-const UNSAFE_VOLUME_TARGETS = new Set(['/', '/workspace', '/proc', '/sys', '/dev'])
+const UNSAFE_VOLUME_TARGETS = new Set(['/', '/workspace', '/proc', '/sys', '/dev', '/etc'])
+
+const UNSAFE_VOLUME_SOURCES = new Set([
+  '/', '/proc', '/sys', '/dev', '/etc', '/boot', '/var/run/docker.sock', '/run/docker.sock'
+])
+
+function hasUnsafePathPrefix(resolved: string): boolean {
+  if (resolved.startsWith('/proc/') || resolved === '/proc') return true
+  if (resolved.startsWith('/sys/') || resolved === '/sys') return true
+  if (resolved.startsWith('/dev/') || resolved === '/dev') return true
+  if (resolved.endsWith('/docker.sock') || resolved === '/docker.sock') return true
+  return false
+}
 
 function isUnsafeVolumeTarget(target: string): boolean {
   const resolved = resolve(target)
   if (UNSAFE_VOLUME_TARGETS.has(resolved)) return true
-  if (resolved.startsWith('/proc/') || resolved === '/proc') return true
-  if (resolved.startsWith('/sys/') || resolved === '/sys') return true
-  if (resolved.startsWith('/dev/') || resolved === '/dev') return true
-  if (resolved.startsWith('/var/run/docker.sock') || resolved === '/var/run/docker.sock') return true
-  if (resolved.startsWith('/run/docker.sock') || resolved === '/run/docker.sock') return true
+  if (hasUnsafePathPrefix(resolved)) return true
+  if (resolved.startsWith('/etc/') || resolved === '/etc') return true
+  return false
+}
+
+function isUnsafeVolumeSource(source: string): boolean {
+  const resolved = resolve(source)
+  if (UNSAFE_VOLUME_SOURCES.has(resolved)) return true
+  if (hasUnsafePathPrefix(resolved)) return true
+  if (resolved.startsWith('/etc/') || resolved === '/etc') return true
   return false
 }
 
@@ -80,8 +97,14 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
       if (typeof v.source !== 'string' || typeof v.target !== 'string') {
         return { valid: false, error: 'Volume source and target must be strings' }
       }
+      if (v.source.includes(':')) {
+        return { valid: false, error: `Volume source must not contain colons (Docker options not allowed): ${v.source}` }
+      }
       if (!v.target.startsWith('/')) {
         return { valid: false, error: `Volume target must be absolute: ${v.target}` }
+      }
+      if (v.target.includes(':')) {
+        return { valid: false, error: `Volume target must not contain colons (Docker options not allowed): ${v.target}` }
       }
       if (isUnsafeVolumeTarget(v.target as string)) {
         return { valid: false, error: `Unsafe volume target: ${v.target}` }
@@ -105,6 +128,9 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
     let dockerfile = (c.dockerfile as string).trim()
     if (repoRoot && !dockerfile.startsWith('/')) {
       dockerfile = join(repoRoot, dockerfile)
+      if (!dockerfile.startsWith(repoRoot + sep) && dockerfile !== repoRoot) {
+        return { valid: false, error: `Dockerfile path escapes repo root: ${dockerfile}` }
+      }
     }
     result.dockerfile = dockerfile
   }
@@ -118,8 +144,18 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
       let source = v.source
       if (repoRoot && !source.startsWith('/')) {
         source = join(repoRoot, source)
+        try {
+          source = realpathSync(source)
+        } catch (err) {
+          const e = err as NodeJS.ErrnoException
+          if (e.code !== 'ENOENT') throw err
+        }
         if (!source.startsWith(repoRoot + sep) && source !== repoRoot) {
           return { valid: false, error: `Volume source escapes repo root: ${source}` }
+        }
+      } else if (source.startsWith('/')) {
+        if (isUnsafeVolumeSource(source)) {
+          return { valid: false, error: `Unsafe volume source path: ${source}` }
         }
       }
       normalizedVolumes.push({ source, target: v.target })

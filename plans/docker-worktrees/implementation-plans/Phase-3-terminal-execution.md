@@ -27,9 +27,9 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 ## Shell rules
 
 - repo config shell wins.
-- else `/bin/bash`.
+- else `/bin/sh`.
 - if shell is missing, report install/config guidance; do not silently fall back
-  to host execution or `/bin/sh` in first slice.
+  to host execution in first slice.
 - agent command arguments are not trusted inside container unless image contains
   corresponding agent CLI.
 

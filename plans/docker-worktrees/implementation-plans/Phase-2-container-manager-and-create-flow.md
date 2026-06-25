@@ -34,7 +34,7 @@ src/main/worktree-containers/
 - `resolveContainerConfig(repoRoot, worktreePath)` merges `.harness.json` with defaults.
 - `ensureImage(config)` pulls/builds image only when needed.
   - for image configs, inspect local image and pull explicitly when missing.
-- `createForWorktree({ repoRoot, worktreePath, branch, config })` creates and
+- `createForWorktree(repoRoot, worktreePath, config)` creates and
   starts container with Harness labels.
 - `execInContainer(container, command, opts)` runs non-interactive setup.
 - sanitize names from repo + branch and assert labels are always present.
@@ -44,7 +44,7 @@ src/main/worktree-containers/
 ## Repo config integration
 
 - `src/shared/state/repo-configs/types.ts`
-  - add `container?: WorktreeContainerConfig` to repo config shape.
+  - add `container?: RepoContainerConfig` to repo config shape.
 - `src/main/repo-config/repo-config.ts`
   - parse file-backed container config.
   - validate `image`/`dockerfile` exclusivity and path rules.

@@ -28,14 +28,25 @@ export interface RepoConfig {
   container?: RepoContainerConfig
 }
 
+/** Container configuration for worktree isolation via Docker. Written to
+ *  `.harness.json` by the user. Env var values are stored in plaintext —
+ *  `.harness.json` is not a secure store for secrets. */
 export interface RepoContainerConfig {
+  /** Docker image to use (e.g. `node:20-alpine`). Mutually exclusive with `dockerfile`. */
   image?: string
+  /** Path to a Dockerfile to build. Mutually exclusive with `image`. Relative paths resolve from repo root. */
   dockerfile?: string
+  /** Working directory inside the container. Defaults to `/workspace`. Must be absolute. */
   workdir?: string
+  /** Shell to use for `docker exec`. Defaults to `/bin/sh`. */
   shell?: string
+  /** Environment variables to pass to the container. Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. */
   env?: Record<string, string>
+  /** Container ports to expose on the host. Bound to `127.0.0.1` only. */
   ports?: number[]
+  /** Additional volume mounts. `source` is a host path (relative to repo root or absolute); `target` is a container path. */
   volumes?: Array<{ source: string; target: string }>
+  /** When `true`, skip container creation for this repo even if the global setting is on. */
   disabled?: boolean
 }
 

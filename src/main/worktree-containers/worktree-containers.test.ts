@@ -136,7 +136,7 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs).toContain('-e')
     expect(runArgs).toContain('KEY=val')
     expect(runArgs).toContain('-p')
-    expect(runArgs).toContain('3000:3000')
+    expect(runArgs).toContain('127.0.0.1:3000:3000')
     expect(runArgs).toContain('-w')
     expect(runArgs).toContain('/workspace')
   })
@@ -201,5 +201,28 @@ describe('createForWorktree', () => {
     const containers = createWorktreeContainers(runner)
     const config = containers.resolveContainerConfig('/r', '/r/wt')
     await expect(containers.createForWorktree('/r', '/r/wt\n', config)).rejects.toThrow(/invalid character/)
+  })
+})
+
+describe('stopContainer', () => {
+  it('runs docker stop then docker rm -f', async () => {
+    const runner = makeRunner()
+    const containers = createWorktreeContainers(runner)
+    await containers.stopContainer('abc123')
+    const stopCall = runner.calls.find((c) => c.args[0] === 'stop' && c.args[1] === 'abc123')
+    const rmCall = runner.calls.find((c) => c.args[0] === 'rm' && c.args[1] === '-f' && c.args[2] === 'abc123')
+    expect(stopCall).toBeDefined()
+    expect(rmCall).toBeDefined()
+  })
+
+  it('swallows errors from stop and rm', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'stop') throw new Error('stop failed')
+      if (args[0] === 'rm') throw new Error('rm failed')
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    await expect(containers.stopContainer('abc123')).resolves.toBeUndefined()
   })
 })

@@ -243,10 +243,6 @@ export class WorktreesFSM {
     log('worktrees-fsm', `Creating Docker container for ${worktreePath}`)
     const config = this.opts.containers.resolveContainerConfig(repoRoot, worktreePath, repoCfg.container)
     const container = await this.opts.containers.createForWorktree(repoRoot, worktreePath, config)
-    this.store.dispatch({
-      type: 'worktrees/containerUpdated',
-      payload: { path: worktreePath, container }
-    })
     return container
   }
 
@@ -274,7 +270,9 @@ export class WorktreesFSM {
       let buffered = ''
       let result: { ok: boolean; exitCode: number; stdout: string; stderr: string }
       if (container) {
-        const execResult = await this.opts.containers!.execInContainer(
+        const containers = this.opts.containers
+        if (!containers) throw new Error('Container support not available')
+        const execResult = await containers.execInContainer(
           container.id,
           setupCmd,
           { workdir: container.workdir, shell: container.shell }
@@ -329,10 +327,17 @@ export class WorktreesFSM {
     await this.refreshList()
 
     if (container) {
-      this.store.dispatch({
-        type: 'worktrees/containerUpdated',
-        payload: { path: created.path, container: { ...container, status: 'running' as const } }
-      })
+      if (setupFailed) {
+        this.store.dispatch({
+          type: 'worktrees/containerUpdated',
+          payload: { path: created.path, container: { ...container, status: 'error' as const, error: 'Setup script failed inside container' } }
+        })
+      } else {
+        this.store.dispatch({
+          type: 'worktrees/containerUpdated',
+          payload: { path: created.path, container: { ...container, status: 'running' as const } }
+        })
+      }
     }
 
     if (setupFailed) {
