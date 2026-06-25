@@ -1011,7 +1011,7 @@ function registerIpcHandlers(): void {
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+      agentKind?: AgentKind
       model?: string
     }) => {
       return worktreesFSM.runPending(params)
@@ -1026,7 +1026,7 @@ function registerIpcHandlers(): void {
         repoRoot: string
         prNumber: number
         initialPrompt?: string
-        agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+        agentKind?: AgentKind
         model?: string
       }
     ) => {
@@ -1570,13 +1570,22 @@ function registerIpcHandlers(): void {
   })
 
   transport.onRequest('config:setPiEnvVars', (_ctx, vars: Record<string, string>) => {
-    if (!vars || Object.keys(vars).length === 0) {
+    const cleaned: Record<string, string> = {}
+    if (vars && typeof vars === 'object') {
+      for (const [rawKey, rawVal] of Object.entries(vars)) {
+        const key = String(rawKey).trim()
+        if (!key) continue
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
+        cleaned[key] = rawVal == null ? '' : String(rawVal)
+      }
+    }
+    if (Object.keys(cleaned).length === 0) {
       delete config.piEnvVars
     } else {
-      config.piEnvVars = vars
+      config.piEnvVars = cleaned
     }
     saveConfig(config)
-    store.dispatch({ type: 'settings/piEnvVarsChanged', payload: config.piEnvVars || {} })
+    store.dispatch({ type: 'settings/piEnvVarsChanged', payload: cleaned })
     return true
   })
 
@@ -3452,7 +3461,7 @@ async function runBoot(): Promise<void> {
           repoRoot: string
           worktree: { path: string }
           initialPrompt?: string
-          agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+          agentKind?: AgentKind
           model?: string
         }
         panesFSM.ensureInitialized(p.worktree.path, {

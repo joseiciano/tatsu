@@ -137,7 +137,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 
 ## Uninstallation
 
-1. **Remove the Claude Code hooks** (do this while Tatsu is still running). Open Settings → **Agent** → **Status hooks** and click **Remove hooks**. This strips Tatsu's entries from `~/.claude/settings.json` and leaves any user-authored hooks intact.
+1. **Remove agent hooks** (do this while Tatsu is still running). Open Settings → **Agent** → **Status hooks** and click **Remove hooks**. This strips Tatsu's entries from agent configuration files (Claude Code, Codex, Opencode, Pi) and leaves any user-authored configuration intact.
 
 2. **Quit Tatsu** with ⌘Q.
 
@@ -159,7 +159,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    rm -rf ~/Library/Logs/Tatsu
    ```
 
-5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open `~/.claude/settings.json` and delete any hook entries whose object contains `"_marker": "__claude_harness__"` — every Tatsu-managed hook is tagged with that marker, so they're safe to identify and remove.
+5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove entries with `_marker: __claude_harness__`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/harness-status.ts`.
 
 6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
 
@@ -173,7 +173,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 
 ## Features
 
-- **Multi-agent** — run Claude Code or Codex in the same window, one harness for both
+- **Multi-agent** — run Claude Code, Codex, Opencode, or Pi in the same window, one harness for all
 - **Multi-repo** — manage multiple repos in a single window, switch between them or see everything at once
 - **Live PR status** — see open PRs and CI checks for every worktree, auto-sorted by urgency
 - **Embedded editor** — full Monaco-powered editor for tweaking files without leaving Tatsu
@@ -242,4 +242,4 @@ xattr -cr release/mac-arm64/Tatsu.app
 
 # Contributing
 
-We absolutely love contributors. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, PR conventions, and pointers into the architecture docs.
+We absolutely love contributors. See [AGENTS.md](AGENTS.md) for setup, PR conventions, and pointers into the architecture docs.

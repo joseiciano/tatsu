@@ -2262,7 +2262,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   type="text"
                   value={piModel || ''}
                   onChange={(e) => { void backend.setPiModel(e.target.value || null) }}
-                  placeholder="e.g. claude-sonnet-4-6"
+                  placeholder="e.g. anthropic/claude-sonnet-4-6"
                   className="w-full bg-panel border border-border-strong rounded px-3 py-2 text-sm text-fg-bright outline-none focus:border-fg font-mono"
                 />
               </div>

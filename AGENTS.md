@@ -465,7 +465,8 @@ event type if you're trying to find where something happens.
 
 **agent-specific hooks** (per agent in `src/main/agents/`) that we install into each worktree's
 configuration (`.claude/settings.local.json` for Claude, `~/.config/opencode/plugins/` for
-Opencode, etc.). The hooks write status events as NDJSON to
+Opencode, `~/.pi/agent/extensions/harness-status.ts` for Pi, `~/.codex/hooks.json` for
+Codex). The hooks write status events as NDJSON to
 `/tmp/harness-status/<terminal-id>.ndjson` and the main process watches that
 directory via `fs.watch`. The hook scripts use `$HARNESS_TERMINAL_ID` env var
 (set by the PtyManager) with `$CLAUDE_HARNESS_ID` as a legacy fallback.

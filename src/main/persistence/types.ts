@@ -6,6 +6,7 @@ import type {
 import type { CostsState } from '../../shared/state/costs'
 import type { SnoozeEntry } from '../../shared/state/snooze'
 
+import type { AgentKind } from '../../shared/state/terminals'
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
 
 export type QuestStep = 'hidden' | 'spawn-second' | 'switch-between' | 'finale' | 'done'
@@ -26,7 +27,7 @@ export interface Config {
   windowBounds: { x: number; y: number; width: number; height: number } | null
   repoRoots: string[]
   hotkeys?: Record<string, string>
-  defaultAgent?: 'claude' | 'codex' | 'opencode' | 'pi'
+  defaultAgent?: AgentKind
   claudeCommand?: string
   codexCommand?: string
   opencodeCommand?: string

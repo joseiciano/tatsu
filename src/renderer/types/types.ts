@@ -180,7 +180,7 @@ export interface ElectronAPI {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+    agentKind?: AgentKind
     model?: string
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }
@@ -192,7 +192,7 @@ export interface ElectronAPI {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+    agentKind?: AgentKind
     model?: string
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }

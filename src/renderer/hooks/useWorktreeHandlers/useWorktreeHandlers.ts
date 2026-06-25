@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AddRepoResult, Worktree, PendingWorktree, PRStatus, TerminalTab } from '../../types'
+import type { AgentKind } from '../../../shared/state/terminals'
 import { markTerminalClosing } from '../../components/XTerminal'
 import { useActiveBackend } from '../../store'
 import { useBackend } from '../../backend'
@@ -162,7 +163,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       branchName: string,
       initialPrompt: string,
       teleportSessionId?: string,
-      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi',
+      agentKind?: AgentKind,
       model?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`
@@ -196,7 +197,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       repoRoot: string,
       prNumber: number,
       initialPrompt: string,
-      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi',
+      agentKind?: AgentKind,
       model?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`

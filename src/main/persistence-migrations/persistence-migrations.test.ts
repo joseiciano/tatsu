@@ -8,6 +8,7 @@ import {
   type PersistedPaneNode,
   type PersistedTab
 } from '.'
+import type { AgentKind } from '../../shared/state/terminals'
 
 // Convenience: run only the v{from}→v{from+1} migration in isolation.
 function runOne(from: number, config: AnyConfig): AnyConfig {
@@ -15,7 +16,7 @@ function runOne(from: number, config: AnyConfig): AnyConfig {
   return config
 }
 
-function tab(id: string, type: 'agent' | 'shell' = 'shell', agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'): PersistedTab {
+function tab(id: string, type: 'agent' | 'shell' = 'shell', agentKind?: AgentKind): PersistedTab {
   return { id, type, label: id, agentKind: type === 'agent' ? (agentKind ?? 'claude') : undefined }
 }
 

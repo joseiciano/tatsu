@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const fsState: { files: Map<string, string> } = { files: new Map() }
+const fsState: { files: Map<string, string>; mtimes: Map<string, number> } = { files: new Map(), mtimes: new Map() }
 
 vi.mock('fs', () => ({
   existsSync: (p: string) => {
@@ -41,7 +41,7 @@ vi.mock('fs', () => ({
     return {
       isFile: () => !isDir && fsState.files.has(p),
       isDirectory: () => isDir,
-      mtimeMs: 0
+      mtimeMs: fsState.mtimes.get(p) ?? 0
     }
   }
 }))
@@ -69,6 +69,7 @@ import type { AgentSpawnOpts } from './index'
 
 beforeEach(() => {
   fsState.files.clear()
+  fsState.mtimes.clear()
 })
 
 describe('pi module exports', () => {
@@ -160,11 +161,11 @@ describe('sessionFileExists', () => {
     expect(sessionFileExists('/tmp', sessionPath)).toBe(true)
   })
 
-  it('finds session by partial match in sessions dir', () => {
+  it('returns false for non-absolute session id', () => {
     const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
     const sessionFile = join(sessionsDir, 'my-session-abc.jsonl')
     fsState.files.set(sessionFile, '')
-    expect(sessionFileExists('/tmp', 'my-session')).toBe(true)
+    expect(sessionFileExists('/tmp', 'my-session')).toBe(false)
   })
 })
 
@@ -176,18 +177,16 @@ describe('latestSessionId', () => {
 
   it('returns the newest session file path', () => {
     const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
-    // Use Pi's documented subdirectory layout where two sessions
-    // have deterministic age ordering.
-    const subdir1 = join(sessionsDir, '--tmp--test--')
-    const subdir2 = join(sessionsDir, '--tmp--test2--')
-    const olderPath = join(subdir1, '001_older.jsonl')
-    const newerPath = join(subdir2, '002_newer.jsonl')
+    // Use Pi's cwd-encoded subdirectory layout: --path--/timestamp_uuid.jsonl
+    const subdir = join(sessionsDir, '--tmp--test--')
+    const olderPath = join(subdir, '001_older.jsonl')
+    const newerPath = join(subdir, '002_newer.jsonl')
     fsState.files.set(olderPath, '{"id":"older"}')
+    fsState.mtimes.set(olderPath, 1000)
     fsState.files.set(newerPath, '{"id":"newer"}')
+    fsState.mtimes.set(newerPath, 2000)
     const result = latestSessionId('/tmp/test')
-    // Both files have the same mock mtimeMs (0), so the result
-    // should be one of the two valid paths.
-    expect([olderPath, newerPath]).toContain(result)
+    expect(result).toBe(newerPath)
   })
 })
 
@@ -244,5 +243,12 @@ describe('buildSpawnArgs', () => {
     const result = buildSpawnArgs({ ...base, sessionId: '/tmp/nonexistent.jsonl', initialPrompt: 'hello' })
     expect(result).not.toContain('--session')
     expect(result).toBe("pi 'hello'")
+  })
+
+  it('does not duplicate --session if already in command', () => {
+    const sessionPath = join('/tmp', 'pi-session-test.jsonl')
+    fsState.files.set(sessionPath, '')
+    const result = buildSpawnArgs({ ...base, command: 'pi --session foo', sessionId: sessionPath, initialPrompt: 'continue' })
+    expect(result).toBe("pi --session foo 'continue'")
   })
 })

@@ -319,6 +319,12 @@ describe('settingsReducer', () => {
     expect(next.piModel).toBe('claude-sonnet-4-6')
   })
 
+  it('piModelChanged clears with null', () => {
+    const withModel = apply(initialSettings, { type: 'settings/piModelChanged', payload: 'claude-sonnet-4-6' })
+    const cleared = apply(withModel, { type: 'settings/piModelChanged', payload: null })
+    expect(cleared.piModel).toBeNull()
+  })
+
   it('piEnvVarsChanged sets env vars', () => {
     const next = apply(initialSettings, { type: 'settings/piEnvVarsChanged', payload: { ANTHROPIC_API_KEY: 'sk-test' } })
     expect(next.piEnvVars).toEqual({ ANTHROPIC_API_KEY: 'sk-test' })

@@ -39,6 +39,7 @@ import type {
   StateEventListener
 } from '../../shared/transport/transport'
 import type { ElectronAPI } from '../types'
+import type { AgentKind } from '../../shared/state/terminals'
 
 export type { ElectronOnlyHelpers }
 
@@ -101,7 +102,7 @@ export function buildBackend(
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+      agentKind?: AgentKind
       model?: string
     }) => req('worktrees:runPending', params),
     runPendingPRWorktree: (params: {
@@ -109,7 +110,7 @@ export function buildBackend(
       repoRoot: string
       prNumber: number
       initialPrompt?: string
-      agentKind?: 'claude' | 'codex' | 'opencode' | 'pi'
+      agentKind?: AgentKind
       model?: string
     }) => req('worktrees:runPendingPR', params),
     retryPendingWorktree: (id: string) => req('worktrees:retryPending', id),
