@@ -550,7 +550,6 @@ hard dependency on `gh`.
   is persisted to `config.worktreeContainers` so restarts can re-associate
   running containers. Repo-level `.harness.json` can override image, dockerfile,
   volumes, env, ports, shell, workdir, and disabled. Ports bind to `127.0.0.1` only.
-  volumes, env, ports, and shell. Ports bind to `127.0.0.1` only.
 - **node-pty rebuild** — `node-pty` compiles against a specific Electron version. 
   After running `pnpm pack` or `pnpm dist*`, the postdist hook runs `electron-rebuild -f -w node-pty` to 
   keep dev mode working. If dev mode ever errors with `posix_spawnp failed`, run

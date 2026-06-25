@@ -219,5 +219,5 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     })
   }
 
-  return { checkDockerAvailable, resolveContainerConfig, ensureImage, createForWorktree, execInContainer, stopContainer, getWorktreeId, sanitizeContainerName }
+  return { checkDockerAvailable, resolveContainerConfig, ensureImage, createForWorktree, execInContainer, stopContainer }
 }

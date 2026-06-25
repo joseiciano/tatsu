@@ -38,6 +38,4 @@ export interface WorktreeContainers {
   createForWorktree(repoRoot: string, worktreePath: string, config: ResolvedWorktreeContainerConfig): Promise<CreatedWorktreeContainer>
   execInContainer(containerId: string, command: string, opts?: { workdir?: string; env?: Record<string, string>; shell?: string }): Promise<DockerRunResult>
   stopContainer(containerId: string): Promise<void>
-  getWorktreeId(absPath: string): string
-  sanitizeContainerName(input: string): string
 }
