@@ -159,7 +159,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    rm -rf ~/Library/Logs/Tatsu
    ```
 
-5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove entries with `_marker: __claude_harness__`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/harness-status.ts`.
+5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove hook entries whose `command` contains `/tmp/harness-status`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/harness-status.ts`.
 
 6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
 

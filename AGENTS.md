@@ -189,7 +189,7 @@ src/
 │   ├── activity-deriver/          # Subscribes to store, derives + records activity transitions
 │   ├── json-claude-status-deriver/# Derives chat status from PTY/tool state
 │   ├── pty-manager/               # node-pty lifecycle, dispatches statuses to store
-│   ├── hooks/                     # Installs Claude Code hooks, dispatches statuses to store
+│   ├── hooks/                     # Status-dir watcher + makeHookCommand; per-agent install lives in agents/
 │   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
 │   │   ├── index.ts               # Public exports
 │   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
