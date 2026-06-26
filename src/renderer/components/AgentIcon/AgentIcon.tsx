@@ -39,7 +39,7 @@ function OpencodeIcon({ className }: { className?: string }): JSX.Element {
 function PiIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" className={className}>
-      <path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm-.5 3h1v5h-1V3zm.5 9.2c-.39 0-.7-.31-.7-.7s.31-.7.7-.7.7.31.7.7-.31.7-.7.7z"/>
+      <path d="M2.5 3.25h11v2H11.8v7.5h-2.2v-7.5H6.4v7.5H4.2v-7.5H2.5z"/>
     </svg>
   )
 }

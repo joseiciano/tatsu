@@ -463,8 +463,8 @@ event type if you're trying to find where something happens.
 
 ## How status detection works
 
-**agent-specific hooks** (per agent in `src/main/agents/`) that we install into each worktree's
-configuration (`.claude/settings.local.json` for Claude, `~/.config/opencode/plugins/` for
+**agent-specific hooks** (per agent in `src/main/agents/`) that we install into user-scope
+configuration (`~/.claude/settings.json` for Claude, `~/.config/opencode/plugins/` for
 Opencode, `~/.pi/agent/extensions/harness-status.ts` for Pi, `~/.codex/hooks.json` for
 Codex). The hooks write status events as NDJSON to
 `/tmp/harness-status/<terminal-id>.ndjson` and the main process watches that

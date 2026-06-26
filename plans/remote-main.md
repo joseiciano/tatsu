@@ -3,7 +3,7 @@
 This is the forward-looking plan for letting `main` run on a remote
 host (or just headlessly on the same machine) while the user drives it
 from a local Electron window or a browser. The architecture itself is
-documented in [CLAUDE.md](../CLAUDE.md); the WS transport that makes
+documented in [AGENTS.md](../AGENTS.md); the WS transport that makes
 this possible is documented in commits `f18f337` (transport) and
 `da87ee9` (web client). This doc is the **why**, the **what's already
 landed**, and the **what's next**.

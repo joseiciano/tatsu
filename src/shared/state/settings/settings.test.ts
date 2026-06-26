@@ -344,6 +344,14 @@ describe('settingsReducer', () => {
     expect(next.defaultAgent).toBe('opencode')
   })
 
+  it('defaultAgentChanged accepts pi', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/defaultAgentChanged',
+      payload: 'pi'
+    })
+    expect(next.defaultAgent).toBe('pi')
+  })
+
   it('harnessSystemPromptEnabledChanged toggles flag', () => {
     const off = apply(initialSettings, {
       type: 'settings/harnessSystemPromptEnabledChanged',

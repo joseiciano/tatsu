@@ -66,7 +66,7 @@ Resolved questions (verified from Pi docs):
 
 1. **TUI initial-prompt support** — Yes. Default TUI accepts positional prompt text: `pi "List all .ts files in src/"`. No special flag needed.
 2. **Extension API for session file/path/id** — Stable. Every event handler receives `ctx.sessionManager` with `getSessionFile()` (absolute `.jsonl` path), `getSessionId()` (UUID), `getSessionDir()`, `getCwd()`, `isPersisted()`.
-3. **`--session <path|id>` behavior** — Accepts both absolute file path and partial UUID. Session files live at `~/.pi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl` where `<path>` is cwd with `/` replaced by `-`. Store absolute path from `getSessionFile()`, pass to `--session` for resume.
+3. **`--session <path|id>` behavior** — Accepts both absolute file path and partial UUID. Session files live at `~/.pi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl` where `<path>` is cwd with `/` replaced by `--`. Store absolute path from `getSessionFile()`, pass to `--session` for resume.
 4. **Extension auto-loading** — Yes. Files in `~/.pi/agent/extensions/*.ts` are auto-discovered and loaded for every Pi session with no extra enablement. Loaded via jiti (TypeScript without compilation). Project-local `.pi/extensions/` requires project trust; global scope does not.
 
 ## Current codebase map

@@ -99,6 +99,10 @@ import { toAgentKind } from './agent-kind'
 // override to fight with.
 const runtime = detectRuntime()
 
+function assertNeverAgentKind(kind: never): never {
+  throw new Error(`Unsupported agent kind: ${kind}`)
+}
+
 // Boot the local backend. The HARNESS_REMOTE_URL "process-wide remote"
 // path was removed in Tier 1 — the chip strip / add-backend modal is
 // the only way to reach a remote backend now (see
@@ -2268,7 +2272,9 @@ function registerIpcHandlers(): void {
           ? (config.codexCommand || agent.defaultCommand)
           : kind === 'opencode'
             ? (config.opencodeCommand || agent.defaultCommand)
-            : (config.piCommand || agent.defaultCommand)
+            : kind === 'pi'
+              ? (config.piCommand || agent.defaultCommand)
+              : assertNeverAgentKind(kind)
       const mcpConfigPath = kind === 'pi'
         ? null
         : writeMcpConfigForTerminal(
@@ -2294,8 +2300,10 @@ function registerIpcHandlers(): void {
         model = override || config.codexModel || null
       } else if (kind === 'opencode') {
         model = override || config.opencodeModel || null
-      } else {
+      } else if (kind === 'pi') {
         model = override || config.piModel || null
+      } else {
+        model = assertNeverAgentKind(kind)
       }
 
       return agent.buildSpawnArgs({ ...opts, command, mcpConfigPath, model, systemPrompt, tuiFullscreen })
@@ -3194,9 +3202,7 @@ async function runBoot(): Promise<void> {
   // to a single user-scope install. Runs once per app install; migrated
   // state sticks via config.hooksMigratedToGlobal.
   void (async () => {
-    const claudeAgent = getAgent('claude')
-    const codexAgent = getAgent('codex')
-    const opencodeAgent = getAgent('opencode')
+    const agentModules = AGENT_REGISTRY.map((agent) => getAgent(agent.kind))
 
     // 1. Decide what the user's previous consent was.
     //    - Explicit persisted value wins (including 'declined').
@@ -3205,7 +3211,7 @@ async function runBoot(): Promise<void> {
     //      legacy per-worktree markers as evidence of a prior accept.
     let consent: 'pending' | 'accepted' | 'declined' | undefined = config.hooksConsent
     if (!consent) {
-      if (claudeAgent.hooksInstalled() || codexAgent.hooksInstalled() || opencodeAgent.hooksInstalled()) {
+      if (agentModules.some((agent) => agent.hooksInstalled())) {
         consent = 'accepted'
       } else {
         let foundLegacy = false
@@ -3216,9 +3222,9 @@ async function runBoot(): Promise<void> {
             // per-worktree file + its contents cheaply here by attempting
             // a strip and rolling back mentally — actually easier to just
             // run the strip and treat the "changed" bit as evidence.
-            if (claudeAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
-            if (codexAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
-            if (opencodeAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
+            for (const agent of agentModules) {
+              if (agent.stripHooksFromWorktree(wt.path)) foundLegacy = true
+            }
           }
         }
         consent = foundLegacy ? 'accepted' : 'pending'
@@ -3245,9 +3251,9 @@ async function runBoot(): Promise<void> {
       for (const root of config.repoRoots || []) {
         const trees = await listWorktrees(root).catch(() => [])
         for (const wt of trees) {
-          claudeAgent.stripHooksFromWorktree(wt.path)
-          codexAgent.stripHooksFromWorktree(wt.path)
-          opencodeAgent.stripHooksFromWorktree(wt.path)
+          for (const agent of agentModules) {
+            agent.stripHooksFromWorktree(wt.path)
+          }
         }
       }
       config.hooksMigratedToGlobal = true

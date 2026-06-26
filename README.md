@@ -57,7 +57,7 @@ Grab the latest release from the [releases page](https://github.com/frenchie4111
 4. On first launch:
    - Pick a git repository when prompted.
    - Click the ⚙ gear icon in the sidebar and paste a [GitHub personal access token](https://github.com/settings/tokens?type=beta) (fine-grained or classic, with `repo` scope). This is optional but required for the PR status panel and checks.
-   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally at `~/.claude/settings.json`. One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the bash command built by `makeHookCommand` — it appends one line of JSON per event to `/tmp/harness-status/<id>.ndjson`) and [`src/main/agents/claude.ts`](src/main/agents/claude.ts) (where the install/uninstall logic lives).
+   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally for supported agents: Claude (`~/.claude/settings.json`), Codex (`~/.codex/hooks.json`), Opencode (`~/.config/opencode/plugins/`), and Pi (`~/.pi/agent/extensions/harness-status.ts`). One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the status watcher) and `src/main/agents/` (where each agent's install/uninstall logic lives).
 
 ### Linux
 
@@ -178,9 +178,9 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 - **Live PR status** — see open PRs and CI checks for every worktree, auto-sorted by urgency
 - **Embedded editor** — full Monaco-powered editor for tweaking files without leaving Tatsu
 - **Full code review tool** — side-by-side syntax-highlighted diffs for every changed file in a worktree
-- **Status at a glance** — sidebar dots show which agent is working, waiting, or needs approval (powered by Claude Code hooks)
+- **Status at a glance** — sidebar dots show which agent is working, waiting, or needs approval (powered by agent hooks)
 - **Command center** — bird's-eye grid of every worktree with mini activity timelines
-- **Tabs + vertical split panes** — Claude, shells, and editor/diff tabs scoped to each checkout, splittable side-by-side
+- **Tabs + vertical split panes** — agents, shells, and editor/diff tabs scoped to each checkout, splittable side-by-side
 - **9 themes** — dark, dracula, nord, gruvbox, tokyo night, catppuccin, one dark, solarized dark/light
 - **Configurable hotkeys** — ⌘1–⌘9 to jump between worktrees, all rebindable
 - **MCP: Claude controls Tatsu** — a built-in MCP server lets Claude create and list worktrees on its own
