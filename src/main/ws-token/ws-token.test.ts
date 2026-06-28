@@ -9,7 +9,7 @@ vi.mock('../secrets', () => ({
   }
 }))
 
-import { getOrCreateWsToken, rotateWsToken } from '.'
+import { getOrCreateWsToken, rotateWsToken, safeEqualToken } from '.'
 
 beforeEach(() => {
   store.clear()
@@ -33,5 +33,23 @@ describe('ws-token', () => {
     const b = rotateWsToken()
     expect(b).not.toBe(a)
     expect(getOrCreateWsToken()).toBe(b)
+  })
+
+
+  it('compares matching tokens safely', () => {
+    expect(safeEqualToken('secret', 'secret')).toBe(true)
+    expect(safeEqualToken('secret', 'other')).toBe(false)
+  })
+
+  it('returns false for undefined provided token', () => {
+    expect(safeEqualToken(undefined, 'secret')).toBe(false)
+  })
+
+  it('returns false for null provided token', () => {
+    expect(safeEqualToken(null, 'secret')).toBe(false)
+  })
+
+  it('returns false instead of throwing for different token lengths', () => {
+    expect(safeEqualToken('secret', 'secrets')).toBe(false)
   })
 })

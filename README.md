@@ -242,4 +242,4 @@ xattr -cr release/mac-arm64/Tatsu.app
 
 # Contributing
 
-We absolutely love contributors. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, PR conventions, and pointers into the architecture docs.
+We absolutely love contributors. See [AGENTS.md](AGENTS.md) for setup, PR conventions, and architecture notes.

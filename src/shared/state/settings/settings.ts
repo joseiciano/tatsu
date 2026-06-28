@@ -44,6 +44,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, mergeStrategy: event.payload }
     case 'settings/worktreeDetailChanged':
       return { ...state, worktreeDetail: event.payload }
+    case 'settings/enableWorktreeContainersChanged':
+      return { ...state, enableWorktreeContainers: event.payload }
     case 'settings/shareClaudeSettingsChanged':
       return { ...state, shareClaudeSettings: event.payload }
     case 'settings/hasGithubTokenChanged':
@@ -84,12 +86,6 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, defaultClaudeTabType: event.payload }
     case 'settings/chatPromotionDismissedChanged':
       return { ...state, chatPromotionDismissed: event.payload }
-    case 'settings/autoApprovePermissionsChanged':
-      return { ...state, autoApprovePermissions: event.payload }
-    case 'settings/autoApproveSteerInstructionsChanged':
-      return { ...state, autoApproveSteerInstructions: event.payload }
-    case 'settings/useSystemClaudeForJsonModeChanged':
-      return { ...state, useSystemClaudeForJsonMode: event.payload }
     case 'settings/jsonModeChatDensityChanged':
       return { ...state, jsonModeChatDensity: event.payload }
     case 'settings/uiScaleChanged':

@@ -17,6 +17,7 @@ interface StubFrameHandler {
   onReq?: (id: string, name: string, args: unknown[], ws: WSType) => void
   onSend?: (name: string, args: unknown[]) => void
   onConnection?: (ws: WSType) => void
+  onVerify?: (queryToken: string | null, authHeader: string | undefined) => void
 }
 
 function startStubServer(
@@ -29,7 +30,13 @@ function startStubServer(
       port: 0,
       verifyClient: (info, cb) => {
         const url = new URL(info.req.url ?? '/', 'http://localhost')
-        if (url.searchParams.get('token') !== token) {
+        const queryToken = url.searchParams.get('token')
+        const authHeader = info.req.headers.authorization
+        handlers.onVerify?.(queryToken, authHeader)
+        const headerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+          ? authHeader.slice(7)
+          : null
+        if ((headerToken ?? queryToken) !== token) {
           cb(false, 401, 'unauthorized')
           return
         }
@@ -145,6 +152,30 @@ describe('WebSocketClientTransport', () => {
 
       const errResult = client.request('unknown-name')
       await expect(errResult).rejects.toThrow(/unknown/)
+    } finally {
+      client.close()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
+  })
+
+  it('can send auth token in Authorization header instead of query string', async () => {
+    const token = 'test-token'
+    const seen: Array<{ queryToken: string | null; authHeader: string | undefined }> = []
+    const { port, server } = await startStubServer(token, {
+      onVerify: (queryToken, authHeader) => {
+        seen.push({ queryToken, authHeader })
+      }
+    })
+    const client = new WebSocketClientTransport({
+      url: `ws://127.0.0.1:${port}`,
+      token,
+      tokenTransport: 'authorizationHeader',
+      WebSocketCtor: WSClient as unknown as typeof WebSocket
+    })
+
+    try {
+      await client.connect()
+      expect(seen[0]).toEqual({ queryToken: null, authHeader: `Bearer ${token}` })
     } finally {
       client.close()
       await new Promise<void>((r) => server.close(() => r()))

@@ -27,6 +27,7 @@ import { PerfMonitor } from './perf-monitor'
 import { setGitHubApiRecorder, setGitHubApiLoggingEnabled } from './github-recorder'
 import { PRPoller } from './pr-poller'
 import { WorktreesFSM } from './worktrees-fsm'
+import { createWorktreeContainers } from './worktree-containers'
 import { WorktreeDeletionFSM } from './worktree-deletion-fsm'
 import { PanesFSM, stripTransientTabFields } from './panes-fsm'
 import { ActivityDeriver } from './activity-deriver'
@@ -783,10 +784,14 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
   })
 }
 
+const worktreeContainers = createWorktreeContainers()
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
+  getPersistedWorktreeContainers: () => config.worktreeContainers,
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
+  getEnableWorktreeContainers: () => store.getSnapshot().state.settings.enableWorktreeContainers,
+  containers: worktreeContainers,
   onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentKind, model }) => {
     void prPoller.refreshAll()
     panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentKind, model })
@@ -977,6 +982,27 @@ store.subscribe((event) => {
     }
     saveConfig(config)
   }
+})
+
+store.subscribe((event) => {
+  if (event.type !== 'worktrees/containerUpdated') return
+  const { path, container } = event.payload
+  if (!config.worktreeContainers) config.worktreeContainers = {}
+  if (container) {
+    config.worktreeContainers[path] = {
+      id: container.id,
+      name: container.name,
+      image: container.image,
+      workdir: container.workdir,
+      shell: container.shell
+    }
+  } else {
+    delete config.worktreeContainers[path]
+  }
+  if (Object.keys(config.worktreeContainers).length === 0) {
+    delete config.worktreeContainers
+  }
+  saveConfig(config)
 })
 
 const snoozeTimer = new SnoozeTimer(store)
@@ -1718,6 +1744,18 @@ function registerIpcHandlers(): void {
       type: 'settings/harnessMcpEnabledChanged',
       payload: config.harnessMcpEnabled !== false
     })
+    return true
+  })
+
+  transport.onRequest('config:setEnableWorktreeContainers', (_ctx, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') return false
+    if (enabled) {
+      config.enableWorktreeContainers = true
+    } else {
+      delete config.enableWorktreeContainers
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/enableWorktreeContainersChanged', payload: enabled })
     return true
   })
 

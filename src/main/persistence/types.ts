@@ -21,6 +21,14 @@ export interface BackendConnection {
   initials?: string
 }
 
+export interface PersistedWorktreeContainer {
+  id?: string
+  name: string
+  image: string
+  workdir: string
+  shell: string
+}
+
 export interface Config {
   schemaVersion?: number
   windowBounds: { x: number; y: number; width: number; height: number } | null
@@ -51,8 +59,10 @@ export interface Config {
   worktreeBase?: 'remote' | 'local'
   mergeStrategy?: 'squash' | 'merge-commit' | 'fast-forward'
   worktreeDetail?: 'diff' | 'age' | 'pr' | 'none'
+  enableWorktreeContainers?: boolean
   worktreeSetupCommand?: string
   worktreeTeardownCommand?: string
+  worktreeContainers?: Record<string, PersistedWorktreeContainer>
   locallyMerged?: Record<string, string>
   nameClaudeSessions?: boolean
   onboarding?: {
@@ -76,9 +86,6 @@ export interface Config {
   browserToolsMode?: 'view' | 'full'
   defaultClaudeTabType?: 'xterm' | 'json'
   chatPromotionDismissed?: boolean
-  autoApprovePermissions?: boolean
-  autoApproveSteerInstructions?: string
-  useSystemClaudeForJsonMode?: boolean
   jsonModeChatDensity?: 'compact' | 'comfy'
   uiScale?: 'x-small' | 'small' | 'medium' | 'large' | 'x-large'
   jsonModeSendOnEnter?: boolean

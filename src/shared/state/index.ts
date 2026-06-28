@@ -5,7 +5,7 @@
 // sides is what makes them stay in sync — the renderer never holds a
 // local copy of anything in here.
 //
-// Adding a new piece of shared state follows the checklist in CLAUDE.md;
+// Adding a new piece of shared state follows the checklist in AGENTS.md;
 // see "Adding a new piece of shared state — the checklist" for the
 // pattern. Don't shortcut it with a useState in App.tsx unless the
 // value is genuinely per-client (focus, modal visibility, sidebar
@@ -111,6 +111,8 @@ export type {
   WorktreesState,
   WorktreesEvent,
   Worktree,
+  WorktreeContainerMetadata,
+  WorktreeContainerStatus,
   PendingWorktree,
   PendingStatus
 } from './worktrees'

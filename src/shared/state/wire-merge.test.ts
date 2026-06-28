@@ -8,7 +8,7 @@ import {
 import { EMPTY_CUSTOM_THEMES } from './settings'
 
 describe('mergeWireSnapshot', () => {
-  it('fills in a recently-added field missing from an older servers settings', () => {
+  it('fills in a recently-added field missing from older server settings', () => {
     // Repro of the v2.9.3 server skew: commit 99262b2 added
     // `customThemes`, so a v2.9.3 snapshot's `settings` object lacks the
     // field. A top-level shallow merge would clobber initial.settings
@@ -27,6 +27,17 @@ describe('mergeWireSnapshot', () => {
     expect(merged.settings.themeMode).toBe('system')
     expect(merged.settings.themeLight).toBe('solarized-light')
     expect(merged.settings.themeDark).toBe('dark')
+  })
+
+  it('backfills missing enableWorktreeContainers from older servers settings', () => {
+    const wire: WireSnapshotState = {
+      settings: {
+        themeMode: 'dark'
+      }
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.enableWorktreeContainers).toBe(false)
+    expect(merged.settings.themeMode).toBe('dark')
   })
 
   it('fills in an entirely-missing slice from initialState', () => {

@@ -129,8 +129,22 @@ export class WebSocketClientTransport implements ClientTransport {
   private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = new URL(this.opts.url)
-      url.searchParams.set('token', this.opts.token)
-      const ws = new this.WebSocketCtor(url.toString())
+      let ws: WebSocket
+      if (this.opts.tokenTransport === 'authorizationHeader') {
+        const WebSocketCtor = this.WebSocketCtor as unknown as {
+          new (
+            url: string,
+            protocols: string | string[] | undefined,
+            options: { headers: Record<string, string> }
+          ): WebSocket
+        }
+        ws = new WebSocketCtor(url.toString(), undefined, {
+          headers: { Authorization: `Bearer ${this.opts.token}` }
+        })
+      } else {
+        url.searchParams.set('token', this.opts.token)
+        ws = new this.WebSocketCtor(url.toString())
+      }
       this.ws = ws
 
       let opened = false

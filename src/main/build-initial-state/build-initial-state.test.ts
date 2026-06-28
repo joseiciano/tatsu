@@ -8,12 +8,12 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { buildInitialAppState } from '.'
+import { buildInitialAppState, hydratePersistedWorktreeContainers } from '.'
 import type { Config } from '../persistence'
 import { initialPRs } from '../../shared/state/prs'
 import { initialOnboarding } from '../../shared/state/onboarding'
 import { initialHooks } from '../../shared/state/hooks'
-import { initialWorktrees } from '../../shared/state/worktrees'
+import { initialWorktrees, type Worktree } from '../../shared/state/worktrees'
 import { initialTerminals } from '../../shared/state/terminals'
 import { initialUpdater } from '../../shared/state/updater'
 import { initialRepoConfigs } from '../../shared/state/repo-configs'
@@ -75,6 +75,54 @@ describe('buildInitialAppState', () => {
     expect(result.settings.themeLight).toBe('solarized-light')
     expect(result.settings.hasGithubToken).toBe(true)
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
+  })
+
+
+  it('hydrates enableWorktreeContainers with strict true semantics', () => {
+    expect(
+      buildInitialAppState({ ...emptyConfig, enableWorktreeContainers: true }, { hasGithubToken: false })
+        .settings.enableWorktreeContainers
+    ).toBe(true)
+    expect(
+      buildInitialAppState({ ...emptyConfig, enableWorktreeContainers: false }, { hasGithubToken: false })
+        .settings.enableWorktreeContainers
+    ).toBe(false)
+    expect(
+      buildInitialAppState(emptyConfig, { hasGithubToken: false }).settings.enableWorktreeContainers
+    ).toBe(false)
+  })
+
+  it('hydrates persisted container metadata before Docker status is known', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], {
+      '/tmp/wt/a': {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+        workdir: '/workspace',
+        shell: '/bin/bash'
+      }
+    })
+
+    expect(result[0]).not.toBe(worktree)
+    expect(result[0].container).toEqual({
+      id: 'abc123',
+      name: 'harness-repo-feature-a',
+      image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+      workdir: '/workspace',
+      shell: '/bin/bash',
+      status: 'starting',
+      error: 'Container status has not been checked yet.'
+    })
   })
 
 })

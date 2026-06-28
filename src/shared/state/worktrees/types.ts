@@ -1,3 +1,29 @@
+/** Lifecycle status of a companion Docker container for a worktree.
+ *  - `starting`: container created but status not yet verified (e.g. on boot recovery).
+ *  - `running`: container is up and accepting `docker exec`.
+ *  - `stopped`: container exists but is not running.
+ *  - `error`: container creation failed or setup failed inside the container. */
+export type WorktreeContainerStatus = 'starting' | 'running' | 'stopped' | 'error'
+
+/** Metadata for a worktree's companion Docker container. Stored in the
+ *  worktrees slice and persisted to `config.worktreeContainers` on change. */
+export interface WorktreeContainerMetadata {
+  /** Docker container ID (from `docker run` output). */
+  id: string
+  /** Human-readable container name (format: `tatsu-wt-<basename>-<short-hash>`). */
+  name: string
+  /** Docker image used to create the container. */
+  image: string
+  /** Working directory inside the container. */
+  workdir: string
+  /** Shell used for `docker exec` commands. */
+  shell: string
+  /** Current lifecycle status. */
+  status: WorktreeContainerStatus
+  /** Error message when `status` is `'error'`. */
+  error?: string
+}
+
 export interface Worktree {
   path: string
   branch: string
@@ -8,6 +34,7 @@ export interface Worktree {
   createdAt: number
   /** Repo this worktree belongs to. Set after a cross-repo listWorktrees merge. */
   repoRoot: string
+  container?: WorktreeContainerMetadata
 }
 
 export type PendingStatus = 'creating' | 'setup' | 'setup-failed' | 'error'
@@ -67,6 +94,10 @@ export interface WorktreesState {
 
 export type WorktreesEvent =
   | { type: 'worktrees/listChanged'; payload: Worktree[] }
+  | {
+      type: 'worktrees/containerUpdated'
+      payload: { path: string; container?: WorktreeContainerMetadata }
+    }
   | { type: 'worktrees/reposChanged'; payload: string[] }
   | { type: 'worktrees/pendingAdded'; payload: PendingWorktree }
   | {

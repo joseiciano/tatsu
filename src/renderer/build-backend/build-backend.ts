@@ -229,6 +229,8 @@ export function buildBackend(
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
+    setEnableWorktreeContainers: (enabled: boolean) =>
+      req('config:setEnableWorktreeContainers', enabled),
     setClaudeTuiFullscreen: (enabled: boolean) => req('config:setClaudeTuiFullscreen', enabled),
     setWsTransportEnabled: (enabled: boolean) => req('config:setWsTransportEnabled', enabled),
     setWsTransportPort: (port: number) => req('config:setWsTransportPort', port),

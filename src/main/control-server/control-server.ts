@@ -3,6 +3,8 @@ import { randomBytes, randomUUID } from 'crypto'
 import { addWorktree, listWorktrees, defaultWorktreeDir, type WorktreeInfo } from '../worktree'
 import type { AgentKind } from '../../shared/state/terminals'
 import { log } from '../debug'
+import { consumeToken, createTokenBucket, type TokenBucket } from '../rate-limit'
+import { safeEqualToken } from '../ws-token'
 import {
   type BrowserQueries,
   type BrowserPerms,
@@ -11,6 +13,96 @@ import {
   type ShellQueries
 } from './types'
 import { FULL_CONTROL_BROWSER_PATHS } from './constants'
+
+const MAX_JSON_BODY_BYTES = 1024 * 1024
+const CONTROL_RATE_LIMIT_CAPACITY = 100
+const CONTROL_RATE_LIMIT_REFILL_PER_SECOND = 100
+const CONTROL_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60 * 1000
+const CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
+
+export interface ControlRateLimiterOptions {
+  capacity?: number
+  refillPerSecond?: number
+  bucketTtlMs?: number
+  sweepIntervalMs?: number
+}
+
+export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
+  const capacity = opts.capacity ?? CONTROL_RATE_LIMIT_CAPACITY
+  const refillPerSecond = opts.refillPerSecond ?? CONTROL_RATE_LIMIT_REFILL_PER_SECOND
+  const bucketTtlMs = opts.bucketTtlMs ?? CONTROL_RATE_LIMIT_BUCKET_TTL_MS
+  const sweepIntervalMs = opts.sweepIntervalMs ?? CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS
+  const buckets = new Map<string, TokenBucket>()
+  let lastSweepAt = 0
+
+  const sweep = (now = Date.now()): number => {
+    for (const [key, bucket] of buckets) {
+      if (now - bucket.updatedAt > bucketTtlMs) buckets.delete(key)
+    }
+    lastSweepAt = now
+    return buckets.size
+  }
+
+  return {
+    allow(req: IncomingMessage, now = Date.now()): boolean {
+      if (now - lastSweepAt >= sweepIntervalMs) sweep(now)
+      const key = rateLimitKeyForRequest(req)
+      let bucket = buckets.get(key)
+      if (!bucket) {
+        bucket = createTokenBucket(capacity, now)
+        buckets.set(key, bucket)
+      }
+      return consumeToken(bucket, capacity, refillPerSecond, now)
+    },
+    sweep,
+    size: () => buckets.size
+  }
+}
+
+function rateLimitKeyForRequest(req: IncomingMessage): string {
+  const terminalId = req.headers?.['x-harness-terminal-id']
+  const value = Array.isArray(terminalId) ? terminalId[0] : terminalId
+  return value || req.socket.remoteAddress || 'unknown'
+}
+
+const controlRateLimiter = createControlRateLimiter()
+
+interface HttpStatusError extends Error {
+  statusCode: number
+}
+
+function isHttpStatusError(err: unknown): err is HttpStatusError {
+  return err instanceof Error && typeof (err as { statusCode?: unknown }).statusCode === 'number'
+}
+
+function httpStatusError(statusCode: number, message: string): HttpStatusError {
+  const err = new Error(message) as HttpStatusError
+  err.statusCode = statusCode
+  return err
+}
+
+function allowControlRequest(req: IncomingMessage): boolean {
+  return controlRateLimiter.allow(req)
+}
+
+export function validateBrowserNavigationUrl(raw: string): { url: string } | { error: string } {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return { error: 'url must be absolute' }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { error: 'url must use http or https' }
+  }
+  return { url: parsed.toString() }
+}
+
+export function parseCreateBrowserTabUrl(body: Record<string, unknown>): { url: string } | { error: string } {
+  const nextUrl = typeof body.url === 'string' ? body.url.trim() : ''
+  if (!nextUrl) return { error: 'url required' }
+  return validateBrowserNavigationUrl(nextUrl)
+}
 
 export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
@@ -37,6 +129,10 @@ export function startControlServer(deps: ControlServerDeps): Promise<void> {
       handleRequest(req, res, token, deps).catch((err) => {
         log('control', 'handler threw', err instanceof Error ? err.message : String(err))
         if (!res.headersSent) {
+          if (isHttpStatusError(err)) {
+            sendJson(res, err.statusCode, { error: err.message })
+            return
+          }
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
         }
@@ -75,10 +171,14 @@ async function handleRequest(
   deps: ControlServerDeps
 ): Promise<void> {
   const auth = req.headers.authorization
-  if (auth !== 'Bearer ' + token) {
+  if (!safeEqualToken(auth, 'Bearer ' + token)) {
     res.writeHead(401)
     res.end('unauthorized')
     return
+  }
+
+  if (!allowControlRequest(req)) {
+    return sendJson(res, 429, { error: 'rate limit exceeded' })
   }
 
   const url = new URL(req.url || '/', 'http://127.0.0.1')
@@ -252,8 +352,9 @@ async function handleRequest(
     }
     if (req.method === 'POST' && path === '/browser/tabs') {
       const body = await readJson(req)
-      const url = typeof body.url === 'string' ? body.url : ''
-      const created = deps.browser.createTab(callerWorktree, url)
+      const validated = parseCreateBrowserTabUrl(body)
+      if ('error' in validated) return sendJson(res, 400, { error: validated.error })
+      const created = deps.browser.createTab(callerWorktree, validated.url)
       return sendJson(res, 200, created)
     }
 
@@ -307,7 +408,9 @@ async function handleRequest(
     if (req.method === 'POST' && path === '/browser/navigate') {
       const nextUrl = String(body.url || '').trim()
       if (!nextUrl) return sendJson(res, 400, { error: 'url required' })
-      deps.browser.navigateTab(tabId, nextUrl)
+      const validated = validateBrowserNavigationUrl(nextUrl)
+      if ('error' in validated) return sendJson(res, 400, { error: validated.error })
+      deps.browser.navigateTab(tabId, validated.url)
       return sendJson(res, 200, { ok: true })
     }
     if (req.method === 'POST' && path === '/browser/back') {
@@ -468,11 +571,28 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
-function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+export function readJson(
+  req: IncomingMessage,
+  maxBodyBytes = MAX_JSON_BODY_BYTES
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
+    let done = false
+    let totalBytes = 0
     const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => chunks.push(c))
+    req.on('data', (c: Buffer) => {
+      if (done) return
+      const chunk = Buffer.isBuffer(c) ? c : Buffer.from(c)
+      totalBytes += chunk.byteLength
+      if (totalBytes > maxBodyBytes) {
+        done = true
+        reject(httpStatusError(413, `request body too large; max ${maxBodyBytes} bytes`))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on('end', () => {
+      if (done) return
       if (chunks.length === 0) return resolve({})
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8')))
@@ -480,6 +600,10 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
         reject(e)
       }
     })
-    req.on('error', reject)
+    req.on('error', (err) => {
+      if (done) return
+      done = true
+      reject(err)
+    })
   })
 }
