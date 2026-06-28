@@ -1,10 +1,12 @@
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
-import { existsSync } from 'fs'
-import { basename, dirname } from 'path'
+import { readFileSync } from 'fs'
+import { basename } from 'path'
 import { log } from '../debug'
 import type { DockerRunner, DockerRunResult, DockerRunOptions, ResolvedWorktreeContainerConfig, CreatedWorktreeContainer, WorktreeContainers } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
+
+const MAX_DOCKER_OUTPUT_BYTES = 1024 * 1024
 
 export function defaultDockerRunner(): DockerRunner {
   return {
@@ -17,28 +19,41 @@ export function defaultDockerRunner(): DockerRunner {
         })
         const stdoutChunks: Buffer[] = []
         const stderrChunks: Buffer[] = []
+        let stdoutBytes = 0
+        let stderrBytes = 0
         let settled = false
-        child.stdout?.on('data', (d: Buffer) => { stdoutChunks.push(d) })
-        child.stderr?.on('data', (d: Buffer) => { stderrChunks.push(d) })
+        const timeoutMs = opts?.timeoutMs ?? 60000
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const clearTimer = () => {
+          if (timer) clearTimeout(timer)
+        }
+        const capture = (chunks: Buffer[], bytes: number, chunk: Buffer): number => {
+          if (bytes >= MAX_DOCKER_OUTPUT_BYTES) return bytes
+          const remaining = MAX_DOCKER_OUTPUT_BYTES - bytes
+          const captured = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk
+          chunks.push(captured)
+          return bytes + captured.length
+        }
+        child.stdout?.on('data', (d: Buffer) => { stdoutBytes = capture(stdoutChunks, stdoutBytes, d); opts?.onOutput?.(d.toString()) })
+        child.stderr?.on('data', (d: Buffer) => { stderrBytes = capture(stderrChunks, stderrBytes, d); opts?.onOutput?.(d.toString()) })
         child.on('error', (err) => {
+          clearTimer()
           if (settled) return
           settled = true
           reject(err)
         })
         child.on('close', (code) => {
+          clearTimer()
           if (settled) return
           settled = true
           resolve({ stdout: Buffer.concat(stdoutChunks).toString(), stderr: Buffer.concat(stderrChunks).toString(), exitCode: code ?? -1 })
         })
-        const timeoutMs = opts?.timeoutMs ?? 60000
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
           if (settled) return
           settled = true
           try { child.kill('SIGKILL') } catch { /* ignore */ }
           reject(new Error(`Docker command timed out after ${timeoutMs}ms`))
         }, timeoutMs)
-        child.on('close', () => clearTimeout(timer))
-        child.on('error', () => clearTimeout(timer))
       })
     }
   }
@@ -51,9 +66,24 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return createHash('sha256').update(absPath).digest('hex').slice(0, 12)
   }
 
+  function getDockerfileImageId(_worktreePath: string, dockerfile: string): string {
+    const hash = createHash('sha256').update(dockerfile)
+    try {
+      hash.update('\0').update(readFileSync(dockerfile))
+    } catch {
+      hash.update('\0missing')
+    }
+    return hash.digest('hex').slice(0, 12)
+  }
+
+  function normalizeMountTarget(target: string): string {
+    return target.length > 1 ? target.replace(/\/+$/g, '') : target
+  }
+
   function sanitizeContainerName(input: string): string {
     const base = basename(input) || 'wt'
-    return base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    const sanitized = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    return sanitized || 'wt'
   }
 
   function makeContainerName(worktreePath: string): string {
@@ -65,8 +95,16 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return `${prefix}${base.slice(0, maxBase)}${suffix}`
   }
 
+  function escapeMountValue(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/=/g, '\\=')
+  }
+
+  function bindMountArg(source: string, target: string): string {
+    return `type=bind,source=${escapeMountValue(source)},target=${escapeMountValue(target)}`
+  }
+
   function validateLabelValue(value: string): string {
-    if (value.length > 4096) {
+    if (Buffer.byteLength(value, 'utf8') > 4096) {
       throw new Error('Label value exceeds 4096 byte limit')
     }
     if (value.includes('\0') || value.includes('\n') || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
@@ -78,10 +116,17 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
   function sanitizeStderr(stderr: string): string {
     const truncated = stderr.length > 500 ? stderr.slice(0, 500) + '...(truncated)' : stderr
     return truncated
-      .replace(/\b(eyJ[A-Za-z0-9+/=]+)\b/g, '[redacted]')
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/g, 'Bearer [redacted]')
       .replace(/\b(ghp_[A-Za-z0-9]{36})\b/g, '[redacted]')
-      .replace(/\b(sk-[A-Za-z0-9]{48})\b/g, '[redacted]')
+      .replace(/\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,})\b/g, '[redacted]')
       .replace(/\b(AKIA[0-9A-Z]{16})\b/g, '[redacted]')
+      .replace(/\bxox[abprs]-[A-Za-z0-9-]+\b/g, '[redacted]')
+      .replace(/\bAIza[0-9A-Za-z_-]{10,}\b/g, '[redacted]')
+      .replace(/(\bpassword=)[^\s]+/gi, '$1[redacted]')
+  }
+
+  function isNoSuchContainer(stderr: string): boolean {
+    return /no such container/i.test(stderr)
   }
 
   let dockerAvailableCache: { ok: boolean; error?: string; ts: number } | null = null
@@ -94,22 +139,28 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     try {
       const result = await docker.run(['version', '--format', 'json'], { timeoutMs: 10000 })
       if (result.exitCode !== 0) {
-        return { ok: false, error: `Docker daemon unavailable: ${result.stderr || 'unknown error'}` }
+        const failure = { ok: false, error: `Docker daemon unavailable: ${result.stderr || 'unknown error'}` }
+        dockerAvailableCache = { ...failure, ts: Date.now() }
+        return failure
       }
       try {
         const parsed = JSON.parse(result.stdout)
         if (!parsed.Server) {
-          return { ok: false, error: 'Docker daemon unavailable: Server section missing from docker version output' }
+          const failure = { ok: false, error: 'Docker daemon unavailable: Server section missing from docker version output' }
+          dockerAvailableCache = { ...failure, ts: Date.now() }
+          return failure
         }
       } catch {
-        return { ok: false, error: 'Docker daemon unavailable: unable to parse docker version output' }
+        const failure = { ok: false, error: 'Docker daemon unavailable: unable to parse docker version output' }
+        dockerAvailableCache = { ...failure, ts: Date.now() }
+        return failure
       }
       dockerAvailableCache = { ok: true, ts: Date.now() }
       return { ok: true }
     } catch (err) {
       const e = err as Error & { code?: string }
       if (e.code === 'ENOENT') {
-        const result = { ok: false, error: 'Docker CLI not found. Install Docker to use worktree containers.' }
+        const result = { ok: false, error: 'Docker CLI not found. Install Docker or ensure it is on your PATH.' }
         dockerAvailableCache = { ...result, ts: Date.now() }
         return result
       }
@@ -119,25 +170,29 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     }
   }
 
-  function resolveContainerConfig(_repoRoot: string, worktreePath: string, repoConfig?: RepoContainerConfig): ResolvedWorktreeContainerConfig {
+  function resolveContainerConfig(repoRoot: string, worktreePath: string, repoConfig?: RepoContainerConfig): ResolvedWorktreeContainerConfig {
+    const workdir = repoConfig?.workdir || '/workspace'
+    const worktreeMountTarget = normalizeMountTarget(workdir)
     const volumes: Array<{ source: string; target: string }> = [
-      { source: worktreePath, target: repoConfig?.workdir || '/workspace' }
+      { source: worktreePath, target: workdir }
     ]
     const harnessStatusDir = '/tmp/harness-status'
-    if (existsSync(harnessStatusDir)) {
-      volumes.push({ source: harnessStatusDir, target: harnessStatusDir })
-    }
+    volumes.push({ source: harnessStatusDir, target: harnessStatusDir })
     if (repoConfig?.volumes) {
       for (const vol of repoConfig.volumes) {
+        if (normalizeMountTarget(vol.target) === worktreeMountTarget) {
+          throw new Error(`Volume target ${vol.target} conflicts with worktree mount ${workdir}`)
+        }
         volumes.push(vol)
       }
     }
     const dockerfile = repoConfig?.dockerfile
-    const image = dockerfile ? `tatsu-worktree:${getWorktreeId(worktreePath)}` : (repoConfig?.image || 'node:20-alpine')
+    const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(worktreePath, dockerfile)}` : (repoConfig?.image || 'node:20-alpine')
     return {
       image,
       ...(dockerfile ? { dockerfile } : {}),
-      workdir: repoConfig?.workdir || '/workspace',
+      ...(dockerfile ? { buildContext: repoConfig?.buildContext || repoRoot } : {}),
+      workdir,
       shell: repoConfig?.shell || '/bin/sh',
       env: repoConfig?.env || {},
       ports: repoConfig?.ports || [],
@@ -148,8 +203,13 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
   async function ensureImage(config: ResolvedWorktreeContainerConfig): Promise<void> {
     const image = config.image
     if (config.dockerfile) {
+      const inspectResult = await docker.run(['inspect', '--type=image', image]).catch((err) => ({ stdout: '', stderr: (err as Error).message, exitCode: 1 }))
+      if (inspectResult.exitCode === 0) {
+        log('worktree-containers', `Image ${image} already exists locally`)
+        return
+      }
       log('worktree-containers', `Building Dockerfile ${config.dockerfile} as ${image}`)
-      const result = await docker.run(['build', '-f', config.dockerfile, '-t', image, ...(config.workdir ? ['--build-arg', `WORKDIR=${config.workdir}`] : []), buildContextFromDockerfile(config.dockerfile)], { timeoutMs: 600000 })
+      const result = await docker.run(['build', '-f', config.dockerfile, '-t', image, '--build-arg', `WORKDIR=${config.workdir}`, config.buildContext || '.'], { timeoutMs: 600000 })
       if (result.exitCode !== 0) throw new Error(`Docker build failed: ${sanitizeStderr(result.stderr)}`)
       return
     }
@@ -163,8 +223,14 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     if (pullResult.exitCode !== 0) throw new Error(`Docker pull failed for ${image}: ${sanitizeStderr(pullResult.stderr)}`)
   }
 
-  function buildContextFromDockerfile(dockerfilePath: string): string {
-    return dirname(dockerfilePath) || '.'
+  async function removeExistingContainerByName(name: string): Promise<void> {
+    const psResult = await docker.run(['ps', '-aq', '--filter', `name=^/${name}$`], { timeoutMs: 30000 })
+    if (psResult.exitCode !== 0) throw new Error(`Docker container lookup failed: ${sanitizeStderr(psResult.stderr)}`)
+    const ids = psResult.stdout.split(/\s+/).map((id) => id.trim()).filter(Boolean)
+    for (const id of ids) {
+      const rmResult = await docker.run(['rm', '-f', id], { timeoutMs: 30000 })
+      if (rmResult.exitCode !== 0) throw new Error(`Failed to remove existing container ${id}: ${sanitizeStderr(rmResult.stderr)}`)
+    }
   }
 
   async function createForWorktree(repoRoot: string, worktreePath: string, config: ResolvedWorktreeContainerConfig): Promise<CreatedWorktreeContainer> {
@@ -175,17 +241,18 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     await ensureImage(config)
     const id = getWorktreeId(worktreePath)
     const name = makeContainerName(worktreePath)
+    await removeExistingContainerByName(name)
     const args = [
       'run', '-d', '--name', name,
       '--label', `tatsu.worktree.id=${validateLabelValue(id)}`,
       '--label', `tatsu.worktree.path=${validateLabelValue(worktreePath)}`,
       '--label', `tatsu.repo.root=${validateLabelValue(repoRoot)}`,
       '-w', config.workdir,
-      ...config.volumes.flatMap((v) => ['-v', `${v.source}:${v.target}`]),
+      ...config.volumes.flatMap((v) => ['--mount', bindMountArg(v.source, v.target)]),
       ...Object.entries(config.env).flatMap(([k, v]) => ['-e', `${k}=${v}`]),
       ...config.ports.flatMap((p) => ['-p', `127.0.0.1:${p}:${p}`]),
       config.image,
-      'sh', '-c', 'while true; do sleep 3600; done'
+      'tail', '-f', '/dev/null'
     ]
     log('worktree-containers', `Creating container for ${worktreePath}: ${name}`)
     const result = await docker.run(args)
@@ -194,7 +261,7 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return { id: containerId, name, image: config.image, workdir: config.workdir, shell: config.shell, status: 'running' }
   }
 
-  async function execInContainer(containerId: string, command: string, opts?: { workdir?: string; env?: Record<string, string>; shell?: string }): Promise<DockerRunResult> {
+  async function execInContainer(containerId: string, command: string, opts?: { workdir?: string; env?: Record<string, string>; shell?: string; onOutput?: (chunk: string) => void }): Promise<DockerRunResult> {
     const shell = opts?.shell || '/bin/sh'
     const args = ['exec']
     if (opts?.workdir) args.push('--workdir', opts.workdir)
@@ -205,19 +272,41 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
         args.push('-e', `${k}=${v}`)
       }
     }
-    args.push(containerId, shell, '-lc', command)
-    return docker.run(args, { timeoutMs: 300000 })
+    args.push(containerId, ...commandArgsForShell(shell, command))
+    return docker.run(args, { timeoutMs: 300000, onOutput: opts?.onOutput })
+  }
+
+  function commandArgsForShell(shell: string, command: string): string[] {
+    const shellName = basename(shell).toLowerCase()
+    if (shellName === 'fish' || shellName === 'nu' || shellName === 'nushell') return [shell, '-c', command]
+    if (shellName === 'pwsh' || shellName === 'powershell' || shellName === 'powershell.exe' || shellName === 'pwsh.exe') {
+      return [shell, '-NoLogo', '-NoProfile', '-Command', command]
+    }
+    return [shell, '-c', command]
+  }
+
+  async function isContainerRunning(containerId: string): Promise<boolean> {
+    const result = await docker.run(['inspect', '--format', '{{.State.Running}}', containerId], { timeoutMs: 30000 })
+    if (result.exitCode !== 0) return false
+    return result.stdout.trim() === 'true'
   }
 
   async function stopContainer(containerId: string): Promise<void> {
     log('worktree-containers', `Stopping container ${containerId}`)
-    await docker.run(['stop', containerId], { timeoutMs: 30000 }).catch((err) => {
-      log('worktree-containers', `Failed to stop container ${containerId}:`, err instanceof Error ? err.message : err)
-    })
-    await docker.run(['rm', '-f', containerId], { timeoutMs: 30000 }).catch((err) => {
-      log('worktree-containers', `Failed to remove container ${containerId}:`, err instanceof Error ? err.message : err)
-    })
+    try {
+      const stopResult = await docker.run(['stop', containerId], { timeoutMs: 30000 })
+      if (stopResult.exitCode !== 0) {
+        log('worktree-containers', `docker stop failed for ${containerId}; trying rm -f`, sanitizeStderr(stopResult.stderr))
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      log('worktree-containers', `docker stop rejected for ${containerId}; trying rm -f`, sanitizeStderr(message))
+    }
+    const rmResult = await docker.run(['rm', '-f', containerId], { timeoutMs: 30000 })
+    if (rmResult.exitCode !== 0 && !isNoSuchContainer(rmResult.stderr)) {
+      throw new Error(`Failed to remove container ${containerId}: ${sanitizeStderr(rmResult.stderr)}`)
+    }
   }
 
-  return { checkDockerAvailable, resolveContainerConfig, ensureImage, createForWorktree, execInContainer, stopContainer }
+  return { checkDockerAvailable, resolveContainerConfig, ensureImage, createForWorktree, execInContainer, isContainerRunning, stopContainer }
 }

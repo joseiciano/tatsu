@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'fs'
-import { join, resolve, sep } from 'path'
+import { isAbsolute, join, resolve, sep } from 'path'
 import { log } from '../debug'
 import { DEFAULT_HIDDEN_RIGHT_PANELS, type RepoConfig } from '../../shared/state/repo-configs'
 
@@ -12,7 +12,7 @@ function configPath(repoRoot: string): string {
   return join(repoRoot, REPO_CONFIG_FILENAME)
 }
 
-const UNSAFE_VOLUME_TARGETS = new Set(['/', '/workspace', '/proc', '/sys', '/dev', '/etc'])
+const UNSAFE_VOLUME_TARGETS = new Set(['/', '/workspace', '/proc', '/sys', '/dev', '/etc', '/tmp/harness-status'])
 
 const UNSAFE_VOLUME_SOURCES = new Set([
   '/', '/proc', '/sys', '/dev', '/etc', '/boot', '/var/run/docker.sock', '/run/docker.sock'
@@ -22,6 +22,7 @@ function hasUnsafePathPrefix(resolved: string): boolean {
   if (resolved.startsWith('/proc/') || resolved === '/proc') return true
   if (resolved.startsWith('/sys/') || resolved === '/sys') return true
   if (resolved.startsWith('/dev/') || resolved === '/dev') return true
+  if (resolved.startsWith('/private/etc/') || resolved === '/private/etc') return true
   if (resolved.endsWith('/docker.sock') || resolved === '/docker.sock') return true
   return false
 }
@@ -42,6 +43,38 @@ function isUnsafeVolumeSource(source: string): boolean {
   return false
 }
 
+const SAFE_CONTAINER_IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/
+
+function validateContainerImage(image: string): string | undefined {
+  if (!SAFE_CONTAINER_IMAGE_PATTERN.test(image.trim())) {
+    return `Invalid container image: ${image}`
+  }
+  return undefined
+}
+
+function realpathIfExists(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException
+    if (e.code !== 'ENOENT') throw err
+    return path
+  }
+}
+
+function resolveRepoPath(repoRoot: string | undefined, value: string, label: string): { valid: true; path: string } | { valid: false; error: string } {
+  let path = value.trim()
+  if (repoRoot && !isAbsolute(path)) path = join(repoRoot, path)
+  if (!repoRoot) return { valid: true, path }
+
+  const resolvedRepoRoot = realpathIfExists(repoRoot)
+  const resolvedPath = realpathIfExists(path)
+  if (!resolvedPath.startsWith(resolvedRepoRoot + sep) && resolvedPath !== resolvedRepoRoot && !resolvedPath.startsWith(repoRoot + sep) && resolvedPath !== repoRoot) {
+    return { valid: false, error: `${label} path escapes repo root: ${resolvedPath}` }
+  }
+  return { valid: true, path: resolvedPath }
+}
+
 function validateContainerConfig(container: unknown, repoRoot?: string): { valid: true; config: NonNullable<RepoConfig['container']> } | { valid: false; error: string } {
   if (!container || typeof container !== 'object') return { valid: false, error: 'Container config must be an object' }
   const c = container as Record<string, unknown>
@@ -49,19 +82,31 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
   const disabled = c.disabled === true
   const hasImage = typeof c.image === 'string' && c.image.trim().length > 0
   const hasDockerfile = typeof c.dockerfile === 'string' && c.dockerfile.trim().length > 0
+  const hasBuildContext = typeof c.buildContext === 'string' && c.buildContext.trim().length > 0
+
+  if (hasImage) {
+    const imageError = validateContainerImage(c.image as string)
+    if (imageError) return { valid: false, error: imageError }
+  }
 
   if (disabled) {
     const result: NonNullable<RepoConfig['container']> = { disabled: true }
-    if (hasImage) result.image = c.image as string
-    if (hasDockerfile) result.dockerfile = c.dockerfile as string
+    if (hasImage) result.image = (c.image as string).trim()
+    if (hasDockerfile) {
+      const resolved = resolveRepoPath(repoRoot, c.dockerfile as string, 'Dockerfile')
+      if (!resolved.valid) return resolved
+      result.dockerfile = resolved.path
+    }
+    if (hasBuildContext) {
+      const resolved = resolveRepoPath(repoRoot, c.buildContext as string, 'Build context')
+      if (!resolved.valid) return resolved
+      result.buildContext = resolved.path
+    }
     return { valid: true, config: result }
   }
 
   if (hasImage && hasDockerfile) {
     return { valid: false, error: 'Cannot specify both image and dockerfile' }
-  }
-  if (!hasImage && !hasDockerfile) {
-    return { valid: false, error: 'Must specify either image or dockerfile' }
   }
 
   if (c.workdir !== undefined) {
@@ -100,11 +145,23 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
       if (v.source.includes(':')) {
         return { valid: false, error: `Volume source must not contain colons (Docker options not allowed): ${v.source}` }
       }
+      if (v.source.includes(',')) {
+        return { valid: false, error: `Volume source must not contain commas (Docker mount separators not allowed): ${v.source}` }
+      }
+      if (v.source.includes('=')) {
+        return { valid: false, error: `Volume source must not contain equals signs (Docker mount separators not allowed): ${v.source}` }
+      }
       if (!v.target.startsWith('/')) {
         return { valid: false, error: `Volume target must be absolute: ${v.target}` }
       }
       if (v.target.includes(':')) {
         return { valid: false, error: `Volume target must not contain colons (Docker options not allowed): ${v.target}` }
+      }
+      if (v.target.includes(',')) {
+        return { valid: false, error: `Volume target must not contain commas (Docker mount separators not allowed): ${v.target}` }
+      }
+      if (v.target.includes('=')) {
+        return { valid: false, error: `Volume target must not contain equals signs (Docker mount separators not allowed): ${v.target}` }
       }
       if (isUnsafeVolumeTarget(v.target as string)) {
         return { valid: false, error: `Unsafe volume target: ${v.target}` }
@@ -113,8 +170,8 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
   }
 
   if (c.ports !== undefined) {
-    if (!Array.isArray(c.ports) || !c.ports.every((p) => typeof p === 'number' && Number.isInteger(p) && p > 0)) {
-      return { valid: false, error: 'ports must be an array of positive integers' }
+    if (!Array.isArray(c.ports) || !c.ports.every((p) => typeof p === 'number' && Number.isInteger(p) && p > 0 && p <= 65535)) {
+      return { valid: false, error: 'ports must be an array of integers between 1 and 65535' }
     }
   }
 
@@ -122,17 +179,21 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
     return { valid: false, error: 'shell must be a string' }
   }
 
+  if (c.buildContext !== undefined && !hasBuildContext) {
+    return { valid: false, error: 'buildContext must be a non-empty string' }
+  }
+
   const result: NonNullable<RepoConfig['container']> = {}
-  if (hasImage) result.image = c.image as string
+  if (hasImage) result.image = (c.image as string).trim()
   if (hasDockerfile) {
-    let dockerfile = (c.dockerfile as string).trim()
-    if (repoRoot && !dockerfile.startsWith('/')) {
-      dockerfile = join(repoRoot, dockerfile)
-      if (!dockerfile.startsWith(repoRoot + sep) && dockerfile !== repoRoot) {
-        return { valid: false, error: `Dockerfile path escapes repo root: ${dockerfile}` }
-      }
-    }
-    result.dockerfile = dockerfile
+    const resolved = resolveRepoPath(repoRoot, c.dockerfile as string, 'Dockerfile')
+    if (!resolved.valid) return resolved
+    result.dockerfile = resolved.path
+  }
+  if (hasBuildContext) {
+    const resolved = resolveRepoPath(repoRoot, c.buildContext as string, 'Build context')
+    if (!resolved.valid) return resolved
+    result.buildContext = resolved.path
   }
   if (c.workdir) result.workdir = c.workdir as string
   if (c.shell) result.shell = c.shell as string
@@ -144,16 +205,13 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
       let source = v.source
       if (repoRoot && !source.startsWith('/')) {
         source = join(repoRoot, source)
-        try {
-          source = realpathSync(source)
-        } catch (err) {
-          const e = err as NodeJS.ErrnoException
-          if (e.code !== 'ENOENT') throw err
-        }
-        if (!source.startsWith(repoRoot + sep) && source !== repoRoot) {
+        source = realpathIfExists(source)
+        const resolvedRepoRoot = realpathIfExists(repoRoot)
+        if (!source.startsWith(resolvedRepoRoot + sep) && source !== resolvedRepoRoot && !source.startsWith(repoRoot + sep) && source !== repoRoot) {
           return { valid: false, error: `Volume source escapes repo root: ${source}` }
         }
-      } else if (source.startsWith('/')) {
+      } else if (isAbsolute(source)) {
+        source = realpathIfExists(source)
         if (isUnsafeVolumeSource(source)) {
           return { valid: false, error: `Unsafe volume source path: ${source}` }
         }

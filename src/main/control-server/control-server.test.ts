@@ -1,6 +1,7 @@
 import { Readable } from 'stream'
+import type { IncomingMessage } from 'http'
 import { describe, it, expect } from 'vitest'
-import { parseAgentKind, parseCreateBrowserTabUrl, readJson, validateBrowserNavigationUrl } from '.'
+import { createControlRateLimiter, parseAgentKind, parseCreateBrowserTabUrl, readJson, validateBrowserNavigationUrl } from '.'
 
 describe('parseAgentKind', () => {
   it('returns undefined for missing/empty values', () => {
@@ -45,6 +46,39 @@ describe('readJson', () => {
 
   it('accepts bodies at the configured byte limit', async () => {
     await expect(readJson(requestWithBody('{\"x\":1}'), 7)).resolves.toEqual({ x: 1 })
+  })
+})
+
+function requestFrom(remoteAddress: string, terminalId?: string): IncomingMessage {
+  return {
+    headers: terminalId ? { 'x-harness-terminal-id': terminalId } : {},
+    socket: { remoteAddress }
+  } as unknown as IncomingMessage
+}
+
+describe('createControlRateLimiter', () => {
+  it('sweeps stale per-address buckets', () => {
+    const limiter = createControlRateLimiter({
+      capacity: 2,
+      refillPerSecond: 1,
+      bucketTtlMs: 100,
+      sweepIntervalMs: 50
+    })
+
+    expect(limiter.allow(requestFrom('127.0.0.2'), 0)).toBe(true)
+    expect(limiter.allow(requestFrom('127.0.0.3'), 0)).toBe(true)
+    expect(limiter.size()).toBe(2)
+
+    expect(limiter.allow(requestFrom('127.0.0.4'), 151)).toBe(true)
+    expect(limiter.size()).toBe(1)
+  })
+
+  it('uses terminal ID header before remote address', () => {
+    const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0 })
+
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(false)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-b'), 0)).toBe(true)
   })
 })
 

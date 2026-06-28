@@ -69,7 +69,7 @@ Labels are authoritative. Name is for humans.
 Containers start detached with idle entrypoint:
 
 ```text
-sh -c 'while true; do sleep 3600; done'
+tail -f /dev/null
 ```
 
 Terminals then use `docker exec -it`.
@@ -82,6 +82,7 @@ Add optional `container` object to `.harness.json` through `RepoConfig`:
 type RepoContainerConfig = {
   image?: string
   dockerfile?: string
+  buildContext?: string
   workdir?: string
   shell?: string
   env?: Record<string, string>
@@ -291,6 +292,7 @@ type DockerRunner = {
     cwd?: string
     env?: Record<string, string>
     timeoutMs?: number
+    onOutput?: (chunk: string) => void
   }): Promise<{ stdout: string; stderr: string; exitCode: number }>
 }
 ```
@@ -299,7 +301,7 @@ Rules:
 
 - Never invoke shell for Docker commands; pass argv arrays.
 - Classify spawn `ENOENT` as Docker CLI missing.
-- Classify `docker info` nonzero as Docker daemon unavailable.
+- Classify `docker version` nonzero as Docker daemon unavailable.
 - Preserve stdout/stderr for setup logs and pending error messages.
 - Tests inject fake runner; no tests require real Docker daemon.
 
@@ -370,7 +372,7 @@ hook files through `/workspace` mount.
 Mount status directory into containers:
 
 ```text
--v /tmp/harness-status:/tmp/harness-status
+--mount type=bind,source=/tmp/harness-status,target=/tmp/harness-status
 ```
 
 Agent hooks continue writing NDJSON to `/tmp/harness-status/<terminal-id>.ndjson`.
@@ -419,18 +421,18 @@ docker run -d \
   --label tatsu.worktree.path=<path> \
   --label tatsu.repo.root=<repo-root> \
   --workdir /workspace \
-  -v <host-worktree>:/workspace \
+  --mount type=bind,source=<host-worktree>,target=/workspace \
   <env args> \
   <port args> \
   <image> \
-  sh -c 'while true; do sleep 3600; done'
+  tail -f /dev/null
 ```
 
 Dockerfile path:
 
 ```text
-docker build -t <tag> -f <dockerfile> <context>
-docker run ... <tag> sh -c 'while true; do sleep 3600; done'
+docker build -t <tag> -f <dockerfile> --build-arg WORKDIR=<workdir> <context>
+docker run ... <tag> tail -f /dev/null
 ```
 
 For image configs, run `docker inspect --type=image <image>` first. If missing, run
@@ -445,7 +447,7 @@ docker exec -it --workdir /workspace <container> <shell>
 Non-interactive setup:
 
 ```text
-docker exec --workdir /workspace <container> <shell> -lc <setup-command>
+docker exec --workdir /workspace <container> <shell> -c <setup-command>
 ```
 
 ## Port strategy

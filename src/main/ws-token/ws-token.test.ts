@@ -41,6 +41,14 @@ describe('ws-token', () => {
     expect(safeEqualToken('secret', 'other')).toBe(false)
   })
 
+  it('returns false for undefined provided token', () => {
+    expect(safeEqualToken(undefined, 'secret')).toBe(false)
+  })
+
+  it('returns false for null provided token', () => {
+    expect(safeEqualToken(null, 'secret')).toBe(false)
+  })
+
   it('returns false instead of throwing for different token lengths', () => {
     expect(safeEqualToken('secret', 'secrets')).toBe(false)
   })

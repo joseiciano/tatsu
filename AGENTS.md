@@ -6,7 +6,7 @@ It documents the project structure and coding conventions.
 
 ## What this app is
 
-Tatsu is an Electron App that manages multiple Agentic CLI instances across git worktrees. The user is able to run multiple harness sessions in parallel sessions. Tatsu gives the user a single window to control multiple worktrees. Tatsu also supports the following: sidebar showing worktrees, terminal tabs per worktree, changed-files panel, PR status, hotkey navigation.
+Tatsu is an Electron App that manages multiple Agentic CLI instances across git worktrees. The user is able to run multiple harness sessions in parallel. Tatsu gives the user a single window to control multiple worktrees. Tatsu also supports the following: sidebar showing worktrees, terminal tabs per worktree, changed-files panel, PR status, hotkey navigation.
 
 **Currently Supported Operating Systems**:
 - macOS desktop
@@ -200,7 +200,7 @@ src/
 │   ├── repo-config/               # Per-repo .harness.json read/write
 │   ├── persistence/               # JSON config at userData/config.json
 │   ├── secrets/                   # safeStorage-encrypted secrets
-│   ├── control-server/            # Headless control server, rate limits, URL validation
+│   ├── control-server/            # Headless control server, rate limits, URL validation, timing-safe auth, body size limits
 │   ├── web-client-server/         # Web client serving for headless mode
 │   ├── browser-manager/           # Desktop browser pane manager
 │   ├── browser-manager-playwright/# Headless browser manager
@@ -362,8 +362,7 @@ Some main-side modules subscribe to the store and react to events:
   `main/index.ts` that listens for `worktrees/listChanged` and
   `hooks/consentChanged`, installs hooks into any new worktree if
   consent is `'accepted'`.
-- **`WorktreeDeletionFSM`** — runs the pending-deletion state machine.
-  Dispatches `worktrees/*` events.
+- **`WorktreeDeletionFSM`** — runs the pending-deletion state machine. Handles container teardown via `execInContainer`, then stops/removes the companion container and deletes the worktree. Dispatches `worktrees/*` events.
 - **`JsonClaudeStatusDeriver`** — derives chat status from PTY/tool state.
 - **`AnnouncementsPoller`** — fetches and dispatches announcement state.
 - **`AutoSleepMonitor`** — monitors user inactivity and dispatches sleep events.
@@ -475,8 +474,8 @@ Container-based worktrees (when `enableWorktreeContainers` is on) track
 container lifecycle status via `WorktreeContainerMetadata` in the worktrees
 slice. The `worktrees/containerUpdated` event updates the status
 (`starting` → `running` → `stopped`/`error`) and a store subscriber
-persists stable identity fields to `config.worktreeContainers` so
-restarts can re-associate running containers.
+persists stable identity fields to `config.worktreeContainers`; boot verifies
+persisted `starting` containers when Docker is available.
 
 ## How performance debugging works
 
@@ -546,9 +545,10 @@ hard dependency on `gh`.
 - **Worktree dep installs** — For fresh git worktrees, always run `pnpm install` once before building. 
 - **Worktree containers** — When `enableWorktreeContainers` is on (Settings →
   Experimental), new worktrees get a companion Docker container. Setup scripts
-  and terminals run inside the container via `docker exec`. Container metadata
-  is persisted to `config.worktreeContainers` so restarts can re-associate
-  running containers. Repo-level `.harness.json` can override image, dockerfile,
+  run inside the container via `docker exec`; terminal execution inside containers
+  is planned for a future phase. Container metadata is persisted to
+  `config.worktreeContainers` and verified on boot when Docker is available.
+  Repo-level `.harness.json` can override image, dockerfile, buildContext,
   volumes, env, ports, shell, workdir, and disabled. Ports bind to `127.0.0.1` only.
 - **node-pty rebuild** — `node-pty` compiles against a specific Electron version. 
   After running `pnpm pack` or `pnpm dist*`, the postdist hook runs `electron-rebuild -f -w node-pty` to 
@@ -587,7 +587,7 @@ hard dependency on `gh`.
   via `RemoteBrowserView` instead of a native overlay — live screencast
   is a follow-up.
 - **Multi-backend (Tier 1)** — 1 Electron instance can connect to 
-  to N backends (the in-process local one + remote `harness-server`
+  N backends (the in-process local one + remote `harness-server`
   instances), with a button at the end of the sidebar to swap. 
     - Full design is at `plans/tier-1-multi-backend-ux.md`. 
 - **Terminal tabs vs ACP chat tabs** — **Terminal tabs** (internally
@@ -607,7 +607,7 @@ This is how you are to behave when working on this repo.
 
 ### General Guidelines
 
-1. **Commit as you go.** All changes are to use a descriptive commit message. Do not batch multiple feature in one commit. 
+1. **Commit as you go.** All changes are to use a descriptive commit message. Do not batch multiple features in one commit. 
 
 2. **Push after every commit.** Always run `git push origin <branch>`
    immediately after a commit succeeds. 
@@ -618,7 +618,7 @@ This is how you are to behave when working on this repo.
      build alone will miss type errors.
    - `pnpm build` — catches missing imports, asset resolution, desktop bundle,
      renderer bundle, and web-client bundle issues.
-   Run `npx vitest run` too if the change could affect reducer/FSM behavior.
+   Run `pnpm test` too if the change could affect reducer/FSM behavior.
    Catch issues before the PR-time CI check (`.github/workflows/ci.yml`) does.
 
 4. **Don't add comments unless asked.** Code should explain itself; comments
@@ -641,7 +641,7 @@ This is how you are to behave when working on this repo.
    context. Don't create scratch markdown files or design docs.
 
 7. **Surface secrets concerns.** Warn the user once if they paste 
-    a token or password that is in now in conversation history
+    a token or password that is now in conversation history
     and should be rotated.
 
 8. **Don't put boxes around screenshots on the marketing site.** No
@@ -657,7 +657,7 @@ This is how you are to behave when working on this repo.
    with the following signature:
 
    ```
-   _Comment left on behalf of @<github-username> by <agent-name> via [Harness](https://github.com/frenchie4111/harness)._
+   _Comment left on behalf of @<github-username> by <agent-name> via [Tatsu](https://github.com/frenchie4111/harness)._
    ```
 
    - `<github-username>` is the user's GitHub login — run
@@ -672,7 +672,13 @@ This is how you are to behave when working on this repo.
    closing PRs, force-pushing, deleting branches or releases, etc. When in
    doubt, ask.
 
-10. **Use the canonical text and icon sizes so the UI scales together.**
+10. **When pushing cleanup commits to contributor PRs, push to the PR head fork.**
+   After `gh pr checkout <number>`, inspect the tracking branch before pushing.
+   Use `git push <head-remote> HEAD:<head-branch>` when the PR comes from a fork.
+   Avoid `git push -u origin <branch>` in review cleanup work — it can create a
+   new branch on the upstream repo instead of updating the contributor's PR.
+
+11. **Use the canonical text and icon sizes so the UI scales together.**
     The renderer's root `html` font-size is driven by the `uiScale`
     setting, so every `rem`-based size (Tailwind `text-*` and the `w-N` /
     `h-N` grid) shifts in lockstep. Inline pixel sizes do NOT scale and
@@ -777,7 +783,10 @@ matching the `actions/setup-node` step in the workflow.
 | `pnpm log:clear` | Clear the debug log |
 | `pnpm log:perf` | Tail the perf trace log (append-only across sessions) |
 | `pnpm log:perf:clear` | Clear the perf trace log (use before a fresh repro) |
+| `pnpm test` | Run Vitest test suite |
+| `pnpm typecheck` | Run TypeScript project-reference typecheck |
 | `pnpm build` | Build desktop bundles (main, preload, renderer) plus web client |
+| `pnpm build:headless` | Build headless server bundle |
 | `pnpm pack` | Build + package without distribution (no signing) |
 | `pnpm dist:mac` | Full signed + notarized macOS build |
 | `pnpm rebuild:dev` | Rebuild node-pty for dev Electron |

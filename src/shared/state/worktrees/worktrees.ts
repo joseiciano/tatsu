@@ -1,4 +1,10 @@
-import type { WorktreesEvent, WorktreesState } from './types'
+import type { WorktreesEvent, WorktreesState, WorktreeContainerMetadata } from './types'
+
+function containersShallowEqual(a: WorktreeContainerMetadata | undefined, b: WorktreeContainerMetadata | undefined): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.id === b.id && a.name === b.name && a.image === b.image && a.workdir === b.workdir && a.shell === b.shell && a.status === b.status && a.error === b.error
+}
 
 export function worktreesReducer(
   state: WorktreesState,
@@ -11,10 +17,11 @@ export function worktreesReducer(
       const i = state.list.findIndex((w) => w.path === event.payload.path)
       if (i === -1) return state
       const current = state.list[i]
-      const patched = event.payload.container
-        ? { ...current, container: event.payload.container }
+      const newContainer = event.payload.container
+      if (containersShallowEqual(current.container, newContainer)) return state
+      const patched = newContainer
+        ? { ...current, container: newContainer }
         : withoutContainer(current)
-      if (patched === current) return state
       return {
         ...state,
         list: [...state.list.slice(0, i), patched, ...state.list.slice(i + 1)]
@@ -37,16 +44,28 @@ export function worktreesReducer(
         ]
       }
     }
-    case 'worktrees/pendingRemoved':
-      return { ...state, pending: state.pending.filter((p) => p.id !== event.payload) }
-    case 'worktrees/pendingDeletionStarted':
+    case 'worktrees/pendingRemoved': {
+      const i = state.pending.findIndex((p) => p.id === event.payload)
+      if (i === -1) return state
+      return { ...state, pending: [...state.pending.slice(0, i), ...state.pending.slice(i + 1)] }
+    }
+    case 'worktrees/pendingDeletionStarted': {
+      const existingIndex = state.pendingDeletions.findIndex((d) => d.path === event.payload.path)
+      if (existingIndex === -1) {
+        return {
+          ...state,
+          pendingDeletions: [...state.pendingDeletions, event.payload]
+        }
+      }
       return {
         ...state,
         pendingDeletions: [
-          ...state.pendingDeletions.filter((d) => d.path !== event.payload.path),
+          ...state.pendingDeletions.slice(0, existingIndex),
+          ...state.pendingDeletions.slice(existingIndex + 1),
           event.payload
         ]
       }
+    }
     case 'worktrees/pendingDeletionUpdated': {
       const i = state.pendingDeletions.findIndex(
         (d) => d.path === event.payload.path
@@ -62,11 +81,14 @@ export function worktreesReducer(
         ]
       }
     }
-    case 'worktrees/pendingDeletionRemoved':
+    case 'worktrees/pendingDeletionRemoved': {
+      const i = state.pendingDeletions.findIndex((d) => d.path === event.payload)
+      if (i === -1) return state
       return {
         ...state,
-        pendingDeletions: state.pendingDeletions.filter((d) => d.path !== event.payload)
+        pendingDeletions: [...state.pendingDeletions.slice(0, i), ...state.pendingDeletions.slice(i + 1)]
       }
+    }
     default: {
       const _exhaustive: never = event
       void _exhaustive

@@ -17,7 +17,55 @@ import { FULL_CONTROL_BROWSER_PATHS } from './constants'
 const MAX_JSON_BODY_BYTES = 1024 * 1024
 const CONTROL_RATE_LIMIT_CAPACITY = 100
 const CONTROL_RATE_LIMIT_REFILL_PER_SECOND = 100
-const controlRateLimitBuckets = new Map<string, TokenBucket>()
+const CONTROL_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60 * 1000
+const CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
+
+export interface ControlRateLimiterOptions {
+  capacity?: number
+  refillPerSecond?: number
+  bucketTtlMs?: number
+  sweepIntervalMs?: number
+}
+
+export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
+  const capacity = opts.capacity ?? CONTROL_RATE_LIMIT_CAPACITY
+  const refillPerSecond = opts.refillPerSecond ?? CONTROL_RATE_LIMIT_REFILL_PER_SECOND
+  const bucketTtlMs = opts.bucketTtlMs ?? CONTROL_RATE_LIMIT_BUCKET_TTL_MS
+  const sweepIntervalMs = opts.sweepIntervalMs ?? CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS
+  const buckets = new Map<string, TokenBucket>()
+  let lastSweepAt = 0
+
+  const sweep = (now = Date.now()): number => {
+    for (const [key, bucket] of buckets) {
+      if (now - bucket.updatedAt > bucketTtlMs) buckets.delete(key)
+    }
+    lastSweepAt = now
+    return buckets.size
+  }
+
+  return {
+    allow(req: IncomingMessage, now = Date.now()): boolean {
+      if (now - lastSweepAt >= sweepIntervalMs) sweep(now)
+      const key = rateLimitKeyForRequest(req)
+      let bucket = buckets.get(key)
+      if (!bucket) {
+        bucket = createTokenBucket(capacity, now)
+        buckets.set(key, bucket)
+      }
+      return consumeToken(bucket, capacity, refillPerSecond, now)
+    },
+    sweep,
+    size: () => buckets.size
+  }
+}
+
+function rateLimitKeyForRequest(req: IncomingMessage): string {
+  const terminalId = req.headers?.['x-harness-terminal-id']
+  const value = Array.isArray(terminalId) ? terminalId[0] : terminalId
+  return value || req.socket.remoteAddress || 'unknown'
+}
+
+const controlRateLimiter = createControlRateLimiter()
 
 interface HttpStatusError extends Error {
   statusCode: number
@@ -34,17 +82,7 @@ function httpStatusError(statusCode: number, message: string): HttpStatusError {
 }
 
 function allowControlRequest(req: IncomingMessage): boolean {
-  const key = req.socket.remoteAddress ?? 'unknown'
-  let bucket = controlRateLimitBuckets.get(key)
-  if (!bucket) {
-    bucket = createTokenBucket(CONTROL_RATE_LIMIT_CAPACITY)
-    controlRateLimitBuckets.set(key, bucket)
-  }
-  return consumeToken(
-    bucket,
-    CONTROL_RATE_LIMIT_CAPACITY,
-    CONTROL_RATE_LIMIT_REFILL_PER_SECOND
-  )
+  return controlRateLimiter.allow(req)
 }
 
 export function validateBrowserNavigationUrl(raw: string): { url: string } | { error: string } {
