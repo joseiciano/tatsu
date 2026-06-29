@@ -14,7 +14,6 @@ export function HeaderNav() {
     { label: 'Features', href: '#features' },
     { label: 'Workflow', href: '#workflow' },
     { label: 'Download', href: '#install' },
-    { label: 'GitHub', href: 'https://github.com/frenchie4111/harness' },
   ]
 
   return (

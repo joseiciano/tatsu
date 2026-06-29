@@ -7,7 +7,7 @@ export function Install() {
             Ready to run <span className="text-[#f59e0b]">parallel agents?</span>
           </h2>
           <p className="text-[#a8a29e] mb-8 max-w-md mx-auto">
-            Tatsu is free and open source. Download the macOS app or run the headless server on Linux.
+            Download the macOS app or run the headless server on Linux.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
