@@ -17,7 +17,10 @@
 
 import '../renderer/styles.css'
 import type { ProfilerOnRenderCallback } from 'react'
-import { WebSocketClientTransport } from '../shared/transport/transport-websocket'
+import {
+  WebSocketClientTransport,
+  exchangeForSessionToken
+} from '../shared/transport/transport-websocket'
 
 declare global {
   interface Window {
@@ -38,10 +41,9 @@ function readToken(): string | null {
   return url.searchParams.get('token')
 }
 
-
 async function boot(): Promise<void> {
-  const token = readToken()
-  if (!token) {
+  const rootToken = readToken()
+  if (!rootToken) {
     document.body.innerHTML =
       '<pre style="padding:24px;color:#fff;background:#222;font-family:monospace;">' +
       'No Tatsu auth token. Open this page from the URL printed by the main process,\n' +
@@ -52,7 +54,24 @@ async function boot(): Promise<void> {
   const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${wsProto}//${window.location.host}/`
 
-  const transport = new WebSocketClientTransport({ url: wsUrl, token })
+  // Exchange the root token for a short-lived one-time session token
+  // via POST /_harness/session. Keeps the root token off the wire
+  // for the WS upgrade handshake.
+  let sessionToken: string
+  try {
+    sessionToken = await exchangeForSessionToken(wsUrl, rootToken)
+  } catch (err) {
+    document.body.innerHTML =
+      '<pre style="padding:24px;color:#fff;background:#400;font-family:monospace;">' +
+      `Session exchange failed: ${String((err as Error)?.message ?? err)}</pre>`
+    return
+  }
+
+  const transport = new WebSocketClientTransport({
+    url: wsUrl,
+    token: sessionToken,
+    tokenTransport: 'sessionQuery'
+  })
   // Connect up front so the first getStateSnapshot() call inside the
   // dynamically imported renderer modules doesn't race the open
   // handshake.
