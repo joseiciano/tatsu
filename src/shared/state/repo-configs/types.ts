@@ -36,6 +36,8 @@ export interface RepoContainerConfig {
   image?: string
   /** Path to a Dockerfile to build. Mutually exclusive with `image`. Relative paths resolve from repo root. */
   dockerfile?: string
+  /** Docker build context. Defaults to repo root. Relative paths resolve from repo root. */
+  buildContext?: string
   /** Working directory inside the container. Defaults to `/workspace`. Must be absolute. */
   workdir?: string
   /** Shell to use for `docker exec`. Defaults to `/bin/sh`. */

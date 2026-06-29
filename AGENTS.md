@@ -70,7 +70,7 @@ editing the reducer + event union.
    `onRequest` handler, routes it to the registered request processor in
    `src/main/index.ts`, which does the side effect (validation, writing to
    disk, etc.) and **dispatches a typed event** through the store:
-   `store.dispatch({type: 'settings/themeChanged', payload: 'solarized'})`.
+   `store.dispatch({type: 'settings/themeDarkChanged', payload: 'solarized'})`.
 4. **Main / store**: `src/main/store/store.ts` runs the dispatched event
    through the shared `rootReducer`, updates its in-memory `AppState`,
    bumps a monotonic `seq`, and notifies subscribers.
@@ -186,7 +186,7 @@ src/
 │   ├── worktree-deletion-fsm/     # Pending-deletion FSM
 │   ├── panes-fsm/                 # Every pane/tab mutation (addTab, closeTab, splitPane, …)
 │   ├── activity-deriver/          # Subscribes to store, derives + records activity transitions
-│   ├── json-claude-status-deriver/# Derives chat status from PTY/tool state
+│   ├── json-claude-status-deriver/ # Derives chat status from PTY/tool state
 │   ├── pty-manager/               # node-pty lifecycle, dispatches statuses to store
 │   ├── hooks/                     # Installs Claude Code hooks, dispatches statuses to store
 │   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
@@ -384,7 +384,7 @@ callback closes over `panesFSM`. Don't reorder without thinking.
 The store-and-slice architecture is sharp. Four common mistakes turn it
 into a quadratic CPU sink. All four are caught either at code review or
 by the cascade detector in `src/main/store/store.ts`, which logs a `[cascade]`
-line to `perf.log` whenever one root event triggers more than 5 nested
+line to `perf.log` whenever one root event triggers more than 15 nested
 dispatches.
 
 **1. Subscribers that sweep all entities on every event.** A
@@ -751,8 +751,9 @@ macOS release builds are handled by `.github/workflows/build-mac.yml`.
 
 PR CI (`.github/workflows/ci.yml`) runs `scripts/smoke-headless.sh`
 after the typecheck / build / tests block. The script launches
-`dist-headless/main/index.js` on an ephemeral port, parses the
-`[web-client] open ...` URL out of its stdout, delegates HTTP
+`dist-headless/main/index.js` on an ephemeral port, reads the token URL
+from `$HARNESS_DATA_DIR/web-client-url.txt` (the server writes the full
+URL to this mode-0600 file), delegates HTTP
 validation to `scripts/web-smoke.mjs` (auth gate + HTML + asset
 reach) and WS validation to `scripts/ws-smoke.mjs` (upgrade +
 snapshot round-trip), then SIGTERMs and confirms clean shutdown.

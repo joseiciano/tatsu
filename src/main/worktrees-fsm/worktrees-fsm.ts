@@ -312,12 +312,7 @@ export class WorktreesFSM {
 
     log('worktrees-fsm', `Creating Docker container for ${worktreePath}`)
     const config = this.opts.containers.resolveContainerConfig(repoRoot, worktreePath, repoCfg.container)
-    const container = await this.opts.containers.createForWorktree(repoRoot, worktreePath, config)
-    this.store.dispatch({
-      type: 'worktrees/containerUpdated',
-      payload: { path: worktreePath, container: { ...container, status: 'starting' } }
-    })
-    return container
+    return await this.opts.containers.createForWorktree(repoRoot, worktreePath, config)
   }
 
   /** Shared post-creation steps: setup script + .claude symlink +
@@ -336,6 +331,13 @@ export class WorktreesFSM {
 
     this.applySharedClaudeSettings(repoRoot, created.path)
     await this.refreshList()
+
+    if (container) {
+      this.store.dispatch({
+        type: 'worktrees/containerUpdated',
+        payload: { path: created.path, container: { ...container, status: 'starting' as const } }
+      })
+    }
 
     const setupCmd = this.resolveSetupCmd(repoRoot)
     let setupFailed = false

@@ -2,7 +2,7 @@
 
 ## Deliverable
 
-New worktrees created while setting is on get companion container, and setup runs
+When the setting is enabled, new worktrees receive a companion container, and setup runs
 inside that container.
 
 System contracts: [`../System-Design.md`](../System-Design.md).
@@ -31,12 +31,13 @@ src/main/worktree-containers/
 
 - `checkDockerAvailable()` runs `docker version` or equivalent and returns
   actionable errors for missing CLI vs daemon unavailable.
-- `resolveContainerConfig(repoRoot, worktreePath)` merges `.harness.json` with defaults.
-- `ensureImage(config)` pulls/builds image only when needed.
+- `resolveContainerConfig(repoRoot, worktreePath, repoConfig?)` merges `.harness.json` with defaults.
+- `ensureImage(config)` pulls image configs when needed and rebuilds Dockerfile configs.
   - for image configs, inspect local image and pull explicitly when missing.
 - `createForWorktree(repoRoot, worktreePath, config)` creates and
-  starts container with Harness labels.
-- `execInContainer(container, command, opts)` runs non-interactive setup.
+  starts container with Tatsu labels.
+- `execInContainer(containerId, command, opts)` runs non-interactive setup.
+- `stopContainer(containerId)` stops and removes a container, continuing to `rm -f` if stop fails and propagating removal errors to the caller.
 - sanitize names from repo + branch and assert labels are always present.
 - `getWorktreeId(worktreePath)` returns `sha256(absPath).slice(0, 12)` for
   labels and generated tags.
@@ -116,4 +117,4 @@ npx vitest run src/main/worktree-containers src/main/repo-config src/main/worktr
 
 ## Outcome
 
-New worktrees can be containerized and setup runs in container.
+New worktrees can be containerized and setup runs in a container.

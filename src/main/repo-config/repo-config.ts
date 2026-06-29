@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync, renameSync, realpathSync } from 'fs'
 import { isAbsolute, join, resolve, sep } from 'path'
 import { log } from '../debug'
 import { DEFAULT_HIDDEN_RIGHT_PANELS, type RepoConfig } from '../../shared/state/repo-configs'
@@ -8,11 +8,13 @@ export type { RepoConfig }
 const REPO_CONFIG_FILENAME = '.harness.json'
 const cache = new Map<string, RepoConfig>()
 
+const VALID_MERGE_STRATEGIES = new Set(['squash', 'merge-commit', 'fast-forward'])
+
 function configPath(repoRoot: string): string {
   return join(repoRoot, REPO_CONFIG_FILENAME)
 }
 
-const UNSAFE_VOLUME_TARGETS = new Set(['/', '/workspace', '/proc', '/sys', '/dev', '/etc', '/tmp/harness-status'])
+const UNSAFE_VOLUME_TARGETS = new Set(['/', '/proc', '/sys', '/dev', '/etc', '/tmp/harness-status', '/workspace'])
 
 const UNSAFE_VOLUME_SOURCES = new Set([
   '/', '/proc', '/sys', '/dev', '/etc', '/boot', '/var/run/docker.sock', '/run/docker.sock'
@@ -35,6 +37,15 @@ function isUnsafeVolumeTarget(target: string): boolean {
   return false
 }
 
+function isUnsafeWorkdir(workdir: string): boolean {
+  const resolved = resolve(workdir)
+  if (resolved === '/') return true
+  if (hasUnsafePathPrefix(resolved)) return true
+  if (resolved.startsWith('/etc/') || resolved === '/etc') return true
+  if (resolved === '/tmp/harness-status') return true
+  return false
+}
+
 function isUnsafeVolumeSource(source: string): boolean {
   const resolved = resolve(source)
   if (UNSAFE_VOLUME_SOURCES.has(resolved)) return true
@@ -50,6 +61,27 @@ function validateContainerImage(image: string): string | undefined {
     return `Invalid container image: ${image}`
   }
   return undefined
+}
+
+function validateNonContainerFields(clean: RepoConfig, path: string): void {
+  if (clean.setupCommand !== undefined) {
+    if (typeof clean.setupCommand !== 'string') {
+      log('repo-config', `Invalid setupCommand in ${path}: must be a string, dropping`)
+      delete clean.setupCommand
+    }
+  }
+  if (clean.teardownCommand !== undefined) {
+    if (typeof clean.teardownCommand !== 'string') {
+      log('repo-config', `Invalid teardownCommand in ${path}: must be a string, dropping`)
+      delete clean.teardownCommand
+    }
+  }
+  if (clean.mergeStrategy !== undefined) {
+    if (!VALID_MERGE_STRATEGIES.has(clean.mergeStrategy)) {
+      log('repo-config', `Invalid mergeStrategy in ${path}: "${clean.mergeStrategy}" is not valid, dropping`)
+      delete clean.mergeStrategy
+    }
+  }
 }
 
 function realpathIfExists(path: string): string {
@@ -112,6 +144,9 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
   if (c.workdir !== undefined) {
     if (typeof c.workdir !== 'string' || !c.workdir.startsWith('/')) {
       return { valid: false, error: 'workdir must be an absolute path' }
+    }
+    if (isUnsafeWorkdir(c.workdir as string)) {
+      return { valid: false, error: `Unsafe container workdir: ${c.workdir}` }
     }
   }
 
@@ -236,6 +271,7 @@ export function loadRepoConfig(repoRoot: string): RepoConfig {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as RepoConfig
     const clean = parsed && typeof parsed === 'object' ? parsed : {}
+    validateNonContainerFields(clean, path)
     if (clean.container) {
       const validation = validateContainerConfig(clean.container, repoRoot)
       if (validation.valid) {
@@ -255,12 +291,16 @@ export function loadRepoConfig(repoRoot: string): RepoConfig {
 }
 
 export function saveRepoConfig(repoRoot: string, next: RepoConfig): RepoConfig {
+  // Validate non-container fields first (drop non-string setupCommand/teardownCommand, invalid mergeStrategy)
+  const validated: RepoConfig = { ...next }
+  validateNonContainerFields(validated, configPath(repoRoot))
+
   const cleaned: RepoConfig = { version: 1 }
-  const setup = next.setupCommand?.trim()
-  const teardown = next.teardownCommand?.trim()
+  const setup = validated.setupCommand?.trim()
+  const teardown = validated.teardownCommand?.trim()
   if (setup) cleaned.setupCommand = setup
   if (teardown) cleaned.teardownCommand = teardown
-  if (next.mergeStrategy) cleaned.mergeStrategy = next.mergeStrategy
+  if (validated.mergeStrategy) cleaned.mergeStrategy = validated.mergeStrategy
   // Migrate legacy hideMergePanel / hidePrPanel into hiddenRightPanels
   // on write. Only the new field is persisted going forward.
   const hidden: Record<string, boolean> = { ...(next.hiddenRightPanels || {}) }
@@ -296,7 +336,9 @@ export function saveRepoConfig(repoRoot: string, next: RepoConfig): RepoConfig {
       cache.set(repoRoot, {})
       return {}
     }
-    writeFileSync(path, JSON.stringify(cleaned, null, 2) + '\n')
+    const tmpPath = `${path}.tmp.${process.pid}`
+    writeFileSync(tmpPath, JSON.stringify(cleaned, null, 2) + '\n')
+    renameSync(tmpPath, path)
     cache.set(repoRoot, cleaned)
     return cleaned
   } catch (err) {

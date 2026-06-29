@@ -191,6 +191,84 @@ describe('WorktreeDeletionFSM container cleanup', () => {
     expect(removeWorktree).toHaveBeenCalled()
   })
 
+  it('falls back to host teardown when companion container is stopped', async () => {
+    const containers = {
+      execInContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      stopContainer: vi.fn(async () => undefined),
+    }
+    const worktreesFSM = { refreshList: vi.fn(async () => undefined) }
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{
+        path: '/repo/wt/feature',
+        branch: 'feature',
+        head: 'abc',
+        isBare: false,
+        isMain: false,
+        createdAt: 0,
+        repoRoot: '/repo',
+        container: { id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'stopped' }
+      }]
+    })
+    const fsm = new WorktreeDeletionFSM(store, {
+      getGlobalTeardownCmd: () => 'pnpm teardown',
+      worktreesFSM,
+      containers,
+    } as any)
+
+    await (fsm as any).run({ repoRoot: '/repo', path: '/repo/wt/feature', branch: 'feature' })
+
+    expect(containers.execInContainer).not.toHaveBeenCalled()
+    expect(runWorktreeScript).toHaveBeenCalledWith('teardown', 'pnpm teardown', expect.objectContaining({ worktreePath: '/repo/wt/feature' }), expect.any(Function))
+  })
+
+  it('falls back to host teardown when companion container is in error state', async () => {
+    const containers = {
+      execInContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      stopContainer: vi.fn(async () => undefined),
+    }
+    const worktreesFSM = { refreshList: vi.fn(async () => undefined) }
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{
+        path: '/repo/wt/feature',
+        branch: 'feature',
+        head: 'abc',
+        isBare: false,
+        isMain: false,
+        createdAt: 0,
+        repoRoot: '/repo',
+        container: { id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'error' }
+      }]
+    })
+    const fsm = new WorktreeDeletionFSM(store, {
+      getGlobalTeardownCmd: () => 'pnpm teardown',
+      worktreesFSM,
+      containers,
+    } as any)
+
+    await (fsm as any).run({ repoRoot: '/repo', path: '/repo/wt/feature', branch: 'feature' })
+
+    expect(containers.execInContainer).not.toHaveBeenCalled()
+    expect(runWorktreeScript).toHaveBeenCalledWith('teardown', 'pnpm teardown', expect.objectContaining({ worktreePath: '/repo/wt/feature' }), expect.any(Function))
+  })
+
+  it('marks pending deletion as failed when removeWorktree throws', async () => {
+    vi.mocked(removeWorktree).mockRejectedValueOnce(new Error('permission denied'))
+    const worktreesFSM = { refreshList: vi.fn(async () => undefined) }
+    const fsm = new WorktreeDeletionFSM(store, {
+      getGlobalTeardownCmd: () => '',
+      worktreesFSM,
+    } as any)
+
+    await (fsm as any).run({ repoRoot: '/repo', path: '/repo/wt/feature', branch: 'feature' })
+
+    const pending = store.getSnapshot().state.worktrees.pendingDeletions.find((d) => d.path === '/repo/wt/feature')
+    expect(pending?.phase).toBe('failed')
+    expect(pending?.error).toBe('permission denied')
+    expect(worktreesFSM.refreshList).not.toHaveBeenCalled()
+  })
+
   it('caps and throttles teardown logs', async () => {
     vi.useFakeTimers()
     const dispatchSpy = vi.spyOn(store, 'dispatch')

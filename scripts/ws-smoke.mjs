@@ -19,8 +19,13 @@ if (!token) {
   process.exit(1)
 }
 
-const url = `ws://127.0.0.1:${port}?token=${encodeURIComponent(token)}`
-const ws = new WebSocket(url)
+// Connect using Authorization: Bearer header — the WS transport no
+// longer accepts the root token via ?token= (browsers must exchange
+// it for a one-time session token first).
+const WebSocketCtor = WebSocket
+const ws = new WebSocketCtor(`ws://127.0.0.1:${port}/`, undefined, {
+  headers: { Authorization: `Bearer ${token}` }
+})
 
 let nextId = 1
 const pending = new Map()

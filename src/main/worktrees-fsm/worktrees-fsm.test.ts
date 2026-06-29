@@ -237,7 +237,7 @@ describe('WorktreesFSM container integration', () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
   })
 
-  it('dispatches containerUpdated with starting status immediately after container creation', async () => {
+  it('dispatches containerUpdated with starting status after refreshList adds the worktree', async () => {
     const containers = {
       checkDockerAvailable: vi.fn(async () => ({ ok: true })),
       resolveContainerConfig: vi.fn(() => ({ image: 'n', workdir: '/w', shell: '/bin/sh', env: {}, ports: [], volumes: [] })),
@@ -418,12 +418,8 @@ describe('WorktreesFSM container integration', () => {
       execInContainer: vi.fn(() => new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => { resolveExec = resolve })),
       stopContainer: vi.fn(),
     }
-    // Seed the worktree into the list before runPending so the
-    // containerUpdated dispatch from maybeCreateContainer actually patches it.
-    store.dispatch({
-      type: 'worktrees/listChanged',
-      payload: [{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }]
-    })
+    // refreshList (called by finishCreate) will add the worktree to the
+    // list before the containerUpdated starting dispatch runs.
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
     const dispatchSpy = vi.spyOn(store, 'dispatch')

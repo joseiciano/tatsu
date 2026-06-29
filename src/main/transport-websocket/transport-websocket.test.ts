@@ -9,6 +9,7 @@ import { WebSocket as WSClient } from 'ws'
 import { Store } from '../store'
 import { WebSocketServerTransport } from '.'
 import { rootReducer, initialState, type AppState, type StateEvent } from '../../shared/state'
+import { issueSessionToken } from '../ws-token'
 
 type AnyFrame = { t: string } & Record<string, unknown>
 
@@ -43,6 +44,20 @@ function randomPort(): number {
   return 40000 + Math.floor(Math.random() * 20000)
 }
 
+/** Create a WS client using Authorization: Bearer header. */
+function authedClient(port: number, token: string): WSClient {
+  const WebSocketCtor = WSClient as unknown as {
+    new (
+      url: string,
+      protocols: string | string[] | undefined,
+      options: { headers: Record<string, string> }
+    ): WSClient
+  }
+  return new WebSocketCtor(`ws://127.0.0.1:${port}/`, undefined, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+}
+
 describe('WebSocketServerTransport', () => {
   it('rejects clients without a valid token', async () => {
     const store = new Store()
@@ -51,8 +66,67 @@ describe('WebSocketServerTransport', () => {
     server.start()
     await new Promise((r) => setTimeout(r, 25))
 
-    const ws = new WSClient(`ws://127.0.0.1:${port}?token=wrong`)
+    const ws = authedClient(port, 'wrong')
     await expect(waitOpen(ws)).rejects.toBeTruthy()
+    server.stop()
+  })
+
+  it('rejects root token via ?token= query param', async () => {
+    const store = new Store()
+    const port = randomPort()
+    const server = new WebSocketServerTransport(store, { port, token: 'secret' })
+    server.start()
+    await new Promise((r) => setTimeout(r, 25))
+
+    // ?token= is no longer accepted for WS — browsers must exchange
+    // the root token for a one-time session token first.
+    const ws = new WSClient(`ws://127.0.0.1:${port}/?token=secret`)
+    await expect(waitOpen(ws)).rejects.toBeTruthy()
+    server.stop()
+  })
+
+  it('accepts one-time session tokens via ?session=', async () => {
+    const store = new Store()
+    const port = randomPort()
+    const ROOT_TOKEN = 'secret'
+    const server = new WebSocketServerTransport(store, { port, token: ROOT_TOKEN })
+    server.start()
+    await new Promise((r) => setTimeout(r, 25))
+
+    // Exchange root token for a one-time session token.
+    const sessionToken = issueSessionToken(ROOT_TOKEN, ROOT_TOKEN)
+    expect(sessionToken).toBeTruthy()
+
+    const ws = new WSClient(`ws://127.0.0.1:${port}/?session=${sessionToken}`)
+    await waitOpen(ws)
+    try {
+      ws.send(JSON.stringify({ t: 'snapreq', id: '1' }))
+      const snap = (await nextFrame(ws, (f) => f.t === 'snapres' && f.id === '1')) as AnyFrame
+      expect(snap.ok).toBe(true)
+    } finally {
+      ws.close()
+      server.stop()
+    }
+  })
+
+  it('rejects reused (already consumed) session tokens', async () => {
+    const store = new Store()
+    const port = randomPort()
+    const ROOT_TOKEN = 'secret'
+    const server = new WebSocketServerTransport(store, { port, token: ROOT_TOKEN })
+    server.start()
+    await new Promise((r) => setTimeout(r, 25))
+
+    const sessionToken = issueSessionToken(ROOT_TOKEN, ROOT_TOKEN)!
+    // First use succeeds
+    const ws1 = new WSClient(`ws://127.0.0.1:${port}/?session=${sessionToken}`)
+    await waitOpen(ws1)
+    ws1.close()
+    await new Promise((r) => setTimeout(r, 25))
+
+    // Second use fails — session token is single-use
+    const ws2 = new WSClient(`ws://127.0.0.1:${port}/?session=${sessionToken}`)
+    await expect(waitOpen(ws2)).rejects.toBeTruthy()
     server.stop()
   })
 
@@ -67,7 +141,7 @@ describe('WebSocketServerTransport', () => {
     server.onSignal('pty:write', signalSpy)
     server.onRequest('echo', async (_ctx, ...args: unknown[]) => ({ args }))
 
-    const ws = new WSClient(`ws://127.0.0.1:${port}?token=secret`)
+    const ws = authedClient(port, 'secret')
     await waitOpen(ws)
 
     try {
@@ -136,7 +210,7 @@ describe('WebSocketServerTransport', () => {
     const signalSpy = vi.fn()
     server.onSignal('pty:write', signalSpy)
 
-    const ws = new WSClient(`ws://127.0.0.1:${port}?token=secret`)
+    const ws = authedClient(port, 'secret')
     await waitOpen(ws)
     try {
       for (let i = 0; i < 150; i += 1) {
@@ -186,8 +260,8 @@ describe('WebSocketServerTransport', () => {
     )
     await new Promise((r) => setTimeout(r, 25))
 
-    const wsA = new WSClient(`ws://127.0.0.1:${port}?token=secret`)
-    const wsB = new WSClient(`ws://127.0.0.1:${port}?token=secret`)
+    const wsA = authedClient(port, 'secret')
+    const wsB = authedClient(port, 'secret')
     await Promise.all([waitOpen(wsA), waitOpen(wsB)])
 
     // Each socket maintains its own mirror via the shared rootReducer —
@@ -259,7 +333,7 @@ describe('WebSocketServerTransport', () => {
     server.start()
     await new Promise((r) => setTimeout(r, 25))
 
-    const ws = new WSClient(`ws://127.0.0.1:${port}?token=secret`)
+    const ws = authedClient(port, 'secret')
     await waitOpen(ws)
     try {
       ws.send(JSON.stringify({ t: 'req', id: '9', name: 'nope', args: [] }))

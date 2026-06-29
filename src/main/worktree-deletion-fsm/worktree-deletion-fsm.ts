@@ -69,7 +69,7 @@ export class WorktreeDeletionFSM {
       if (hasTeardown) {
         const teardownLog = this.createTeardownLogCollector(path)
         try {
-          const result = container && this.opts.containers && typeof this.opts.containers.execInContainer === 'function'
+          const result = container && container.status === 'running' && this.opts.containers && typeof this.opts.containers.execInContainer === 'function'
             ? await this.opts.containers.execInContainer(container.id, teardownCmd, {
               workdir: container.workdir,
               shell: container.shell,

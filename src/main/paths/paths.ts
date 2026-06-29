@@ -8,7 +8,7 @@
 // the runtime picks itself.
 //
 // Electron mode: delegate to `app.getPath('userData')`. The dev-mode
-// override (`Harness (Dev)` user-data dir) lives in the desktop shell's
+// override (`Tatsu (Dev)` user-data dir) lives in the desktop shell's
 // boot block — by the time anything in this module runs it has already
 // been applied.
 //

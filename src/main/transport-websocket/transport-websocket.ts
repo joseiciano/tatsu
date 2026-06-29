@@ -28,8 +28,13 @@
 // history buffer server-side.
 //
 // Auth: a random 32-byte hex token is generated at start() and required
-// via Authorization: Bearer <token> or ?token=… on the WS upgrade. No TLS,
-// token rotation yet. Per-client frames use a small token-bucket rate limit.
+// via Authorization: Bearer <token> on the WS upgrade.  Browsers use
+// short-lived one-time session tokens via ?session=<session_token>,
+// obtained by exchanging the root token over same-origin HTTP
+// (POST /_harness/session on the web-client-server).  The root token
+// in ?token= is NOT accepted for WS — browsers must exchange it first.
+// No TLS, token rotation yet.  Per-client frames use a small
+// token-bucket rate limit.
 
 import { randomBytes, randomUUID } from 'crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -46,7 +51,7 @@ import type { PerfMonitor } from '../perf-monitor'
 import { log } from '../debug'
 import { perfLog } from '../perf-log'
 import { consumeToken, createTokenBucket, type TokenBucket } from '../rate-limit'
-import { safeEqualToken } from '../ws-token'
+import { safeEqualToken, consumeSessionToken } from '../ws-token'
 import type { ServerFrame, ClientFrame, WebSocketServerTransportOptions } from './types'
 import { SLOW_IPC_MS } from './constants'
 
@@ -175,23 +180,29 @@ export class WebSocketServerTransport implements ServerTransport {
     req: IncomingMessage,
     cb: (ok: boolean, code?: number, message?: string) => void
   ): void {
-    // Token may arrive either as Authorization: Bearer <token> (preferred
-    // for programmatic clients) or as ?token=<token> (easier from a plain
-    // browser where headers on the upgrade request aren't user-settable).
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const queryToken = url.searchParams.get('token')
+
+    // 1. One-time browser session tokens via ?session=<session_token>.
+    const sessionParam = url.searchParams.get('session')
+    if (sessionParam && consumeSessionToken(sessionParam)) {
+      cb(true)
+      return
+    }
+
+    // 2. Root auth token via Authorization: Bearer <token>
+    // (programmatic clients — CLI, curl, etc.).
     const authHeader = req.headers['authorization']
     const headerToken =
       typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
         ? authHeader.slice(7)
         : null
-    const provided = headerToken ?? queryToken
-    if (!safeEqualToken(provided, this.token)) {
-      log('ws-transport', 'rejected unauth ws handshake')
-      cb(false, 401, 'unauthorized')
+    if (safeEqualToken(headerToken, this.token)) {
+      cb(true)
       return
     }
-    cb(true)
+
+    log('ws-transport', 'rejected unauth ws handshake')
+    cb(false, 401, 'unauthorized')
   }
 
   private handleConnection(ws: WebSocket): void {

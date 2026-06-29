@@ -59,7 +59,7 @@ own worktree.
   not app restarts.
 - "Always allow…" button on the approval card opens an inline picker
   of self-generated rule suggestions (narrow → medium → broad scoped)
-  derived from the tool name + input by `src/shared/permission-patterns.ts`
+  derived from the tool name + input by `src/shared/permission-patterns/permission-patterns.ts`
   — Bash gets `<head> <arg1>:*` / `<head>:*` / `*`, file tools get
   exact path / parent-dir glob / any, WebFetch gets URL / domain / any,
   MCP and other tools get the bare name. Selecting a rule resolves the
@@ -341,9 +341,9 @@ is shipped.
 | Approval card | `src/renderer/components/JsonClaudeApprovalCard/JsonClaudeApprovalCard.tsx` |
 | Approvals hook | `src/renderer/hooks/useJsonClaudeApprovals/useJsonClaudeApprovals.ts` |
 | Tab-type wiring (panes/persistence/types) | `src/main/panes-fsm/panes-fsm.ts`, `src/main/persistence-migrations/persistence-migrations.ts`, `src/shared/state/terminals/terminals.ts` |
-| Feature flag | `src/shared/state/settings/settings.ts` (`jsonModeClaudeTabs`) |
+| Feature flag | `src/shared/state/settings/settings.ts` (`defaultClaudeTabType`) |
 | Markdown CSS | `src/renderer/styles.css` (`.markdown` scope) |
-| Integration test | `src/main/approval-bridge/approval-bridge.test.ts` |
+| Integration test | `src/main/chat-runtimes/claude-acp.test.ts` |
 | Diagnostic log | `/tmp/harness-permission-mcp.log` (tail to verify MCP wire) |
 
 ## Rewind
@@ -384,7 +384,7 @@ multi-block turns into one entry while the jsonl can't.
 
 ### Subprocess lifecycle
 
-`JsonClaudeManager` (`src/main/json-claude-manager/json-claude-manager.ts:197`) owns one
+`ClaudeAcpRuntime` (`src/main/chat-runtimes/claude-acp.ts`) owns one
 instance per session id. `create()` (`:364`) spawns with
 `--resume <id>` if the jsonl exists (`:432`), else `--session-id <id>`.
 `kill()` (`:792`) ends stdin + SIGTERM. No first-class restart —
@@ -427,8 +427,8 @@ renders them) and pass through the cut when they predate it.
 
 | In-flight | Where | Cleanup |
 |---|---|---|
-| Streaming assistant (`busy`, `partial != null`) | `JsonClaudeManager.partial` (`:49`, `:1328`) | `interrupt()` (`:759`); wait ≤1500ms for next `result` |
-| Pending approval round-trip | `ApprovalBridge.pendingResponses` (`src/main/approval-bridge/approval-bridge.ts:78`) | New `cancelPendingForSession(sessionId)` — same loop as `stopSession` (`:122`), without tearing the server down |
+| Streaming assistant (`busy`, `partial != null`) | `ClaudeAcpRuntime.partial` (`src/main/chat-runtimes/claude-acp.ts`) | `interrupt()`; wait ≤1500ms for next `result` |
+| Pending approval round-trip | `pendingApprovals` (`src/main/chat-runtimes/claude-acp.ts`) | New `cancelPendingForSession(sessionId)` — same loop as `stopSession`, without tearing the server down |
 | Tool running through MCP (approved, awaiting result) | Untracked; lives inside the subprocess agent loop | Subsumed by interrupt; long-running Bash etc. completes inside the subprocess, result discarded after `kill()` |
 | Queued user messages (`isQueued`) | `entries[i].isQueued` (`src/shared/state/json-claude/types.ts:73`) | Already on stdin; absorbed by the truncation pass |
 

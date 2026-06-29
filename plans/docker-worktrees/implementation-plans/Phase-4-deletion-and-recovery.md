@@ -38,8 +38,8 @@ System contracts: [`../System-Design.md`](../System-Design.md).
   - add `listHarnessContainers()` using Docker label filter.
   - add `inspectContainer(idOrName)` to map running/stopped/error.
 - `src/main/index.ts`
-  - after initial worktree list is loaded, inspect `harness=true` containers.
-  - match by `harness.worktreePath` label.
+  - after initial worktree list is loaded, inspect `tatsu.worktree.id` labeled containers.
+  - match by `tatsu.worktree.path` label.
   - update matching `Worktree.container.status`.
   - log orphan containers with no matching host worktree; no UI action first slice.
 
@@ -53,7 +53,7 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 
 ## Verification
 
-- Delete containerized worktree; `docker ps -a --filter label=harness=true` no longer lists it.
+- Delete containerized worktree; `docker ps -a --filter label=tatsu.worktree.id` no longer lists it.
 - Kill app while container exists, restart, worktree shows recovered running or stopped status.
 - Orphan container is logged, not shown as fake worktree.
 - `pnpm typecheck`

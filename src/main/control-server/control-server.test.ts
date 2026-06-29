@@ -73,12 +73,33 @@ describe('createControlRateLimiter', () => {
     expect(limiter.size()).toBe(1)
   })
 
-  it('uses terminal ID header before remote address', () => {
+  it('same remote address shares bucket regardless of terminal ID', () => {
+    const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0 })
+
+    // Same address + same terminal = same bucket (rate limited after 1 request)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(false)
+
+    // Same address + different terminal = same bucket (terminal ID ignored)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-b'), 0)).toBe(false)
+  })
+
+  it('does not create fresh buckets when terminal ID changes for same IP', () => {
+    const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0 })
+
+    // Request with terminal-a from 127.0.0.1 consumes the shared bucket
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
+
+    // Changing terminal ID alone should NOT give a fresh bucket for the same IP
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-z'), 0)).toBe(false)
+  })
+
+  it('different IPs get separate buckets', () => {
     const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0 })
 
     expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
-    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(false)
-    expect(limiter.allow(requestFrom('127.0.0.1', 'term-b'), 0)).toBe(true)
+    // Different IP — separate bucket regardless of terminal ID
+    expect(limiter.allow(requestFrom('127.0.0.2', 'term-a'), 0)).toBe(true)
   })
 })
 

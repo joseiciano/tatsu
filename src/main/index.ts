@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync } from 'fs'
+import { existsSync, lstatSync, readFileSync, writeFileSync } from 'fs'
 import { createRequire } from 'module'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
@@ -18,7 +18,7 @@ import { getOrCreateWsToken, rotateWsToken } from './ws-token'
 import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
-import { detectRuntime } from './paths'
+import { detectRuntime, userDataDir } from './paths'
 import { fixPathFromLoginShell } from './path-fix'
 import { parseCliFlags, USAGE, type CliFlags } from './cli-args'
 import { PlaywrightBrowserManager } from './browser-manager-playwright'
@@ -388,13 +388,22 @@ if (webHttpServer && wsTransport) {
     // Log to stdout so the user can paste the URL into another browser
     // without digging through the debug log. TODO(production): expose
     // through a Settings UI screen with a copy button + regenerate action.
+    // WS URL no longer accepts ?token= — browsers exchange the root token
+    // for a one-time session token first, so we don't print the root
+    // token in the WS URL anymore.
     // eslint-disable-next-line no-console
     console.log(
-      `[ws-transport] enabled on ws://${displayHost}:${boundPort}?token=${wsTransport.getToken()} (bind=${wsHost})`
+      `[ws-transport] enabled on ws://${displayHost}:${boundPort} (bind=${wsHost})`
     )
+    // Write the full URL (with token) to a mode-0600 file under
+    // userDataDir so automation can read it without the token leaking
+    // to stdout / CI logs.
+    const tokenUrl = `http://${displayHost}:${boundPort}/?token=${wsTransport.getToken()}`
+    const tokenUrlPath = join(userDataDir(), 'web-client-url.txt')
+    writeFileSync(tokenUrlPath, tokenUrl + '\n', { mode: 0o600 })
     // eslint-disable-next-line no-console
     console.log(
-      `[web-client] open http://${displayHost}:${boundPort}/?token=${wsTransport.getToken()}`
+      `[web-client] open http://${displayHost}:${boundPort}/ (token URL written to ${tokenUrlPath})`
     )
   })
 }
@@ -803,7 +812,8 @@ const worktreesFSM = new WorktreesFSM(store, {
 
 const worktreeDeletionFSM = new WorktreeDeletionFSM(store, {
   getGlobalTeardownCmd: () => config.worktreeTeardownCommand || '',
-  worktreesFSM
+  worktreesFSM,
+  containers: worktreeContainers
 })
 
 const activityDeriver = new ActivityDeriver(store)
@@ -984,19 +994,49 @@ store.subscribe((event) => {
   }
 })
 
+// Prune config.worktreeContainers entries whose path is not in the
+// current worktrees list so orphan container metadata doesn't linger.
+store.subscribe((event) => {
+  if (event.type !== 'worktrees/listChanged') return
+  if (!config.worktreeContainers) return
+  const live = new Set(store.getSnapshot().state.worktrees.list.map((w) => w.path))
+  let pruned = false
+  for (const path of Object.keys(config.worktreeContainers)) {
+    if (!live.has(path)) {
+      delete config.worktreeContainers[path]
+      pruned = true
+    }
+  }
+  if (pruned) {
+    if (Object.keys(config.worktreeContainers).length === 0) {
+      delete config.worktreeContainers
+    }
+    saveConfig(config)
+  }
+})
+
 store.subscribe((event) => {
   if (event.type !== 'worktrees/containerUpdated') return
   const { path, container } = event.payload
   if (!config.worktreeContainers) config.worktreeContainers = {}
   if (container) {
-    config.worktreeContainers[path] = {
+    const existing = config.worktreeContainers[path]
+    const next = {
       id: container.id,
       name: container.name,
       image: container.image,
       workdir: container.workdir,
       shell: container.shell
     }
+    if (existing &&
+        existing.id === next.id &&
+        existing.name === next.name &&
+        existing.image === next.image &&
+        existing.workdir === next.workdir &&
+        existing.shell === next.shell) return
+    config.worktreeContainers[path] = next
   } else {
+    if (!config.worktreeContainers[path]) return
     delete config.worktreeContainers[path]
   }
   if (Object.keys(config.worktreeContainers).length === 0) {

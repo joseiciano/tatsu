@@ -11,7 +11,7 @@ export type ServerFrame =
   | { t: 'res'; id: string; ok: boolean; value?: unknown; error?: string }
   | { t: 'sig'; name: string; args: unknown[] }
 
-export type WebSocketTokenTransport = 'query' | 'authorizationHeader'
+export type WebSocketTokenTransport = 'query' | 'authorizationHeader' | 'sessionQuery'
 
 export interface WebSocketClientTransportOptions {
   url: string

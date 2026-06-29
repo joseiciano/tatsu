@@ -60,9 +60,7 @@ export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
 }
 
 function rateLimitKeyForRequest(req: IncomingMessage): string {
-  const terminalId = req.headers?.['x-harness-terminal-id']
-  const value = Array.isArray(terminalId) ? terminalId[0] : terminalId
-  return value || req.socket.remoteAddress || 'unknown'
+  return req.socket.remoteAddress || 'unknown'
 }
 
 const controlRateLimiter = createControlRateLimiter()

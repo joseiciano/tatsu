@@ -53,18 +53,27 @@ function flattenScratchpadNotes(
 
 export function hydratePersistedWorktreeContainers(
   worktrees: Worktree[],
-  persisted: Record<string, PersistedWorktreeContainer> | undefined
+  persisted: Record<string, PersistedWorktreeContainer> | undefined,
+  existing?: Worktree[]
 ): Worktree[] {
-  if (!persisted || Object.keys(persisted).length === 0) return worktrees
+  const hasPersisted = Boolean(persisted && Object.keys(persisted).length > 0)
+  if (!hasPersisted && !existing?.some((w) => w.container)) return worktrees
+  const existingByPath = new Map(existing?.map((w) => [w.path, w]))
   let changed = false
   const next = worktrees.map((worktree) => {
-    const container = persisted[worktree.path]
+    const existingContainer = existingByPath.get(worktree.path)?.container
+    if (existingContainer) {
+      changed = true
+      return { ...worktree, container: existingContainer }
+    }
+    const container = persisted?.[worktree.path]
     if (!container) return worktree
+    if (!container.id) return worktree
     changed = true
     return {
       ...worktree,
       container: {
-        id: container.id ?? '',
+        id: container.id,
         name: container.name,
         image: container.image,
         workdir: container.workdir,

@@ -44,8 +44,8 @@
 
 Grab the latest release from the [releases page](https://github.com/frenchie4111/harness/releases/latest).
 
-- **Apple Silicon (M1/M2/M3/M4):** [Tatsu-2.10.0-arm64.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Tatsu-2.10.0-arm64.dmg)
-- **Intel Mac:** [Tatsu-2.10.0.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Tatsu-2.10.0.dmg)
+- **Apple Silicon (M1/M2/M3/M4):** [Harness-2.10.0-arm64.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Harness-2.10.0-arm64.dmg)
+- **Intel Mac:** [Harness-2.10.0.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Harness-2.10.0.dmg)
 
 ## Installation
 
@@ -152,16 +152,16 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 4. **Remove app data** (optional, for a fully clean uninstall):
 
    ```sh
-   rm -rf ~/Library/Application\ Support/Tatsu
+   rm -rf ~/Library/Application\ Support/harness
    rm -rf ~/Library/Preferences/org.mikelyons.harness.plist
    rm -rf ~/Library/Saved\ Application\ State/org.mikelyons.harness.savedState
    rm -rf ~/Library/Caches/org.mikelyons.harness
-   rm -rf ~/Library/Logs/Tatsu
+   rm -rf ~/Library/Logs/harness
    ```
 
 5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open `~/.claude/settings.json` and delete any hook entries whose object contains `"_marker": "__claude_harness__"` — every Tatsu-managed hook is tagged with that marker, so they're safe to identify and remove.
 
-6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
+6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `<repo-name>-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
 
    ```sh
    cd <your-repo>
@@ -169,7 +169,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    git worktree remove <path>
    ```
 
-   Or delete the `claude-harness-worktrees/` directories from disk and run `git worktree prune` in each repo.
+   Or delete the `<repo-name>-worktrees/` directories from disk and run `git worktree prune` in each repo.
 
 ## Features
 
@@ -201,7 +201,7 @@ The main benefit of this is that your worktrees stay organized, and it's very ob
 
 This app assumes that you are going to want to use worktrees (otherwise what's the point)
 
-It will create a worktree directory at `../<your repo folder>-worktree` and start making worktrees there. This directory will probably be changable at some point
+It will create a worktree directory at `../<your repo folder>-worktrees` and start making worktrees there. This directory will probably be changeable at some point
 
 # Roadmap
 

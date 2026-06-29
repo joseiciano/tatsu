@@ -25,14 +25,25 @@ node dist-headless/main/index.js --port 0 --host 127.0.0.1 > "$LOG" 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
 
-# Wait up to 15s for the URL line. Format is
-#   "[web-client] open http://127.0.0.1:<port>/?token=<token>"
-# emitted from src/main/index.ts in the webHttpServer.listen callback.
-# If the log shape changes, this fails loudly (which is what we want,
-# since the Settings UI and other tooling read the same line).
+# Wait up to 15s for the server to be ready. The server now writes the
+# full token URL to $HARNESS_DATA_DIR/web-client-url.txt and prints a
+# redacted log line. We watch for either the file or the log line.
+URL_FILE="$HARNESS_DATA_DIR/web-client-url.txt"
 URL=""
 for _ in $(seq 1 75); do
-  URL="$(grep -oE 'http://127\.0\.0\.1:[0-9]+/\?token=[a-f0-9]+' "$LOG" | head -1 || true)"
+  # Prefer the file — it has the real token URL.
+  if [ -f "$URL_FILE" ] && [ -s "$URL_FILE" ]; then
+    URL="$(head -1 "$URL_FILE")"
+  fi
+  # Fallback: parse the redacted log line for host:port only (no token),
+  # then read the token from the file.
+  if [ -z "$URL" ]; then
+    HOST_PORT_LINE="$(grep -oE 'http://127\.0\.0\.1:[0-9]+/' "$LOG" | head -1 || true)"
+    if [ -n "$HOST_PORT_LINE" ] && [ -f "$URL_FILE" ] && [ -s "$URL_FILE" ]; then
+      TOKEN="$(head -1 "$URL_FILE" | sed 's/.*token=//')"
+      URL="${HOST_PORT_LINE}?token=${TOKEN}"
+    fi
+  fi
   if [ -n "$URL" ]; then break; fi
   sleep 0.2
 done

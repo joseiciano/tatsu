@@ -141,6 +141,9 @@ export class WebSocketClientTransport implements ClientTransport {
         ws = new WebSocketCtor(url.toString(), undefined, {
           headers: { Authorization: `Bearer ${this.opts.token}` }
         })
+      } else if (this.opts.tokenTransport === 'sessionQuery') {
+        url.searchParams.set('session', this.opts.token)
+        ws = new this.WebSocketCtor(url.toString())
       } else {
         url.searchParams.set('token', this.opts.token)
         ws = new this.WebSocketCtor(url.toString())

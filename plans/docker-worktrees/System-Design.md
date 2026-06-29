@@ -179,10 +179,10 @@ Metadata update points:
 - boot recovery: merge Docker inspect status into shared state; persist only stable
   identity fields.
 - stop/error detection: update shared state only; avoid config churn for transient status.
-- delete success: remove `worktreeContainers[worktreePath]` after container and
-  host worktree cleanup both succeed.
-- force host deletion after container cleanup failure: keep persisted metadata so
-  restart still routes cleanup/recovery toward Docker.
+- delete success: remove `worktreeContainers[worktreePath]` after host worktree
+  cleanup completes. Container cleanup failure does not block host deletion.
+- container cleanup failure during delete: proceed with host worktree deletion
+  and remove persisted metadata; log the orphan container for manual cleanup.
 
 Use one main-process helper, e.g. `persistWorktreeContainerMetadata(path,
 metadata)`, so creation, recovery, and deletion do not each rewrite config
@@ -387,10 +387,10 @@ Default containerized delete order:
 3. remove container.
 4. remove host worktree.
 
-If stop/remove fails, block host worktree deletion and show pending deletion
-error. `force: true` may remove host worktree anyway, but must warn that orphan
-container may remain. Force does not imply `docker rm -f`; that requires separate
-explicit container cleanup request.
+If stop/remove fails, proceed with host worktree deletion anyway (best-effort
+container cleanup). Log the container cleanup failure so the user can manually
+clean up the orphan container. Force does not imply `docker rm -f`; that
+requires separate explicit container cleanup request.
 
 Container status transitions:
 
@@ -406,7 +406,7 @@ Container status transitions:
 | terminal opens stopped container | `stopped` | `stopped` | shared state only |
 | delete start | `running`/`stopped` | existing status | keep metadata |
 | delete success | any | none | remove metadata |
-| delete container cleanup failure | any | `error` | keep metadata |
+| delete container cleanup failure | any | none | remove metadata; log orphan |
 
 ## Docker command shape
 
@@ -534,5 +534,5 @@ Manual failure paths:
 3. Bad Dockerfile/image: pending error includes build/pull failure.
 4. Container stopped before opening terminal: terminal reports not running and
    suggests restart/recreate.
-5. Container removal failure during delete: host worktree remains and pending
-   deletion shows failure.
+5. Container removal failure during delete: host worktree is still deleted
+   (best-effort cleanup); orphan container logged for manual removal.

@@ -9,7 +9,7 @@ vi.mock('../secrets', () => ({
   }
 }))
 
-import { getOrCreateWsToken, rotateWsToken, safeEqualToken } from '.'
+import { getOrCreateWsToken, rotateWsToken, safeEqualToken, issueSessionToken, consumeSessionToken } from '.'
 
 beforeEach(() => {
   store.clear()
@@ -51,5 +51,48 @@ describe('ws-token', () => {
 
   it('returns false instead of throwing for different token lengths', () => {
     expect(safeEqualToken('secret', 'secrets')).toBe(false)
+  })
+})
+
+describe('session tokens', () => {
+  it('issues a session token when root token matches', () => {
+    const token = issueSessionToken('root', 'root')
+    expect(token).toMatch(/^[0-9a-f]{32}$/)
+  })
+
+  it('returns null when root token does not match', () => {
+    expect(issueSessionToken('wrong', 'root')).toBeNull()
+  })
+
+  it('returns null for non-string provided token', () => {
+    expect(issueSessionToken(undefined, 'root')).toBeNull()
+    expect(issueSessionToken(null, 'root')).toBeNull()
+    expect(issueSessionToken(123, 'root')).toBeNull()
+  })
+
+  it('consumes a valid session token exactly once', () => {
+    const token = issueSessionToken('root', 'root')!
+    expect(consumeSessionToken(token)).toBe(true)
+    // Second use fails — single-use
+    expect(consumeSessionToken(token)).toBe(false)
+  })
+
+  it('returns false for unknown session tokens', () => {
+    expect(consumeSessionToken('bogus')).toBe(false)
+  })
+
+  it('returns false for non-string session tokens', () => {
+    expect(consumeSessionToken(undefined)).toBe(false)
+    expect(consumeSessionToken(null)).toBe(false)
+    expect(consumeSessionToken(42)).toBe(false)
+  })
+
+  it('rejects expired session tokens', async () => {
+    // Issue a token, then fast-forward past the TTL.
+    const token = issueSessionToken('root', 'root')!
+    vi.useFakeTimers()
+    vi.advanceTimersByTime(31_000) // SESSION_TTL_MS is 30_000
+    expect(consumeSessionToken(token)).toBe(false)
+    vi.useRealTimers()
   })
 })

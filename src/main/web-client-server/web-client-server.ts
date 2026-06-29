@@ -1,17 +1,22 @@
 // HTTP server that serves the bundled web-client renderer to remote
 // browsers. Designed to share its port with the WS transport: clients
 // fetch `http://host:port/?token=…` to load index.html, then the
-// renderer opens `ws://host:port/?token=…` on the same origin.
-// Same-origin avoids any CORS plumbing, and the ws library's
-// `verifyClient` still gates every upgrade on the shared auth token.
+// renderer exchanges that root token over same-origin HTTP for a
+// short-lived one-time session token, and connects via WS with
+// `?session=<session_token>`.
 //
 // Auth model:
 //   - HTML entry (`/`, `/index.html`) requires `?token=<token>` on the
 //     URL (or an `Authorization: Bearer <token>` header). Unauthenticated
 //     requests get 401 with a plaintext hint — the token is never
 //     disclosed to a caller that didn't already present it.
-//   - WS upgrade on the same port is gated by `verifyClient` against the
-//     same token.
+//   - `POST /_harness/session` exchanges a valid root token
+//     (`?token=` or `Authorization: Bearer`) for a short-lived,
+//     one-time-use session token the browser uses for the WS upgrade.
+//   - WS upgrade on the same port accepts `?session=<session_token>`
+//     (one-time browser tokens) or `Authorization: Bearer <root_token>`
+//     (programmatic clients). The root token in `?token=` is NOT
+//     accepted for WS — browsers must exchange it first.
 //   - Static assets (CSS, JS chunks, images, favicon, manifest, fonts)
 //     are intentionally ungated: they don't carry the token, browsers
 //     often fetch them without query strings (favicon/manifest), and
@@ -43,6 +48,7 @@ import { createServer, type IncomingMessage, type Server as HttpServer } from 'h
 import { readFile, stat } from 'fs/promises'
 import { extname, join, resolve, sep } from 'path'
 import { log } from '../debug'
+import { issueSessionToken } from '../ws-token'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -80,6 +86,44 @@ export function createWebClientServer(opts: WebClientServerOptions): HttpServer 
       const url = new URL(req.url ?? '/', 'http://localhost')
       let pathname = decodeURIComponent(url.pathname)
       if (pathname === '/' || pathname === '') pathname = '/index.html'
+
+      // POST /_harness/session — exchange root token for a short-lived
+      // one-time session token the browser uses for the WS upgrade.
+      // Also handle OPTIONS for CORS preflight from cross-origin renderers.
+      if (pathname === '/_harness/session') {
+        // CORS headers for cross-origin requests from the Electron renderer
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+        res.setHeader('Access-Control-Max-Age', '86400')
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          res.end()
+          return
+        }
+
+        if (req.method === 'POST') {
+          const rootToken = extractBearerToken(req) ?? url.searchParams.get('token')
+          const sessionToken = issueSessionToken(rootToken, opts.token)
+          if (!sessionToken) {
+            res.statusCode = 401
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            res.end('unauthorized')
+            return
+          }
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Cache-Control', 'no-store')
+          res.end(JSON.stringify({ sessionToken }))
+          return
+        }
+
+        res.statusCode = 405
+        res.setHeader('Allow', 'POST, OPTIONS')
+        res.end('method not allowed')
+        return
+      }
 
       const filePath = resolve(join(root, pathname))
       if (filePath !== root && !filePath.startsWith(root + sep)) {
@@ -165,4 +209,11 @@ function hasValidToken(req: IncomingMessage, url: URL, expected: string): boolea
     if (m && m[1] === expected) return true
   }
   return false
+}
+
+function extractBearerToken(req: IncomingMessage): string | null {
+  const auth = req.headers['authorization']
+  if (typeof auth !== 'string') return null
+  const m = auth.match(/^Bearer\s+(.+)$/i)
+  return m ? m[1] : null
 }

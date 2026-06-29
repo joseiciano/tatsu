@@ -2,7 +2,7 @@
  *  - `starting`: container created but status not yet verified (e.g. on boot recovery).
  *  - `running`: container is up and accepting `docker exec`.
  *  - `stopped`: container exists but is not running.
- *  - `error`: container creation failed or setup failed inside the container. */
+ *  - `error`: container creation failed, Docker was unavailable during recovery, or cleanup failed. */
 export type WorktreeContainerStatus = 'starting' | 'running' | 'stopped' | 'error'
 
 /** Metadata for a worktree's companion Docker container. Stored in the
@@ -59,6 +59,8 @@ export interface PendingWorktree {
   initialPrompt?: string
   /** One-shot teleport session id for the new Claude tab. In-memory only. */
   teleportSessionId?: string
+  agentKind?: 'claude' | 'codex' | 'opencode'
+  model?: string
 }
 
 export type PendingDeletionPhase =

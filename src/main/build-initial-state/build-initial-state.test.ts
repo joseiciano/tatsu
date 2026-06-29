@@ -125,4 +125,93 @@ describe('buildInitialAppState', () => {
     })
   })
 
+  it('omits persisted container metadata when the container ID is missing', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], {
+      '/tmp/wt/a': {
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      }
+    })
+
+    expect(result).toBeDefined()
+    expect(result[0]).toBe(worktree)
+    expect(result[0].container).toBeUndefined()
+  })
+
+  it('does not overwrite existing container metadata during refresh hydration', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+    const existing: Worktree = {
+      ...worktree,
+      container: {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh',
+        status: 'running'
+      }
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], {
+      '/tmp/wt/a': {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      }
+    }, [existing])
+
+    expect(result[0]).not.toBe(worktree)
+    expect(result[0].container).toEqual(existing.container)
+  })
+
+  it('preserves existing container metadata even without persisted metadata', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+    const existing: Worktree = {
+      ...worktree,
+      container: {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh',
+        status: 'running'
+      }
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], undefined, [existing])
+
+    expect(result[0]).not.toBe(worktree)
+    expect(result[0].container).toEqual(existing.container)
+  })
+
 })

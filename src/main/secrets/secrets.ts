@@ -101,9 +101,8 @@ class KeytarBackend implements SecretsBackend {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly keytar: any
   private readonly knownKeys = new Set<string>()
-  // Synchronous index of which keys exist. Keytar is async-only, so we
-  // shadow it here for the sync `has` / `get` API the rest of main relies
-  // on. Loaded once at construction; updated on every set/delete.
+  // Synchronous index of which keys exist. Loaded once at construction;
+  // updated on every set/delete.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(keytar: any) {
     this.keytar = keytar
@@ -117,11 +116,9 @@ class KeytarBackend implements SecretsBackend {
 
   set(key: string, value: string): void {
     try {
-      // Keytar exposes only async methods on most platforms. Fire-and-forget
-      // — the next get for this key won't observe the write until it lands,
-      // but the only caller (settings:setGithubToken) awaits a roundtrip
-      // before re-reading via hasSecret, which gives keytar enough time.
-      void this.keytar.setPassword(KeytarBackend.SERVICE, key, value)
+      this.keytar.setPassword(KeytarBackend.SERVICE, key, value).catch((err: unknown) => {
+        log('secrets', `keytar set failed for ${key}`, err instanceof Error ? err.message : err)
+      })
       this.knownKeys.add(key)
     } catch (err) {
       log('secrets', `keytar set failed for ${key}`, err instanceof Error ? err.message : err)
@@ -130,10 +127,6 @@ class KeytarBackend implements SecretsBackend {
 
   get(key: string): string | null {
     try {
-      // Keytar offers a sync variant on Linux/Windows; use it when present
-      // so the existing sync API contract holds. On macOS the sync variant
-      // is missing and we'd need to redesign the public API to be async —
-      // not in scope for this seam.
       if (typeof this.keytar.getPasswordSync === 'function') {
         const v = this.keytar.getPasswordSync(KeytarBackend.SERVICE, key)
         return v ?? null
@@ -152,7 +145,9 @@ class KeytarBackend implements SecretsBackend {
 
   delete(key: string): void {
     try {
-      void this.keytar.deletePassword(KeytarBackend.SERVICE, key)
+      this.keytar.deletePassword(KeytarBackend.SERVICE, key).catch((err: unknown) => {
+        log('secrets', `keytar delete failed for ${key}`, err instanceof Error ? err.message : err)
+      })
       this.knownKeys.delete(key)
     } catch (err) {
       log('secrets', `keytar delete failed for ${key}`, err instanceof Error ? err.message : err)
@@ -237,6 +232,10 @@ function pickBackend(): SecretsBackend {
   // error, including the binding being missing entirely.
   try {
     const keytar = dynamicRequire('keytar')
+    if (typeof keytar.getPasswordSync !== 'function' || typeof keytar.findCredentialsSync !== 'function') {
+      log('secrets', 'keytar sync methods unavailable; falling back to local encrypted file backend')
+      throw new Error('keytar sync methods unavailable')
+    }
     backendCache = new KeytarBackend(keytar)
     log('secrets', 'using keytar backend')
     return backendCache
