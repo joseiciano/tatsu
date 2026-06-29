@@ -1,43 +1,5 @@
-import { useRef, useState, useEffect } from 'react'
-import { motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion'
-import {
-  MockHarness,
-  type MockHarnessState,
-  type MockStatus,
-  type MockWorktree
-} from './MockHarness'
-
-type SectionIndex = 0 | 1 | 2 | 3
-type Phase = { section: SectionIndex; localProgress: number }
-
-const BASE_WORKTREES: Omit<MockWorktree, 'status'>[] = [
-  {
-    id: '1',
-    branch: 'feat/onboarding',
-    path: 'harness/feat-onboarding',
-    pr: { checks: 'success', additions: 142, deletions: 58 }
-  },
-  {
-    id: '2',
-    branch: 'fix/login-flash',
-    path: 'harness/fix-login-flash'
-  },
-  {
-    id: '3',
-    branch: 'refactor/auth',
-    path: 'harness/refactor-auth'
-  },
-  {
-    id: '4',
-    branch: 'chore/deps-bump',
-    path: 'harness/chore-deps-bump'
-  },
-  {
-    id: '5',
-    branch: 'docs/api-reference',
-    path: 'harness/docs-api-reference'
-  }
-]
+import { useState, useCallback } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Section {
   eyebrow: string
@@ -71,253 +33,90 @@ const SECTIONS: Section[] = [
 ]
 
 export function ScrollDiorama() {
-  const sectionRef = useRef<HTMLElement>(null)
-  const prefersReduced = useReducedMotion()
+  const [activeIndex, setActiveIndex] = useState(0)
 
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ['start start', 'end end']
-  })
+  const goTo = useCallback((index: number) => {
+    setActiveIndex(Math.max(0, Math.min(SECTIONS.length - 1, index)))
+  }, [])
 
-  const [phase, setPhase] = useState<Phase>({ section: 0, localProgress: 0 })
-
-  useMotionValueEvent(scrollYProgress, 'change', (p) => {
-    const clamped = Math.max(0, Math.min(1, p))
-    const section = Math.min(3, Math.floor(clamped * 4)) as SectionIndex
-    const localProgress = clamped * 4 - section
-    setPhase({ section, localProgress })
-  })
-
-  useEffect(() => {
-    if (prefersReduced) setPhase({ section: 3, localProgress: 1 })
-  }, [prefersReduced])
-
-  const mockState = dioramaStateFor(phase, prefersReduced ?? false)
+  const goPrev = useCallback(() => goTo(activeIndex - 1), [activeIndex, goTo])
+  const goNext = useCallback(() => goTo(activeIndex + 1), [activeIndex, goTo])
 
   return (
-    <>
-      <section
-        id="diorama"
-        ref={sectionRef}
-        className="relative diorama-bg hidden md:block"
-        style={{ height: '640vh' }}
-      >
-        <div className="sticky top-0 h-screen flex items-center overflow-hidden">
-          <div className="w-full grid grid-cols-[minmax(0,42%)_minmax(0,58%)] gap-8 max-w-[1400px] mx-auto">
-            <div className="px-8 lg:px-16">
-              <CopyStack activeSection={phase.section} />
-            </div>
-
-            <div className="relative h-[68vh] translate-x-[8%]">
-              <div className="absolute inset-0">
-                <MockHarness state={mockState} />
-              </div>
+    <section id="diorama" className="diorama-bg py-16 md:py-24">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="relative">
+          <div className="overflow-hidden">
+            <div
+              className="flex transition-transform duration-500 ease-out"
+              style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+            >
+              {SECTIONS.map((s, i) => (
+                <div
+                  key={i}
+                  className="w-full flex-shrink-0 px-2 md:px-4"
+                  role="group"
+                  aria-roledescription="slide"
+                  aria-label={`${i + 1} of ${SECTIONS.length}`}
+                >
+                  <div className="max-w-2xl mx-auto">
+                    <div className="bg-[#1c1917] border border-[#44403c] rounded-xl p-8 md:p-12 min-h-[360px] md:min-h-[420px] flex flex-col justify-center text-center">
+                      <div className="text-xs uppercase tracking-[0.2em] text-[#fbbf24]/80 font-semibold mb-4">
+                        {s.eyebrow}
+                      </div>
+                      <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-[1.1] mb-5 text-[#fafaf9]">
+                        {s.title}
+                      </h2>
+                      <p className="text-base md:text-lg text-[#a8a29e] leading-relaxed mb-3">
+                        {s.body}
+                      </p>
+                      {s.bonus && (
+                        <p className="text-sm text-[#78716c] leading-relaxed">
+                          <span className="text-[#fbbf24]/80 font-semibold">Bonus:</span>{' '}
+                          {s.bonus.replace(/^Bonus:\s*/, '')}
+                        </p>
+                      )}
+                      {/* <MockHarness state={mockState} /> */}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          <ProgressRail section={phase.section} />
+          <button
+            onClick={goPrev}
+            disabled={activeIndex === 0}
+            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 md:-translate-x-4 p-2 rounded-full bg-[#292524]/80 text-[#a8a29e] hover:bg-[#44403c] hover:text-[#fafaf9] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Previous slide"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <button
+            onClick={goNext}
+            disabled={activeIndex === SECTIONS.length - 1}
+            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 md:translate-x-4 p-2 rounded-full bg-[#292524]/80 text-[#a8a29e] hover:bg-[#44403c] hover:text-[#fafaf9] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Next slide"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
-      </section>
 
-      <StackedDiorama />
-    </>
-  )
-}
-
-/** Mobile fallback: one block per section, each with a static snapshot of
- * the mock above the copy. No scroll hijack, no pinning — just a readable
- * stack that mirrors the desktop narrative. */
-function StackedDiorama() {
-  return (
-    <section className="md:hidden diorama-bg py-12">
-      {SECTIONS.map((s, i) => {
-        const sectionIdx = i as SectionIndex
-        const mockState =
-          sectionIdx === 0
-            ? sectionOneState(0.8)
-            : sectionIdx === 1
-              ? sectionTwoState(0.8)
-              : sectionIdx === 2
-                ? sectionThreeState(0.8)
-                : sectionFourState(0.8)
-        return (
-          <div key={i} className="mx-auto max-w-xl px-5 py-10">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-amber-400/80 font-semibold mb-3">
-              {s.eyebrow}
-            </div>
-            <h2 className="text-3xl font-bold tracking-tight mb-3 leading-[1.15]">{s.title}</h2>
-            <p className="text-base text-ink-400 leading-relaxed mb-2">{s.body}</p>
-            {s.bonus && (
-              <p className="text-sm text-ink-500 leading-relaxed mb-6">
-                <span className="text-amber-400/80 font-semibold">Bonus:</span>{' '}
-                {s.bonus.replace(/^Bonus:\s*/, '')}
-              </p>
-            )}
-            {!s.bonus && <div className="mb-6" />}
-            <div className="h-[360px] rounded-xl overflow-hidden">
-              <MockHarness state={mockState} />
-            </div>
-          </div>
-        )
-      })}
+        <div className="flex justify-center gap-2 mt-10" role="tablist" aria-label="Carousel slides">
+          {SECTIONS.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              role="tab"
+              aria-selected={i === activeIndex}
+              aria-label={`Go to slide ${i + 1}`}
+              className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                i === activeIndex ? 'bg-[#fbbf24]' : 'bg-[#44403c] hover:bg-[#57534e]'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
     </section>
   )
-}
-
-function CopyStack({ activeSection }: { activeSection: SectionIndex }) {
-  return (
-    <div className="relative h-[68vh]">
-      <div className="relative w-full h-full">
-        {SECTIONS.map((s, i) => {
-          const active = i === activeSection
-          return (
-            <motion.div
-              key={i}
-              initial={false}
-              animate={{
-                opacity: active ? 1 : 0,
-                y: active ? 0 : i < activeSection ? -24 : 24
-              }}
-              transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0 flex flex-col pt-[6vh]"
-              style={{
-                pointerEvents: active ? 'auto' : 'none',
-                zIndex: active ? 2 : 1
-              }}
-            >
-              <div className="text-xs uppercase tracking-[0.2em] text-amber-400/80 font-semibold mb-5">
-                {s.eyebrow}
-              </div>
-              <h2 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.08] mb-6">
-                {s.title}
-              </h2>
-              <p className="text-lg text-ink-400 leading-relaxed max-w-xl">{s.body}</p>
-              {s.bonus && (
-                <p className="text-sm text-ink-500 leading-relaxed max-w-xl mt-4">
-                  <span className="text-amber-400/80 font-semibold">Bonus:</span>{' '}
-                  {s.bonus.replace(/^Bonus:\s*/, '')}
-                </p>
-              )}
-            </motion.div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function ProgressRail({ section }: { section: SectionIndex }) {
-  return (
-    <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-3 hidden lg:flex">
-      {[0, 1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className={`w-1.5 h-8 rounded-full transition-colors ${
-            i === section ? 'bg-amber-500' : 'bg-ink-800'
-          }`}
-        />
-      ))}
-    </div>
-  )
-}
-
-function dioramaStateFor(phase: Phase, reduced: boolean): MockHarnessState {
-  if (reduced) return finalState()
-
-  const { section, localProgress } = phase
-
-  if (section === 0) return sectionOneState(localProgress)
-  if (section === 1) return sectionTwoState(localProgress)
-  if (section === 2) return sectionThreeState(localProgress)
-  return sectionFourState(localProgress)
-}
-
-function sectionOneState(progress: number): MockHarnessState {
-  const revealCount = Math.min(BASE_WORKTREES.length, Math.floor(progress * 6) + 2)
-  const worktrees = BASE_WORKTREES.slice(0, revealCount).map((w, i) => ({
-    ...w,
-    status: sectionOneStatusFor(i, progress)
-  }))
-  return {
-    activeWorktreeId: '1',
-    worktrees,
-    highlightedElement: progress > 0.15 ? 'sidebar' : null,
-    panelMode: 'terminal',
-    mergedClosedCount: 3
-  }
-}
-
-function sectionOneStatusFor(i: number, progress: number): MockStatus {
-  const rotations: MockStatus[][] = [
-    ['processing', 'processing', 'processing', 'processing'],
-    ['processing', 'waiting', 'processing', 'processing'],
-    ['idle', 'processing', 'processing', 'idle'],
-    ['processing', 'processing', 'idle', 'processing'],
-    ['waiting', 'processing', 'processing', 'processing']
-  ]
-  const phase = Math.min(3, Math.floor(progress * 4))
-  return rotations[i]?.[phase] ?? 'processing'
-}
-
-function sectionTwoState(progress: number): MockHarnessState {
-  const worktrees = BASE_WORKTREES.map((w, i) => {
-    let status: MockStatus = sectionOneStatusFor(i, 0.8)
-    if (i === 1) status = progress > 0.2 ? 'needs-approval' : 'processing'
-    return { ...w, status }
-  })
-  const highlightRow = progress > 0.35
-  return {
-    activeWorktreeId: highlightRow ? '2' : '1',
-    worktrees,
-    highlightedElement: highlightRow ? 'worktree-row' : 'sidebar',
-    highlightedWorktreeId: '2',
-    panelMode: 'terminal',
-    mergedClosedCount: 3
-  }
-}
-
-function sectionThreeState(progress: number): MockHarnessState {
-  const worktrees = BASE_WORKTREES.map((w, i) => ({
-    ...w,
-    status: i === 1 ? ('needs-approval' as MockStatus) : sectionOneStatusFor(i, 0.8)
-  }))
-  const showForm = progress > 0.5
-  return {
-    activeWorktreeId: showForm ? 'new' : '1',
-    worktrees,
-    highlightedElement: 'new-worktree-button',
-    panelMode: showForm ? 'new-worktree-flow' : 'terminal',
-    mergedClosedCount: 3
-  }
-}
-
-function sectionFourState(progress: number): MockHarnessState {
-  const worktrees = BASE_WORKTREES.map((w, i) => ({
-    ...w,
-    status: sectionOneStatusFor(i, 0.8)
-  }))
-  const panelOpen = progress > 0.25
-  return {
-    activeWorktreeId: '1',
-    worktrees,
-    highlightedElement: panelOpen ? null : 'right-column-button',
-    panelMode: 'terminal',
-    mergedClosedCount: 3,
-    rightPanelOpen: panelOpen
-  }
-}
-
-function finalState(): MockHarnessState {
-  const worktrees = BASE_WORKTREES.map((w, i) => ({
-    ...w,
-    status: sectionOneStatusFor(i, 0.8)
-  }))
-  return {
-    activeWorktreeId: '1',
-    worktrees,
-    highlightedElement: null,
-    panelMode: 'terminal',
-    mergedClosedCount: 3,
-    rightPanelOpen: true
-  }
 }
