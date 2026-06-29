@@ -4,7 +4,7 @@ export function Install() {
       <div className="max-w-3xl mx-auto px-6 text-center">
         <div className="p-8 md:p-12 rounded-2xl bg-[#1c1917] border border-[#44403c]">
           <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-4">
-            Ready to run <span className="gradient-text">parallel agents?</span>
+            Ready to run <span className="text-[#f59e0b]">parallel agents?</span>
           </h2>
           <p className="text-[#a8a29e] mb-8 max-w-md mx-auto">
             Tatsu is free and open source. Download the macOS app or run the headless server on Linux.

@@ -10,7 +10,7 @@ export function Hero() {
         <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-[1.1]">
           Swarm Control Agents
           <br />
-          across <span className="gradient-text">every worktree.</span>
+          across <span className="text-[#f59e0b]">every worktree.</span>
         </h1>
 
         <p className="text-lg md:text-xl text-[#a8a29e] max-w-2xl mx-auto mb-10 leading-relaxed">
