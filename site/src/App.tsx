@@ -3,7 +3,6 @@ import { Hero } from './components/Hero'
 import { DemoVideo } from './components/DemoVideo'
 import { FeatureCallouts } from './components/FeatureCallouts'
 import { Features } from './components/Features'
-import { OpenSource } from './components/OpenSource'
 import { Install } from './components/Install'
 import { Footer } from './components/Footer'
 import { ScrollDiorama } from './components/ScrollDiorama'
@@ -17,7 +16,6 @@ export function App() {
       <ScrollDiorama />
       <FeatureCallouts />
       <Features />
-      <OpenSource />
       <Install />
       <Footer />
     </div>
