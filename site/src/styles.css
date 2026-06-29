@@ -22,6 +22,25 @@
   --color-amber-400: #fbbf24;
   --color-amber-600: #d97706;
 
+  /* App UI tokens — mapped to warm clay/amber/ink palette */
+  --color-app: #0c0a09;
+  --color-panel: #1c1917;
+  --color-panel-raised: #292524;
+  --color-surface: #44403c;
+  --color-surface-hover: #57534e;
+  --color-border: #44403c;
+  --color-border-strong: #57534e;
+  --color-fg: #d6d3d1;
+  --color-fg-bright: #f5f5f4;
+  --color-muted: #a8a29e;
+  --color-dim: #78716c;
+  --color-faint: #57534e;
+  --color-success: #22c55e;
+  --color-warning: #fbbf24;
+  --color-danger: #ef4444;
+  --color-info: #60a5fa;
+  --color-accent: #c67c5c;
+
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -121,6 +140,82 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pulse-dot {
+    animation: none;
+  }
+}
+
+/* Brand aliases — warm clay/amber/ink scheme */
+.brand-gradient-text,
+.brand-gradient-text {
+  background: linear-gradient(135deg, #fbbf24 0%, #c67c5c 50%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-gradient-bg {
+  background: linear-gradient(135deg, #fbbf24 0%, #c67c5c 50%, #f59e0b 100%);
+}
+
+.brand-grid-bg {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.07), transparent 55%),
+    radial-gradient(circle at 0% 100%, rgba(198, 124, 92, 0.06), transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(245, 158, 11, 0.04), transparent 50%);
+}
+
+.brand-glow-amber {
+  box-shadow: 0 0 60px rgba(251, 191, 36, 0.12);
+}
+
+.brand-gradient-flow-bar {
+  background: linear-gradient(
+    90deg,
+    #fbbf24 0%,
+    #c67c5c 25%,
+    #f59e0b 50%,
+    #c67c5c 75%,
+    #fbbf24 100%
+  );
+  background-size: 200% 100%;
+  animation: warm-gradient-flow 2.4s linear infinite;
+}
+
+.group:hover .brand-gradient-flow-text-hover,
+.brand-gradient-flow-text-active .brand-gradient-flow-text-hover {
+  background: linear-gradient(
+    90deg,
+    #fbbf24 0%,
+    #c67c5c 25%,
+    #f59e0b 50%,
+    #c67c5c 75%,
+    #fbbf24 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: warm-gradient-flow 2.4s linear infinite;
+}
+
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret-blink {
+  animation: caret-blink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret-blink {
     animation: none;
   }
 }
