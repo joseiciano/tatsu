@@ -40,7 +40,11 @@
     "dev:site": "vite --config site/vite.config.ts",
     "build:site": "vite build --config site/vite.config.ts",
     "preview:site": "vite preview --config site/vite.config.ts",
-    "typecheck:site": "tsc -p site/tsconfig.json --noEmit"
+    "typecheck:site": "tsc -p site/tsconfig.json --noEmit",
+    "dev:site-old": "vite --config site-old/vite.config.ts",
+    "build:site-old": "vite build --config site-old/vite.config.ts",
+    "preview:site-old": "vite preview --config site-old/vite.config.ts",
+    "typecheck:site-old": "tsc -p site-old/tsconfig.json --noEmit"
   },
   "build": {
     "appId": "org.mikelyons.harness",
