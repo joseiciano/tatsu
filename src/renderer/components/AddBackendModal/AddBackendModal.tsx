@@ -4,7 +4,10 @@ import {
   parseConnectionUrl,
   suggestLabelFromUrl
 } from '../../../shared/transport/parse-connection-url'
-import { WebSocketClientTransport } from '../../../shared/transport/transport-websocket'
+import {
+  WebSocketClientTransport,
+  exchangeForSessionToken
+} from '../../../shared/transport/transport-websocket'
 import { getBackendsRegistry } from '../../store'
 import { useBackend } from '../../backend'
 import type { StateSnapshot } from '../../../shared/state'
@@ -17,10 +20,11 @@ interface AddBackendModalProps {
 
 /** Modal for adding a remote `harness-server` to the chip strip. The
  *  user pastes the link Settings displays on the host machine
- *  (`http://host:port/?token=...`); we parse, validate the connection
- *  by opening a WebSocket and fetching a snapshot, persist via main,
- *  and add the live transport to the renderer's registry as the new
- *  active backend. Per design §B/§I.
+ *  (`http://host:port/?token=...`); we parse, exchange the root token
+ *  for a short-lived session token via POST /_harness/session, validate
+ *  the connection by opening a WebSocket and fetching a snapshot, persist
+ *  via main, and add the live transport to the renderer's registry as the
+ *  new active backend. Per design §B/§I.
  *
  *  The `Test & save` flow keeps the WS transport that was used for
  *  validation — it's the same instance we then register, so the user
@@ -72,9 +76,18 @@ export function AddBackendModal({ isOpen, onClose }: AddBackendModalProps): JSX.
       // it's a no-op — events from the test handshake don't update
       // status because there's nothing to set status on yet.
       let savedId: string | null = null
+
+      // Exchange the root token for a short-lived session token via
+      // POST /_harness/session. Keeps the root token off the wire.
+      const sessionToken = await exchangeForSessionToken(
+        parseResult.parsed.wsUrl,
+        parseResult.parsed.token
+      )
+
       ws = new WebSocketClientTransport({
         url: parseResult.parsed.wsUrl,
-        token: parseResult.parsed.token,
+        token: sessionToken,
+        tokenTransport: 'sessionQuery',
         onConnectionChange: (connected, reason) => {
           if (!savedId) return
           registry.setStatus(savedId, {

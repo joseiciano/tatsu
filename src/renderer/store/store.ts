@@ -34,7 +34,10 @@ import {
   type WireSnapshotState
 } from '../../shared/state'
 import type { LocalTransportHandle, BackendConnection } from '../types'
-import { WebSocketClientTransport } from '../../shared/transport/transport-websocket'
+import {
+  WebSocketClientTransport,
+  exchangeForSessionToken
+} from '../../shared/transport/transport-websocket'
 import { initBackend, getBackend } from '../backend'
 import type { BackendStatus, ReconnectSubscriber } from './types'
 import {
@@ -439,8 +442,9 @@ export async function initStore(): Promise<void> {
 }
 
 /** Construct a WS transport for a saved remote, fetch its token from
- *  secrets, connect, and register the pair. Errors are logged but
- *  non-fatal — the user can retry from the chip strip.
+ *  secrets, exchange it for a short-lived session token, connect, and
+ *  register the pair. Errors are logged but non-fatal — the user can
+ *  retry from the chip strip.
  *
  *  Exported (with dependency-injection) for tests. Production callers
  *  pass the module-level `registry` and `backend`. */
@@ -454,12 +458,16 @@ export async function hydrateRemoteBackend(
 ): Promise<void> {
   const { registry: reg, backend, WSCtor = WebSocketClientTransport } = deps
   try {
-    const token = await backend.connectionsGetToken(conn.id)
-    if (!token) {
+    const rootToken = await backend.connectionsGetToken(conn.id)
+    if (!rootToken) {
       // eslint-disable-next-line no-console
       console.warn(`[harness] no token stored for backend ${conn.id} — skipping`)
       return
     }
+    // Exchange the root token for a short-lived one-time session token
+    // via POST /_harness/session. Keeps the root token off the wire
+    // for the WS upgrade handshake.
+    const sessionToken = await exchangeForSessionToken(conn.url, rootToken)
     // BackendConnection.url is the wire URL with ws://-or-wss:// prefix
     // (parseConnectionUrl preserves the TLS choice from what the user
     // pasted). The token is held separately in secrets.enc. The
@@ -473,7 +481,8 @@ export async function hydrateRemoteBackend(
     if (reg.has(conn.id)) return
     const ws = new WSCtor({
       url: conn.url,
-      token,
+      token: sessionToken,
+      tokenTransport: 'sessionQuery',
       onConnectionChange: (connected, reason) => {
         reg.setStatus(conn.id, {
           state: connected ? 'connected' : 'disconnected',
