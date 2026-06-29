@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
-import { readFileSync } from 'fs'
+import { mkdirSync, readFileSync } from 'fs'
 import { basename } from 'path'
 import { log } from '../debug'
 import type { DockerRunner, DockerRunResult, DockerRunOptions, ResolvedWorktreeContainerConfig, CreatedWorktreeContainer, WorktreeContainers } from './types'
@@ -103,14 +103,23 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return `type=bind,source=${escapeMountValue(source)},target=${escapeMountValue(target)}`
   }
 
+  function encodeLabelValue(value: string): string {
+    return 'b64:' + Buffer.from(value, 'utf8').toString('base64url')
+  }
+
   function validateLabelValue(value: string): string {
     if (Buffer.byteLength(value, 'utf8') > 4096) {
       throw new Error('Label value exceeds 4096 byte limit')
     }
-    if (value.includes('\0') || value.includes('\n') || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
+    if (!/^[A-Za-z0-9_:/-]+$/.test(value)) {
       throw new Error('Label value contains invalid character')
     }
     return value
+  }
+
+  function encodeAndValidateLabelValue(value: string): string {
+    const encoded = encodeLabelValue(value)
+    return validateLabelValue(encoded)
   }
 
   function sanitizeStderr(stderr: string): string {
@@ -122,7 +131,13 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       .replace(/\b(AKIA[0-9A-Z]{16})\b/g, '[redacted]')
       .replace(/\bxox[abprs]-[A-Za-z0-9-]+\b/g, '[redacted]')
       .replace(/\bAIza[0-9A-Za-z_-]{10,}\b/g, '[redacted]')
-      .replace(/(\bpassword=)[^\s]+/gi, '$1[redacted]')
+      .replace(/\b([A-Za-z_][A-Za-z0-9_]*=)[^\s]+/g, (match, prefix) => {
+        const key = prefix.slice(0, -1)
+        if (/token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key/i.test(key)) {
+          return `${prefix}[redacted]`
+        }
+        return match
+      })
   }
 
   function isNoSuchContainer(stderr: string): boolean {
@@ -137,21 +152,9 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       return { ok: dockerAvailableCache.ok, error: dockerAvailableCache.error }
     }
     try {
-      const result = await docker.run(['version', '--format', 'json'], { timeoutMs: 10000 })
+      const result = await docker.run(['version'], { timeoutMs: 10000 })
       if (result.exitCode !== 0) {
         const failure = { ok: false, error: `Docker daemon unavailable: ${result.stderr || 'unknown error'}` }
-        dockerAvailableCache = { ...failure, ts: Date.now() }
-        return failure
-      }
-      try {
-        const parsed = JSON.parse(result.stdout)
-        if (!parsed.Server) {
-          const failure = { ok: false, error: 'Docker daemon unavailable: Server section missing from docker version output' }
-          dockerAvailableCache = { ...failure, ts: Date.now() }
-          return failure
-        }
-      } catch {
-        const failure = { ok: false, error: 'Docker daemon unavailable: unable to parse docker version output' }
         dockerAvailableCache = { ...failure, ts: Date.now() }
         return failure
       }
@@ -177,6 +180,7 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       { source: worktreePath, target: workdir }
     ]
     const harnessStatusDir = '/tmp/harness-status'
+    mkdirSync(harnessStatusDir, { recursive: true, mode: 0o700 })
     volumes.push({ source: harnessStatusDir, target: harnessStatusDir })
     if (repoConfig?.volumes) {
       for (const vol of repoConfig.volumes) {
@@ -188,13 +192,25 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     }
     const dockerfile = repoConfig?.dockerfile
     const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(worktreePath, dockerfile)}` : (repoConfig?.image || 'node:20-alpine')
+
+    // Sane default env vars for read-only containers. HOME and XDG dirs live
+    // under the worktree bind mount so they survive restarts and are writable
+    // even when the container root fs is read-only. User-supplied values win.
+    const defaultEnv: Record<string, string> = {
+      HOME: `${workdir}/.home`,
+      XDG_CACHE_HOME: `${workdir}/.cache`,
+      XDG_CONFIG_HOME: `${workdir}/.config`,
+      XDG_DATA_HOME: `${workdir}/.local/share`
+    }
+    const mergedEnv: Record<string, string> = { ...defaultEnv, ...(repoConfig?.env || {}) }
+
     return {
       image,
       ...(dockerfile ? { dockerfile } : {}),
       ...(dockerfile ? { buildContext: repoConfig?.buildContext || repoRoot } : {}),
       workdir,
       shell: repoConfig?.shell || '/bin/sh',
-      env: repoConfig?.env || {},
+      env: mergedEnv,
       ports: repoConfig?.ports || [],
       volumes
     }
@@ -244,9 +260,14 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     await removeExistingContainerByName(name)
     const args = [
       'run', '-d', '--name', name,
+      '--cap-drop=ALL',
+      '--security-opt=no-new-privileges',
+      '--read-only',
+      '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m',
+      '--tmpfs', '/var/tmp:rw,noexec,nosuid,size=256m',
       '--label', `tatsu.worktree.id=${validateLabelValue(id)}`,
-      '--label', `tatsu.worktree.path=${validateLabelValue(worktreePath)}`,
-      '--label', `tatsu.repo.root=${validateLabelValue(repoRoot)}`,
+      '--label', `tatsu.worktree.path=${encodeAndValidateLabelValue(worktreePath)}`,
+      '--label', `tatsu.repo.root=${encodeAndValidateLabelValue(repoRoot)}`,
       '-w', config.workdir,
       ...config.volumes.flatMap((v) => ['--mount', bindMountArg(v.source, v.target)]),
       ...Object.entries(config.env).flatMap(([k, v]) => ['-e', `${k}=${v}`]),

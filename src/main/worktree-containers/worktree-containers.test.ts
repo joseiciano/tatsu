@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { DockerRunner } from './types'
@@ -12,20 +12,31 @@ function makeRunner(): DockerRunner & { calls: Array<{ args: string[]; opts?: Re
 }
 
 describe('checkDockerAvailable', () => {
-  it('returns ok when Server present', async () => {
+  it('calls docker version without --format json', async () => {
     const runner = makeRunner()
-    runner.run = vi.fn().mockResolvedValue({ stdout: JSON.stringify({ Server: { Version: '24.0.0' } }), stderr: '', exitCode: 0 })
+    runner.run = vi.fn().mockResolvedValue({ stdout: 'Docker version 20.10.12', stderr: '', exitCode: 0 })
+    const containers = createWorktreeContainers(runner)
+    await containers.checkDockerAvailable()
+    expect(runner.run).toHaveBeenCalledWith(['version'], { timeoutMs: 10000 })
+    const callArgs = (runner.run as any).mock.calls[0][0]
+    expect(callArgs).not.toContain('--format')
+    expect(callArgs).not.toContain('json')
+  })
+
+  it('returns ok on exit 0 regardless of output format', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockResolvedValue({ stdout: 'Docker version 20.10.12, build e91ed57', stderr: '', exitCode: 0 })
     const containers = createWorktreeContainers(runner)
     const result = await containers.checkDockerAvailable()
     expect(result.ok).toBe(true)
   })
 
-  it('returns daemon-unavailable when Server missing', async () => {
+  it('returns daemon-unavailable on nonzero exit', async () => {
     const runner = makeRunner()
-    runner.run = vi.fn().mockResolvedValue({ stdout: JSON.stringify({ Client: { Version: '24.0.0' } }), stderr: '', exitCode: 0 })
+    runner.run = vi.fn().mockResolvedValue({ stdout: '', stderr: 'Cannot connect to the Docker daemon', exitCode: 1 })
     const result = await createWorktreeContainers(runner).checkDockerAvailable()
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/Server section missing/)
+    expect(result.error).toMatch(/daemon unavailable/)
   })
 
   it('CLI not found error on ENOENT mentions PATH', async () => {
@@ -243,8 +254,20 @@ describe('ensureImage', () => {
     const containers = createWorktreeContainers(runner)
     await expect(containers.ensureImage({ image: 'missing:latest', workdir: '/workspace', shell: '/bin/sh', env: {}, ports: [], volumes: [] })).rejects.toThrow('Bearer [redacted] [redacted] [redacted] password=[redacted]')
   })
+
+  it('redacts generic env assignment secrets (GITLAB_TOKEN, NPM_TOKEN, API_KEY)', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'inspect') return { stdout: '', stderr: 'No such image', exitCode: 1 }
+      if (args[0] === 'pull') return { stdout: '', stderr: 'error: GITLAB_TOKEN=glpat-abc123def456 NPM_TOKEN=npm_abc123 API_KEY=sk-realkey123', exitCode: 1 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    await expect(containers.ensureImage({ image: 'missing:latest', workdir: '/workspace', shell: '/bin/sh', env: {}, ports: [], volumes: [] })).rejects.toThrow(/GITLAB_TOKEN=\[redacted\].*NPM_TOKEN=\[redacted\].*API_KEY=\[redacted\]/)
+  })
 })
 
+describe('resolveContainerConfig', () => {
   it('returns same image for worktrees sharing the same dockerfile', () => {
     const runner = makeRunner()
     const containers = createWorktreeContainers(runner)
@@ -276,7 +299,15 @@ describe('ensureImage', () => {
     }
   })
 
-describe('resolveContainerConfig', () => {
+  it('ensures /tmp/harness-status directory exists for bind mount', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt')
+    expect(existsSync('/tmp/harness-status')).toBe(true)
+    const harnessVol = config.volumes.find(v => v.source === '/tmp/harness-status')
+    expect(harnessVol).toBeDefined()
+    expect(harnessVol!.target).toBe('/tmp/harness-status')
+  })
+
   it('rejects user volumes that target the worktree mount path', () => {
     const containers = createWorktreeContainers(makeRunner())
     expect(() => containers.resolveContainerConfig('/repo', '/repo/wt', {
@@ -287,7 +318,7 @@ describe('resolveContainerConfig', () => {
 })
 
 describe('createForWorktree docker run args', () => {
-  it('includes labels, bind mounts, workdir, env, ports', async () => {
+  it('includes labels, bind mounts, workdir, env, ports, security flags, and tmpfs', async () => {
     const runner = makeRunner()
     runner.run = vi.fn().mockImplementation(async (args: string[]) => {
       if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
@@ -304,6 +335,9 @@ describe('createForWorktree docker run args', () => {
     await containers.createForWorktree('/repo', '/repo/wt', config)
     const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
     expect(runArgs).toContain('-d')
+    expect(runArgs).toContain('--cap-drop=ALL')
+    expect(runArgs).toContain('--security-opt=no-new-privileges')
+    expect(runArgs).toContain('--read-only')
     expect(runArgs).toContain('--label')
     expect(runArgs.some((a: string) => a.includes('tatsu.worktree.id'))).toBe(true)
     expect(runArgs.some((a: string) => a.includes('tatsu.worktree.path'))).toBe(true)
@@ -316,8 +350,82 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs).toContain('127.0.0.1:3000:3000')
     expect(runArgs).toContain('-w')
     expect(runArgs).toContain('/workspace')
+    expect(runArgs).toContain('--tmpfs')
+    expect(runArgs).toContain('/tmp:rw,noexec,nosuid,size=256m')
+    expect(runArgs).toContain('/var/tmp:rw,noexec,nosuid,size=256m')
   })
 
+
+  it('includes default HOME and XDG env vars under workdir', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt', { image: 'node:20-alpine' })
+    await containers.createForWorktree('/repo', '/repo/wt', config)
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    expect(runArgs).toContain('HOME=/workspace/.home')
+    expect(runArgs).toContain('XDG_CACHE_HOME=/workspace/.cache')
+    expect(runArgs).toContain('XDG_CONFIG_HOME=/workspace/.config')
+    expect(runArgs).toContain('XDG_DATA_HOME=/workspace/.local/share')
+  })
+
+  it('user env overrides default HOME and XDG vars', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt', {
+      image: 'node:20-alpine',
+      env: { HOME: '/custom/home', XDG_CACHE_HOME: '/custom/cache' }
+    })
+    await containers.createForWorktree('/repo', '/repo/wt', config)
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    expect(runArgs).toContain('HOME=/custom/home')
+    expect(runArgs).toContain('XDG_CACHE_HOME=/custom/cache')
+    expect(runArgs).not.toContain('HOME=/workspace/.home')
+    expect(runArgs).not.toContain('XDG_CACHE_HOME=/workspace/.cache')
+    // non-overridden defaults still present
+    expect(runArgs).toContain('XDG_CONFIG_HOME=/workspace/.config')
+    expect(runArgs).toContain('XDG_DATA_HOME=/workspace/.local/share')
+  })
+
+  it('default env vars respect custom workdir', async () => {
+    const runner = makeRunner()
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt', { workdir: '/app' })
+    expect(config.env.HOME).toBe('/app/.home')
+    expect(config.env.XDG_CACHE_HOME).toBe('/app/.cache')
+    expect(config.env.XDG_CONFIG_HOME).toBe('/app/.config')
+    expect(config.env.XDG_DATA_HOME).toBe('/app/.local/share')
+  })
+
+  it('tmpfs mounts for /tmp and /var/tmp are always present', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt')
+    await containers.createForWorktree('/repo', '/repo/wt', config)
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const tmpfsIdx = runArgs.indexOf('--tmpfs')
+    expect(tmpfsIdx).toBeGreaterThan(-1)
+    expect(runArgs[tmpfsIdx + 1]).toBe('/tmp:rw,noexec,nosuid,size=256m')
+    expect(runArgs[tmpfsIdx + 2]).toBe('--tmpfs')
+    expect(runArgs[tmpfsIdx + 3]).toBe('/var/tmp:rw,noexec,nosuid,size=256m')
+  })
 
   it('uses colon-safe bind mount args and shell-independent keepalive', async () => {
     const runner = makeRunner()
@@ -392,8 +500,8 @@ describe('createForWorktree docker run args', () => {
       return { stdout: '', stderr: '', exitCode: 0 }
     })
     const containers = createWorktreeContainers(runner)
-    const config = containers.resolveContainerConfig('/repo', '/repo/My Branch!')
-    await containers.createForWorktree('/repo', '/repo/My Branch!', config)
+    const config = containers.resolveContainerConfig('/repo', '/repo/my-branch')
+    await containers.createForWorktree('/repo', '/repo/my-branch', config)
     const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
     const nameIdx = runArgs.indexOf('--name')
     expect(nameIdx).toBeGreaterThan(-1)
@@ -412,8 +520,8 @@ describe('createForWorktree docker run args', () => {
       return { stdout: '', stderr: '', exitCode: 0 }
     })
     const containers = createWorktreeContainers(runner)
-    const config = containers.resolveContainerConfig('/repo', '/repo/My Branch!')
-    const created = await containers.createForWorktree('/repo', '/repo/My Branch!', config)
+    const config = containers.resolveContainerConfig('/repo', '/repo/my-branch')
+    const created = await containers.createForWorktree('/repo', '/repo/my-branch', config)
     const rmCall = (runner.run as any).mock.calls.find((c: any) => c[0][0] === 'rm' && c[0][1] === '-f' && c[0][2] === 'old123')
     const runCallIndex = (runner.run as any).mock.calls.findIndex((c: any) => c[0][0] === 'run')
     const rmCallIndex = (runner.run as any).mock.calls.findIndex((c: any) => c[0][0] === 'rm')
@@ -455,15 +563,88 @@ describe('createForWorktree', () => {
     expect(runArgs[runArgs.indexOf('--name') + 1].length).toBeLessThanOrEqual(63)
   })
 
-  it('throws on invalid label with newline', async () => {
+  it('accepts worktree path with newline (encoded in label)', async () => {
     const runner = makeRunner()
     runner.run = vi.fn().mockImplementation(async (args: string[]) => {
       if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
       return { stdout: '', stderr: '', exitCode: 0 }
     })
     const containers = createWorktreeContainers(runner)
     const config = containers.resolveContainerConfig('/r', '/r/wt')
-    await expect(containers.createForWorktree('/r', '/r/wt\n', config)).rejects.toThrow(/invalid character/)
+    await expect(containers.createForWorktree('/r', '/r/wt\n', config)).resolves.toBeDefined()
+  })
+
+  it('accepts worktree path with space (encoded in label)', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/r', '/r/my worktree')
+    const created = await containers.createForWorktree('/r', '/r/my worktree', config)
+    expect(created).toBeDefined()
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const pathLabel = runArgs.find((a: string) => a.startsWith('tatsu.worktree.path='))
+    expect(pathLabel).toBeDefined()
+    expect(pathLabel).toMatch(/^tatsu\.worktree\.path=b64:/)
+    expect(pathLabel).not.toContain(' ')
+  })
+
+  it('accepts worktree path with double quote (encoded in label)', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/r', '/r/wt"bad')
+    const created = await containers.createForWorktree('/r', '/r/wt"bad', config)
+    expect(created).toBeDefined()
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const pathLabel = runArgs.find((a: string) => a.startsWith('tatsu.worktree.path='))
+    expect(pathLabel).toMatch(/^tatsu\.worktree\.path=b64:/)
+    expect(pathLabel).not.toContain('"')
+  })
+
+  it('accepts worktree path with single quote (encoded in label)', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/r', "/r/wt'bad")
+    const created = await containers.createForWorktree('/r', "/r/wt'bad", config)
+    expect(created).toBeDefined()
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const pathLabel = runArgs.find((a: string) => a.startsWith('tatsu.worktree.path='))
+    expect(pathLabel).toMatch(/^tatsu\.worktree\.path=b64:/)
+    expect(pathLabel).not.toContain("'")
+  })
+
+  it('accepts normal absolute paths in labels and encodes them', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt-feature')
+    await expect(containers.createForWorktree('/repo', '/repo/wt-feature', config)).resolves.toBeDefined()
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const pathLabel = runArgs.find((a: string) => a.startsWith('tatsu.worktree.path='))
+    expect(pathLabel).toMatch(/^tatsu\.worktree\.path=b64:/)
   })
 
   it('rejects labels over 4096 bytes', async () => {
@@ -475,6 +656,51 @@ describe('createForWorktree', () => {
     const containers = createWorktreeContainers(runner)
     const config = containers.resolveContainerConfig('/r', '/r/wt')
     await expect(containers.createForWorktree('/r', `/r/${'é'.repeat(2100)}`, config)).rejects.toThrow(/4096 byte limit/)
+  })
+
+  it('base64url-encoded path labels contain only base64url-safe characters', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt-feature')
+    await containers.createForWorktree('/repo', '/repo/wt-feature', config)
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const pathLabel = runArgs.find((a: string) => a.startsWith('tatsu.worktree.path='))
+    const rootLabel = runArgs.find((a: string) => a.startsWith('tatsu.repo.root='))
+    expect(pathLabel).toBeDefined()
+    expect(rootLabel).toBeDefined()
+    const pathValue = pathLabel.split('=', 2)[1]
+    const rootValue = rootLabel.split('=', 2)[1]
+    expect(pathValue).toMatch(/^b64:[A-Za-z0-9_-]+$/)
+    expect(rootValue).toMatch(/^b64:[A-Za-z0-9_-]+$/)
+    expect(pathValue).not.toMatch(/[.]/)
+    expect(pathValue).not.toMatch(/[@]/)
+    expect(pathValue).not.toMatch(/[^A-Za-z0-9_:/-]/)
+  })
+
+  it('base64url encoding round-trips path correctly', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+      if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+      if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+      if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+      return { stdout: '', stderr: '', exitCode: 0 }
+    })
+    const containers = createWorktreeContainers(runner)
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt')
+    await containers.createForWorktree('/repo', '/repo/wt', config)
+    const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+    const pathLabel = runArgs.find((a: string) => a.startsWith('tatsu.worktree.path='))
+    const encoded = pathLabel.split('=', 2)[1]
+    const prefix = 'b64:'
+    expect(encoded.startsWith(prefix)).toBe(true)
+    const decoded = Buffer.from(encoded.slice(prefix.length), 'base64url').toString('utf8')
+    expect(decoded).toBe('/repo/wt')
   })
 })
 
