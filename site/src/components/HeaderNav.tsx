@@ -27,7 +27,7 @@ export function HeaderNav() {
     >
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
         <a href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-lg clay-gradient-bg flex items-center justify-center text-white font-extrabold text-sm">
+          <div className="w-9 h-9 rounded-lg bg-[#f59e0b] flex items-center justify-center text-white font-extrabold text-sm">
             T
           </div>
           <span className="text-lg font-bold text-[#fafaf9] group-hover:text-[#fbbf24] transition-colors">
