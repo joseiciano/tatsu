@@ -27,10 +27,31 @@ function CodexIcon({ className }: { className?: string }): JSX.Element {
   )
 }
 
+function OpencodeIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="1em" height="1em" className={className}>
+      <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="2"/>
+      <path d="M5 7l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+function PiIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" className={className}>
+      <path d="M2.5 3.25h11v2H11.8v7.5h-2.2v-7.5H6.4v7.5H4.2v-7.5H2.5z"/>
+    </svg>
+  )
+}
+
 export function AgentIcon({ kind, className = 'icon-base' }: AgentIconProps): JSX.Element {
   switch (kind) {
     case 'codex':
       return <CodexIcon className={className} />
+    case 'opencode':
+      return <OpencodeIcon className={className} />
+    case 'pi':
+      return <PiIcon className={className} />
     case 'claude':
     default:
       return <ClaudeIcon className={className} />

@@ -57,7 +57,7 @@ Grab the latest release from the [releases page](https://github.com/frenchie4111
 4. On first launch:
    - Pick a git repository when prompted.
    - Click the ⚙ gear icon in the sidebar and paste a [GitHub personal access token](https://github.com/settings/tokens?type=beta) (fine-grained or classic, with `repo` scope). This is optional but required for the PR status panel and checks.
-   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally at `~/.claude/settings.json`. One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the bash command built by `makeHookCommand` — it appends one line of JSON per event to `/tmp/harness-status/<id>.ndjson`) and [`src/main/agents/claude.ts`](src/main/agents/claude.ts) (where the install/uninstall logic lives).
+   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally for supported agents: Claude (`~/.claude/settings.json`), Codex (`~/.codex/hooks.json`), Opencode (`~/.config/opencode/plugins/`), and Pi (`~/.pi/agent/extensions/harness-status.ts`). One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the status watcher) and `src/main/agents/` (where each agent's install/uninstall logic lives).
 
 ### Linux
 
@@ -137,7 +137,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 
 ## Uninstallation
 
-1. **Remove the Claude Code hooks** (do this while Tatsu is still running). Open Settings → **Agent** → **Status hooks** and click **Remove hooks**. This strips Tatsu's entries from `~/.claude/settings.json` and leaves any user-authored hooks intact.
+1. **Remove agent hooks** (do this while Tatsu is still running). Open Settings → **Agent** → **Status hooks** and click **Remove hooks**. This strips Tatsu's entries from agent configuration files (Claude Code, Codex, Opencode, Pi) and leaves any user-authored configuration intact.
 
 2. **Quit Tatsu** with ⌘Q.
 
@@ -159,7 +159,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    rm -rf ~/Library/Logs/Tatsu
    ```
 
-5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open `~/.claude/settings.json` and delete any hook entries whose object contains `"_marker": "__claude_harness__"` — every Tatsu-managed hook is tagged with that marker, so they're safe to identify and remove.
+5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove hook entries whose `command` contains `/tmp/harness-status`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/harness-status.ts`.
 
 6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
 
@@ -173,14 +173,14 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 
 ## Features
 
-- **Multi-agent** — run Claude Code or Codex in the same window, one harness for both
+- **Multi-agent** — run Claude Code, Codex, Opencode, or Pi in the same window, one harness for all
 - **Multi-repo** — manage multiple repos in a single window, switch between them or see everything at once
 - **Live PR status** — see open PRs and CI checks for every worktree, auto-sorted by urgency
 - **Embedded editor** — full Monaco-powered editor for tweaking files without leaving Tatsu
 - **Full code review tool** — side-by-side syntax-highlighted diffs for every changed file in a worktree
-- **Status at a glance** — sidebar dots show which agent is working, waiting, or needs approval (powered by Claude Code hooks)
+- **Status at a glance** — sidebar dots show which agent is working, waiting, or needs approval (powered by agent hooks)
 - **Command center** — bird's-eye grid of every worktree with mini activity timelines
-- **Tabs + vertical split panes** — Claude, shells, and editor/diff tabs scoped to each checkout, splittable side-by-side
+- **Tabs + vertical split panes** — agents, shells, and editor/diff tabs scoped to each checkout, splittable side-by-side
 - **9 themes** — dark, dracula, nord, gruvbox, tokyo night, catppuccin, one dark, solarized dark/light
 - **Configurable hotkeys** — ⌘1–⌘9 to jump between worktrees, all rebindable
 - **MCP: Claude controls Tatsu** — a built-in MCP server lets Claude create and list worktrees on its own
@@ -242,4 +242,4 @@ xattr -cr release/mac-arm64/Tatsu.app
 
 # Contributing
 
-We absolutely love contributors. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, PR conventions, and pointers into the architecture docs.
+We absolutely love contributors. See [AGENTS.md](AGENTS.md) for setup, PR conventions, and pointers into the architecture docs.

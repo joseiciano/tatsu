@@ -1,3 +1,4 @@
+import type { AgentKind } from '../../shared/state/terminals'
 export interface BrowserTabSummary {
   id: string
   url: string
@@ -84,7 +85,7 @@ export interface ControlServerDeps {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }) => Promise<{ ok: true; path: string; branch: string } | { ok: false; error: string }>
   resolveCallerScope: (terminalId: string) => CallerScope | null

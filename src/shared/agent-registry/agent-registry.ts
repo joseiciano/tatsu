@@ -13,7 +13,8 @@ export interface AgentInfo {
 export const AGENT_REGISTRY: AgentInfo[] = [
   { kind: 'claude', displayName: 'Claude Code', vendor: 'Anthropic', assignsSessionId: true },
   { kind: 'codex', displayName: 'Codex', vendor: 'OpenAI', assignsSessionId: false },
-  { kind: 'opencode', displayName: 'Opencode', vendor: 'Opencode', assignsSessionId: false }
+  { kind: 'opencode', displayName: 'Opencode', vendor: 'Opencode', assignsSessionId: false },
+  { kind: 'pi', displayName: 'Pi', vendor: 'Earendil', assignsSessionId: false }
 ]
 
 export interface ModelOption {

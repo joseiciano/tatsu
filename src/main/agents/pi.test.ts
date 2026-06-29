@@ -1,0 +1,331 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const fsState: { files: Map<string, string>; mtimes: Map<string, number>; readdirCalls: number; statCalls: number } = { files: new Map(), mtimes: new Map(), readdirCalls: 0, statCalls: 0 }
+
+vi.mock('fs', () => ({
+  existsSync: (p: string) => {
+    if (fsState.files.has(p)) return true
+    for (const key of fsState.files.keys()) {
+      if (key.startsWith(p + '/') || key.startsWith(p + '\\')) return true
+    }
+    return false
+  },
+  readFileSync: (p: string) => {
+    if (!fsState.files.has(p)) throw new Error(`ENOENT: ${p}`)
+    return fsState.files.get(p) as string
+  },
+  writeFileSync: (p: string, data: string) => {
+    fsState.files.set(p, data)
+  },
+  mkdirSync: () => {},
+  unlinkSync: (p: string) => {
+    fsState.files.delete(p)
+  },
+  readdirSync: (p: string) => {
+    fsState.readdirCalls += 1
+    const entries: string[] = []
+    for (const key of fsState.files.keys()) {
+      if (key.startsWith(p + '/') || key.startsWith(p + '\\')) {
+        const relative = key.slice(p.length + 1)
+        const firstSegment = relative.split(/[/\\]/)[0]
+        if (firstSegment && !entries.includes(firstSegment)) {
+          entries.push(firstSegment)
+        }
+      }
+    }
+    return entries
+  },
+  statSync: (p: string) => {
+    fsState.statCalls += 1
+    const isDir = Array.from(fsState.files.keys()).some(
+      (k) => k.startsWith(p + '/') || k.startsWith(p + '\\')
+    )
+    return {
+      isFile: () => !isDir && fsState.files.has(p),
+      isDirectory: () => isDir,
+      mtimeMs: fsState.mtimes.get(p) ?? 0
+    }
+  }
+}))
+
+vi.mock('../debug', () => ({
+  log: () => {}
+}))
+
+import { homedir } from 'os'
+import { join } from 'path'
+import {
+  buildSpawnArgs,
+  hooksInstalled,
+  installHooks,
+  uninstallHooks,
+  sessionFileExists,
+  latestSessionId,
+  stripHooksFromWorktree,
+  hookEvents,
+  defaultCommand,
+  assignsSessionId,
+  EXTENSION_PATH
+} from './pi'
+import type { AgentSpawnOpts } from './index'
+
+beforeEach(() => {
+  fsState.files.clear()
+  fsState.mtimes.clear()
+  fsState.readdirCalls = 0
+  fsState.statCalls = 0
+})
+
+describe('pi module exports', () => {
+  it('has correct defaultCommand', () => {
+    expect(defaultCommand).toBe('pi')
+  })
+
+  it('has assignsSessionId false', () => {
+    expect(assignsSessionId).toBe(false)
+  })
+
+  it('has expected hookEvents', () => {
+    expect(hookEvents).toContain('session_start')
+    expect(hookEvents).toContain('agent_start')
+    expect(hookEvents).toContain('agent_end')
+    expect(hookEvents).toContain('tool_execution_start')
+    expect(hookEvents).toContain('tool_execution_end')
+    expect(hookEvents).toContain('session_shutdown')
+  })
+})
+
+describe('hooksInstalled', () => {
+  it('returns false when extension file does not exist', () => {
+    expect(hooksInstalled()).toBe(false)
+  })
+
+  it('returns true when Harness extension file exists', () => {
+    fsState.files.set(EXTENSION_PATH, '// harness-pi-extension')
+    expect(hooksInstalled()).toBe(true)
+  })
+
+  it('returns false when a non-Harness extension file exists', () => {
+    fsState.files.set(EXTENSION_PATH, '// some other extension')
+    expect(hooksInstalled()).toBe(false)
+  })
+})
+
+describe('installHooks', () => {
+  it('writes the extension file', () => {
+    installHooks()
+    expect(fsState.files.has(EXTENSION_PATH)).toBe(true)
+    const content = fsState.files.get(EXTENSION_PATH) as string
+    expect(content).toContain('harness-pi-extension')
+    expect(content).toContain('/tmp/harness-status')
+  })
+
+  it('writes hot-path filesystem setup outside emit', () => {
+    installHooks()
+    const content = fsState.files.get(EXTENSION_PATH) as string
+    const emitIndex = content.indexOf('async function emit')
+    expect(content.indexOf("const path = require('path')")).toBeLessThan(emitIndex)
+    expect(content.indexOf("const { mkdir, appendFile } = require('fs').promises")).toBeLessThan(emitIndex)
+    expect(content).not.toContain('await mkdir(dir, { recursive: true });')
+  })
+
+  it('awaits status emits before returning from Pi event handlers', () => {
+    installHooks()
+    const content = fsState.files.get(EXTENSION_PATH) as string
+    expect(content).toContain("await emit('UserPromptSubmit'")
+    expect(content).toContain("await emit('PreToolUse'")
+    expect(content).toContain("await emit('PostToolUse'")
+    expect(content).toContain("await emit('Stop'")
+  })
+
+  it('overwrites an existing extension file', () => {
+    fsState.files.set(EXTENSION_PATH, '// old content')
+    installHooks()
+    const content = fsState.files.get(EXTENSION_PATH) as string
+    expect(content).toContain('harness-pi-extension')
+  })
+})
+
+describe('uninstallHooks', () => {
+  it('removes only the Harness extension file', () => {
+    installHooks()
+    expect(fsState.files.has(EXTENSION_PATH)).toBe(true)
+    uninstallHooks()
+    expect(fsState.files.has(EXTENSION_PATH)).toBe(false)
+  })
+
+  it('no-ops when extension file does not exist', () => {
+    expect(() => uninstallHooks()).not.toThrow()
+    expect(fsState.files.has(EXTENSION_PATH)).toBe(false)
+  })
+
+  it('preserves non-Harness extension files', () => {
+    fsState.files.set(EXTENSION_PATH, '// some other extension')
+    uninstallHooks()
+    expect(fsState.files.has(EXTENSION_PATH)).toBe(true)
+  })
+})
+
+describe('stripHooksFromWorktree', () => {
+  it('returns false', () => {
+    expect(stripHooksFromWorktree('/some/path')).toBe(false)
+  })
+})
+
+describe('sessionFileExists', () => {
+  it('returns false for non-existent session', () => {
+    expect(sessionFileExists('/tmp', 'nonexistent-session-12345')).toBe(false)
+  })
+
+  it('accepts absolute session path that exists', () => {
+    const sessionPath = join('/tmp', 'pi-session-test.jsonl')
+    fsState.files.set(sessionPath, '')
+    expect(sessionFileExists('/tmp', sessionPath)).toBe(true)
+  })
+
+  it('returns false for non-absolute session id', () => {
+    const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
+    const sessionFile = join(sessionsDir, 'my-session-abc.jsonl')
+    fsState.files.set(sessionFile, '')
+    expect(sessionFileExists('/tmp', 'my-session')).toBe(false)
+  })
+})
+
+describe('latestSessionId', () => {
+  it('returns null when no sessions exist', () => {
+    const result = latestSessionId('/tmp')
+    expect(result).toBeNull()
+  })
+
+  it('returns the newest session file path', () => {
+    const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
+    // Use Pi's cwd-encoded subdirectory layout: --path--/timestamp_uuid.jsonl
+    const subdir = join(sessionsDir, '--tmp--test--')
+    const olderPath = join(subdir, '001_older.jsonl')
+    const newerPath = join(subdir, '002_newer.jsonl')
+    fsState.files.set(olderPath, '{"id":"older"}')
+    fsState.mtimes.set(olderPath, 1000)
+    fsState.files.set(newerPath, '{"id":"newer"}')
+    fsState.mtimes.set(newerPath, 2000)
+    const result = latestSessionId('/tmp/test')
+    expect(result).toBe(newerPath)
+  })
+
+  it('does not return sessions from nested cwd slug directories', () => {
+    const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
+    const exactSubdir = join(sessionsDir, '--tmp--exact--')
+    const nestedSubdir = join(sessionsDir, '--tmp--exact--sub--')
+    const exactPath = join(exactSubdir, '001_exact.jsonl')
+    const nestedPath = join(nestedSubdir, '002_nested.jsonl')
+    fsState.files.set(exactPath, '{"id":"exact"}')
+    fsState.mtimes.set(exactPath, 1000)
+    fsState.files.set(nestedPath, '{"id":"nested"}')
+    fsState.mtimes.set(nestedPath, 2000)
+
+    const result = latestSessionId('/tmp/exact')
+
+    expect(result).toBe(exactPath)
+  })
+
+  it('reuses a fresh cwd lookup without rescanning the sessions tree', () => {
+    const sessionsDir = join(homedir(), '.pi', 'agent', 'sessions')
+    const subdir = join(sessionsDir, '--tmp--cached--')
+    const sessionPath = join(subdir, '001_cached.jsonl')
+    fsState.files.set(sessionPath, '{}')
+    fsState.mtimes.set(sessionPath, 1000)
+
+    expect(latestSessionId('/tmp/cached')).toBe(sessionPath)
+    const readdirCalls = fsState.readdirCalls
+    const statCalls = fsState.statCalls
+    expect(latestSessionId('/tmp/cached')).toBe(sessionPath)
+
+    expect(fsState.readdirCalls).toBe(readdirCalls)
+    expect(fsState.statCalls).toBe(statCalls)
+  })
+})
+
+describe('buildSpawnArgs', () => {
+  const base: AgentSpawnOpts = {
+    command: 'pi',
+    cwd: '/tmp/test',
+  }
+
+  it('returns base command by default', () => {
+    const result = buildSpawnArgs(base)
+    expect(result).toBe('pi')
+  })
+
+  it('adds --model when model is set', () => {
+    const result = buildSpawnArgs({ ...base, model: 'claude-sonnet-4-6' })
+    expect(result).toBe("pi --model 'claude-sonnet-4-6'")
+  })
+
+  it('does not duplicate --model if already in command', () => {
+    const result = buildSpawnArgs({ ...base, command: 'pi --model foo', model: 'bar' })
+    expect(result).toBe('pi --model foo')
+  })
+
+  it('still adds --model when command contains the unrelated -m flag', () => {
+    const result = buildSpawnArgs({ ...base, command: 'pi -m legacy', model: 'bar' })
+    expect(result).toBe("pi -m legacy --model 'bar'")
+  })
+
+  it('adds --name when sessionName is set', () => {
+    const result = buildSpawnArgs({ ...base, sessionName: 'my-session' })
+    expect(result).toBe("pi --name 'my-session'")
+  })
+
+  it('adds initial prompt', () => {
+    const result = buildSpawnArgs({ ...base, initialPrompt: 'hello world' })
+    expect(result).toBe("pi 'hello world'")
+  })
+
+  it('quotes initial prompt with single quotes', () => {
+    const result = buildSpawnArgs({ ...base, initialPrompt: "it's a test" })
+    expect(result).toBe("pi 'it'\\''s a test'")
+  })
+
+  it('quotes model with single quotes', () => {
+    const result = buildSpawnArgs({ ...base, model: "op'us" })
+    expect(result).toBe("pi --model 'op'\\''us'")
+  })
+
+  it('quotes session name with single quotes', () => {
+    const result = buildSpawnArgs({ ...base, sessionName: "today's-work" })
+    expect(result).toBe("pi --name 'today'\\''s-work'")
+  })
+
+  it('adds model and initial prompt together', () => {
+    const result = buildSpawnArgs({ ...base, model: 'opus', initialPrompt: 'hello' })
+    expect(result).toBe("pi --model 'opus' 'hello'")
+  })
+
+  it('adds --session for existing session and includes prompt', () => {
+    const sessionPath = join('/tmp', 'pi-session-test.jsonl')
+    fsState.files.set(sessionPath, '')
+    const result = buildSpawnArgs({ ...base, sessionId: sessionPath, initialPrompt: 'continue' })
+    expect(result).toContain('--session')
+    expect(result).toContain("'continue'")
+  })
+
+
+  it('quotes session paths with single quotes', () => {
+    const sessionPath = join('/tmp', "pi-session-test's.jsonl")
+    fsState.files.set(sessionPath, '')
+    const result = buildSpawnArgs({ ...base, sessionId: sessionPath })
+    expect(result).toBe("pi --session '/tmp/pi-session-test'\\''s.jsonl'")
+  })
+
+  it('skips --session when session does not exist and falls back to prompt', () => {
+    const result = buildSpawnArgs({ ...base, sessionId: '/tmp/nonexistent.jsonl', initialPrompt: 'hello' })
+    expect(result).not.toContain('--session')
+    expect(result).toBe("pi 'hello'")
+  })
+
+  it('does not duplicate --session if already in command', () => {
+    const sessionPath = join('/tmp', 'pi-session-test.jsonl')
+    fsState.files.set(sessionPath, '')
+    const result = buildSpawnArgs({ ...base, command: 'pi --session foo', sessionId: sessionPath, initialPrompt: 'continue' })
+    expect(result).toBe("pi --session foo 'continue'")
+  })
+})

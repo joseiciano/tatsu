@@ -76,6 +76,7 @@ import {
 } from '../shared/state/settings'
 import { watchStatusDir } from './hooks'
 import { getAgent, type AgentKind } from './agents'
+import { AGENT_REGISTRY } from '../shared/agent-registry'
 import { buildClaudeLaunchSettings } from './claude-launch'
 import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
@@ -97,6 +98,10 @@ import { toAgentKind } from './agent-kind'
 // Node leaves it undefined. The mode picks itself; there's no env-var
 // override to fight with.
 const runtime = detectRuntime()
+
+function assertNeverAgentKind(kind: never): never {
+  throw new Error(`Unsupported agent kind: ${kind}`)
+}
 
 // Boot the local backend. The HARNESS_REMOTE_URL "process-wide remote"
 // path was removed in Tier 1 — the chip strip / add-backend modal is
@@ -816,14 +821,14 @@ function installHooksGlobally(): void {
   // installHooks() is idempotent — it strips any existing Harness entries
   // before writing a fresh one — so calling it unconditionally also
   // collapses duplicate entries left by earlier buggy install passes.
-  for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
-    agent.installHooks()
+  for (const { kind } of AGENT_REGISTRY) {
+    getAgent(kind).installHooks()
   }
 }
 
 function uninstallHooksGlobally(): void {
-  for (const agent of [getAgent('claude'), getAgent('codex'), getAgent('opencode')]) {
-    agent.uninstallHooks()
+  for (const { kind } of AGENT_REGISTRY) {
+    getAgent(kind).uninstallHooks()
   }
 }
 
@@ -1010,7 +1015,7 @@ function registerIpcHandlers(): void {
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: AgentKind
       model?: string
     }) => {
       return worktreesFSM.runPending(params)
@@ -1025,7 +1030,7 @@ function registerIpcHandlers(): void {
         repoRoot: string
         prNumber: number
         initialPrompt?: string
-        agentKind?: 'claude' | 'codex' | 'opencode'
+        agentKind?: AgentKind
         model?: string
       }
     ) => {
@@ -1539,6 +1544,52 @@ function registerIpcHandlers(): void {
     }
     saveConfig(config)
     store.dispatch({ type: 'settings/opencodeEnvVarsChanged', payload: config.opencodeEnvVars || {} })
+    return true
+  })
+
+  transport.onRequest('config:setPiCommand', (_ctx, command: string) => {
+    const trimmed = command.trim()
+    if (!trimmed || trimmed === 'pi') {
+      delete config.piCommand
+    } else {
+      config.piCommand = trimmed
+    }
+    saveConfig(config)
+    store.dispatch({
+      type: 'settings/piCommandChanged',
+      payload: config.piCommand || 'pi'
+    })
+    return true
+  })
+
+  transport.onRequest('config:setPiModel', (_ctx, model: string | null) => {
+    if (model) {
+      config.piModel = model
+    } else {
+      delete config.piModel
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/piModelChanged', payload: model })
+    return true
+  })
+
+  transport.onRequest('config:setPiEnvVars', (_ctx, vars: Record<string, string>) => {
+    const cleaned: Record<string, string> = {}
+    if (vars && typeof vars === 'object') {
+      for (const [rawKey, rawVal] of Object.entries(vars)) {
+        const key = String(rawKey).trim()
+        if (!key) continue
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
+        cleaned[key] = rawVal == null ? '' : String(rawVal)
+      }
+    }
+    if (Object.keys(cleaned).length === 0) {
+      delete config.piEnvVars
+    } else {
+      config.piEnvVars = cleaned
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/piEnvVarsChanged', payload: cleaned })
     return true
   })
 
@@ -2219,11 +2270,17 @@ function registerIpcHandlers(): void {
         ? (config.claudeCommand || agent.defaultCommand)
         : kind === 'codex'
           ? (config.codexCommand || agent.defaultCommand)
-          : (config.opencodeCommand || agent.defaultCommand)
-      const mcpConfigPath = writeMcpConfigForTerminal(
-        opts.terminalId,
-        resolveCallerScope(opts.terminalId)
-      )
+          : kind === 'opencode'
+            ? (config.opencodeCommand || agent.defaultCommand)
+            : kind === 'pi'
+              ? (config.piCommand || agent.defaultCommand)
+              : assertNeverAgentKind(kind)
+      const mcpConfigPath = kind === 'pi'
+        ? null
+        : writeMcpConfigForTerminal(
+            opts.terminalId,
+            resolveCallerScope(opts.terminalId)
+          )
 
       const override = opts.modelOverride && opts.modelOverride.trim() ? opts.modelOverride.trim() : undefined
       let systemPrompt: string | undefined
@@ -2241,8 +2298,12 @@ function registerIpcHandlers(): void {
         model = launch.model ?? null
       } else if (kind === 'codex') {
         model = override || config.codexModel || null
-      } else {
+      } else if (kind === 'opencode') {
         model = override || config.opencodeModel || null
+      } else if (kind === 'pi') {
+        model = override || config.piModel || null
+      } else {
+        model = assertNeverAgentKind(kind)
       }
 
       return agent.buildSpawnArgs({ ...opts, command, mcpConfigPath, model, systemPrompt, tuiFullscreen })
@@ -2469,6 +2530,7 @@ function registerIpcHandlers(): void {
       const extraEnv = agentKind === 'claude' ? config.claudeEnvVars
         : agentKind === 'codex' ? config.codexEnvVars
         : agentKind === 'opencode' ? config.opencodeEnvVars
+        : agentKind === 'pi' ? config.piEnvVars
         : undefined
       const existed = ptyManager.hasTerminal(id)
       ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
@@ -3140,9 +3202,7 @@ async function runBoot(): Promise<void> {
   // to a single user-scope install. Runs once per app install; migrated
   // state sticks via config.hooksMigratedToGlobal.
   void (async () => {
-    const claudeAgent = getAgent('claude')
-    const codexAgent = getAgent('codex')
-    const opencodeAgent = getAgent('opencode')
+    const agentModules = AGENT_REGISTRY.map((agent) => getAgent(agent.kind))
 
     // 1. Decide what the user's previous consent was.
     //    - Explicit persisted value wins (including 'declined').
@@ -3151,7 +3211,7 @@ async function runBoot(): Promise<void> {
     //      legacy per-worktree markers as evidence of a prior accept.
     let consent: 'pending' | 'accepted' | 'declined' | undefined = config.hooksConsent
     if (!consent) {
-      if (claudeAgent.hooksInstalled() || codexAgent.hooksInstalled() || opencodeAgent.hooksInstalled()) {
+      if (agentModules.some((agent) => agent.hooksInstalled())) {
         consent = 'accepted'
       } else {
         let foundLegacy = false
@@ -3162,9 +3222,9 @@ async function runBoot(): Promise<void> {
             // per-worktree file + its contents cheaply here by attempting
             // a strip and rolling back mentally — actually easier to just
             // run the strip and treat the "changed" bit as evidence.
-            if (claudeAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
-            if (codexAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
-            if (opencodeAgent.stripHooksFromWorktree(wt.path)) foundLegacy = true
+            for (const agent of agentModules) {
+              if (agent.stripHooksFromWorktree(wt.path)) foundLegacy = true
+            }
           }
         }
         consent = foundLegacy ? 'accepted' : 'pending'
@@ -3191,9 +3251,9 @@ async function runBoot(): Promise<void> {
       for (const root of config.repoRoots || []) {
         const trees = await listWorktrees(root).catch(() => [])
         for (const wt of trees) {
-          claudeAgent.stripHooksFromWorktree(wt.path)
-          codexAgent.stripHooksFromWorktree(wt.path)
-          opencodeAgent.stripHooksFromWorktree(wt.path)
+          for (const agent of agentModules) {
+            agent.stripHooksFromWorktree(wt.path)
+          }
         }
       }
       config.hooksMigratedToGlobal = true
@@ -3407,7 +3467,7 @@ async function runBoot(): Promise<void> {
           repoRoot: string
           worktree: { path: string }
           initialPrompt?: string
-          agentKind?: 'claude' | 'codex' | 'opencode'
+          agentKind?: AgentKind
           model?: string
         }
         panesFSM.ensureInitialized(p.worktree.path, {

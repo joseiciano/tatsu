@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import { randomBytes, randomUUID } from 'crypto'
 import { addWorktree, listWorktrees, defaultWorktreeDir, type WorktreeInfo } from '../worktree'
 import type { AgentKind } from '../../shared/state/terminals'
+import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { log } from '../debug'
 import {
   type BrowserQueries,
@@ -16,10 +17,13 @@ export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
   if (typeof raw !== 'string') return { error: 'agentKind must be a string' }
   const lowered = raw.trim().toLowerCase()
-  if (lowered === 'claude' || lowered === 'codex' || lowered === 'opencode') {
-    return { kind: lowered }
-  }
-  return { error: 'agentKind must be "claude", "codex", or "opencode"' }
+  const agent = AGENT_REGISTRY.find((a) => a.kind === lowered)
+  if (agent) return { kind: agent.kind }
+  const agentNames = AGENT_REGISTRY.map((a) => `"${a.kind}"`)
+  const validAgents = agentNames.length > 1
+    ? `${agentNames.slice(0, -1).join(', ')}, or ${agentNames[agentNames.length - 1]}`
+    : agentNames[0]
+  return { error: `agentKind must be ${validAgents}` }
 }
 
 

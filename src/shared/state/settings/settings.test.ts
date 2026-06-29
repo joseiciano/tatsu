@@ -309,12 +309,47 @@ describe('settingsReducer', () => {
     expect(next.opencodeEnvVars).toEqual({ FOO: 'bar', BAZ: 'qux' })
   })
 
+  it('piCommandChanged sets the command', () => {
+    const next = apply(initialSettings, { type: 'settings/piCommandChanged', payload: '/usr/local/bin/pi' })
+    expect(next.piCommand).toBe('/usr/local/bin/pi')
+  })
+
+  it('piModelChanged sets the model', () => {
+    const next = apply(initialSettings, { type: 'settings/piModelChanged', payload: 'claude-sonnet-4-6' })
+    expect(next.piModel).toBe('claude-sonnet-4-6')
+  })
+
+  it('piModelChanged clears with null', () => {
+    const withModel = apply(initialSettings, { type: 'settings/piModelChanged', payload: 'claude-sonnet-4-6' })
+    const cleared = apply(withModel, { type: 'settings/piModelChanged', payload: null })
+    expect(cleared.piModel).toBeNull()
+  })
+
+  it('piEnvVarsChanged sets env vars', () => {
+    const next = apply(initialSettings, { type: 'settings/piEnvVarsChanged', payload: { ANTHROPIC_API_KEY: 'sk-test' } })
+    expect(next.piEnvVars).toEqual({ ANTHROPIC_API_KEY: 'sk-test' })
+  })
+
+  it('default state includes pi fields', () => {
+    expect(initialSettings.piCommand).toBe('')
+    expect(initialSettings.piEnvVars).toEqual({})
+    expect(initialSettings.piModel).toBeNull()
+  })
+
   it('defaultAgentChanged accepts opencode', () => {
     const next = apply(initialSettings, {
       type: 'settings/defaultAgentChanged',
       payload: 'opencode'
     })
     expect(next.defaultAgent).toBe('opencode')
+  })
+
+  it('defaultAgentChanged accepts pi', () => {
+    const next = apply(initialSettings, {
+      type: 'settings/defaultAgentChanged',
+      payload: 'pi'
+    })
+    expect(next.defaultAgent).toBe('pi')
   })
 
   it('harnessSystemPromptEnabledChanged toggles flag', () => {

@@ -60,6 +60,12 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, codexModel: event.payload }
     case 'settings/opencodeModelChanged':
       return { ...state, opencodeModel: event.payload }
+    case 'settings/piCommandChanged':
+      return { ...state, piCommand: event.payload }
+    case 'settings/piEnvVarsChanged':
+      return { ...state, piEnvVars: event.payload }
+    case 'settings/piModelChanged':
+      return { ...state, piModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
     case 'settings/harnessSystemPromptEnabledChanged':
