@@ -101,13 +101,6 @@
   box-shadow: 0 0 60px rgba(251, 191, 36, 0.12);
 }
 
-.diorama-bg {
-  background-image:
-    radial-gradient(circle at 85% 20%, rgba(245, 158, 11, 0.06), transparent 45%),
-    radial-gradient(circle at 15% 80%, rgba(198, 124, 92, 0.08), transparent 45%),
-    radial-gradient(circle at 80% 80%, rgba(251, 191, 36, 0.04), transparent 45%);
-}
-
 @keyframes warm-gradient-flow {
   0% {
     background-position: 0% 50%;
