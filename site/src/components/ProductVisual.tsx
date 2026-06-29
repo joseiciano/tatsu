@@ -53,7 +53,7 @@ export function ProductVisual() {
   return (
     <section className="py-12 md:py-20">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="relative rounded-xl border border-border-strong bg-app overflow-hidden glow-amber" style={{ height: '28rem' }}>
+        <div className="relative rounded-xl border border-border-strong bg-app overflow-hidden glow-amber h-[360px] md:h-[68vh] md:min-h-[560px] md:max-h-[760px]">
           <MockTatsu state={STATIC_STATE} />
         </div>
       </div>
