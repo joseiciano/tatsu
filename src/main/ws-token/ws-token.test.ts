@@ -4,8 +4,11 @@ const store = new Map<string, string>()
 
 vi.mock('../secrets', () => ({
   getSecret: (key: string) => store.get(key) ?? null,
-  setSecret: (key: string, value: string) => {
+  setSecret: async (key: string, value: string) => {
     store.set(key, value)
+  },
+  deleteSecret: async (key: string) => {
+    store.delete(key)
   }
 }))
 
@@ -16,23 +19,23 @@ beforeEach(() => {
 })
 
 describe('ws-token', () => {
-  it('generates and persists a token on first call', () => {
-    const t = getOrCreateWsToken()
+  it('generates and persists a token on first call', async () => {
+    const t = await getOrCreateWsToken()
     expect(t).toMatch(/^[0-9a-f]{64}$/)
     expect(store.get('wsAuthToken')).toBe(t)
   })
 
-  it('returns the same token on subsequent calls (survives reboots)', () => {
-    const a = getOrCreateWsToken()
-    const b = getOrCreateWsToken()
+  it('returns the same token on subsequent calls (survives reboots)', async () => {
+    const a = await getOrCreateWsToken()
+    const b = await getOrCreateWsToken()
     expect(a).toBe(b)
   })
 
-  it('rotateWsToken replaces the stored token', () => {
-    const a = getOrCreateWsToken()
-    const b = rotateWsToken()
+  it('rotateWsToken replaces the stored token', async () => {
+    const a = await getOrCreateWsToken()
+    const b = await rotateWsToken()
     expect(b).not.toBe(a)
-    expect(getOrCreateWsToken()).toBe(b)
+    expect(await getOrCreateWsToken()).toBe(b)
   })
 
 

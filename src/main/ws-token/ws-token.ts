@@ -1,25 +1,29 @@
 // The WS/web-client auth token lives in the encrypted secrets store so
 // it survives main-process restarts. That lets users pin a web-client
 // URL to their phone's homescreen or bookmark it and have the link
-// keep working across reboots. When safeStorage is unavailable (rare
-// — only headless CI and Linux without a keyring), setSecret silently
-// no-ops and we fall back to a fresh token on every boot, matching
-// the pre-persistence behavior.
+// keep working across reboots. Backend selection:
+//   - Electron mode: safeStorage-backed file when available; if
+//     safeStorage.isEncryptionAvailable() is false, setSecret
+//     silently no-ops and we fall back to a fresh token on every boot.
+//   - Headless mode: prefers keytar (OS keychain) then falls through
+//     to LocalEncryptedFileBackend (AES-256-GCM with random key file
+//     at <userData>/.secret-key), which always persists. The token
+//     survives restarts in headless CI.
 
 import { randomBytes, timingSafeEqual } from 'crypto'
 import { getSecret, setSecret } from '../secrets'
 
 const SECRET_KEY = 'wsAuthToken'
 
-export function getOrCreateWsToken(): string {
+export async function getOrCreateWsToken(): Promise<string> {
   const existing = getSecret(SECRET_KEY)
   if (existing) return existing
   return rotateWsToken()
 }
 
-export function rotateWsToken(): string {
+export async function rotateWsToken(): Promise<string> {
   const token = randomBytes(32).toString('hex')
-  setSecret(SECRET_KEY, token)
+  await setSecret(SECRET_KEY, token)
   return token
 }
 

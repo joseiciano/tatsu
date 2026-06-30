@@ -60,7 +60,9 @@ export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
 }
 
 function rateLimitKeyForRequest(req: IncomingMessage): string {
-  return req.socket.remoteAddress || 'unknown'
+  const address = req.socket.remoteAddress || 'unknown'
+  const terminalId = String(req.headers['x-harness-terminal-id'] || '')
+  return terminalId ? `${address}:${terminalId}` : address
 }
 
 const controlRateLimiter = createControlRateLimiter()
@@ -595,7 +597,7 @@ export function readJson(
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8')))
       } catch (e) {
-        reject(e)
+        reject(httpStatusError(400, `malformed JSON: ${(e as Error).message}`))
       }
     })
     req.on('error', (err) => {

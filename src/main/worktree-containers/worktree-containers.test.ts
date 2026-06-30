@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { DockerRunner } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
-import { createWorktreeContainers } from './worktree-containers'
+import { createWorktreeContainers, defaultDockerRunner, sanitizeStderr } from './worktree-containers'
 
 function makeRunner(): DockerRunner & { calls: Array<{ args: string[]; opts?: Record<string, unknown> }> } {
   const calls: Array<{ args: string[]; opts?: Record<string, unknown> }> = []
@@ -299,10 +299,10 @@ describe('resolveContainerConfig', () => {
     }
   })
 
-  it('ensures /tmp/harness-status directory exists for bind mount', () => {
+  it('includes /tmp/harness-status bind mount without creating directory', () => {
     const containers = createWorktreeContainers(makeRunner())
     const config = containers.resolveContainerConfig('/repo', '/repo/wt')
-    expect(existsSync('/tmp/harness-status')).toBe(true)
+    // resolveContainerConfig should include the mount but NOT create the directory
     const harnessVol = config.volumes.find(v => v.source === '/tmp/harness-status')
     expect(harnessVol).toBeDefined()
     expect(harnessVol!.target).toBe('/tmp/harness-status')
@@ -809,5 +809,174 @@ describe('checkDockerAvailable caching', () => {
     expect(r1.ok).toBe(false)
     expect(r2.ok).toBe(false)
     expect(versionCallCount).toBe(1)
+  })
+})
+
+// ─── Finding 1: defaultDockerRunner real spawn coverage ────────────
+
+let spawnTmpDir: string
+let origPath: string | undefined
+
+beforeAll(() => {
+  spawnTmpDir = mkdtempSync(join(tmpdir(), 'tatsu-spawn-test-'))
+  origPath = process.env.PATH
+})
+
+afterEach(() => {
+  // Restore PATH after each test
+  if (origPath !== undefined) process.env.PATH = origPath
+})
+
+afterAll(() => {
+  try { rmSync(spawnTmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
+})
+
+function writeFakeDocker(dir: string, script: string): string {
+  const scriptPath = join(dir, 'docker')
+  writeFileSync(scriptPath, script)
+  chmodSync(scriptPath, 0o755)
+  return scriptPath
+}
+
+describe('defaultDockerRunner real spawn', () => {
+  it('captures stdout, stderr, and exitCode from real process', async () => {
+    writeFakeDocker(spawnTmpDir, '#!/bin/sh\necho "hello out"; echo "hello err" >&2; exit 0')
+    const runner = defaultDockerRunner()
+    const result = await runner.run(['version'], { env: { PATH: spawnTmpDir } })
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('hello out')
+    expect(result.stderr).toContain('hello err')
+  })
+
+  it('calls onOutput with stdout and stderr chunks', async () => {
+    writeFakeDocker(spawnTmpDir, '#!/bin/sh\necho "chunk1"; echo "chunk2" >&2; exit 0')
+    const runner = defaultDockerRunner()
+    const chunks: string[] = []
+    await runner.run(['info'], { env: { PATH: spawnTmpDir }, onOutput: (c) => chunks.push(c) })
+    expect(chunks.join('')).toContain('chunk1')
+    expect(chunks.join('')).toContain('chunk2')
+  })
+
+  it('returns non-zero exitCode on process failure', async () => {
+    writeFakeDocker(spawnTmpDir, '#!/bin/sh\nexit 2')
+    const runner = defaultDockerRunner()
+    const result = await runner.run(['bad'], { env: { PATH: spawnTmpDir } })
+    expect(result.exitCode).toBe(2)
+  })
+
+  it('rejects with ENOENT when docker binary not found', async () => {
+    // Use a dir that has NO docker script
+    const emptyDir = mkdtempSync(join(tmpdir(), 'tatsu-no-docker-'))
+    try {
+      const runner = defaultDockerRunner()
+      await expect(
+        runner.run(['version'], { env: { PATH: emptyDir } })
+      ).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects with timeout error and kills child via SIGKILL', async () => {
+    writeFakeDocker(spawnTmpDir, '#!/bin/sh\nwhile true; do :; done')
+    const runner = defaultDockerRunner()
+    await expect(
+      runner.run(['sleep'], { env: { PATH: spawnTmpDir }, timeoutMs: 100 })
+    ).rejects.toThrow(/timed out after 100ms/)
+  })
+
+  it('caps output at 1 MiB', async () => {
+    // Script that writes more than 1 MiB
+    const bigScript = '#!/bin/sh\n' + 'echo ' + '"A'.repeat(256) + '"' + '\n' + 'repeat=true\n' + 'while $repeat; do\n' + '  echo "' + 'B'.repeat(4096) + '"\n' + 'done\nexit 0\n'
+    // Simpler approach: dd or printf
+    writeFakeDocker(spawnTmpDir, '#!/bin/sh\npython3 -c "print(\'X\' * (2 * 1024 * 1024))" 2>/dev/null || dd if=/dev/zero bs=1048576 count=2 2>/dev/null | tr "\\0" "X"; exit 0')
+    const runner = defaultDockerRunner()
+    const result = await runner.run(['big'], { env: { PATH: spawnTmpDir } })
+    // Output should be capped at ~1 MiB (1024*1024 = 1048576 bytes)
+    expect(result.stdout.length).toBeLessThanOrEqual(1024 * 1024 + 100) // small margin for the truncation boundary
+  })
+
+  it('passes cwd option to spawn', async () => {
+    const cwdDir = mkdtempSync(join(tmpdir(), 'tatsu-cwd-'))
+    try {
+      writeFakeDocker(spawnTmpDir, '#!/bin/sh\npwd')
+      const runner = defaultDockerRunner()
+      const result = await runner.run(['version'], { env: { PATH: spawnTmpDir }, cwd: cwdDir })
+      // macOS resolves /var to /private/var via symlink
+      const resolved = require('fs').realpathSync(cwdDir)
+      expect(result.stdout.trim()).toBe(resolved)
+    } finally {
+      rmSync(cwdDir, { recursive: true, force: true })
+    }
+  })
+})
+
+// ─── Finding 5: sanitizeStderr hardening ───────────────────────────
+
+describe('sanitizeStderr', () => {
+  it('redacts sensitive env values with spaces (not leaking trailing words)', () => {
+    const input = 'Error: TOKEN=abc123 def GPG_KEY=xyz'
+    const result = sanitizeStderr(input)
+    expect(result).toContain('TOKEN=[redacted]')
+    expect(result).not.toContain('abc123')
+    expect(result).not.toContain(' def')
+  })
+
+  it('redacts multiple sensitive assignments on the same line', () => {
+    const input = 'TOKEN=secret123 API_KEY=sk-realkey123'
+    const result = sanitizeStderr(input)
+    expect(result).toContain('TOKEN=[redacted]')
+    expect(result).toContain('API_KEY=[redacted]')
+    expect(result).not.toContain('secret123')
+    expect(result).not.toContain('sk-realkey123')
+  })
+
+  it('preserves non-sensitive env assignments', () => {
+    const input = 'NODE_ENV=development TOKEN=secret123'
+    const result = sanitizeStderr(input)
+    expect(result).toContain('NODE_ENV=development')
+    expect(result).toContain('TOKEN=[redacted]')
+  })
+
+  it('redacts github_pat_ fine-grained PAT tokens', () => {
+    const input = 'auth failed github_pat_11ABCD0E_abcdefghijklmnopqrstuvwxyz1234567890AB'
+    const result = sanitizeStderr(input)
+    expect(result).toContain('[redacted]')
+    expect(result).not.toContain('github_pat_11ABCD0E')
+  })
+
+  it('redacts multiline/private-key-like content if env assignment', () => {
+    const input = 'PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\nMIIEpA=\nEND'
+    const result = sanitizeStderr(input)
+    // PRIVATE_KEY is a sensitive key pattern; the first-line value should be redacted
+    expect(result).toContain('PRIVATE_KEY=[redacted]')
+    expect(result).not.toContain('-----BEGIN RSA PRIVATE KEY-----')
+    // Continuation lines must also be redacted — PEM body and footer must not leak
+    expect(result).not.toContain('MIIEpA=')
+    expect(result).not.toMatch(/\bEND\b/)
+  })
+
+  it('redacts multiline PEM with -----END footer', () => {
+    const input = 'PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n0aV+Z2Y=\n-----END RSA PRIVATE KEY-----'
+    const result = sanitizeStderr(input)
+    expect(result).toContain('PRIVATE_KEY=[redacted]')
+    expect(result).not.toContain('MIIEpAIBAAKCAQEA')
+    expect(result).not.toContain('0aV+Z2Y=')
+    expect(result).not.toContain('-----END RSA PRIVATE KEY-----')
+  })
+
+  it('stops redaction at next line-start env assignment', () => {
+    const input = 'PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\nMIIEpA=\nOTHER=value'
+    const result = sanitizeStderr(input)
+    expect(result).toContain('PRIVATE_KEY=[redacted]')
+    expect(result).not.toContain('MIIEpA=')
+    expect(result).toContain('OTHER=value')
+  })
+
+  it('truncates output at 500 chars', () => {
+    const longInput = 'x'.repeat(600)
+    const result = sanitizeStderr(longInput)
+    expect(result.length).toBeLessThan(600)
+    expect(result).toContain('...(truncated)')
   })
 })

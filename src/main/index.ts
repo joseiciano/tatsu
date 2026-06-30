@@ -121,15 +121,15 @@ if (runtime === 'electron') {
 // Covers both Electron-from-Dock and headless-via-ssh/systemd, both of
 // which can start with a stripped PATH. No-op outside of macOS today;
 // see path-fix.ts.
-void fixPathFromLoginShell().then(bootLocal)
+void fixPathFromLoginShell().then(() => bootLocal())
 
 // Wrap the entire local-mode boot in a function so the remote-mode
 // branch above can early-exit cleanly. Function declarations are
 // hoisted, so the call site above sees this definition. Everything
 // inside used to live at module top-level; the only change is the
-// extra `function bootLocal(): void {` wrapper + matching brace at
+// extra `function bootLocal(): Promise<void> {` wrapper + matching brace at
 // EOF — the body is otherwise identical.
-function bootLocal(): void {
+async function bootLocal(): Promise<void> {
 
 // Resolves the caller's MCP scope from their terminal id. Used by both
 // the control HTTP server (on every tool call, authoritative) and
@@ -335,7 +335,7 @@ const wsHost =
 // users pin the web-client URL to a phone homescreen or bookmark it
 // and have it keep working across main-process restarts. Rotation
 // happens explicitly via Settings, not on every boot.
-const wsToken = wsEnabled ? getOrCreateWsToken() : null
+const wsToken = wsEnabled ? await getOrCreateWsToken() : null
 
 // Electron-packaged builds resolve the web-client bundle inside the asar;
 // every other path (Electron-dev, headless) reads it from a sibling of
@@ -1858,12 +1858,12 @@ function registerIpcHandlers(): void {
     }
   })
 
-  transport.onRequest('config:rotateWsToken', (_ctx) => {
+  transport.onRequest('config:rotateWsToken', async (_ctx) => {
     // Writes a fresh token to the encrypted secrets store. The running
     // HTTP + WS servers captured the old token in closures at boot, so
     // they keep accepting it until the app restarts; the UI surfaces a
     // "relaunch required" hint after a rotation.
-    const next = rotateWsToken()
+    const next = await rotateWsToken()
     log('ws-transport', 'auth token rotated — takes effect on next launch')
     return next
   })
@@ -2335,7 +2335,7 @@ function registerIpcHandlers(): void {
   transport.onRequest('settings:setGithubToken', async (_ctx, token: string) => {
     const trimmed = token.trim()
     if (!trimmed) {
-      deleteSecret('githubToken')
+      await deleteSecret('githubToken')
       store.dispatch({ type: 'settings/hasGithubTokenChanged', payload: false })
       invalidateTokenCache()
       await resolveGitHubToken()
@@ -2346,7 +2346,7 @@ function registerIpcHandlers(): void {
     // Validate the token first by hitting /user
     const test = await testToken(trimmed)
     if (!test.ok) return { ok: false, error: test.error }
-    setSecret('githubToken', trimmed)
+    await setSecret('githubToken', trimmed)
     store.dispatch({ type: 'settings/hasGithubTokenChanged', payload: true })
     invalidateTokenCache()
     await resolveGitHubToken()
@@ -2357,7 +2357,7 @@ function registerIpcHandlers(): void {
   })
 
   transport.onRequest('settings:clearGithubToken', async (_ctx) => {
-    deleteSecret('githubToken')
+    await deleteSecret('githubToken')
     store.dispatch({ type: 'settings/hasGithubTokenChanged', payload: false })
     invalidateTokenCache()
     await resolveGitHubToken()
@@ -2951,7 +2951,7 @@ function registerIpcHandlers(): void {
 
   transport.onRequest(
     'connections:add',
-    (
+    async (
       _ctx,
       input: { label: string; url: string; kind: 'remote'; color?: string; initials?: string },
       token: string
@@ -2973,20 +2973,20 @@ function registerIpcHandlers(): void {
       const list = (config.connections ?? []).slice()
       list.push(conn)
       config.connections = list
-      setSecret(`backend-token:${id}`, token)
+      await setSecret(`backend-token:${id}`, token)
       saveConfig(config)
       return conn
     }
   )
 
-  transport.onRequest('connections:remove', (_ctx, id: string) => {
+  transport.onRequest('connections:remove', async (_ctx, id: string) => {
     if (id === LOCAL_BACKEND_ID) throw new Error('cannot remove the local backend')
     const list = config.connections ?? []
     const next = list.filter((c) => c.id !== id)
     if (next.length === list.length) return false
     config.connections = next
     if (config.activeBackendId === id) config.activeBackendId = LOCAL_BACKEND_ID
-    deleteSecret(`backend-token:${id}`)
+    await deleteSecret(`backend-token:${id}`)
     saveConfig(config)
     return true
   })

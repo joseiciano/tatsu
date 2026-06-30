@@ -1,6 +1,6 @@
-// Pluggable secrets storage. The external API (`setSecret`, `getSecret`,
-// `hasSecret`, `deleteSecret`) is unchanged so call sites don't need to
-// know which backend is active.
+// Pluggable secrets storage. `getSecret` and `hasSecret` are synchronous;
+// `setSecret` and `deleteSecret` are async/awaitable so callers can
+// observe persistence completion.
 //
 // Backends (chosen at first use):
 //   1. Electron mode → safeStorage. OS keychain-backed encryption,
@@ -27,10 +27,10 @@ import { detectRuntime, userDataDir } from '../paths'
 import { log } from '../debug'
 
 interface SecretsBackend {
-  set(key: string, value: string): void
+  set(key: string, value: string): void | Promise<void>
   get(key: string): string | null
   has(key: string): boolean
-  delete(key: string): void
+  delete(key: string): void | Promise<void>
 }
 
 interface SecretsFile {
@@ -114,15 +114,14 @@ class KeytarBackend implements SecretsBackend {
     }
   }
 
-  set(key: string, value: string): void {
+  async set(key: string, value: string): Promise<void> {
     try {
-      this.keytar.setPassword(KeytarBackend.SERVICE, key, value).catch((err: unknown) => {
-        log('secrets', `keytar set failed for ${key}`, err instanceof Error ? err.message : err)
-      })
-      this.knownKeys.add(key)
+      await this.keytar.setPassword(KeytarBackend.SERVICE, key, value)
     } catch (err) {
       log('secrets', `keytar set failed for ${key}`, err instanceof Error ? err.message : err)
+      throw err
     }
+    this.knownKeys.add(key)
   }
 
   get(key: string): string | null {
@@ -143,19 +142,18 @@ class KeytarBackend implements SecretsBackend {
     return this.knownKeys.has(key)
   }
 
-  delete(key: string): void {
+  async delete(key: string): Promise<void> {
     try {
-      this.keytar.deletePassword(KeytarBackend.SERVICE, key).catch((err: unknown) => {
-        log('secrets', `keytar delete failed for ${key}`, err instanceof Error ? err.message : err)
-      })
-      this.knownKeys.delete(key)
+      await this.keytar.deletePassword(KeytarBackend.SERVICE, key)
     } catch (err) {
       log('secrets', `keytar delete failed for ${key}`, err instanceof Error ? err.message : err)
+      throw err
     }
+    this.knownKeys.delete(key)
   }
 }
 
-class LocalEncryptedFileBackend implements SecretsBackend {
+export class LocalEncryptedFileBackend implements SecretsBackend {
   private readonly key: Buffer
 
   constructor() {
@@ -179,6 +177,7 @@ class LocalEncryptedFileBackend implements SecretsBackend {
     const data = readSecretsFile()
     const iv = randomBytes(12)
     const cipher = createCipheriv('aes-256-gcm', this.key, iv)
+    cipher.setAAD(Buffer.from(key, 'utf8'))
     const ct = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
     const tag = cipher.getAuthTag()
     data[key] = Buffer.concat([iv, tag, ct]).toString('base64')
@@ -195,9 +194,40 @@ class LocalEncryptedFileBackend implements SecretsBackend {
       const iv = buf.subarray(0, 12)
       const tag = buf.subarray(12, 28)
       const ct = buf.subarray(28)
-      const decipher = createDecipheriv('aes-256-gcm', this.key, iv)
-      decipher.setAuthTag(tag)
-      return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8')
+
+      // Try AAD-bound decrypt first (current format)
+      try {
+        const decipher = createDecipheriv('aes-256-gcm', this.key, iv)
+        decipher.setAAD(Buffer.from(key, 'utf8'))
+        decipher.setAuthTag(tag)
+        return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8')
+      } catch {
+        // AAD-bound decrypt failed — fall through to legacy no-AAD attempt
+      }
+
+      // Legacy format: blob was encrypted without AAD. Decrypt and
+      // re-encrypt under the current AAD-bound format so subsequent
+      // reads hit the fast path.
+      try {
+        const decipher = createDecipheriv('aes-256-gcm', this.key, iv)
+        // No setAAD — legacy format
+        decipher.setAuthTag(tag)
+        const plaintext = Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8')
+        // Migrate: re-encrypt with AAD so future reads don't need
+        // the legacy fallback. Errors here are non-fatal (we still
+        // return the plaintext).
+        try {
+          this.set(key, plaintext)
+        } catch {
+          log('secrets', `failed to migrate legacy secret ${key} to AAD-bound format`)
+        }
+        return plaintext
+      } catch {
+        // Both AAD and legacy decrypt failed — corrupt or wrong key
+      }
+
+      log('secrets', `failed to decrypt secret ${key} (both AAD and legacy formats failed)`)
+      return null
     } catch (err) {
       log('secrets', `failed to decrypt secret ${key}`, err instanceof Error ? err.message : err)
       return null
@@ -247,9 +277,9 @@ function pickBackend(): SecretsBackend {
   return backendCache
 }
 
-/** Store a secret. */
-export function setSecret(key: string, value: string): void {
-  pickBackend().set(key, value)
+/** Store a secret. Returns a promise so callers can await persistence. */
+export async function setSecret(key: string, value: string): Promise<void> {
+  await pickBackend().set(key, value)
 }
 
 /** Retrieve a secret, or null if absent. */
@@ -262,12 +292,20 @@ export function hasSecret(key: string): boolean {
   return pickBackend().has(key)
 }
 
-/** Remove a secret. */
-export function deleteSecret(key: string): void {
-  pickBackend().delete(key)
+/** Remove a secret. Returns a promise so callers can await persistence. */
+export async function deleteSecret(key: string): Promise<void> {
+  await pickBackend().delete(key)
 }
 
 /** Test-only: reset the backend cache so a fresh `pickBackend` runs. */
 export function resetSecretsBackendForTests(): void {
   backendCache = null
+}
+
+/** Test-only: create a KeytarBackend with a mock keytar for unit tests. */
+export function createKeytarBackendForTests(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  keytar: any
+): SecretsBackend {
+  return new KeytarBackend(keytar)
 }

@@ -8,6 +8,58 @@ import type { RepoContainerConfig } from '../../shared/state/repo-configs'
 
 const MAX_DOCKER_OUTPUT_BYTES = 1024 * 1024
 
+export function sanitizeStderr(stderr: string): string {
+  const truncated = stderr.length > 500 ? stderr.slice(0, 500) + '...(truncated)' : stderr
+  // Phase 1: specific token/key patterns
+  const withSpecificPatterns = truncated
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/g, 'Bearer [redacted]')
+    .replace(/\b(ghp_[A-Za-z0-9]{36})\b/g, '[redacted]')
+    .replace(/\b(github_pat_[A-Za-z0-9_]+)\b/g, '[redacted]')
+    .replace(/\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,})\b/g, '[redacted]')
+    .replace(/\b(AKIA[0-9A-Z]{16})\b/g, '[redacted]')
+    .replace(/\bxox[abprs]-[A-Za-z0-9-]+\b/g, '[redacted]')
+    .replace(/\bAIza[0-9A-Za-z_-]{10,}\b/g, '[redacted]')
+
+  // Phase 2a: same-line env assignments (existing behavior).
+  // Sensitive keys get VALUE redacted; non-sensitive keys are kept.
+  const withSameLineEnv = withSpecificPatterns.replace(
+    /\b([A-Za-z_][A-Za-z0-9_]*=)\S+(?:\s+(?![A-Za-z_][A-Za-z0-9_]*=)\S+)*/g,
+    (match, prefix: string) => {
+      const key = prefix.slice(0, -1)
+      if (/token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key/i.test(key)) {
+        return `${prefix}[redacted]`
+      }
+      return match
+    }
+  )
+
+  // Phase 2b: multiline continuation for sensitive keys.
+  // After phase 2a, sensitive keys look like `KEY=[redacted]\n...continuation...`.
+  // Consume continuation lines that don't start with a real env assignment
+  // (KEY=value with non-empty value). Lines like `MIIEpA=` (PEM body) lack
+  // a value after `=`, so they continue to be consumed.
+  const lines = withSameLineEnv.split('\n')
+  const result: string[] = []
+  let inSensitiveContinuation = false
+  for (const line of lines) {
+    if (inSensitiveContinuation) {
+      // Stop at a real env assignment (key=value with non-empty value)
+      if (/^[A-Za-z_][A-Za-z0-9_]*=.+/.test(line)) {
+        inSensitiveContinuation = false
+        result.push(line)
+      }
+      // Otherwise skip this continuation line (part of the redacted value)
+    } else {
+      result.push(line)
+      // Entering sensitive continuation mode if this line has a redacted env value
+      if (/\b[A-Za-z_][A-Za-z0-9_]*=\[redacted\]/.test(line)) {
+        inSensitiveContinuation = true
+      }
+    }
+  }
+  return result.join('\n')
+}
+
 export function defaultDockerRunner(): DockerRunner {
   return {
     run(args: string[], opts?: DockerRunOptions): Promise<DockerRunResult> {
@@ -122,24 +174,6 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return validateLabelValue(encoded)
   }
 
-  function sanitizeStderr(stderr: string): string {
-    const truncated = stderr.length > 500 ? stderr.slice(0, 500) + '...(truncated)' : stderr
-    return truncated
-      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/g, 'Bearer [redacted]')
-      .replace(/\b(ghp_[A-Za-z0-9]{36})\b/g, '[redacted]')
-      .replace(/\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,})\b/g, '[redacted]')
-      .replace(/\b(AKIA[0-9A-Z]{16})\b/g, '[redacted]')
-      .replace(/\bxox[abprs]-[A-Za-z0-9-]+\b/g, '[redacted]')
-      .replace(/\bAIza[0-9A-Za-z_-]{10,}\b/g, '[redacted]')
-      .replace(/\b([A-Za-z_][A-Za-z0-9_]*=)[^\s]+/g, (match, prefix) => {
-        const key = prefix.slice(0, -1)
-        if (/token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key/i.test(key)) {
-          return `${prefix}[redacted]`
-        }
-        return match
-      })
-  }
-
   function isNoSuchContainer(stderr: string): boolean {
     return /no such container/i.test(stderr)
   }
@@ -180,7 +214,6 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       { source: worktreePath, target: workdir }
     ]
     const harnessStatusDir = '/tmp/harness-status'
-    mkdirSync(harnessStatusDir, { recursive: true, mode: 0o700 })
     volumes.push({ source: harnessStatusDir, target: harnessStatusDir })
     if (repoConfig?.volumes) {
       for (const vol of repoConfig.volumes) {
@@ -193,9 +226,11 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     const dockerfile = repoConfig?.dockerfile
     const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(worktreePath, dockerfile)}` : (repoConfig?.image || 'node:20-alpine')
 
-    // Sane default env vars for read-only containers. HOME and XDG dirs live
-    // under the worktree bind mount so they survive restarts and are writable
-    // even when the container root fs is read-only. User-supplied values win.
+    /**
+     * Sane default env vars for read-only containers. HOME and XDG dirs live
+     * under the worktree bind mount so they survive restarts and are writable
+     * even when the container root fs is read-only. User-supplied values win.
+     */
     const defaultEnv: Record<string, string> = {
       HOME: `${workdir}/.home`,
       XDG_CACHE_HOME: `${workdir}/.cache`,
@@ -254,6 +289,8 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     if (!dockerCheck.ok) {
       throw new Error(dockerCheck.error || 'Docker is not available')
     }
+    // Ensure harness-status dir exists before docker run
+    mkdirSync('/tmp/harness-status', { recursive: true, mode: 0o700 })
     await ensureImage(config)
     const id = getWorktreeId(worktreePath)
     const name = makeContainerName(worktreePath)

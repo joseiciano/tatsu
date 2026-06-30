@@ -43,22 +43,39 @@ function url(path: string): string {
 }
 
 describe('createWebClientServer', () => {
-  it('returns 401 for HTML entry without a token', async () => {
+  it('serves safe unauthenticated boot shell for HTML entry without a token', async () => {
     const res = await fetch(url('/'))
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toMatch(/text\/html/)
+    expect(res.headers.get('cache-control')).toBe('no-store')
     const body = await res.text()
+    // Must contain the HTML shell so client JS can load
+    expect(body).toContain('<html')
+    // Must NOT inject token into the manifest link
+    expect(body).not.toContain(`?token=`)
+    expect(body).toContain('href="./manifest.webmanifest"')
+    // Must NOT disclose the server token
     expect(body).not.toContain(TOKEN)
-    expect(body).not.toContain('<html')
-    expect(body).toMatch(/unauthorized/i)
   })
 
-  it('returns 401 for /index.html without a token', async () => {
+  it('serves safe unauthenticated boot shell for /index.html without a token', async () => {
     const res = await fetch(url('/index.html'))
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const body = await res.text()
+    expect(body).toContain('<html')
+    expect(body).not.toContain(`?token=`)
   })
 
   it('returns 401 for HTML entry with the wrong token', async () => {
     const res = await fetch(url('/?token=nope'))
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 401 for HTML entry with wrong Bearer token', async () => {
+    const res = await fetch(url('/'), {
+      headers: { Authorization: 'Bearer wrong-token' }
+    })
     expect(res.status).toBe(401)
   })
 
@@ -69,6 +86,12 @@ describe('createWebClientServer', () => {
     const body = await res.text()
     expect(body).toContain('<html')
     expect(body).not.toContain('harness-ws-token')
+  })
+
+  it('sets Cache-Control: no-store on authenticated HTML response', async () => {
+    const res = await fetch(url(`/?token=${TOKEN}`))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
   })
 
   it('accepts a bearer token in the Authorization header', async () => {
@@ -220,5 +243,49 @@ describe('createWebClientServer', () => {
       expect(res.status).toBe(405)
       expect(res.headers.get('allow')).toBe('POST, OPTIONS')
     })
+  })
+})
+
+describe('POST /_harness/session rate limiting', () => {
+  let rateServer: ReturnType<typeof createWebClientServer>
+  let ratePort: number
+  const rateToken = 'rate-limit-token'
+
+  beforeAll(async () => {
+    rateServer = createWebClientServer({ token: rateToken, rootDir: root, sessionRateLimit: { capacity: 2, refillPerSecond: 0 } })
+    await new Promise<void>((resolve) => {
+      rateServer.listen(0, '127.0.0.1', () => resolve())
+    })
+    ratePort = (rateServer.address() as AddressInfo).port
+  })
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => rateServer.close(() => resolve()))
+  })
+
+  function rateUrl(path: string): string {
+    return `http://127.0.0.1:${ratePort}${path}`
+  }
+
+  it('returns 429 after capacity is consumed', async () => {
+    // First two requests succeed (capacity = 2)
+    const res1 = await fetch(rateUrl('/_harness/session'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${rateToken}` }
+    })
+    expect(res1.status).toBe(200)
+
+    const res2 = await fetch(rateUrl('/_harness/session'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${rateToken}` }
+    })
+    expect(res2.status).toBe(200)
+
+    // Third request hits rate limit
+    const res3 = await fetch(rateUrl('/_harness/session'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${rateToken}` }
+    })
+    expect(res3.status).toBe(429)
   })
 })

@@ -47,6 +47,18 @@ describe('readJson', () => {
   it('accepts bodies at the configured byte limit', async () => {
     await expect(readJson(requestWithBody('{\"x\":1}'), 7)).resolves.toEqual({ x: 1 })
   })
+
+  it('rejects malformed JSON with statusCode 400', async () => {
+    await expect(readJson(requestWithBody('{bad json}'))).rejects.toMatchObject({
+      statusCode: 400
+    })
+  })
+
+  it('rejects completely invalid JSON with statusCode 400', async () => {
+    await expect(readJson(requestWithBody('not json at all'))).rejects.toMatchObject({
+      statusCode: 400
+    })
+  })
 })
 
 function requestFrom(remoteAddress: string, terminalId?: string): IncomingMessage {
@@ -73,25 +85,25 @@ describe('createControlRateLimiter', () => {
     expect(limiter.size()).toBe(1)
   })
 
-  it('same remote address shares bucket regardless of terminal ID', () => {
+  it('same remote address with different terminal IDs get separate buckets', () => {
     const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0 })
 
-    // Same address + same terminal = same bucket (rate limited after 1 request)
+    // Same address + terminal-a consumes its bucket
     expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
+    // Same address + terminal-b gets its own bucket (not rate-limited)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-b'), 0)).toBe(true)
+    // Same address + terminal-a is now rate-limited
     expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(false)
-
-    // Same address + different terminal = same bucket (terminal ID ignored)
-    expect(limiter.allow(requestFrom('127.0.0.1', 'term-b'), 0)).toBe(false)
+    // Same address + no terminal ID gets its own bucket
+    expect(limiter.allow(requestFrom('127.0.0.1'), 0)).toBe(true)
   })
 
-  it('does not create fresh buckets when terminal ID changes for same IP', () => {
+  it('same terminal ID shares bucket regardless of terminal ID presence', () => {
     const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0 })
 
-    // Request with terminal-a from 127.0.0.1 consumes the shared bucket
+    // Same address + same terminal = same bucket
     expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
-
-    // Changing terminal ID alone should NOT give a fresh bucket for the same IP
-    expect(limiter.allow(requestFrom('127.0.0.1', 'term-z'), 0)).toBe(false)
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(false)
   })
 
   it('different IPs get separate buckets', () => {

@@ -122,6 +122,9 @@ function validateContainerConfig(container: unknown, repoRoot?: string): { valid
   }
 
   if (disabled) {
+    if (hasImage && hasDockerfile) {
+      return { valid: false, error: 'Cannot specify both image and dockerfile' }
+    }
     const result: NonNullable<RepoConfig['container']> = { disabled: true }
     if (hasImage) result.image = (c.image as string).trim()
     if (hasDockerfile) {

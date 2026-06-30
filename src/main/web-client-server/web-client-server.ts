@@ -6,10 +6,14 @@
 // `?session=<session_token>`.
 //
 // Auth model:
-//   - HTML entry (`/`, `/index.html`) requires `?token=<token>` on the
-//     URL (or an `Authorization: Bearer <token>` header). Unauthenticated
-//     requests get 401 with a plaintext hint — the token is never
-//     disclosed to a caller that didn't already present it.
+//   - HTML entry (`/`, `/index.html`):
+//     • No token presented → serve a safe unauthenticated boot shell
+//       (index.html without token injection, `Cache-Control: no-store`).
+//       The client JS shows "No Tatsu auth token" unless it can recover
+//       a token from sessionStorage. The token is never disclosed.
+//     • Invalid token presented (wrong ?token= or Bearer) → 401.
+//     • Valid token → serve index.html with manifest link rewritten to
+//       carry the token, `Cache-Control: no-store`.
 //   - `POST /_harness/session` exchanges a valid root token
 //     (`?token=` or `Authorization: Bearer`) for a short-lived,
 //     one-time-use session token the browser uses for the WS upgrade.
@@ -48,7 +52,19 @@ import { createServer, type IncomingMessage, type Server as HttpServer } from 'h
 import { readFile, stat } from 'fs/promises'
 import { extname, join, resolve, sep } from 'path'
 import { log } from '../debug'
-import { issueSessionToken } from '../ws-token'
+import { issueSessionToken, safeEqualToken } from '../ws-token'
+import { consumeToken, createTokenBucket, type TokenBucket } from '../rate-limit'
+
+const SESSION_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
+
+export interface WebClientServerOptions {
+  token: string
+  rootDir: string
+  sessionRateLimit?: {
+    capacity?: number
+    refillPerSecond?: number
+  }
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -81,6 +97,30 @@ export interface WebClientServerOptions {
 export function createWebClientServer(opts: WebClientServerOptions): HttpServer {
   const root = resolve(opts.rootDir)
   const indexPath = join(root, 'index.html')
+
+  // Per-IP session token minting rate limiter
+  const sessionCapacity = opts.sessionRateLimit?.capacity ?? 10
+  const sessionRefill = opts.sessionRateLimit?.refillPerSecond ?? 1
+  const sessionBuckets = new Map<string, TokenBucket>()
+  let lastSessionSweepAt = 0
+
+  function sessionRateLimit(req: IncomingMessage): boolean {
+    const now = Date.now()
+    if (now - lastSessionSweepAt >= SESSION_RATE_LIMIT_SWEEP_INTERVAL_MS) {
+      for (const [key, bucket] of sessionBuckets) {
+        if (now - bucket.updatedAt > 60_000) sessionBuckets.delete(key)
+      }
+      lastSessionSweepAt = now
+    }
+    const ip = req.socket.remoteAddress || 'unknown'
+    let bucket = sessionBuckets.get(ip)
+    if (!bucket) {
+      bucket = createTokenBucket(sessionCapacity, now)
+      sessionBuckets.set(ip, bucket)
+    }
+    return consumeToken(bucket, sessionCapacity, sessionRefill, now)
+  }
+
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost')
@@ -104,6 +144,13 @@ export function createWebClientServer(opts: WebClientServerOptions): HttpServer 
         }
 
         if (req.method === 'POST') {
+          if (!sessionRateLimit(req)) {
+            res.statusCode = 429
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            res.setHeader('Retry-After', '1')
+            res.end('rate limit exceeded')
+            return
+          }
           const rootToken = extractBearerToken(req) ?? url.searchParams.get('token')
           const sessionToken = issueSessionToken(rootToken, opts.token)
           if (!sessionToken) {
@@ -134,11 +181,20 @@ export function createWebClientServer(opts: WebClientServerOptions): HttpServer 
 
       const isHtmlEntry = filePath === indexPath
       const isManifest = pathname === '/manifest.webmanifest'
-      if (isHtmlEntry && !hasValidToken(req, url, opts.token)) {
-        res.statusCode = 401
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-        res.end('unauthorized — append ?token=<token> to the URL')
-        return
+      if (isHtmlEntry) {
+        const tokenPresent = hasAnyToken(req, url)
+        const tokenValid = hasValidToken(req, url, opts.token)
+        if (tokenPresent && !tokenValid) {
+          // Explicit wrong token — reject with 401
+          res.statusCode = 401
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          res.end('unauthorized — append ?token=<token> to the URL')
+          return
+        }
+        // If no token or valid token, content is read below.
+        // Invalid-token case returns early above; here we fall through
+        // to serve either the safe unauthenticated shell (no token
+        // rewrite) or the authenticated shell (with manifest rewrite).
       }
 
       let content: Buffer | null = null
@@ -163,14 +219,18 @@ export function createWebClientServer(opts: WebClientServerOptions): HttpServer 
       }
 
       if (isHtmlEntry) {
-        const tokenEnc = encodeURIComponent(opts.token)
-        const html = content
-          .toString('utf8')
-          .replace(
+        let html = content.toString('utf8')
+        // Only rewrite manifest link when a valid token was presented.
+        // Unauthenticated boot shell keeps the bare href so no token leaks.
+        if (hasValidToken(req, url, opts.token)) {
+          const tokenEnc = encodeURIComponent(opts.token)
+          html = html.replace(
             /<link\s+rel=["']manifest["']\s+href=["'][^"']*["']\s*\/?>/,
             `<link rel="manifest" href="./manifest.webmanifest?token=${tokenEnc}" />`
           )
+        }
         res.setHeader('Content-Type', MIME['.html'])
+        res.setHeader('Cache-Control', 'no-store')
         res.end(html)
         return
       }
@@ -200,13 +260,22 @@ export function createWebClientServer(opts: WebClientServerOptions): HttpServer 
   })
 }
 
+/** Check if any token was presented (query param or Bearer header),
+ *  regardless of whether it matches the expected token. */
+function hasAnyToken(req: IncomingMessage, url: URL): boolean {
+  if (url.searchParams.has('token')) return true
+  const auth = req.headers['authorization']
+  if (typeof auth === 'string' && /^Bearer\s+/i.test(auth)) return true
+  return false
+}
+
 function hasValidToken(req: IncomingMessage, url: URL, expected: string): boolean {
   const q = url.searchParams.get('token')
-  if (q && q === expected) return true
+  if (safeEqualToken(q, expected)) return true
   const auth = req.headers['authorization']
   if (typeof auth === 'string') {
     const m = auth.match(/^Bearer\s+(.+)$/i)
-    if (m && m[1] === expected) return true
+    if (m && safeEqualToken(m[1], expected)) return true
   }
   return false
 }

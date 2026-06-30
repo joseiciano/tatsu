@@ -120,6 +120,29 @@ describe('loadRepoConfig container parsing', () => {
     invalidateRepoConfigCache(dir)
   })
 
+  it('rejects disabled container with both image and dockerfile', () => {
+    const dir = makeTempDir('rc-test-dis-both-')
+    const saved = saveRepoConfig(dir, { container: { disabled: true, image: 'node:20', dockerfile: './Dockerfile' } })
+    // When disabled:true but both image+dockerfile, the config should be dropped
+    expect(saved.container).toBeUndefined()
+    invalidateRepoConfigCache(dir)
+  })
+
+  it('rejects disabled container with both image and dockerfile on load', () => {
+    const dir = makeTempDir('rc-test-dis-both-load-')
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify({ container: { disabled: true, image: 'node:20', dockerfile: './Dockerfile' } }))
+    invalidateRepoConfigCache(dir)
+    const loaded = loadRepoConfig(dir)
+    expect(loaded.container).toBeUndefined()
+  })
+
+  it('allows disabled container with only image', () => {
+    const dir = makeTempDir('rc-test-dis-img-')
+    const saved = saveRepoConfig(dir, { container: { disabled: true, image: 'node:20' } })
+    expect(saved.container).toEqual({ disabled: true, image: 'node:20' })
+    invalidateRepoConfigCache(dir)
+  })
+
   it('normalizes relative dockerfile on load', () => {
     const dir = makeTempDir('rc-test-df-')
     writeFileSync(join(dir, '.harness.json'), JSON.stringify({ container: { dockerfile: './Dockerfile' } }))
