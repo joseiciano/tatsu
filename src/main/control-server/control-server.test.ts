@@ -1,7 +1,7 @@
 import { Readable } from 'stream'
 import type { IncomingMessage } from 'http'
 import { describe, it, expect } from 'vitest'
-import { createControlRateLimiter, parseAgentKind, parseCreateBrowserTabUrl, readJson, validateBrowserNavigationUrl } from '.'
+import { createControlRateLimiter, parseAgentKind, parseCreateBrowserTabUrl, readJson, validateBrowserNavigationUrl, validateControlBranchName } from '.'
 
 describe('parseAgentKind', () => {
   it('returns undefined for missing/empty values', () => {
@@ -113,6 +113,24 @@ describe('createControlRateLimiter', () => {
     // Different IP — separate bucket regardless of terminal ID
     expect(limiter.allow(requestFrom('127.0.0.2', 'term-a'), 0)).toBe(true)
   })
+
+  it('custom keyFn: same IP with different terminal IDs share one bucket', () => {
+    const ipOnlyKeyFn = (req: IncomingMessage) => req.socket.remoteAddress || 'unknown'
+    const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0, keyFn: ipOnlyKeyFn })
+
+    // Same IP + terminal-a consumes the single bucket
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
+    // Same IP + different terminal-b shares the same bucket → rate-limited
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-b'), 0)).toBe(false)
+  })
+
+  it('custom keyFn: different IPs still get separate buckets', () => {
+    const ipOnlyKeyFn = (req: IncomingMessage) => req.socket.remoteAddress || 'unknown'
+    const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 0, keyFn: ipOnlyKeyFn })
+
+    expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
+    expect(limiter.allow(requestFrom('127.0.0.2', 'term-a'), 0)).toBe(true)
+  })
 })
 
 describe('validateBrowserNavigationUrl', () => {
@@ -156,5 +174,52 @@ describe('parseCreateBrowserTabUrl', () => {
     expect(parseCreateBrowserTabUrl({ url: '/relative' })).toEqual({
       error: 'url must be absolute'
     })
+  })
+})
+
+describe('validateControlBranchName', () => {
+  it('accepts typical branch names', () => {
+    expect(validateControlBranchName('feature/foo')).toEqual({ valid: true })
+    expect(validateControlBranchName('release_2024.10-rc1')).toEqual({ valid: true })
+    expect(validateControlBranchName('fix-bug-123')).toEqual({ valid: true })
+    expect(validateControlBranchName('main')).toEqual({ valid: true })
+  })
+
+  it('rejects empty names', () => {
+    expect(validateControlBranchName('')).toEqual({ valid: false, error: 'branchName must not be empty' })
+    expect(validateControlBranchName('  ')).toEqual({ valid: false, error: 'branchName must not be empty' })
+  })
+
+  it('rejects names starting with -', () => {
+    expect(validateControlBranchName('-x')).toEqual({ valid: false, error: 'branchName must not start with -' })
+    expect(validateControlBranchName('--verbose')).toEqual({ valid: false, error: 'branchName must not start with -' })
+  })
+
+  it('rejects control characters', () => {
+    expect(validateControlBranchName('foo\nbar')).toEqual({ valid: false, error: 'branchName must not contain control characters' })
+    expect(validateControlBranchName('foo\x00bar')).toEqual({ valid: false, error: 'branchName must not contain control characters' })
+  })
+
+  it('rejects .. (directory traversal)', () => {
+    expect(validateControlBranchName('foo..bar')).toEqual({ valid: false, error: 'branchName must not contain ..' })
+    expect(validateControlBranchName('../etc')).toEqual({ valid: false, error: 'branchName must not contain ..' })
+  })
+
+  it('rejects @{ (reflog metacharacter)', () => {
+    expect(validateControlBranchName('foo@{bar')).toEqual({ valid: false, error: 'branchName must not contain @{' })
+  })
+
+  it('rejects git ref metacharacters ~^:?*[]\\', () => {
+    expect(validateControlBranchName('foo~bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+    expect(validateControlBranchName('foo^bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+    expect(validateControlBranchName('foo:bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+    expect(validateControlBranchName('foo?bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+    expect(validateControlBranchName('foo*bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+    expect(validateControlBranchName('foo[bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+    expect(validateControlBranchName('foo\\bar')).toEqual({ valid: false, error: 'branchName contains invalid git ref characters' })
+  })
+
+  it('rejects overly long names', () => {
+    expect(validateControlBranchName('a'.repeat(256))).toEqual({ valid: false, error: 'branchName must not exceed 255 characters' })
   })
 })

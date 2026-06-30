@@ -253,6 +253,37 @@ describe('WorktreeDeletionFSM container cleanup', () => {
     expect(runWorktreeScript).toHaveBeenCalledWith('teardown', 'pnpm teardown', expect.objectContaining({ worktreePath: '/repo/wt/feature' }), expect.any(Function))
   })
 
+  it('falls back to host teardown when companion container is starting', async () => {
+    const containers = {
+      execInContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      stopContainer: vi.fn(async () => undefined),
+    }
+    const worktreesFSM = { refreshList: vi.fn(async () => undefined) }
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{
+        path: '/repo/wt/feature',
+        branch: 'feature',
+        head: 'abc',
+        isBare: false,
+        isMain: false,
+        createdAt: 0,
+        repoRoot: '/repo',
+        container: { id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'starting' }
+      }]
+    })
+    const fsm = new WorktreeDeletionFSM(store, {
+      getGlobalTeardownCmd: () => 'pnpm teardown',
+      worktreesFSM,
+      containers,
+    } as any)
+
+    await (fsm as any).run({ repoRoot: '/repo', path: '/repo/wt/feature', branch: 'feature' })
+
+    expect(containers.execInContainer).not.toHaveBeenCalled()
+    expect(runWorktreeScript).toHaveBeenCalledWith('teardown', 'pnpm teardown', expect.objectContaining({ worktreePath: '/repo/wt/feature' }), expect.any(Function))
+  })
+
   it('marks pending deletion as failed when removeWorktree throws', async () => {
     vi.mocked(removeWorktree).mockRejectedValueOnce(new Error('permission denied'))
     const worktreesFSM = { refreshList: vi.fn(async () => undefined) }

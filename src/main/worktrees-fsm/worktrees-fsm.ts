@@ -478,7 +478,7 @@ export class WorktreesFSM {
     const repoCfg = loadRepoConfig(repoRoot)
     if (repoCfg.container?.disabled) return undefined
     const existing = this.store.getSnapshot().state.worktrees.list.find((w) => w.path === worktreePath)?.container
-    if (existing?.status === 'running') return existing as CreatedWorktreeContainer
+    if (existing?.status === 'running' || existing?.status === 'starting') return existing as CreatedWorktreeContainer
     const config = this.opts.containers.resolveContainerConfig(repoRoot, worktreePath, repoCfg.container)
     const container = await this.opts.containers.createForWorktree(repoRoot, worktreePath, config)
     try {
@@ -549,7 +549,7 @@ export class WorktreesFSM {
       try {
         const existing = this.store.getSnapshot().state.worktrees.list.find((w) => w.path === current.createdPath)
         if (existing) {
-          const container = existing.container?.status === 'running'
+          const container = (existing.container?.status === 'running' || existing.container?.status === 'starting')
             ? existing.container as CreatedWorktreeContainer
             : await this.maybeCreateContainer(id, current.repoRoot, existing.path)
           return this.finishCreateWithContainerCleanup({
@@ -566,7 +566,7 @@ export class WorktreesFSM {
         const refreshed = await this.refreshList()
         const refreshedExisting = refreshed.find((w) => w.path === current.createdPath)
         if (refreshedExisting) {
-          const container = refreshedExisting.container?.status === 'running'
+          const container = (refreshedExisting.container?.status === 'running' || refreshedExisting.container?.status === 'starting')
             ? refreshedExisting.container as CreatedWorktreeContainer
             : await this.maybeCreateContainer(id, current.repoRoot, refreshedExisting.path)
           return this.finishCreateWithContainerCleanup({

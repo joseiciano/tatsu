@@ -42,7 +42,9 @@ When toggle is on:
 5. Mount host worktree into container at `/workspace`.
 6. Run setup script inside container.
 7. Mark worktree as containerized in shared state.
-8. New terminal/chat agent panes for that worktree execute through `docker exec`.
+8. New terminal/chat agent panes for that worktree currently execute on host.
+   Routing terminal/chat panes through `docker exec` is planned (Phase 3) but
+   not yet implemented.
 
 If container creation fails after host worktree creation, mark pending worktree
 failed and include cleanup guidance. Do not silently delete user files.
@@ -125,12 +127,14 @@ Running agents inside containers changes credential boundary.
 
 Do not mount host auth directories by default.
 
-Support `shareAgentConfig: true` in repo config as explicit opt-in. When true,
-mount known agent config directories read-only where possible:
+**Future**: Support `shareAgentConfig: true` in repo config as explicit opt-in.
+When true, mount known agent config directories read-only where possible:
 
 - `~/.claude` for Claude Code.
 - `~/.config/opencode` for Opencode.
 - `~/.codex` or configured Codex home if present.
+
+`shareAgentConfig` is not yet in the schema or implemented.
 
 If agent binary/auth is missing inside container, terminal should show clear
 message: install agent CLI in image or enable/share required config.

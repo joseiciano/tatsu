@@ -63,8 +63,7 @@ class SafeStorageBackend implements SecretsBackend {
 
   set(key: string, value: string): void {
     if (!this.safeStorage.isEncryptionAvailable()) {
-      log('secrets', 'safeStorage encryption not available, refusing to store')
-      return
+      throw new Error('Encryption is not available on this platform')
     }
     const data = readSecretsFile()
     data[key] = this.safeStorage.encryptString(value).toString('base64')
@@ -79,7 +78,7 @@ class SafeStorageBackend implements SecretsBackend {
     try {
       return this.safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
     } catch (err) {
-      log('secrets', `failed to decrypt secret ${key}`, err instanceof Error ? err.message : err)
+      log('secrets', 'failed to decrypt a secret', err instanceof Error ? err.message : err)
       return null
     }
   }
@@ -118,7 +117,7 @@ class KeytarBackend implements SecretsBackend {
     try {
       await this.keytar.setPassword(KeytarBackend.SERVICE, key, value)
     } catch (err) {
-      log('secrets', `keytar set failed for ${key}`, err instanceof Error ? err.message : err)
+      log('secrets', 'keytar set failed for a secret', err instanceof Error ? err.message : err)
       throw err
     }
     this.knownKeys.add(key)
@@ -133,7 +132,7 @@ class KeytarBackend implements SecretsBackend {
       log('secrets', 'keytar getPasswordSync unavailable on this platform — get returns null')
       return null
     } catch (err) {
-      log('secrets', `keytar get failed for ${key}`, err instanceof Error ? err.message : err)
+      log('secrets', 'keytar get failed for a secret', err instanceof Error ? err.message : err)
       return null
     }
   }
@@ -146,7 +145,7 @@ class KeytarBackend implements SecretsBackend {
     try {
       await this.keytar.deletePassword(KeytarBackend.SERVICE, key)
     } catch (err) {
-      log('secrets', `keytar delete failed for ${key}`, err instanceof Error ? err.message : err)
+      log('secrets', 'keytar delete failed for a secret', err instanceof Error ? err.message : err)
       throw err
     }
     this.knownKeys.delete(key)
@@ -219,17 +218,17 @@ export class LocalEncryptedFileBackend implements SecretsBackend {
         try {
           this.set(key, plaintext)
         } catch {
-          log('secrets', `failed to migrate legacy secret ${key} to AAD-bound format`)
+          log('secrets', 'failed to migrate legacy secret to AAD-bound format')
         }
         return plaintext
       } catch {
         // Both AAD and legacy decrypt failed — corrupt or wrong key
       }
 
-      log('secrets', `failed to decrypt secret ${key} (both AAD and legacy formats failed)`)
+      log('secrets', 'failed to decrypt a secret (both AAD and legacy formats failed)')
       return null
     } catch (err) {
-      log('secrets', `failed to decrypt secret ${key}`, err instanceof Error ? err.message : err)
+      log('secrets', 'failed to decrypt a secret', err instanceof Error ? err.message : err)
       return null
     }
   }

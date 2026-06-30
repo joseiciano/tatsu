@@ -20,11 +20,19 @@ const CONTROL_RATE_LIMIT_REFILL_PER_SECOND = 100
 const CONTROL_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60 * 1000
 const CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
 
+// Pre-auth rate limiter: keys only by remoteAddress to prevent brute-force
+// token guessing by varying X-Harness-Terminal-Id.
+const CONTROL_AUTH_RATE_LIMIT_CAPACITY = 20
+const CONTROL_AUTH_RATE_LIMIT_REFILL_PER_SECOND = 5
+const CONTROL_AUTH_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60 * 1000
+const CONTROL_AUTH_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
+
 export interface ControlRateLimiterOptions {
   capacity?: number
   refillPerSecond?: number
   bucketTtlMs?: number
   sweepIntervalMs?: number
+  keyFn?: (req: IncomingMessage) => string
 }
 
 export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
@@ -43,10 +51,12 @@ export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
     return buckets.size
   }
 
+  const keyFn = opts.keyFn ?? rateLimitKeyForRequest
+
   return {
     allow(req: IncomingMessage, now = Date.now()): boolean {
       if (now - lastSweepAt >= sweepIntervalMs) sweep(now)
-      const key = rateLimitKeyForRequest(req)
+      const key = keyFn(req)
       let bucket = buckets.get(key)
       if (!bucket) {
         bucket = createTokenBucket(capacity, now)
@@ -65,7 +75,21 @@ function rateLimitKeyForRequest(req: IncomingMessage): string {
   return terminalId ? `${address}:${terminalId}` : address
 }
 
+function ipOnlyKey(req: IncomingMessage): string {
+  return req.socket.remoteAddress || 'unknown'
+}
+
 const controlRateLimiter = createControlRateLimiter()
+
+/** IP-only pre-auth limiter — keyed solely by remoteAddress so that
+ *  brute-force token guessing by varying X-Harness-Terminal-Id is throttled. */
+const preAuthRateLimiter = createControlRateLimiter({
+  capacity: CONTROL_AUTH_RATE_LIMIT_CAPACITY,
+  refillPerSecond: CONTROL_AUTH_RATE_LIMIT_REFILL_PER_SECOND,
+  bucketTtlMs: CONTROL_AUTH_RATE_LIMIT_BUCKET_TTL_MS,
+  sweepIntervalMs: CONTROL_AUTH_RATE_LIMIT_SWEEP_INTERVAL_MS,
+  keyFn: ipOnlyKey
+})
 
 interface HttpStatusError extends Error {
   statusCode: number
@@ -83,6 +107,10 @@ function httpStatusError(statusCode: number, message: string): HttpStatusError {
 
 function allowControlRequest(req: IncomingMessage): boolean {
   return controlRateLimiter.allow(req)
+}
+
+function allowPreAuthRequest(req: IncomingMessage): boolean {
+  return preAuthRateLimiter.allow(req)
 }
 
 export function validateBrowserNavigationUrl(raw: string): { url: string } | { error: string } {
@@ -112,6 +140,26 @@ export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string
     return { kind: lowered }
   }
   return { error: 'agentKind must be "claude", "codex", or "opencode"' }
+}
+
+const GIT_REF_METACHARACTERS = /[~^:?*\[\]\\]/
+const MAX_BRANCH_NAME_LENGTH = 255
+
+/**
+ * Validate a branch name for use in POST /worktrees.
+ * Accepts typical git branch names (`feature/foo`, `release_2024.10-rc1`)
+ * and rejects dangerous or invalid inputs.
+ */
+export function validateControlBranchName(name: string): { valid: true } | { valid: false; error: string } {
+  const trimmed = name.trim()
+  if (!trimmed) return { valid: false, error: 'branchName must not be empty' }
+  if (trimmed.length > MAX_BRANCH_NAME_LENGTH) return { valid: false, error: `branchName must not exceed ${MAX_BRANCH_NAME_LENGTH} characters` }
+  if (trimmed.startsWith('-')) return { valid: false, error: 'branchName must not start with -' }
+  if (/[\x00-\x1f\x7f]/.test(trimmed)) return { valid: false, error: 'branchName must not contain control characters' }
+  if (trimmed.includes('..')) return { valid: false, error: 'branchName must not contain ..' }
+  if (trimmed.includes('@{')) return { valid: false, error: 'branchName must not contain @{' }
+  if (GIT_REF_METACHARACTERS.test(trimmed)) return { valid: false, error: 'branchName contains invalid git ref characters' }
+  return { valid: true }
 }
 
 
@@ -170,6 +218,12 @@ async function handleRequest(
   token: string,
   deps: ControlServerDeps
 ): Promise<void> {
+  // Pre-auth IP-only rate limit gate — keyed solely by remoteAddress so that
+  // brute-force token guessing by varying X-Harness-Terminal-Id is throttled.
+  if (!allowPreAuthRequest(req)) {
+    return sendJson(res, 429, { error: 'rate limit exceeded' })
+  }
+
   const auth = req.headers.authorization
   if (!safeEqualToken(auth, 'Bearer ' + token)) {
     res.writeHead(401)
@@ -177,6 +231,8 @@ async function handleRequest(
     return
   }
 
+  // Post-auth rate limit gate: keys by remoteAddress + terminalId for
+  // authenticated request throughput control.
   if (!allowControlRequest(req)) {
     return sendJson(res, 429, { error: 'rate limit exceeded' })
   }
@@ -260,7 +316,7 @@ async function handleRequest(
 
     if (prNumber !== undefined) {
       if (branchName) {
-        log('control', `prNumber=${prNumber} provided — ignoring branchName=${branchName}`)
+        log('control', `prNumber=${prNumber} provided — ignoring branchName`)
       }
       // No explicit prompt → fall back to the configured review-prompt default.
       // Empty-string prompts ('') are honored as "no prompt" so callers can
@@ -283,6 +339,10 @@ async function handleRequest(
 
     if (!branchName) {
       return sendJson(res, 400, { error: 'branchName or prNumber required' })
+    }
+    const branchValidation = validateControlBranchName(branchName)
+    if (!branchValidation.valid) {
+      return sendJson(res, 400, { error: branchValidation.error })
     }
     const wtDir = defaultWorktreeDir(repoRoot)
     const mode = deps.getWorktreeBase()

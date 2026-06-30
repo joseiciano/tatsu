@@ -352,6 +352,69 @@ describe('WorktreesFSM container integration', () => {
     expect(onWorktreeCreated).toHaveBeenCalledWith(expect.objectContaining({ agentKind: 'codex', model: 'o4' }))
   })
 
+  it('retry reuses starting container instead of recreating', async () => {
+    const containers = {
+      checkDockerAvailable: vi.fn(async () => ({ ok: true })),
+      resolveContainerConfig: vi.fn(() => ({ image: 'n', workdir: '/w', shell: '/bin/sh', env: {}, ports: [], volumes: [] })),
+      ensureImage: vi.fn(),
+      createForWorktree: vi.fn(),
+      execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      stopContainer: vi.fn(),
+    }
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{
+        path: '/repo/wt/test-branch',
+        branch: 'test-branch',
+        head: 'abc',
+        isBare: false,
+        isMain: false,
+        createdAt: 0,
+        repoRoot: '/repo',
+        container: { id: 'c-starting', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'starting' }
+      }]
+    })
+    store.dispatch({
+      type: 'worktrees/pendingAdded',
+      payload: { id: 'p-starting-retry', repoRoot: '/repo', branchName: 'test-branch', status: 'setup-failed', createdPath: '/repo/wt/test-branch' }
+    })
+    const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
+    const result = await fsm.retryPending('p-starting-retry')
+    expect(result.outcome).toBe('success')
+    expect(mockedAddWorktree).not.toHaveBeenCalled()
+    expect(containers.createForWorktree).not.toHaveBeenCalled()
+    expect(containers.execInContainer).toHaveBeenCalledWith('c-starting', 'pnpm install', expect.objectContaining({ workdir: '/w' }))
+  })
+
+  it('external worktree setup reuses starting container instead of recreating', async () => {
+    const containers = {
+      checkDockerAvailable: vi.fn(async () => ({ ok: true })),
+      resolveContainerConfig: vi.fn(() => ({ image: 'n', workdir: '/w', shell: '/bin/sh', env: {}, ports: [], volumes: [] })),
+      ensureImage: vi.fn(),
+      createForWorktree: vi.fn(),
+      execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      stopContainer: vi.fn(),
+    }
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{
+        path: '/repo/wt/ext',
+        branch: 'ext',
+        head: 'abc',
+        isBare: false,
+        isMain: false,
+        createdAt: 0,
+        repoRoot: '/repo',
+        container: { id: 'c-ext-starting', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'starting' }
+      }]
+    })
+    const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
+    await fsm.runWorktreeSetup({ repoRoot: '/repo', worktreePath: '/repo/wt/ext', branch: 'ext' })
+    expect(containers.createForWorktree).not.toHaveBeenCalled()
+    expect(containers.execInContainer).toHaveBeenCalledWith('c-ext-starting', 'pnpm install', expect.objectContaining({ workdir: '/w' }))
+    expect(mockedRunWorktreeScript).not.toHaveBeenCalled()
+  })
+
 
   it('retry records an error when container recreation fails for an existing worktree', async () => {
     const containers = {

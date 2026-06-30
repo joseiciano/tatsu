@@ -268,6 +268,51 @@ describe('ensureImage', () => {
 })
 
 describe('resolveContainerConfig', () => {
+  it('returns different image when same dockerfile has different buildContext', () => {
+    const runner = makeRunner()
+    const containers = createWorktreeContainers(runner)
+    const dir = mkdtempSync(join(tmpdir(), 'tatsu-df-bc-'))
+    try {
+      const dockerfile = join(dir, 'Dockerfile')
+      writeFileSync(dockerfile, 'FROM node:20-alpine\n')
+      const configA = containers.resolveContainerConfig('/repo', '/repo/wt', { dockerfile, buildContext: '/repo/ctx1' })
+      const configB = containers.resolveContainerConfig('/repo', '/repo/wt', { dockerfile, buildContext: '/repo/ctx2' })
+      expect(configA.image).not.toBe(configB.image)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns different image when same dockerfile has different workdir', () => {
+    const runner = makeRunner()
+    const containers = createWorktreeContainers(runner)
+    const dir = mkdtempSync(join(tmpdir(), 'tatsu-df-wd-'))
+    try {
+      const dockerfile = join(dir, 'Dockerfile')
+      writeFileSync(dockerfile, 'FROM node:20-alpine\n')
+      const configA = containers.resolveContainerConfig('/repo', '/repo/wt', { dockerfile, workdir: '/workspace' })
+      const configB = containers.resolveContainerConfig('/repo', '/repo/wt', { dockerfile, workdir: '/app' })
+      expect(configA.image).not.toBe(configB.image)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns same image for same dockerfile across different worktree paths', () => {
+    const runner = makeRunner()
+    const containers = createWorktreeContainers(runner)
+    const dir = mkdtempSync(join(tmpdir(), 'tatsu-df-same-'))
+    try {
+      const dockerfile = join(dir, 'Dockerfile')
+      writeFileSync(dockerfile, 'FROM node:20-alpine\n')
+      const configA = containers.resolveContainerConfig('/repo', '/repo/wt-a', { dockerfile })
+      const configB = containers.resolveContainerConfig('/repo', '/repo/wt-b', { dockerfile })
+      expect(configA.image).toBe(configB.image)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('returns same image for worktrees sharing the same dockerfile', () => {
     const runner = makeRunner()
     const containers = createWorktreeContainers(runner)
@@ -306,6 +351,68 @@ describe('resolveContainerConfig', () => {
     const harnessVol = config.volumes.find(v => v.source === '/tmp/harness-status')
     expect(harnessVol).toBeDefined()
     expect(harnessVol!.target).toBe('/tmp/harness-status')
+  })
+
+  it('rejects user volumes with source outside repoRoot', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    expect(() => containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: '/etc/passwd', target: '/data' }]
+    })).toThrow(/[Vv]olume source.*resolves outside repo root/)
+  })
+
+  it('allows user volumes with absolute source inside repoRoot', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: '/repo/data', target: '/data' }]
+    })
+    expect(config.volumes.some(v => v.source === '/repo/data' && v.target === '/data')).toBe(true)
+  })
+
+  it('rejects relative volume source that escapes repo root via ../outside', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    expect(() => containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: '../outside', target: '/data' }]
+    })).toThrow(/[Vv]olume source.*resolves outside repo root/)
+  })
+
+  it('rejects absolute volume source with traversal that escapes repo root', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    expect(() => containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: '/repo/../etc', target: '/data' }]
+    })).toThrow(/[Vv]olume source.*resolves outside repo root/)
+  })
+
+  it('allows relative in-repo source and normalizes it in returned config', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: 'data', target: '/data' }]
+    })
+    const vol = config.volumes.find(v => v.target === '/data')
+    expect(vol).toBeDefined()
+    expect(vol!.source).toBe('/repo/data')
+  })
+
+  it('allows absolute in-repo source and normalizes it in returned config', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: '/repo/data', target: '/data' }]
+    })
+    const vol = config.volumes.find(v => v.target === '/data')
+    expect(vol).toBeDefined()
+    expect(vol!.source).toBe('/repo/data')
+  })
+
+  it('rejects user volumes with absolute source outside repoRoot', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    expect(() => containers.resolveContainerConfig('/repo', '/repo/wt', {
+      volumes: [{ source: '/tmp/evil', target: '/data' }]
+    })).toThrow(/[Vv]olume source.*resolves outside repo root/)
+  })
+
+  it('allows /tmp/harness-status as built-in mount', () => {
+    const containers = createWorktreeContainers(makeRunner())
+    const config = containers.resolveContainerConfig('/repo', '/repo/wt')
+    expect(config.volumes.some(v => v.source === '/tmp/harness-status')).toBe(true)
   })
 
   it('rejects user volumes that target the worktree mount path', () => {
@@ -977,6 +1084,20 @@ describe('sanitizeStderr', () => {
     const longInput = 'x'.repeat(600)
     const result = sanitizeStderr(longInput)
     expect(result.length).toBeLessThan(600)
+    expect(result).toContain('...(truncated)')
+  })
+
+  it('redacts tokens that span the 500-char boundary before truncating', () => {
+    // ghp_ token starts near the 500-char boundary; the token itself is 40 chars.
+    // Use a prefix ending with a non-word char so \b boundary matches.
+    const prefix = ' '.repeat(490)
+    const token = 'ghp_abcdefghijklmnopqrstuvwxyz1234567890'
+    const input = prefix + token + ' more stuff after'
+    const result = sanitizeStderr(input)
+    // Must not leak any part of the token
+    expect(result).not.toMatch(/ghp_/)
+    expect(result).toContain('[redacted]')
+    // Output should still be truncated
     expect(result).toContain('...(truncated)')
   })
 })

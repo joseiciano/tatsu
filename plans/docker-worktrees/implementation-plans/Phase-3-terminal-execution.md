@@ -1,5 +1,11 @@
 # Phase 3 — terminal execution
 
+## Status: future / not yet implemented
+
+Currently only setup scripts execute inside containers via `docker exec`.
+Terminal and agent panes for containerized worktrees still execute on the host.
+This phase documents the planned PTY container routing.
+
 ## Deliverable
 
 Terminals and agent panes for containerized worktrees execute inside companion

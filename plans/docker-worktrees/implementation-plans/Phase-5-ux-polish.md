@@ -1,5 +1,11 @@
 # Phase 5 — UX polish
 
+## Status: future / not yet implemented
+
+Current UI has the Settings toggle for enabling worktree containers only.
+Container badges, status labels, restart/recreate actions, and the
+Open shell action described below are planned but not implemented.
+
 ## Deliverable
 
 Container state is visible and recoverable from UI.

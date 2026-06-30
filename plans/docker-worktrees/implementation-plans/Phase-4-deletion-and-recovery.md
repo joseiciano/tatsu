@@ -11,14 +11,12 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 
 - `src/main/worktree-deletion-fsm/worktree-deletion-fsm.ts`
   - current order: optional teardown → `removeWorktree()` → refresh list.
-  - new order for containerized worktrees:
-    1. optional teardown using container executor if container running.
-    2. stop container.
-    3. remove container.
-    4. remove host worktree.
-    5. refresh list.
-  - extend `PendingDeletion.phase` union with `removing-container` before
-    `removing-worktree`.
+  - implemented containerized deletion order:
+    1. `running-teardown`: optional teardown using container executor if container running.
+    2. `removing-worktree`: stop/remove container, then remove host worktree.
+    3. `failed`: any step failure.
+  - `PendingDeletion.phase` union is `running-teardown | removing-worktree | failed`.
+    Container cleanup is folded into `removing-worktree`, not a separate phase.
 - `src/main/index.ts`
   - pass container manager/resolver into deletion FSM construction.
 
@@ -34,13 +32,12 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 
 ## Recovery files
 
-- `src/main/worktree-containers/worktree-containers.ts`
-  - add `listHarnessContainers()` using Docker label filter.
-  - add `inspectContainer(idOrName)` to map running/stopped/error.
 - `src/main/index.ts`
-  - after initial worktree list is loaded, inspect `tatsu.worktree.id` labeled containers.
-  - match by `tatsu.worktree.path` label.
-  - update matching `Worktree.container.status`.
+  - boot recovery reads persisted `config.worktreeContainers` metadata.
+  - when Docker is available, verifies each entry with `isContainerRunning` to
+    set `running`, `stopped`, or `error` status. No `listHarnessContainers` or
+    `inspectContainer` methods exist; status is derived from persisted metadata
+    plus a lightweight Docker check.
   - log orphan containers with no matching host worktree; no UI action first slice.
 
 ## Tests

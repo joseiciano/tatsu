@@ -1,17 +1,24 @@
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
 import { mkdirSync, readFileSync } from 'fs'
-import { basename } from 'path'
+import { basename, join, resolve } from 'path'
 import { log } from '../debug'
 import type { DockerRunner, DockerRunResult, DockerRunOptions, ResolvedWorktreeContainerConfig, CreatedWorktreeContainer, WorktreeContainers } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
 
 const MAX_DOCKER_OUTPUT_BYTES = 1024 * 1024
 
+/**
+ * Sanitize Docker stderr output by redacting sensitive tokens and
+ * environment variable values, then truncating to a safe length.
+ *
+ * @param stderr - Raw stderr output from a Docker command.
+ * @returns Redacted and truncated string safe for user-facing display.
+ */
 export function sanitizeStderr(stderr: string): string {
-  const truncated = stderr.length > 500 ? stderr.slice(0, 500) + '...(truncated)' : stderr
-  // Phase 1: specific token/key patterns
-  const withSpecificPatterns = truncated
+  // Redact first so tokens spanning any boundary are fully removed
+  // before truncation, preventing partial token leaks.
+  const withSpecificPatterns = stderr
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+\b/g, 'Bearer [redacted]')
     .replace(/\b(ghp_[A-Za-z0-9]{36})\b/g, '[redacted]')
     .replace(/\b(github_pat_[A-Za-z0-9_]+)\b/g, '[redacted]')
@@ -57,9 +64,15 @@ export function sanitizeStderr(stderr: string): string {
       }
     }
   }
-  return result.join('\n')
+  const redacted = result.join('\n')
+  return redacted.length > 500 ? redacted.slice(0, 500) + '...(truncated)' : redacted
 }
 
+/**
+ * Create a default {@link DockerRunner} that spawns `docker` CLI
+ * subprocesses. Output is capped at 1 MiB per stream and commands
+ * time out after the caller-specified (or default 60 s) deadline.
+ */
 export function defaultDockerRunner(): DockerRunner {
   return {
     run(args: string[], opts?: DockerRunOptions): Promise<DockerRunResult> {
@@ -111,6 +124,14 @@ export function defaultDockerRunner(): DockerRunner {
   }
 }
 
+/**
+ * Create a {@link WorktreeContainers} manager backed by the given
+ * (or default) Docker runner. Provides container lifecycle operations
+ * (create, exec, stop) and configuration resolution for per-worktree
+ * companion containers.
+ *
+ * @param runner - Optional custom {@link DockerRunner} for testability.
+ */
 export function createWorktreeContainers(runner?: DockerRunner): WorktreeContainers {
   const docker = runner || defaultDockerRunner()
 
@@ -118,8 +139,8 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return createHash('sha256').update(absPath).digest('hex').slice(0, 12)
   }
 
-  function getDockerfileImageId(_worktreePath: string, dockerfile: string): string {
-    const hash = createHash('sha256').update(dockerfile)
+  function getDockerfileImageId(dockerfile: string, buildContext: string, workdir: string): string {
+    const hash = createHash('sha256').update(dockerfile).update('\0').update(buildContext).update('\0').update(workdir)
     try {
       hash.update('\0').update(readFileSync(dockerfile))
     } catch {
@@ -220,11 +241,19 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
         if (normalizeMountTarget(vol.target) === worktreeMountTarget) {
           throw new Error(`Volume target ${vol.target} conflicts with worktree mount ${workdir}`)
         }
-        volumes.push(vol)
+        // Harden: reject user-provided volume sources that resolve outside the repo root.
+        // Built-in mounts (worktree bind, /tmp/harness-status) are always safe.
+        // Use resolve() to normalize traversal (e.g. ../outside, /repo/../etc) before comparison.
+        const resolvedSource = vol.source.startsWith('/') ? resolve(vol.source) : resolve(repoRoot, vol.source)
+        const normalizedRoot = resolve(repoRoot)
+        if (resolvedSource !== normalizedRoot && !resolvedSource.startsWith(normalizedRoot + '/')) {
+          throw new Error(`Volume source '${vol.source}' resolves outside repo root: ${resolvedSource}`)
+        }
+        volumes.push({ source: resolvedSource, target: vol.target })
       }
     }
     const dockerfile = repoConfig?.dockerfile
-    const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(worktreePath, dockerfile)}` : (repoConfig?.image || 'node:20-alpine')
+    const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(dockerfile, repoConfig?.buildContext || repoRoot, workdir)}` : (repoConfig?.image || 'node:20-alpine')
 
     /**
      * Sane default env vars for read-only containers. HOME and XDG dirs live
