@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, GitPullRequest, ChevronDown, ChevronRight, Layers, Rows3 } from 'lucide-react'
 import { useSettings, useSnooze } from '../../store'
 import { useBackend } from '../../backend'
@@ -48,14 +48,6 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
   merged: 'Merged'
 }
 
-const STATUS_BAR_FILL: Record<DisplayStatus, string> = {
-  idle: 'bg-faint/40',
-  processing: 'bg-success',
-  waiting: 'bg-warning',
-  'needs-approval': 'bg-danger',
-  merged: 'bg-accent'
-}
-
 const STATUS_CARD_RING: Record<DisplayStatus, string> = {
   idle: 'ring-1 ring-border',
   processing: 'ring-1 ring-success/40',
@@ -64,18 +56,16 @@ const STATUS_CARD_RING: Record<DisplayStatus, string> = {
   merged: 'ring-1 ring-accent/30'
 }
 
-const SAMPLE_COUNT = 60
-// Match the aggregate bar graph above: last minute.
 const TIMELINE_WINDOW_MS = 60 * 1000
 
-interface Sample {
+interface StatusCounts {
   'needs-approval': number
   waiting: number
   processing: number
   idle: number
 }
 
-function emptySample(): Sample {
+function emptyStatusCounts(): StatusCounts {
   return { 'needs-approval': 0, waiting: 0, processing: 0, idle: 0 }
 }
 
@@ -133,7 +123,7 @@ export function CommandCenter({
 
   // Aggregate counts right now.
   const counts = useMemo(() => {
-    const c = emptySample()
+    const c = emptyStatusCounts()
     for (const wt of worktrees) {
       if (wt.isMain) continue
       if (mergedPaths[wt.path] || isPRMerged(prStatuses[wt.path])) continue
@@ -142,32 +132,6 @@ export function CommandCenter({
     }
     return c
   }, [worktrees, worktreeStatuses, prStatuses, mergedPaths])
-
-  // Rolling 60-sample aggregate history for the top bar graph.
-  const [history, setHistory] = useState<Sample[]>(() =>
-    Array.from({ length: SAMPLE_COUNT }, () => emptySample())
-  )
-  const countsRef = useRef(counts)
-  countsRef.current = counts
-  useEffect(() => {
-    const t = setInterval(() => {
-      setHistory((prev) => {
-        const next = prev.slice(1)
-        next.push({ ...countsRef.current })
-        return next
-      })
-    }, 1000)
-    return () => clearInterval(t)
-  }, [])
-
-  const maxBarTotal = useMemo(() => {
-    let m = 1
-    for (const s of history) {
-      const t = s['needs-approval'] + s.waiting + s.processing + s.idle
-      if (t > m) m = t
-    }
-    return m
-  }, [history])
 
   // Distinct repos represented in the current worktree list, in first-seen
   // order. Used to decide when to show the unified/split toggle and to
@@ -277,7 +241,7 @@ export function CommandCenter({
   }
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col bg-bg">
+    <div className="flex-1 min-w-0 flex flex-col bg-panel">
       <div className="drag-region h-10 shrink-0 border-b border-border relative">
         <button
           onClick={onClose}
@@ -321,34 +285,6 @@ export function CommandCenter({
             {unifiedRepos ? <Rows3 className="icon-base" /> : <Layers className="icon-base" />}
           </button>
         )}
-      </div>
-
-      {/* Live stacked bar graph */}
-      <div className="px-4 py-3 border-b border-border shrink-0">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs uppercase tracking-wider text-faint">Last minute</span>
-          <span className="text-xs text-faint">1s intervals</span>
-        </div>
-        <div className="h-16 flex items-end gap-[2px]">
-          {history.map((s, i) => {
-            const total = s['needs-approval'] + s.waiting + s.processing + s.idle
-            const h = (total / maxBarTotal) * 100
-            const seg = (n: number): string =>
-              total === 0 ? '0%' : `${(n / total) * h}%`
-            return (
-              <div
-                key={i}
-                className="flex-1 flex flex-col-reverse justify-start min-w-0"
-                style={{ height: '100%' }}
-              >
-                <div className={STATUS_BAR_FILL['needs-approval']} style={{ height: seg(s['needs-approval']) }} />
-                <div className={STATUS_BAR_FILL.waiting} style={{ height: seg(s.waiting) }} />
-                <div className={STATUS_BAR_FILL.processing} style={{ height: seg(s.processing) }} />
-                <div className={STATUS_BAR_FILL.idle} style={{ height: seg(s.idle) }} />
-              </div>
-            )
-          })}
-        </div>
       </div>
 
       {/* Grouped grid of session cards */}
