@@ -1,6 +1,6 @@
 # Phase 3 — terminal execution
 
-## Status: future / not yet implemented
+## Status: implemented
 
 Currently only setup scripts execute inside containers via `docker exec`.
 Terminal and agent panes for containerized worktrees still execute on the host.
