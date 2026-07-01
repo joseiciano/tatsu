@@ -10,8 +10,10 @@ import {
 import type { Store } from '../store'
 import type { PerfMonitor } from '../perf-monitor'
 import type { PtyStatus } from '../../shared/state/terminals'
+import { buildPtySpawnPlan, type WorktreeContainerResolver } from './pty-spawn-plan'
 
 export type { PtyStatus }
+export type { WorktreeContainerResolver } from './pty-spawn-plan'
 
 interface PtyInstance {
   pty: pty.IPty
@@ -92,6 +94,7 @@ export class PtyManager {
   private historyDirty = new Set<string>()
   private historyFlushTimer: NodeJS.Timeout | null = null
   private perfMonitor: PerfMonitor | null = null
+  private containerResolver: WorktreeContainerResolver | null = null
 
   /** Wire the authoritative store after it's constructed. PTY status,
    * shell activity, and cleanup events dispatch through it. */
@@ -101,6 +104,10 @@ export class PtyManager {
 
   setPerfMonitor(monitor: PerfMonitor): void {
     this.perfMonitor = monitor
+  }
+
+  setContainerResolver(resolver: WorktreeContainerResolver): void {
+    this.containerResolver = resolver
   }
 
   getActivePtyCount(): number {
@@ -127,7 +134,7 @@ export class PtyManager {
     isShell: boolean = false,
     cols: number = 120,
     rows: number = 30
-  ): void {
+  ): boolean {
     log('pty', `create id=${id} cmd=${command} args=${JSON.stringify(args)} cwd=${cwd} cols=${cols} rows=${rows}`)
     if (this.ptys.has(id)) {
       // A PTY for this id is already running — most likely a second
@@ -139,19 +146,35 @@ export class PtyManager {
       // history it already loaded via getTerminalHistory replays the
       // scrollback up to the join point.
       log('pty', `create id=${id} no-op — PTY already exists, treating as attach`)
-      return
+      return true
     }
 
-    const env = {
-      ...process.env,
-      ...(extraEnv || {}),
-      CLAUDE_HARNESS_ID: id,
-      HARNESS_TERMINAL_ID: id
-    } as Record<string, string>
-    const shell = command || env.SHELL || '/bin/zsh'
+    const plan = buildPtySpawnPlan({
+      id,
+      cwd,
+      command,
+      args,
+      extraEnv,
+      isShell,
+      resolver: this.containerResolver ?? undefined
+    })
+
+    if (plan.kind === 'error') {
+      log('pty', `spawn plan error id=${id}: ${plan.message}`)
+      const msg = `\r\n\x1b[31m${plan.message}\x1b[0m\r\n`
+      this.sendSignal?.('terminal:data', id, msg)
+      this.store?.dispatch({
+        type: 'terminals/statusChanged',
+        payload: { id, status: 'idle', pendingTool: null }
+      })
+      this.sendSignal?.('terminal:exit', id, 1)
+      return false
+    }
+
+    const { command: spawnCmd, args: spawnArgs, cwd: spawnCwd, env } = plan
     let ptyProcess: pty.IPty
     try {
-      ptyProcess = pty.spawn(shell, args, {
+      ptyProcess = pty.spawn(spawnCmd, spawnArgs, {
         name: 'xterm-256color',
         // Spawn at the renderer's fitted dimensions so the first burst of
         // output paints at the correct grid size. Falling back to 120x30
@@ -159,18 +182,18 @@ export class PtyManager {
         // output that arrives in the gap lands at the wrong column.
         cols,
         rows,
-        cwd,
+        cwd: spawnCwd,
         env
       })
     } catch (err) {
       log('pty', `spawn failed id=${id}`, err instanceof Error ? err.message : err)
-      const msg = `\r\n\x1b[31mFailed to spawn "${shell}": ${err instanceof Error ? err.message : err}\x1b[0m\r\n`
+      const msg = `\r\n\x1b[31mFailed to spawn "${spawnCmd}": ${err instanceof Error ? err.message : err}\x1b[0m\r\n`
       this.sendSignal?.('terminal:data', id, msg)
       this.store?.dispatch({
         type: 'terminals/statusChanged',
         payload: { id, status: 'idle', pendingTool: null }
       })
-      return
+      return false
     }
 
     // Shells spawned with an exec-mode flag (`-c`, `-ilc`, `-lc`, `-ic`) run
@@ -242,6 +265,8 @@ export class PtyManager {
         payload: { id, active: true, processName: firstWord }
       })
     }
+
+    return true
   }
 
   /** Raw PTY scrollback for `id`, or empty string if none. */
