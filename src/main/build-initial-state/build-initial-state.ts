@@ -33,6 +33,11 @@ import {
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
 
+export interface PersistedWorktreeContainerOrphan {
+  path: string
+  container: PersistedWorktreeContainer
+}
+
 /** Flatten the nested `repoRoot → worktreePath → text` shape on disk
  *  into the flat `worktreePath → text` map the slice carries in memory.
  *  Two repos shouldn't have overlapping worktree paths in practice; if
@@ -84,6 +89,17 @@ export function hydratePersistedWorktreeContainers(
     }
   })
   return changed ? next : worktrees
+}
+
+export function findPersistedWorktreeContainerOrphans(
+  worktrees: Worktree[],
+  persisted: Record<string, PersistedWorktreeContainer> | undefined
+): PersistedWorktreeContainerOrphan[] {
+  if (!persisted) return []
+  const live = new Set(worktrees.map((w) => w.path))
+  return Object.entries(persisted)
+    .filter(([path]) => !live.has(path))
+    .map(([path, container]) => ({ path, container }))
 }
 
 export function buildInitialAppState(

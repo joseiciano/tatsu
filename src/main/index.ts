@@ -90,7 +90,7 @@ import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorkt
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { perfLog } from './perf-log'
-import { buildInitialAppState } from './build-initial-state'
+import { buildInitialAppState, findPersistedWorktreeContainerOrphans } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
 import { toAgentKind } from './agent-kind'
 
@@ -1019,13 +1019,13 @@ store.subscribe((event) => {
 store.subscribe((event) => {
   if (event.type !== 'worktrees/listChanged') return
   if (!config.worktreeContainers) return
-  const live = new Set(store.getSnapshot().state.worktrees.list.map((w) => w.path))
+  const liveWorktrees = store.getSnapshot().state.worktrees.list
+  const orphanContainers = findPersistedWorktreeContainerOrphans(liveWorktrees, config.worktreeContainers)
   let pruned = false
-  for (const path of Object.keys(config.worktreeContainers)) {
-    if (!live.has(path)) {
-      delete config.worktreeContainers[path]
-      pruned = true
-    }
+  for (const { path, container } of orphanContainers) {
+    log('worktree-containers', `orphan container metadata for missing worktree ${path}; container ${container.name}${container.id ? ` (${container.id})` : ''} may need manual cleanup`)
+    delete config.worktreeContainers[path]
+    pruned = true
   }
   if (pruned) {
     if (Object.keys(config.worktreeContainers).length === 0) {

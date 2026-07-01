@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { buildInitialAppState, hydratePersistedWorktreeContainers } from '.'
+import { buildInitialAppState, findPersistedWorktreeContainerOrphans, hydratePersistedWorktreeContainers } from '.'
 import type { Config } from '../persistence'
 import { initialPRs } from '../../shared/state/prs'
 import { initialOnboarding } from '../../shared/state/onboarding'
@@ -212,6 +212,48 @@ describe('buildInitialAppState', () => {
 
     expect(result[0]).not.toBe(worktree)
     expect(result[0].container).toEqual(existing.container)
+  })
+
+  it('finds persisted container metadata without matching host worktrees', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+
+    const result = findPersistedWorktreeContainerOrphans([worktree], {
+      '/tmp/wt/a': {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      },
+      '/tmp/wt/orphan': {
+        id: 'def456',
+        name: 'tatsu-wt-orphan-def456',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      }
+    })
+
+    expect(result).toEqual([
+      {
+        path: '/tmp/wt/orphan',
+        container: {
+          id: 'def456',
+          name: 'tatsu-wt-orphan-def456',
+          image: 'node:20-alpine',
+          workdir: '/workspace',
+          shell: '/bin/sh'
+        }
+      }
+    ])
   })
 
 })

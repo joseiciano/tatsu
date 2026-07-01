@@ -14,7 +14,7 @@ System contracts: [`../System-Design.md`](../System-Design.md).
   - implemented containerized deletion order:
     1. `running-teardown`: optional teardown using container executor if container running.
     2. `removing-worktree`: stop/remove container, then remove host worktree.
-    3. `failed`: any step failure.
+    3. `failed`: host worktree removal or uncaught deletion failure.
   - `PendingDeletion.phase` union is `running-teardown | removing-worktree | failed`.
     Container cleanup is folded into `removing-worktree`, not a separate phase.
 - `src/main/index.ts`
@@ -23,10 +23,9 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 ## Failure policy
 
 - teardown fails: preserve current behavior unless existing force semantics say otherwise.
-- stop/remove container fails: deletion phase becomes `failed`; host worktree is
-  not removed by default.
-- `force: true` may remove host worktree after failed container cleanup only if UI
-  explicitly calls deletion with force; error text warns about orphan container.
+- stop/remove container fails: proceed with host worktree deletion anyway (best-effort
+  container cleanup). Log the container cleanup failure so the user can manually clean
+  up the orphan container.
 - force does not mean `docker rm -f`; that requires separate explicit container cleanup request.
 - host worktree removal fails after container removed: pending deletion failed; no container resurrection.
 
@@ -44,7 +43,7 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 
 - create `src/main/worktree-deletion-fsm/worktree-deletion-fsm.test.ts`.
   - containerized deletion stops/removes container before `removeWorktree()`.
-  - stop/remove failure blocks host deletion and records pending error.
+  - stop/remove failure logs orphan container but proceeds with host worktree deletion (best-effort).
   - non-container deletion path unchanged.
 - container manager tests label filter and inspect parsing.
 
