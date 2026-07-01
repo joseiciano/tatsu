@@ -1342,7 +1342,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowCommandCenter(true)
             }}
             onOpenNewProject={() => setShowNewProject(true)}
-            onOpenMyWeek={() => setShowMyWeek(true)}
             width={sidebarWidth}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}
@@ -1371,7 +1370,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
             }}
             onOpenNewProject={() => setShowNewProject(true)}
             onOpenActivity={() => setShowActivity(true)}
-            onOpenMyWeek={() => setShowMyWeek(true)}
             onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
             onOpenSettings={() => setShowSettings(true)}
           /></div>
@@ -1457,10 +1455,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
           <div className="flex-1 min-w-0 flex">
             <Activity
               onClose={() => setShowActivity(false)}
-              onOpenMyWeek={() => {
-                setShowActivity(false)
-                setShowMyWeek(true)
-              }}
               worktrees={worktrees}
               prStatuses={prStatuses}
               mergedPaths={mergedPaths}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, BarChart3, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, CalendarDays, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, BarChart3, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
 import { HotkeyBadge } from '../HotkeyBadge'
@@ -48,7 +48,6 @@ interface SidebarProps {
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
-  onOpenMyWeek: () => void
   width: number
   collapsedGroups: Record<string, boolean>
   onToggleGroup: (scope: string, key: GroupKey) => void
@@ -92,7 +91,6 @@ export function Sidebar({
   onOpenCleanup,
   onOpenCommandCenter,
   onOpenNewProject,
-  onOpenMyWeek,
   width,
   collapsedGroups: _collapsedGroups,
   onToggleGroup,
@@ -539,14 +537,6 @@ export function Sidebar({
             className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
           >
             <BarChart3 className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="My week" side="top">
-          <button
-            onClick={onOpenMyWeek}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <CalendarDays className="icon-sm" />
           </button>
         </Tooltip>
         <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="top">

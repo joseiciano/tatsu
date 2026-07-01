@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Flame, Clock, Zap, GitBranch, GitMerge, RefreshCw, CalendarDays } from 'lucide-react'
+import { ArrowLeft, Flame, Clock, Zap, GitBranch, GitMerge, RefreshCw } from 'lucide-react'
 import type {
   Worktree,
   ActivityLog,
@@ -11,10 +11,10 @@ import type {
 import { isPRMerged } from '../../../shared/state/prs'
 import { useBackend } from '../../backend'
 import { ActivityCosts } from '../ActivityCosts'
+import { WeeklyWrappedContent } from '../WeeklyWrappedScreen'
 
 interface ActivityProps {
   onClose: () => void
-  onOpenMyWeek: () => void
   worktrees: Worktree[]
   prStatuses?: Record<string, PRStatus | null>
   mergedPaths?: Record<string, boolean>
@@ -101,9 +101,9 @@ function isLiveMerged(
   return !!mergedPaths?.[path] || isPRMerged(prStatuses?.[path])
 }
 
-type ActivityTab = 'timeline' | 'costs'
+type ActivityTab = 'timeline' | 'costs' | 'myweek'
 
-export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedPaths }: ActivityProps): JSX.Element {
+export function Activity({ onClose, worktrees, prStatuses, mergedPaths }: ActivityProps): JSX.Element {
   const backend = useBackend()
   const [tab, setTab] = useState<ActivityTab>('timeline')
   const [log, setLog] = useState<ActivityLog>({})
@@ -270,14 +270,6 @@ export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedP
         </span>
         <div className="no-drag absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
           <button
-            onClick={onOpenMyWeek}
-            className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted hover:text-fg-bright hover:bg-surface rounded transition-colors cursor-pointer"
-            title="Weekly review"
-          >
-            <CalendarDays className="icon-sm" />
-            My week
-          </button>
-          <button
             onClick={loadLog}
             className="text-muted hover:text-fg-bright transition-colors cursor-pointer p-1"
             title="Refresh"
@@ -294,10 +286,11 @@ export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedP
       </div>
 
       <div className="shrink-0 border-b border-border flex items-center gap-1 px-4 bg-panel">
-        {([
-          ['timeline', 'Timeline'],
-          ['costs', 'Costs']
-        ] as const).map(([id, label]) => (
+          {([
+            ['timeline', 'Timeline'],
+            ['costs', 'Costs'],
+            ['myweek', 'My week']
+          ] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -314,6 +307,7 @@ export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedP
 
       <div className="flex-1 overflow-y-auto">
         {tab === 'costs' && <ActivityCosts />}
+        {tab === 'myweek' && <WeeklyWrappedContent />}
         {tab === 'timeline' && (
         <div className="max-w-5xl mx-auto px-8 py-8">
           {/* Range selector */}
