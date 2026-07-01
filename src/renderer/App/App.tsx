@@ -401,6 +401,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     const openReport = (detail: OpenReportIssueDetail): void => {
       setShowSettings(false)
       setShowHotkeyCheatsheet(false)
+      setShowCommandCenter(false)
       setReportIssueState(detail)
     }
     const cleanupMenu = backend.onOpenReportIssue(() => openReport({}))
@@ -583,6 +584,22 @@ const setQuestStep = useCallback((next: QuestStep) => {
   const handleUpdateRestart = useCallback(() => {
     void backend.quitAndInstall()
   }, [])
+
+  const closeFullscreenViews = useCallback(() => {
+    setShowNewWorktree(false)
+    setShowActivity(false)
+    setShowCleanup(false)
+    setShowCommandCenter(false)
+  }, [])
+
+  const toggleCommandCenter = useCallback(() => {
+    if (showCommandCenter) {
+      setShowCommandCenter(false)
+    } else {
+      closeFullscreenViews()
+      setShowCommandCenter(true)
+    }
+  }, [showCommandCenter, closeFullscreenViews])
 
   // All worktree + repo + pending-creation handlers. Also subscribes to
   // external-create events from the harness-control MCP and routes focus
@@ -1328,20 +1345,36 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onDeleteWorktree={handleDeleteWorktree}
             onRefresh={handleRefreshWorktrees}
             repoRoots={repoRoots}
-            onAddRepo={handleAddRepo}
-            onRemoveRepo={handleRemoveRepo}
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenAddBackend={() => setShowAddBackend(true)}
-            onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
-            onOpenActivity={() => setShowActivity(true)}
-            onOpenCleanup={() => setShowCleanup(true)}
-            onOpenCommandCenter={() => {
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setShowCommandCenter(true)
+            onAddRepo={() => {
+              setShowCommandCenter(false)
+              handleAddRepo()
             }}
-            onOpenNewProject={() => setShowNewProject(true)}
+            onRemoveRepo={handleRemoveRepo}
+            onOpenSettings={() => {
+              setShowCommandCenter(false)
+              setShowSettings(true)
+            }}
+            onOpenAddBackend={() => {
+              setShowCommandCenter(false)
+              setShowAddBackend(true)
+            }}
+            onOpenHotkeyCheatsheet={() => {
+              setShowCommandCenter(false)
+              setShowHotkeyCheatsheet(true)
+            }}
+            onOpenActivity={() => {
+              closeFullscreenViews()
+              setShowActivity(true)
+            }}
+            onOpenCleanup={() => {
+              closeFullscreenViews()
+              setShowCleanup(true)
+            }}
+            onOpenCommandCenter={toggleCommandCenter}
+            onOpenNewProject={() => {
+              closeFullscreenViews()
+              setShowNewProject(true)
+            }}
             width={sidebarWidth}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}
@@ -1356,22 +1389,35 @@ const setQuestStep = useCallback((next: QuestStep) => {
         {!singleScreenMode && !sidebarVisible && (
           <div className="mt-10 shrink-0 flex"><CollapsedSidebar
             onExpand={() => setSidebarVisible(true)}
-            onAddRepo={handleAddRepo}
+            onAddRepo={() => {
+              setShowCommandCenter(false)
+              handleAddRepo()
+            }}
             onNewWorktree={() => {
               setNewWorktreeRepo(undefined)
               setShowNewWorktree(true)
             }}
-            onOpenCleanup={() => setShowCleanup(true)}
-            onOpenCommandCenter={() => {
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setShowCommandCenter(true)
+            onOpenCleanup={() => {
+              closeFullscreenViews()
+              setShowCleanup(true)
             }}
-            onOpenNewProject={() => setShowNewProject(true)}
-            onOpenActivity={() => setShowActivity(true)}
-            onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenCommandCenter={toggleCommandCenter}
+            onOpenNewProject={() => {
+              closeFullscreenViews()
+              setShowNewProject(true)
+            }}
+            onOpenActivity={() => {
+              closeFullscreenViews()
+              setShowActivity(true)
+            }}
+            onOpenHotkeyCheatsheet={() => {
+              setShowCommandCenter(false)
+              setShowHotkeyCheatsheet(true)
+            }}
+            onOpenSettings={() => {
+              setShowCommandCenter(false)
+              setShowSettings(true)
+            }}
           /></div>
         )}
         {!singleScreenMode && sidebarVisible && (
@@ -1474,24 +1520,26 @@ const setQuestStep = useCallback((next: QuestStep) => {
           </div>
         )}
         {showCommandCenter && (
-          <CommandCenter
-            worktrees={worktrees}
-            worktreeStatuses={worktreeStatuses}
-            worktreePendingTools={worktreePendingTools}
-            prStatuses={prStatuses}
-            mergedPaths={mergedPaths}
-            lastActive={lastActive}
-            tailLines={tailLines}
-            terminalTabs={terminalTabs}
-            onClose={() => setShowCommandCenter(false)}
-            onSelect={(path) => {
-              setShowCommandCenter(false)
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setActiveWorktreeId(path)
-            }}
-          />
+          <div className="flex-1 min-w-0 flex">
+            <CommandCenter
+              worktrees={worktrees}
+              worktreeStatuses={worktreeStatuses}
+              worktreePendingTools={worktreePendingTools}
+              prStatuses={prStatuses}
+              mergedPaths={mergedPaths}
+              lastActive={lastActive}
+              tailLines={tailLines}
+              terminalTabs={terminalTabs}
+              onClose={() => setShowCommandCenter(false)}
+              onSelect={(path) => {
+                setShowCommandCenter(false)
+                setShowNewWorktree(false)
+                setShowActivity(false)
+                setShowCleanup(false)
+                setActiveWorktreeId(path)
+              }}
+            />
+          </div>
         )}
         {showReview && activeWorktreeId && (() => {
           const reviewWt = worktrees.find((w) => w.path === activeWorktreeId)

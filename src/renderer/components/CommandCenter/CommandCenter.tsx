@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, GitPullRequest, ChevronDown, ChevronRight, Layers, Rows3 } from 'lucide-react'
+import { ArrowLeft, GitPullRequest, ChevronDown, ChevronRight, Layers, Rows3 } from 'lucide-react'
 import { useSettings, useSnooze } from '../../store'
 import { useBackend } from '../../backend'
 import type {
@@ -278,13 +278,23 @@ export function CommandCenter({
 
   return (
     <div className="flex-1 min-w-0 flex flex-col bg-bg">
-      {/* Header */}
-      <div className="drag-region px-4 py-4 border-b border-border flex items-start gap-6 shrink-0">
+      <div className="drag-region h-10 shrink-0 border-b border-border relative">
+        <button
+          onClick={onClose}
+          className="no-drag absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-muted hover:text-fg-bright transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="icon-sm" />
+          Back
+          <kbd className="text-xs text-faint bg-bg px-1.5 py-0.5 rounded border border-border font-mono">ESC</kbd>
+        </button>
+        <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 text-sm font-medium text-fg pointer-events-none">
+          Command Center
+        </span>
+      </div>
+
+      <div className="px-4 py-4 border-b border-border flex items-start gap-6 shrink-0">
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold text-fg-bright tracking-tight no-drag">
-            Command Center
-          </h1>
-          <p className="text-xs text-dim mt-0.5 no-drag">
+          <p className="text-xs text-dim">
             {totalCards} session{totalCards === 1 ? '' : 's'} · live view
           </p>
         </div>
@@ -311,14 +321,6 @@ export function CommandCenter({
             {unifiedRepos ? <Rows3 className="icon-base" /> : <Layers className="icon-base" />}
           </button>
         )}
-
-        <button
-          onClick={onClose}
-          className="no-drag p-2 rounded hover:bg-surface text-muted hover:text-fg cursor-pointer"
-          title="Close (Esc)"
-        >
-          <X className="icon-base" />
-        </button>
       </div>
 
       {/* Live stacked bar graph */}
