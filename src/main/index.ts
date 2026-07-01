@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readFileSync, writeFileSync } from 'fs'
 import { createRequire } from 'module'
 import { randomUUID } from 'crypto'
-import { join } from 'path'
+import { isAbsolute, join, relative } from 'path'
 import { PtyManager } from './pty-manager'
 import { ChatRuntimeRegistry } from './chat-runtimes'
 import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
@@ -563,6 +563,26 @@ ptyManager.setStore(store)
 ptyManager.setSendSignal((channel, ...args) => transport.sendSignal(channel, ...args))
 ptyManager.setPerfMonitor(perfMonitor)
 perfMonitor.start(store, () => ptyManager.getActivePtyCount())
+
+ptyManager.setContainerResolver((_id, cwd) => {
+  const worktrees = store.getSnapshot().state.worktrees.list
+  let best: typeof worktrees[number] | null = null
+  for (const wt of worktrees) {
+    if (!wt.container) continue
+    const rel = relative(wt.path, cwd)
+    if (rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || isAbsolute(rel)) continue
+    if (!best || wt.path.length > best.path.length) best = wt
+  }
+  if (!best || !best.container) return undefined
+  return {
+    worktreePath: best.path,
+    name: best.container.name,
+    shell: best.container.shell,
+    workdir: best.container.workdir,
+    status: best.container.status,
+    error: best.container.error
+  }
+})
 
 // Watches each subscribed worktree's .git/ for index/HEAD/MERGE_HEAD changes
 // so the renderer's Changed Files panel can refresh on real events instead
@@ -2549,7 +2569,8 @@ function registerIpcHandlers(): void {
         : agentKind === 'opencode' ? config.opencodeEnvVars
         : undefined
       const existed = ptyManager.hasTerminal(id)
-      ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
+      const created = ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
+      if (!created) return
       if (!existed) {
         // Creator becomes controller immediately so their first keystroke
         // — which is a fire-and-forget signal right behind pty:create —
