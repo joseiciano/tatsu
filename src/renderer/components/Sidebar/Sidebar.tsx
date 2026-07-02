@@ -262,6 +262,59 @@ export function Sidebar({
         </defs>
       </svg>
 
+      {/* Top actions — overlay launchers (worktree-management buttons
+          live in the WORKTREES header now). */}
+      <div className="border-b border-border p-2 flex justify-center items-center gap-1 shrink-0 flex-wrap">
+        <Tooltip label="Command Center" action="toggleCommandCenter" side="bottom">
+          <button
+            onClick={onOpenCommandCenter}
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <LayoutGrid className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="New project" side="bottom">
+          <button
+            onClick={onOpenNewProject}
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <FilePlus className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Add repository" side="bottom">
+          <button
+            onClick={onAddRepo}
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <FolderOpen className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="bottom">
+          <button
+            onClick={onOpenHotkeyCheatsheet}
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <Keyboard className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Report an issue / request a feature / submit a suggestion" side="bottom">
+          <button
+            onClick={() => openReportIssue()}
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <MessageSquareHeart className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Settings" action="openSettings" side="bottom">
+          <button
+            onClick={onOpenSettings}
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <SettingsIcon className="icon-sm" />
+          </button>
+        </Tooltip>
+      </div>
+
       {/* Worktrees header */}
       <div className="px-3 py-3 flex items-center gap-2 shrink-0">
         <Tooltip label="Collapse sidebar" action="toggleSidebar" side="bottom">
@@ -502,58 +555,6 @@ export function Sidebar({
           tier-1-multi-backend-ux.md §A. */}
       <BackendChipStrip onAddBackend={onOpenAddBackend} />
 
-      {/* Bottom actions — overlay launchers (worktree-management buttons
-          live in the WORKTREES header now). */}
-      <div className="border-t border-border p-2 flex justify-center items-center gap-1 shrink-0 flex-wrap">
-        <Tooltip label="Command Center" action="toggleCommandCenter" side="top">
-          <button
-            onClick={onOpenCommandCenter}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <LayoutGrid className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="New project" side="top">
-          <button
-            onClick={onOpenNewProject}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <FilePlus className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Add repository" side="top">
-          <button
-            onClick={onAddRepo}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <FolderOpen className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="top">
-          <button
-            onClick={onOpenHotkeyCheatsheet}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <Keyboard className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Report an issue / request a feature / submit a suggestion" side="top">
-          <button
-            onClick={() => openReportIssue()}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <MessageSquareHeart className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Settings" action="openSettings" side="top">
-          <button
-            onClick={onOpenSettings}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <SettingsIcon className="icon-sm" />
-          </button>
-        </Tooltip>
-      </div>
       {calendarFor && (
         <SnoozeCalendar
           anchor={calendarFor.anchor}
