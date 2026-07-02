@@ -1,4 +1,4 @@
-import { GitPullRequest, RotateCw, Trash2, Loader2, Moon, TriangleAlert } from 'lucide-react'
+import { GitPullRequest, RotateCw, Trash2, Loader2, Moon, TriangleAlert, RefreshCw, Terminal, Box } from 'lucide-react'
 import type { Worktree, PtyStatus, PendingTool, PRStatus } from '../../types'
 import { isPRMerged } from '../../../shared/state/prs'
 import { formatWakeAt } from '../../../shared/state/snooze'
@@ -11,6 +11,7 @@ import { formatPendingTool } from '../../pending-tool'
 import { HotkeyBadge } from '../HotkeyBadge'
 import { useMetaHeld } from '../../hooks/useMetaHeld'
 import type { Action } from '../../hotkeys'
+import { containerStatusLabel } from './container-status'
 
 interface WorktreeTabProps {
   worktree: Worktree
@@ -36,11 +37,11 @@ interface WorktreeTabProps {
   onClick: () => void
   onDelete?: () => void
   onContinue?: () => void
-  /** Plain click → snooze for default duration. Option-click → open calendar
-   *  popover at the row. The handler receives the original event so the
-   *  caller can decide based on altKey. */
   onSnooze?: (e: React.MouseEvent) => void
   onUnsnooze?: () => void
+  onRestartContainer?: () => void
+  onRecreateContainer?: () => void
+  onOpenContainerShell?: () => void
 }
 
 const STATUS_COLORS: Record<PtyStatus | 'merged', string> = {
@@ -85,7 +86,7 @@ const PR_STATE_COLOR: Record<string, string> = {
   closed: 'text-danger'
 }
 
-export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActive, prStatus, isMerged, repoLabel, cmdOrdinal, deleting, isSnoozed, snoozeWakeAt, onClick, onDelete, onContinue, onSnooze, onUnsnooze }: WorktreeTabProps): JSX.Element {
+export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActive, prStatus, isMerged, repoLabel, cmdOrdinal, deleting, isSnoozed, snoozeWakeAt, onClick, onDelete, onContinue, onSnooze, onUnsnooze, onRestartContainer, onRecreateContainer, onOpenContainerShell }: WorktreeTabProps): JSX.Element {
   const metaHeld = useMetaHeld()
   const configuredWorktreeDetail = useAppState((s) => s.settings.worktreeDetail)
   const worktreeDetailOverride = useWorktreeDetailOverride()
@@ -179,6 +180,41 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
             )}
           </div>
         )}
+        {worktree.container && (
+          <div className="text-xs truncate flex items-center gap-1 mt-0.5">
+            {worktree.container.status === 'starting' && (
+              <Loader2 className="icon-2xs animate-spin text-warning shrink-0" />
+            )}
+            {worktree.container.status === 'running' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+            )}
+            {worktree.container.status === 'stopped' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-faint shrink-0" />
+            )}
+            {worktree.container.status === 'error' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />
+            )}
+            <span className={
+              worktree.container.status === 'error' ? 'text-danger' :
+              worktree.container.status === 'starting' ? 'text-warning' :
+              worktree.container.status === 'running' ? 'text-success' :
+              'text-dim'
+            }>
+              {containerStatusLabel(worktree.container)}
+            </span>
+            {worktree.container.status === 'error' && onRestartContainer && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRestartContainer()
+                }}
+                className="text-faint hover:text-accent transition-colors shrink-0 cursor-pointer"
+              >
+                <RefreshCw className="icon-2xs" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {canContinue && (
         <Tooltip label="Continue on a new branch off main" side="left">
@@ -261,6 +297,52 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
             <Moon className="icon-xs" />
           </button>
         </Tooltip>
+      )}
+      {worktree.container && (
+        <>
+          {onOpenContainerShell && (
+            <Tooltip label="Open container shell" side="left">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpenContainerShell()
+                }}
+                disabled={worktree.container.status === 'starting'}
+                className="hidden group-hover:flex text-faint hover:text-accent transition-colors shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Terminal className="icon-xs" />
+              </button>
+            </Tooltip>
+          )}
+          {onRestartContainer && (
+            <Tooltip label="Restart container" side="left">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRestartContainer()
+                }}
+                disabled={worktree.container.status === 'starting'}
+                className="hidden group-hover:flex text-faint hover:text-accent transition-colors shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className="icon-xs" />
+              </button>
+            </Tooltip>
+          )}
+          {onRecreateContainer && (
+            <Tooltip label="Recreate container" side="left">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRecreateContainer()
+                }}
+                disabled={worktree.container.status === 'starting'}
+                className="hidden group-hover:flex text-faint hover:text-accent transition-colors shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Box className="icon-xs" />
+              </button>
+            </Tooltip>
+          )}
+        </>
       )}
       {onDelete && (
         <Tooltip label="Remove worktree" side="left">

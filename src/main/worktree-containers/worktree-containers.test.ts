@@ -93,6 +93,20 @@ describe('execInContainer', () => {
   })
 })
 
+describe('restartContainer', () => {
+  it('uses docker restart for non-destructive container recovery', async () => {
+    const runner = makeRunner()
+    await createWorktreeContainers(runner).restartContainer('container-1')
+    expect(runner.calls[0].args).toEqual(['restart', 'container-1'])
+  })
+
+  it('throws sanitized restart failures', async () => {
+    const runner = makeRunner()
+    runner.run = vi.fn().mockResolvedValue({ stdout: '', stderr: 'restart failed ghp_abcdefghijklmnopqrstuvwxyz1234567890', exitCode: 1 })
+    await expect(createWorktreeContainers(runner).restartContainer('container-1')).rejects.toThrow(/Docker restart failed for container-1: restart failed \[redacted\]/)
+  })
+})
+
 describe('ensureImage', () => {
   it('skips Dockerfile build when tagged image exists locally', async () => {
     const runner = makeRunner()
@@ -893,9 +907,9 @@ describe('isContainerRunning', () => {
     })
     const containers = createWorktreeContainers(runner)
 
-    await expect(containers.isContainerRunning!('running')).resolves.toBe(true)
-    await expect(containers.isContainerRunning!('stopped')).resolves.toBe(false)
-    await expect(containers.isContainerRunning!('missing')).resolves.toBe(false)
+    await expect(containers.isContainerRunning('running')).resolves.toBe(true)
+    await expect(containers.isContainerRunning('stopped')).resolves.toBe(false)
+    await expect(containers.isContainerRunning('missing')).resolves.toBe(false)
   })
 })
 

@@ -3,6 +3,7 @@ import { createHash } from 'crypto'
 import { mkdirSync, readFileSync } from 'fs'
 import { basename, join, resolve } from 'path'
 import { log } from '../debug'
+import { commandArgsForShell } from '../shell-quote'
 import type { DockerRunner, DockerRunResult, DockerRunOptions, ResolvedWorktreeContainerConfig, CreatedWorktreeContainer, WorktreeContainers } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
 
@@ -319,7 +320,11 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       throw new Error(dockerCheck.error || 'Docker is not available')
     }
     // Ensure harness-status dir exists before docker run
-    mkdirSync('/tmp/harness-status', { recursive: true, mode: 0o700 })
+    try {
+      mkdirSync('/tmp/harness-status', { recursive: true, mode: 0o700 })
+    } catch (err) {
+      throw new Error(`Failed to create /tmp/harness-status directory: ${err instanceof Error ? err.message : err}`)
+    }
     await ensureImage(config)
     const id = getWorktreeId(worktreePath)
     const name = makeContainerName(worktreePath)
@@ -363,15 +368,6 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return docker.run(args, { timeoutMs: 300000, onOutput: opts?.onOutput })
   }
 
-  function commandArgsForShell(shell: string, command: string): string[] {
-    const shellName = basename(shell).toLowerCase()
-    if (shellName === 'fish' || shellName === 'nu' || shellName === 'nushell') return [shell, '-c', command]
-    if (shellName === 'pwsh' || shellName === 'powershell' || shellName === 'powershell.exe' || shellName === 'pwsh.exe') {
-      return [shell, '-NoLogo', '-NoProfile', '-Command', command]
-    }
-    return [shell, '-c', command]
-  }
-
   async function isContainerRunning(containerId: string): Promise<boolean> {
     const result = await docker.run(['inspect', '--format', '{{.State.Running}}', containerId], { timeoutMs: 30000 })
     if (result.exitCode !== 0) return false
@@ -395,5 +391,12 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     }
   }
 
-  return { checkDockerAvailable, resolveContainerConfig, ensureImage, createForWorktree, execInContainer, isContainerRunning, stopContainer }
+  async function restartContainer(containerId: string): Promise<void> {
+    const result = await docker.run(['restart', containerId], { timeoutMs: 30000 })
+    if (result.exitCode !== 0) {
+      throw new Error(`Docker restart failed for ${containerId}: ${sanitizeStderr(result.stderr)}`)
+    }
+  }
+
+  return { checkDockerAvailable, resolveContainerConfig, ensureImage, createForWorktree, execInContainer, isContainerRunning, restartContainer, stopContainer }
 }

@@ -1,10 +1,8 @@
 # Phase 5 — UX polish
 
-## Status: future / not yet implemented
+## Status: implemented
 
-Current UI has the Settings toggle for enabling worktree containers only.
-Container badges, status labels, restart/recreate actions, and the
-Open shell action described below are planned but not implemented.
+Container state is visible and recoverable through the sidebar. Status labels, restart/recreate actions, and the Open shell action described below are implemented.
 
 ## Deliverable
 
@@ -12,12 +10,10 @@ Container state is visible and recoverable from UI.
 
 System contracts: [`../System-Design.md`](../System-Design.md).
 
-## Files likely touched
+## Request names
 
-- worktree row/detail components under `src/renderer/components/`.
-- shared repo config types under `src/shared/state/repo-configs/types.ts`.
-- repo config read/write in `src/main/repo-config/repo-config.ts` only when adding editable fields.
-- backend API + main handlers for restart/retry actions.
+- Container restart/recreate: `worktrees:restartContainer`, `worktrees:recreateContainer`
+- Renderer backend: `backend.restartWorktreeContainer(path)`, `backend.recreateWorktreeContainer(path)`
 
 ## UI rules
 
@@ -31,9 +27,9 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 
 ## Actions
 
-- Restart container: stop then start existing container.
-- Recreate container: remove old container and create from current config.
-- Open shell: create normal terminal pane; existing PTY routing handles Docker.
+- Restart container: restart existing container in-place (non-destructive).
+- Recreate container: remove old container and create from current `.harness.json` config.
+- Open shell: add terminal tab to the worktree (handled by `handleAddTerminalTab`).
 
 ## Deferred UX
 
@@ -43,8 +39,9 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 
 ## Tests
 
-- renderer component test for badge visibility and status labels if existing test harness supports it.
-- reducer/request tests for restart/recreate status updates.
+- `src/main/worktree-containers/worktree-containers.test.ts` — `restartContainer`
+- `src/main/worktree-container-actions/worktree-container-actions.test.ts` — `restartWorktreeContainer`, `recreateWorktreeContainer`
+- `src/renderer/components/WorktreeTab/container-status.test.ts` — `containerStatusLabel`, `shortContainerError`
 
 ## Verification
 
@@ -56,3 +53,5 @@ System contracts: [`../System-Design.md`](../System-Design.md).
 ## Outcome
 
 Users can see and recover containerized worktree state without reading logs.
+
+These actions are wired through the backend as `worktrees:restartContainer` and `worktrees:recreateContainer` requests. The UI shows a compact container status badge below the worktree path, with action buttons (restart, recreate, open shell) appearing on hover. Error states show a truncated message (≤80 chars) with a retry button. Buttons are disabled while the container is in `starting` state.

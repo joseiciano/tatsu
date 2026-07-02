@@ -33,9 +33,11 @@ export interface ResolvedWorktreeContainerConfig {
   volumes: Array<{ source: string; target: string }>
 }
 
-/** Container metadata returned after successful creation. Status is always `running`. */
+/** Container metadata returned after successful creation or when reusing
+ *  an existing container. Status is 'running' after fresh creation, or
+ *  'starting' when reusing a container that hasn't been verified yet. */
 export interface CreatedWorktreeContainer extends WorktreeContainerMetadata {
-  status: 'running'
+  status: 'running' | 'starting'
 }
 
 /** Public manager interface for worktree container lifecycle.
@@ -46,6 +48,7 @@ export interface WorktreeContainers {
   ensureImage(config: ResolvedWorktreeContainerConfig): Promise<void>
   createForWorktree(repoRoot: string, worktreePath: string, config: ResolvedWorktreeContainerConfig): Promise<CreatedWorktreeContainer>
   execInContainer(containerId: string, command: string, opts?: { workdir?: string; env?: Record<string, string>; shell?: string; onOutput?: (chunk: string) => void }): Promise<DockerRunResult>
-  isContainerRunning?(containerId: string): Promise<boolean>
+  isContainerRunning(containerId: string): Promise<boolean>
+  restartContainer(containerId: string): Promise<void>
   stopContainer(containerId: string): Promise<void>
 }

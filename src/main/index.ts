@@ -29,6 +29,7 @@ import { PRPoller } from './pr-poller'
 import { WorktreesFSM } from './worktrees-fsm'
 import { createWorktreeContainers } from './worktree-containers'
 import { WorktreeDeletionFSM } from './worktree-deletion-fsm'
+import { restartWorktreeContainer, recreateWorktreeContainer } from './worktree-container-actions'
 import { PanesFSM, stripTransientTabFields } from './panes-fsm'
 import { ActivityDeriver } from './activity-deriver'
 import { AutoSleepMonitor } from './auto-sleep-monitor'
@@ -1188,6 +1189,30 @@ function registerIpcHandlers(): void {
   transport.onRequest('worktree:dismissPendingDeletion', (_ctx, path: string) => {
     worktreeDeletionFSM.dismiss(path)
     return true
+  })
+
+  transport.onRequest('worktrees:restartContainer', async (_ctx, path: string) => {
+    const ok = await restartWorktreeContainer({
+      getWorktrees: () => store.getSnapshot().state.worktrees.list,
+      updateContainer: (wtPath, next) => {
+        store.dispatch({ type: 'worktrees/containerUpdated', payload: { path: wtPath, container: next } })
+      },
+      loadRepoConfig,
+      containers: worktreeContainers
+    }, path)
+    return ok
+  })
+
+  transport.onRequest('worktrees:recreateContainer', async (_ctx, path: string) => {
+    const ok = await recreateWorktreeContainer({
+      getWorktrees: () => store.getSnapshot().state.worktrees.list,
+      updateContainer: (wtPath, next) => {
+        store.dispatch({ type: 'worktrees/containerUpdated', payload: { path: wtPath, container: next } })
+      },
+      loadRepoConfig,
+      containers: worktreeContainers
+    }, path)
+    return ok
   })
 
   transport.onRequest('worktree:dir', async (_ctx, repoRoot: string) => {

@@ -130,6 +130,8 @@ export function buildBackend(
       removeMeta?: { prNumber?: number; prState?: 'open' | 'draft' | 'merged' | 'closed' }
     ) => req('worktree:remove', repoRoot, path, force, removeMeta),
     dismissPendingDeletion: (path: string) => req('worktree:dismissPendingDeletion', path),
+    restartWorktreeContainer: (path: string) => req('worktrees:restartContainer', path),
+    recreateWorktreeContainer: (path: string) => req('worktrees:recreateContainer', path),
     getWorktreeDir: (repoRoot: string) => req('worktree:dir', repoRoot),
 
     listRepos: () => req('repo:list'),

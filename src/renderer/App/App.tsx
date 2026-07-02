@@ -1343,6 +1343,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
             }}
             onOpenNewProject={() => setShowNewProject(true)}
             onOpenMyWeek={() => setShowMyWeek(true)}
+            onOpenContainerShell={(path) => {
+              handleAddTerminalTab(path)
+              setActiveWorktreeId(path)
+            }}
             width={sidebarWidth}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}
