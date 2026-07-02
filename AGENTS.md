@@ -764,3 +764,13 @@ matching the `actions/setup-node` step in the workflow.
 | `pnpm dist:mac` | Full signed + notarized macOS build |
 | `pnpm rebuild:dev` | Rebuild node-pty for dev Electron |
 | `pnpm release <ver>` | Full end-to-end release |
+
+## Feature Flags 
+
+The following feature flags gate specific features:
+
+| Flag | Default | Feature |
+|---|---:|---|
+| `ENABLE_COST` | `false` | Command Center Costs tab |
+| `ENABLE_TIMELINE` | `false` | Command Center Timeline tab |
+| `ENABLE_MY_WEEK` | `false` | Command Center My week tab |

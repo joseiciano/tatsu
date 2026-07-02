@@ -8,6 +8,10 @@ export const HARNESS_RELEASES_URL = `${HARNESS_REPO_URL}/releases`
 export const HARNESS_SITE_URL = 'https://harness.mikelyons.org'
 export const HARNESS_SITE_RELEASES_URL = `${HARNESS_SITE_URL}/releases.html`
 
+export const ENABLE_COST = false
+export const ENABLE_TIMELINE = false
+export const ENABLE_MY_WEEK = false
+
 export function harnessReleaseNotesUrl(version: string): string {
   const v = version.startsWith('v') ? version : `v${version}`
   return `${HARNESS_SITE_RELEASES_URL}#${v}`

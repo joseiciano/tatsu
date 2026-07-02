@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, BarChart3, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
 import { HotkeyBadge } from '../HotkeyBadge'
@@ -44,7 +44,6 @@ interface SidebarProps {
   onOpenSettings: () => void
   onOpenAddBackend: () => void
   onOpenHotkeyCheatsheet: () => void
-  onOpenActivity: () => void
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
@@ -87,7 +86,6 @@ export function Sidebar({
   onOpenSettings,
   onOpenAddBackend,
   onOpenHotkeyCheatsheet,
-  onOpenActivity,
   onOpenCleanup,
   onOpenCommandCenter,
   onOpenNewProject,
@@ -529,14 +527,6 @@ export function Sidebar({
             className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
           >
             <FolderOpen className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Activity" side="top">
-          <button
-            onClick={onOpenActivity}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <BarChart3 className="icon-sm" />
           </button>
         </Tooltip>
         <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="top">

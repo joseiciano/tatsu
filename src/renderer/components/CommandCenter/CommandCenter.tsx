@@ -21,6 +21,7 @@ interface CommandCenterProps {
   lastActive: Record<string, number>
   onClose: () => void
   onSelect: (worktreePath: string) => void
+  embedded?: boolean
 }
 
 type DisplayStatus = PtyStatus | 'merged'
@@ -77,7 +78,8 @@ export function CommandCenter({
   mergedPaths,
   lastActive,
   onClose,
-  onSelect
+  onSelect,
+  embedded = false
 }: CommandCenterProps): JSX.Element {
   // Clock tick so relative times advance.
   const [now, setNow] = useState(Date.now())
@@ -195,8 +197,8 @@ export function CommandCenter({
   }
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col bg-panel">
-      <div className="drag-region h-10 shrink-0 border-b border-border relative">
+    <div className={`${embedded ? 'min-w-0 flex flex-col bg-panel' : 'flex-1 min-w-0 flex flex-col bg-panel'}`}>
+      {!embedded && <div className="drag-region h-10 shrink-0 border-b border-border relative">
         <button
           onClick={onClose}
           className="no-drag absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-muted hover:text-fg-bright transition-colors cursor-pointer"
@@ -208,7 +210,7 @@ export function CommandCenter({
         <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 text-sm font-medium text-fg pointer-events-none">
           Command Center
         </span>
-      </div>
+      </div>}
 
       <div className="px-4 py-4 border-b border-border flex items-start gap-6 shrink-0">
         <div className="flex-1 min-w-0">
@@ -242,7 +244,7 @@ export function CommandCenter({
       </div>
 
       {/* Grouped grid of session cards */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+      <div className={`${embedded ? 'p-6 space-y-6' : 'flex-1 min-h-0 overflow-y-auto p-6 space-y-6'}`}>
         {totalCards === 0 && (
           <div className="h-full flex items-center justify-center text-dim">
             No sessions yet — create a worktree to get started.

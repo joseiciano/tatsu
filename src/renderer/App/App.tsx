@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type Dispatch, type SetStateAction } from 'react'
 import { useSettings, usePrs, useOnboarding, useHooks, useWorktrees, useTerminals, usePanes, useLastActive, useUpdater, useRepoConfigs, useSnooze, useAnnouncements } from '../store'
 import { useBackend } from '../backend'
 import { useTabHandlers } from '../hooks/useTabHandlers'
@@ -29,9 +29,8 @@ import { Guide } from '../components/Guide'
 import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { AgentIcon } from '../components/AgentIcon'
 import { InterfaceToggle } from '../components/InterfaceToggle'
-import { Activity } from '../components/Activity'
+import { Activity, type ActivityTab } from '../components/Activity'
 import { Cleanup } from '../components/Cleanup'
-import { CommandCenter } from '../components/CommandCenter'
 import { ReviewScreen } from '../components/ReviewScreen'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
@@ -227,8 +226,8 @@ function DesktopApp(): JSX.Element {
   const [showGuide, setShowGuide] = useState(false)
   const [showMyWeek, setShowMyWeek] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
+  const [activityTab, setActivityTab] = useState<ActivityTab>('command')
   const [showCleanup, setShowCleanup] = useState(false)
-  const [showCommandCenter, setShowCommandCenter] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
@@ -249,6 +248,21 @@ function DesktopApp(): JSX.Element {
   // explicit confirmation separately for the onboarding step checkmarks.
   const [themeChosen, setThemeChosen] = useState(false)
   const [agentChosen, setAgentChosen] = useState(false)
+  const showCommandCenter = showActivity && activityTab === 'command'
+  const setShowCommandCenter = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
+    const nextVisible = typeof next === 'function' ? next(showCommandCenter) : next
+    if (nextVisible) {
+      setShowNewWorktree(false)
+      setShowCleanup(false)
+      setShowReview(false)
+      setReportIssueState(null)
+      setShowNewProject(false)
+      setActivityTab('command')
+      setShowActivity(true)
+    } else if (showCommandCenter) {
+      setShowActivity(false)
+    }
+  }, [showCommandCenter])
   const settings = useSettings()
   const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultAgent } = settings
   // Apply the persisted UI scale to the root html element so every
@@ -584,15 +598,18 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowNewWorktree(false)
     setShowActivity(false)
     setShowCleanup(false)
-    setShowCommandCenter(false)
+    setShowReview(false)
+    setReportIssueState(null)
+    setShowNewProject(false)
   }, [])
 
   const toggleCommandCenter = useCallback(() => {
     if (showCommandCenter) {
-      setShowCommandCenter(false)
+      setShowActivity(false)
     } else {
       closeFullscreenViews()
-      setShowCommandCenter(true)
+      setActivityTab('command')
+      setShowActivity(true)
     }
   }, [showCommandCenter, closeFullscreenViews])
 
@@ -1357,10 +1374,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowCommandCenter(false)
               setShowHotkeyCheatsheet(true)
             }}
-            onOpenActivity={() => {
-              closeFullscreenViews()
-              setShowActivity(true)
-            }}
             onOpenCleanup={() => {
               closeFullscreenViews()
               setShowCleanup(true)
@@ -1400,10 +1413,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onOpenNewProject={() => {
               closeFullscreenViews()
               setShowNewProject(true)
-            }}
-            onOpenActivity={() => {
-              closeFullscreenViews()
-              setShowActivity(true)
             }}
             onOpenHotkeyCheatsheet={() => {
               setShowCommandCenter(false)
@@ -1497,8 +1506,19 @@ const setQuestStep = useCallback((next: QuestStep) => {
             <Activity
               onClose={() => setShowActivity(false)}
               worktrees={worktrees}
+              worktreeStatuses={worktreeStatuses}
+              worktreePendingTools={worktreePendingTools}
               prStatuses={prStatuses}
               mergedPaths={mergedPaths}
+              lastActive={lastActive}
+              tab={activityTab}
+              onTabChange={setActivityTab}
+              onSelectWorktree={(path) => {
+                setShowNewWorktree(false)
+                setShowActivity(false)
+                setShowCleanup(false)
+                setActiveWorktreeId(path)
+              }}
             />
           </div>
         )}
@@ -1511,26 +1531,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
               mergedPaths={mergedPaths}
               lastActive={lastActive}
               onBulkDelete={handleBulkDeleteWorktrees}
-            />
-          </div>
-        )}
-        {showCommandCenter && (
-          <div className="flex-1 min-w-0 flex">
-            <CommandCenter
-              worktrees={worktrees}
-              worktreeStatuses={worktreeStatuses}
-              worktreePendingTools={worktreePendingTools}
-              prStatuses={prStatuses}
-              mergedPaths={mergedPaths}
-              lastActive={lastActive}
-              onClose={() => setShowCommandCenter(false)}
-              onSelect={(path) => {
-                setShowCommandCenter(false)
-                setShowNewWorktree(false)
-                setShowActivity(false)
-                setShowCleanup(false)
-                setActiveWorktreeId(path)
-              }}
             />
           </div>
         )}

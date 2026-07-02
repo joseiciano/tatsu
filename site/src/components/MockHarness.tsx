@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ENABLE_COST } from '../../../src/shared/constants'
 import {
   Check,
   ChevronDown,
@@ -639,7 +640,7 @@ function MockRightPanel({ active }: { active: MockWorktree }) {
 
       <MockAllFilesPanel />
 
-      <RightPanelSection title="Cost" collapsed />
+      {ENABLE_COST && <RightPanelSection title="Cost" collapsed />}
 
       <div className="truncate px-3 py-1 text-[10px] text-dim shrink-0">{active.path}</div>
     </div>
