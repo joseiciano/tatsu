@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, GitPullRequest, ChevronDown, ChevronRight, Layers, Rows3 } from 'lucide-react'
 import { useSettings, useSnooze } from '../../store'
-import { useBackend } from '../../backend'
 import type {
   Worktree,
   PtyStatus,
   PendingTool,
-  PRStatus,
-  TerminalTab,
-  ActivityLog,
-  ActivityRecord
+  PRStatus
 } from '../../types'
-import { eventsToSegments, STATE_COLOR } from '../Activity'
 import { groupWorktrees, type GroupKey } from '../../worktree-sort'
 import { isPRMerged } from '../../../shared/state/prs'
 import { repoNameColor } from '../RepoIcon'
@@ -24,8 +19,6 @@ interface CommandCenterProps {
   prStatuses: Record<string, PRStatus | null>
   mergedPaths: Record<string, boolean>
   lastActive: Record<string, number>
-  tailLines: Record<string, string>
-  terminalTabs: Record<string, TerminalTab[]>
   onClose: () => void
   onSelect: (worktreePath: string) => void
 }
@@ -48,15 +41,13 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
   merged: 'Merged'
 }
 
-const STATUS_CARD_RING: Record<DisplayStatus, string> = {
-  idle: 'ring-1 ring-border',
-  processing: 'ring-1 ring-success/40',
-  waiting: 'ring-1 ring-warning/50',
-  'needs-approval': 'ring-2 ring-danger shadow-[0_0_32px_rgba(239,68,68,0.25)] animate-pulse',
-  merged: 'ring-1 ring-accent/30'
+const STATUS_CARD_BORDER: Record<DisplayStatus, string> = {
+  idle: 'border-border',
+  processing: 'border-success/60',
+  waiting: 'border-warning/70',
+  'needs-approval': 'border-danger/80',
+  merged: 'border-accent/60'
 }
-
-const TIMELINE_WINDOW_MS = 60 * 1000
 
 interface StatusCounts {
   'needs-approval': number
@@ -69,9 +60,9 @@ function emptyStatusCounts(): StatusCounts {
   return { 'needs-approval': 0, waiting: 0, processing: 0, idle: 0 }
 }
 
-function relTime(ms: number | undefined): string {
+function relTime(ms: number | undefined, now: number): string {
   if (!ms) return '—'
-  const diff = Date.now() - ms
+  const diff = now - ms
   if (diff < 60_000) return 'just now'
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
@@ -85,36 +76,10 @@ export function CommandCenter({
   prStatuses,
   mergedPaths,
   lastActive,
-  tailLines,
-  terminalTabs,
   onClose,
   onSelect
 }: CommandCenterProps): JSX.Element {
-  const backend = useBackend()
-  // Activity log for per-worktree mini timelines.
-  const [log, setLog] = useState<ActivityLog>({})
-  useEffect(() => {
-    let cancelled = false
-    const load = async (): Promise<void> => {
-      try {
-        const data = await backend.getActivityLog()
-        if (!cancelled) setLog(data)
-      } catch {
-        // ignore
-      }
-    }
-    load()
-    const t = setInterval(load, 3000)
-    return () => {
-      cancelled = true
-      clearInterval(t)
-    }
-  }, [])
-
-  const terminalFont = useSettings().terminalFontFamily ||
-    "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
-
-  // Clock tick so timelines + relative times advance.
+  // Clock tick so relative times advance.
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 2000)
@@ -224,17 +189,6 @@ export function CommandCenter({
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const pickTail = (wtPath: string): string => {
-    const tabs = terminalTabs[wtPath] || []
-    for (const t of tabs) {
-      const line = tailLines[t.id]
-      if (line && line.trim()) return line
-    }
-    return ''
-  }
-
-  const pickRecord = (wtPath: string): ActivityRecord | undefined => log[wtPath]
-
   const cardDisplay = (wt: Worktree): DisplayStatus => {
     if (mergedPaths[wt.path] || isPRMerged(prStatuses[wt.path])) return 'merged'
     return worktreeStatuses[wt.path] || 'idle'
@@ -326,82 +280,68 @@ export function CommandCenter({
 
                   {!collapsedHere && (
                     <div
-                      className="grid gap-4"
-                      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
+                      className="grid gap-3"
+                      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}
                     >
                       {group.worktrees.map((wt) => {
                         const display = cardDisplay(wt)
                         const pr = prStatuses[wt.path]
-                        const tail = pickTail(wt.path)
-                        const record = pickRecord(wt.path)
+                        const repoLabel = wt.repoRoot.split('/').pop() || wt.repoRoot
                         return (
                           <button
                             key={wt.path}
                             onClick={() => onSelect(wt.path)}
-                            className={`text-left rounded-lg bg-surface hover:bg-surface-hover transition-colors flex flex-col cursor-pointer overflow-hidden ${STATUS_CARD_RING[display]}`}
+                            className={`h-28 text-left bg-app/50 border rounded-xl p-4 transition-colors hover:bg-app/60 flex flex-col justify-between cursor-pointer ${STATUS_CARD_BORDER[display]}`}
                           >
-                            <div className="px-4 pt-3 pb-2.5 flex flex-col gap-1 min-w-0">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                {showRepoLabelOnCards && (
-                                  <>
-                                    <span className={`text-xs truncate shrink ${repoNameColor(wt.repoRoot.split('/').pop() || wt.repoRoot)}`}>
-                                      {wt.repoRoot.split('/').pop()}
-                                    </span>
-                                    <span className="text-faint shrink-0">/</span>
-                                  </>
-                                )}
-                                <span className="text-sm font-semibold text-fg-bright truncate flex-1">
-                                  {wt.branch}
-                                </span>
-                              </div>
-                              {display === 'needs-approval' && worktreePendingTools[wt.path] && (
-                                <div className="flex items-center gap-1.5 min-w-0 text-xs text-danger">
-                                  <span className="font-semibold shrink-0">Waiting on:</span>
-                                  <span className="truncate font-mono">
-                                    {formatPendingTool(worktreePendingTools[wt.path] as PendingTool)}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2 min-w-0 text-xs">
-                                <span
-                                  className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[display]}`}
-                                />
-                                <span className="text-muted">{STATUS_LABEL[display]}</span>
-                                <div className="flex-1" />
-                                {pr && (
-                                  <GitPullRequest
-                                    className={`icon-xs ${pr.state === 'merged'
-                                        ? 'text-accent'
-                                        : pr.state === 'closed'
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[display]}`}
+                              />
+                              <span className="text-xs uppercase tracking-wider text-dim font-semibold truncate">
+                                {STATUS_LABEL[display]}
+                              </span>
+                              <div className="flex-1" />
+                              {pr && (
+                                <GitPullRequest
+                                  className={`icon-xs shrink-0 ${pr.state === 'merged'
+                                      ? 'text-accent'
+                                      : pr.state === 'closed'
+                                        ? 'text-danger'
+                                        : pr.checksOverall === 'failure' || pr.hasConflict
                                           ? 'text-danger'
-                                          : pr.checksOverall === 'failure' || pr.hasConflict
-                                            ? 'text-danger'
-                                            : pr.checksOverall === 'pending'
-                                              ? 'text-warning'
-                                              : pr.checksOverall === 'success'
-                                                ? 'text-success'
-                                                : 'text-dim'}`} />
-                                )}
-                                <span className="text-faint">{relTime(lastActive[wt.path])}</span>
+                                          : pr.checksOverall === 'pending'
+                                            ? 'text-warning'
+                                            : pr.checksOverall === 'success'
+                                              ? 'text-success'
+                                              : 'text-dim'}`} />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="text-lg font-bold text-fg-bright tabular-nums truncate">
+                                {wt.branch}
                               </div>
                             </div>
 
-                            <div
-                              className="border-t border-border/60 px-3 py-2 h-24 overflow-hidden flex flex-col justify-end"
-                              style={{ backgroundColor: 'var(--color-app)' }}
-                            >
-                              <pre
-                                className="text-xs leading-tight whitespace-pre-wrap break-all line-clamp-6"
-                                style={{
-                                  fontFamily: terminalFont,
-                                  color: 'var(--color-fg-bright)'
-                                }}
-                              >
-                                {tail || <span className="text-faint italic">no output yet</span>}
-                              </pre>
+                            <div className="flex items-center gap-1.5 min-w-0 text-xs text-dim">
+                              {showRepoLabelOnCards && (
+                                <>
+                                  <span className={`truncate shrink ${repoNameColor(repoLabel)}`}>
+                                    {repoLabel}
+                                  </span>
+                                  <span className="text-dim/60 shrink-0">·</span>
+                                </>
+                              )}
+                              {display === 'needs-approval' && worktreePendingTools[wt.path] ? (
+                                <span className="truncate text-danger">
+                                  waiting on {formatPendingTool(worktreePendingTools[wt.path] as PendingTool)}
+                                </span>
+                              ) : (
+                                <span className="truncate tabular-nums">
+                                  active {relTime(lastActive[wt.path], now)}
+                                </span>
+                              )}
                             </div>
-
-                            <MiniTimeline record={record} now={now} />
                           </button>
                         )
                       })}
@@ -414,39 +354,6 @@ export function CommandCenter({
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-function MiniTimeline({
-  record,
-  now
-}: {
-  record: ActivityRecord | undefined
-  now: number
-}): JSX.Element {
-  const windowStart = now - TIMELINE_WINDOW_MS
-  const span = now - windowStart
-  const events = record?.events || []
-  const segs = eventsToSegments(events, windowStart, now, record?.removedAt)
-  return (
-    <div className="relative h-6 overflow-hidden border-t border-border bg-faint/5 mt-auto">
-      {segs.map((seg, i) => {
-        if (seg.state === 'idle') return null
-        const leftPct = ((seg.start - windowStart) / span) * 100
-        const widthPct = ((seg.end - seg.start) / span) * 100
-        if (widthPct <= 0) return null
-        return (
-          <div
-            key={i}
-            className={`absolute top-0 h-full ${STATE_COLOR[seg.state]}`}
-            style={{
-              left: `${leftPct}%`,
-              width: `${Math.max(widthPct, 0.4)}%`
-            }}
-          />
-        )
-      })}
     </div>
   )
 }

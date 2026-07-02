@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSettings, usePrs, useOnboarding, useHooks, useWorktrees, useTerminals, usePanes, useLastActive, useUpdater, useRepoConfigs, useSnooze, useAnnouncements } from '../store'
 import { useBackend } from '../backend'
-import { useTailLineBuffer } from '../hooks/useTailLineBuffer'
 import { useTabHandlers } from '../hooks/useTabHandlers'
 import { useHotkeyHandlers } from '../hooks/useHotkeyHandlers'
 import { useWorktreeHandlers } from '../hooks/useWorktreeHandlers'
@@ -250,10 +249,6 @@ function DesktopApp(): JSX.Element {
   // explicit confirmation separately for the onboarding step checkmarks.
   const [themeChosen, setThemeChosen] = useState(false)
   const [agentChosen, setAgentChosen] = useState(false)
-  // Only subscribe to the PTY stream when CommandCenter is open. Without
-  // this gate, a chatty PTY pegs the renderer with re-renders for output
-  // nobody is currently looking at.
-  const tailLines = useTailLineBuffer(showCommandCenter)
   const settings = useSettings()
   const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultAgent } = settings
   // Apply the persisted UI scale to the root html element so every
@@ -1528,8 +1523,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
               prStatuses={prStatuses}
               mergedPaths={mergedPaths}
               lastActive={lastActive}
-              tailLines={tailLines}
-              terminalTabs={terminalTabs}
               onClose={() => setShowCommandCenter(false)}
               onSelect={(path) => {
                 setShowCommandCenter(false)
