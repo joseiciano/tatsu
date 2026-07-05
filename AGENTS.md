@@ -192,7 +192,8 @@ src/
 │   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
 │   │   ├── index.ts               # Public exports
 │   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
-│   │   └── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
+│   │   ├── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
+│   │   └── *.test.ts              # Tests (colocated, not listed individually)
 │   ├── worktree/                  # git worktree CRUD primitives
 │   ├── worktree-containers/      # Docker companion container lifecycle (create, exec, stop)
 │   ├── github/                    # GitHub REST API calls
@@ -637,8 +638,9 @@ This is how you are to behave when working on this repo.
    above. Per-client UI focus / modal visibility / sidebar widths stay
    as `useState` in `src/renderer/App/App.tsx`; everything else is a slice.
 
-6. **Don't write planning/decision documents.** Work from conversation
-   context. Don't create scratch markdown files or design docs.
+6. **Don't write ad-hoc planning/decision documents.** Work from conversation
+   context. Don't create scratch markdown files or design docs. Intentional
+   design docs in `plans/` are the exception.
 
 7. **Surface secrets concerns.** Warn the user once if they paste 
     a token or password that is now in conversation history

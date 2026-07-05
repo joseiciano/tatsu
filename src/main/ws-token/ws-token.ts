@@ -43,9 +43,22 @@ export function safeEqualToken(provided: unknown, expected: string): boolean {
 // after SESSION_TTL_MS, and live only in memory.
 
 const SESSION_TTL_MS = 30_000
+const SESSION_SWEEP_INTERVAL_MS = 60_000
 
 /** Maps session token → expiry timestamp (ms since epoch). */
 const sessionTokens = new Map<string, number>()
+let lastSessionSweepAt = 0
+
+/** Remove expired entries to prevent unbounded growth. Throttled to
+ *  one sweep per SESSION_SWEEP_INTERVAL_MS; called on every
+ *  issueSessionToken / consumeSessionToken invocation. */
+function sweepExpiredSessionTokens(now: number): void {
+  if (now - lastSessionSweepAt < SESSION_SWEEP_INTERVAL_MS) return
+  lastSessionSweepAt = now
+  for (const [token, expiresAt] of sessionTokens) {
+    if (now > expiresAt) sessionTokens.delete(token)
+  }
+}
 
 /** Mint a short-lived one-time session token.
  *  Returns null if `provided` doesn't match `expected` (timing-safe). */
@@ -53,18 +66,22 @@ export function issueSessionToken(
   provided: unknown,
   expected: string
 ): string | null {
+  const now = Date.now()
+  sweepExpiredSessionTokens(now)
   if (!safeEqualToken(provided, expected)) return null
   const token = randomBytes(16).toString('hex')
-  sessionTokens.set(token, Date.now() + SESSION_TTL_MS)
+  sessionTokens.set(token, now + SESSION_TTL_MS)
   return token
 }
 
 /** Consume a one-time session token.  Returns true if valid and
  *  not yet expired; the token is removed on first call (single-use). */
 export function consumeSessionToken(provided: unknown): boolean {
+  const now = Date.now()
+  sweepExpiredSessionTokens(now)
   if (typeof provided !== 'string') return false
   const expiresAt = sessionTokens.get(provided)
   if (expiresAt === undefined) return false
   sessionTokens.delete(provided) // one-time use
-  return Date.now() <= expiresAt
+  return now <= expiresAt
 }

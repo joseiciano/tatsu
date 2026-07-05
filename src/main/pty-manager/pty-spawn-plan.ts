@@ -1,4 +1,6 @@
-import { basename, isAbsolute, relative } from 'path'
+import { isAbsolute, relative } from 'path'
+import { commandArgsForShell } from '../shell-quote'
+import { WORKTREE_CONTAINER_NATIVE_TMPDIR } from '../worktree-containers'
 import type { WorktreeContainerStatus } from '../../shared/state/worktrees'
 
 export interface WorktreeContainerTarget {
@@ -43,15 +45,6 @@ export type PtySpawnPlan = PtySpawnSpec | PtySpawnError
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-function commandArgsForShell(shell: string, command: string): string[] {
-  const shellName = basename(shell).toLowerCase()
-  if (shellName === 'fish' || shellName === 'nu' || shellName === 'nushell') return [shell, '-c', command]
-  if (shellName === 'pwsh' || shellName === 'powershell' || shellName === 'powershell.exe' || shellName === 'pwsh.exe') {
-    return [shell, '-NoLogo', '-NoProfile', '-Command', command]
-  }
-  return [shell, '-c', command]
-}
-
 function isExecModeArgs(args: string[]): boolean {
   return args.some((a) => a === '-c' || a === '-ilc' || a === '-lc' || a === '-ic')
 }
@@ -82,13 +75,14 @@ export function buildPtySpawnPlan(input: PtySpawnInput): PtySpawnPlan {
     return { kind: 'spawn', command: shell, args, cwd, env, isContainer: false }
   }
 
-  // Container path — status must be running
-  if (target.status !== 'running') {
+  // Container path — allow 'running' and 'starting'. A 'starting'
+  // container may already be ready (boot verification hasn't flipped
+  // it to 'running' yet); attempting docker exec lets Docker return
+  // the real error if the container isn't actually ready.
+  if (target.status !== 'running' && target.status !== 'starting') {
     const hint = target.status === 'stopped'
       ? `Container "${target.name}" is stopped. Restart or recreate it from Settings → Worktrees.`
-      : target.status === 'error'
-        ? `Container "${target.name}" is in error state${target.error ? `: ${target.error}` : ''}. Recreate it from Settings → Worktrees.`
-        : `Container "${target.name}" is ${target.status}. Wait for it to start or recreate from Settings → Worktrees.`
+      : `Container "${target.name}" is in error state${target.error ? `: ${target.error}` : ''}. Recreate it from Settings → Worktrees.`
     return { kind: 'error', message: hint }
   }
 
@@ -108,6 +102,8 @@ export function buildPtySpawnPlan(input: PtySpawnInput): PtySpawnPlan {
   dockerArgs.push('-e', `CLAUDE_HARNESS_ID=${id}`)
   dockerArgs.push('-e', 'TERM=xterm-256color')
   dockerArgs.push('-e', 'COLORTERM=truecolor')
+  dockerArgs.push('-e', `TMPDIR=${WORKTREE_CONTAINER_NATIVE_TMPDIR}`)
+  dockerArgs.push('-e', `BUN_TMPDIR=${WORKTREE_CONTAINER_NATIVE_TMPDIR}`)
 
   // Extra env keys (validated above). Values may be secrets, so pass only
   // the key name to docker -e (value is inherited from the host process env).
@@ -121,7 +117,7 @@ export function buildPtySpawnPlan(input: PtySpawnInput): PtySpawnPlan {
 
   const shell = target.shell || '/bin/sh'
 
-  if (isShell && isExecModeArgs(args)) {
+  if ((isShell || !command) && isExecModeArgs(args)) {
     // Extract the command from the last arg (zsh-style: <shell> -ilc <cmd>)
     const cmdStr = args[args.length - 1] || ''
     dockerArgs.push(target.name, ...commandArgsForShell(shell, cmdStr))

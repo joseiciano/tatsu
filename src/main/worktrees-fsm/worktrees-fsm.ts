@@ -4,6 +4,7 @@ import {
   fetchPullRequestRef,
   listWorktrees,
   localBranchExists,
+  removeWorktree,
   runWorktreeScript,
   symlinkClaudeSettings,
   type WorktreeInfo
@@ -112,8 +113,8 @@ export class WorktreesFSM {
   }
 
   private async verifyRecoveredContainers(worktrees: Worktree[]): Promise<void> {
-    const isContainerRunning = this.opts.containers?.isContainerRunning
-    if (!isContainerRunning) return
+    if (!this.opts.containers) return
+    const isContainerRunning = this.opts.containers.isContainerRunning
     const starting = worktrees.filter((wt) => wt.container?.status === 'starting')
     await Promise.all(starting.map(async (wt) => {
       const container = wt.container!
@@ -195,6 +196,7 @@ export class WorktreesFSM {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+      await this.cleanupWorktreeOnFailure(id, repoRoot)
       this.store.dispatch({
         type: 'worktrees/pendingUpdated',
         payload: { id, patch: { status: 'error', error: message } }
@@ -263,11 +265,26 @@ export class WorktreesFSM {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+      await this.cleanupWorktreeOnFailure(id, repoRoot)
       this.store.dispatch({
         type: 'worktrees/pendingUpdated',
         payload: { id, patch: { status: 'error', error: message } }
       })
       return { id, outcome: 'error', error: message }
+    }
+  }
+
+  /** Remove the worktree directory from disk if it was already created
+   *  but the overall creation flow failed (e.g. container creation threw).
+   *  Reads createdPath from the pending entry so it works from any catch
+   *  block without needing a local variable. Best-effort — logs on failure. */
+  private async cleanupWorktreeOnFailure(id: string, repoRoot: string): Promise<void> {
+    const pendingEntry = this.store.getSnapshot().state.worktrees.pending.find((p) => p.id === id)
+    if (!pendingEntry?.createdPath) return
+    try {
+      await removeWorktree(repoRoot, pendingEntry.createdPath)
+    } catch (cleanupErr) {
+      log('worktrees-fsm', `worktree cleanup failed for ${pendingEntry.createdPath}`, cleanupErr instanceof Error ? cleanupErr.message : cleanupErr)
     }
   }
 
@@ -387,7 +404,7 @@ export class WorktreesFSM {
     }
 
     if (container) {
-      const containerStillRunning = typeof this.opts.containers?.isContainerRunning === 'function'
+      const containerStillRunning = this.opts.containers
         ? await this.opts.containers.isContainerRunning(container.id)
         : true
       this.store.dispatch({

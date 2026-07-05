@@ -7,6 +7,9 @@ export function createTokenBucket(capacity: number, now = Date.now()): TokenBuck
   return { tokens: capacity, updatedAt: now }
 }
 
+/** Attempt to consume one token from the bucket. Mutates `bucket` in-place
+ *  (updates `tokens` and `updatedAt`). Returns true if a token was available
+ *  and consumed, false if the bucket is empty. */
 export function consumeToken(
   bucket: TokenBucket,
   capacity: number,

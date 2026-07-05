@@ -25,12 +25,13 @@ export interface DockerRunner {
 export interface ResolvedWorktreeContainerConfig {
   image: string
   dockerfile?: string
+  managedDockerfile?: string
   buildContext?: string
   workdir: string
   shell: string
   env: Record<string, string>
   ports: number[]
-  volumes: Array<{ source: string; target: string }>
+  volumes: Array<{ source: string; target: string; readOnly?: boolean }>
 }
 
 /** Container metadata returned after successful creation or when reusing

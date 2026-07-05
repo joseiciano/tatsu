@@ -185,7 +185,7 @@ describe('buildPtySpawnPlan', () => {
     expect(plan.message).toMatch(/Docker daemon unavailable/)
   })
 
-  it('starting container returns error with hint', () => {
+  it('starting container allows spawn (docker exec returns real error if not ready)', () => {
     const resolver: WorktreeContainerResolver = () => ({
       worktreePath: '/worktrees/my-project',
       name: 'tatsu-wt-my-project-abc',
@@ -195,9 +195,7 @@ describe('buildPtySpawnPlan', () => {
       error: undefined
     })
     const plan = buildPtySpawnPlan(hostInput({ resolver }))
-    expect(plan.kind).toBe('error')
-    if (plan.kind !== 'error') return
-    expect(plan.message).toMatch(/not running|starting/i)
+    expect(plan.kind).toBe('spawn')
   })
 
   it('invalid env key returns clear error', () => {
@@ -265,6 +263,23 @@ describe('buildPtySpawnPlan', () => {
     const eArgs = plan.args.filter((a, i) => plan.args[i - 1] === '-e')
     expect(eArgs.some(e => e.startsWith('TERM='))).toBe(true)
     expect(eArgs.some(e => e.startsWith('COLORTERM='))).toBe(true)
+  })
+
+  it('container exec points Bun native extraction at executable tmpfs', () => {
+    const resolver: WorktreeContainerResolver = () => ({
+      worktreePath: '/worktrees/my-project',
+      name: 'tatsu-wt-my-project-abc',
+      shell: '/bin/sh',
+      workdir: '/workspace',
+      status: 'running',
+      error: undefined
+    })
+    const plan = buildPtySpawnPlan(hostInput({ resolver }))
+    expect(plan.kind).toBe('spawn')
+    if (plan.kind !== 'spawn') return
+    const eArgs = plan.args.filter((a, i) => plan.args[i - 1] === '-e')
+    expect(eArgs).toContain('TMPDIR=/tmp/.tatsu-native-tmp')
+    expect(eArgs).toContain('BUN_TMPDIR=/tmp/.tatsu-native-tmp')
   })
 
   it('container shell defaults to /bin/sh when metadata shell empty', () => {
@@ -340,5 +355,29 @@ describe('buildPtySpawnPlan', () => {
     if (plan.kind !== 'spawn') return
     expect(plan.args).toContain('claude')
     expect(plan.args).toContain('--help')
+  })
+
+  it('agent command with empty executable uses container shell instead of execing empty string', () => {
+    const resolver: WorktreeContainerResolver = () => ({
+      worktreePath: '/worktrees/my-project',
+      name: 'tatsu-wt-my-project-abc',
+      shell: '/bin/sh',
+      workdir: '/workspace',
+      status: 'running',
+      error: undefined
+    })
+    const plan = buildPtySpawnPlan(hostInput({
+      resolver,
+      command: '',
+      args: ['-ilc', 'opencode'],
+      isShell: false
+    }))
+    expect(plan.kind).toBe('spawn')
+    if (plan.kind !== 'spawn') return
+    const containerIdx = plan.args.indexOf('tatsu-wt-my-project-abc')
+    expect(plan.args[containerIdx + 1]).toBe('/bin/sh')
+    expect(plan.args[containerIdx + 2]).toBe('-c')
+    expect(plan.args[containerIdx + 3]).toBe('opencode')
+    expect(plan.args).not.toContain('')
   })
 })

@@ -1,6 +1,6 @@
 # Phase 3 — terminal execution
 
-## Status: implemented
+## Status: partially implemented (setup only; terminal routing pending)
 
 Currently only setup scripts execute inside containers via `docker exec`.
 Terminal and agent panes for containerized worktrees still execute on the host.

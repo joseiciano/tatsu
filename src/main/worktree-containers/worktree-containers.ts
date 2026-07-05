@@ -1,13 +1,24 @@
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
-import { mkdirSync, readFileSync } from 'fs'
-import { basename, join, resolve } from 'path'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs'
+import { homedir, tmpdir } from 'os'
+import { basename, dirname, isAbsolute, join, resolve } from 'path'
 import { log } from '../debug'
 import { commandArgsForShell } from '../shell-quote'
+import { WORKTREE_CONTAINER_NATIVE_TMPDIR } from './constants'
 import type { DockerRunner, DockerRunResult, DockerRunOptions, ResolvedWorktreeContainerConfig, CreatedWorktreeContainer, WorktreeContainers } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
 
 const MAX_DOCKER_OUTPUT_BYTES = 1024 * 1024
+const MANAGED_WORKTREE_DOCKERFILE = `FROM node:20-alpine
+
+RUN apk add --no-cache bash git ripgrep ca-certificates curl
+RUN npm install -g opencode-ai@latest && opencode --version
+
+WORKDIR /workspace
+CMD ["tail", "-f", "/dev/null"]
+`
+const MANAGED_WORKTREE_IMAGE = `tatsu-worktree:${createHash('sha256').update(MANAGED_WORKTREE_DOCKERFILE).digest('hex').slice(0, 12)}`
 
 /**
  * Sanitize Docker stderr output by redacting sensitive tokens and
@@ -173,8 +184,69 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return value.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/=/g, '\\=')
   }
 
-  function bindMountArg(source: string, target: string): string {
-    return `type=bind,source=${escapeMountValue(source)},target=${escapeMountValue(target)}`
+  function bindMountArg(source: string, target: string, readOnly?: boolean): string {
+    return `type=bind,source=${escapeMountValue(source)},target=${escapeMountValue(target)}${readOnly ? ',readonly' : ''}`
+  }
+
+  function addExistingVolume(volumes: ResolvedWorktreeContainerConfig['volumes'], source: string, target: string, readOnly: boolean): void {
+    if (!existsSync(source)) return
+    const normalizedTarget = normalizeMountTarget(target)
+    if (volumes.some((v) => normalizeMountTarget(v.target) === normalizedTarget)) return
+    volumes.push({ source, target, readOnly })
+  }
+
+  function authTargetBase(value: string | undefined, fallback: string, workdir: string): string {
+    if (!value || !isAbsolute(value)) return fallback
+    const target = normalizeMountTarget(value)
+    const root = normalizeMountTarget(workdir)
+    return target === root || target.startsWith(`${root}/`) ? target : fallback
+  }
+
+  function addOpencodeFileReferenceVolumes(volumes: ResolvedWorktreeContainerConfig['volumes'], configPath: string, home: string, containerHome: string): void {
+    let configText = ''
+    try {
+      configText = readFileSync(configPath, 'utf8')
+    } catch {
+      return
+    }
+    const refs = configText.matchAll(/\{file:~\/([^}]+)\}/g)
+    const normalizedHome = normalizeMountTarget(resolve(home))
+    const normalizedContainerHome = normalizeMountTarget(containerHome)
+    for (const ref of refs) {
+      const relativePath = ref[1]
+      if (!relativePath || relativePath.includes('\0') || relativePath.split('/').some((part) => !part || part === '.' || part === '..')) continue
+      const source = resolve(home, relativePath)
+      if (source !== normalizedHome && !source.startsWith(`${normalizedHome}/`)) continue
+      if (!existsSync(source)) continue
+      const realSource = realpathSync(source)
+      const sourceParent = dirname(realSource)
+      const targetParent = normalizeMountTarget(resolve(containerHome, relativePath.split('/').slice(0, -1).join('/')))
+      if (targetParent !== normalizedContainerHome && !targetParent.startsWith(`${normalizedContainerHome}/`)) continue
+      addExistingVolume(volumes, sourceParent, targetParent, true)
+    }
+  }
+
+  function addAgentAuthVolumes(volumes: ResolvedWorktreeContainerConfig['volumes'], env: Record<string, string>, workdir: string): void {
+    const home = homedir()
+    const hostConfigHome = process.env.XDG_CONFIG_HOME || join(home, '.config')
+    const hostDataHome = process.env.XDG_DATA_HOME || join(home, '.local', 'share')
+    const hostCacheHome = process.env.XDG_CACHE_HOME || join(home, '.cache')
+    const containerHome = authTargetBase(env.HOME, `${workdir}/.home`, workdir)
+    const containerConfigHome = authTargetBase(env.XDG_CONFIG_HOME, `${workdir}/.config`, workdir)
+    const containerDataHome = authTargetBase(env.XDG_DATA_HOME, `${workdir}/.local/share`, workdir)
+    const containerCacheHome = authTargetBase(env.XDG_CACHE_HOME, `${workdir}/.cache`, workdir)
+
+    const macOpencodeHome = join(home, 'Library', 'Application Support', 'opencode')
+    const macOpencodeCache = join(home, 'Library', 'Caches', 'opencode')
+    const opencodeConfig = join(hostConfigHome, 'opencode')
+    const opencodeData = join(hostDataHome, 'opencode')
+    const opencodeCache = join(hostCacheHome, 'opencode')
+    if (existsSync(opencodeConfig)) addExistingVolume(volumes, opencodeConfig, `${containerConfigHome}/opencode`, true)
+    addOpencodeFileReferenceVolumes(volumes, join(opencodeConfig, 'opencode.json'), home, containerHome)
+    addExistingVolume(volumes, existsSync(opencodeData) ? opencodeData : macOpencodeHome, `${containerDataHome}/opencode`, false)
+    addExistingVolume(volumes, existsSync(opencodeCache) ? opencodeCache : macOpencodeCache, `${containerCacheHome}/opencode`, false)
+    addExistingVolume(volumes, join(home, '.claude'), `${containerHome}/.claude`, false)
+    addExistingVolume(volumes, join(home, '.codex'), `${containerHome}/.codex`, false)
   }
 
   function encodeLabelValue(value: string): string {
@@ -232,7 +304,16 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
   function resolveContainerConfig(repoRoot: string, worktreePath: string, repoConfig?: RepoContainerConfig): ResolvedWorktreeContainerConfig {
     const workdir = repoConfig?.workdir || '/workspace'
     const worktreeMountTarget = normalizeMountTarget(workdir)
-    const volumes: Array<{ source: string; target: string }> = [
+    const defaultEnv: Record<string, string> = {
+      HOME: `${workdir}/.home`,
+      XDG_CACHE_HOME: `${workdir}/.cache`,
+      XDG_CONFIG_HOME: `${workdir}/.config`,
+      XDG_DATA_HOME: `${workdir}/.local/share`,
+      TMPDIR: WORKTREE_CONTAINER_NATIVE_TMPDIR,
+      BUN_TMPDIR: WORKTREE_CONTAINER_NATIVE_TMPDIR
+    }
+    const mergedEnv: Record<string, string> = { ...defaultEnv, ...(repoConfig?.env || {}) }
+    const volumes: ResolvedWorktreeContainerConfig['volumes'] = [
       { source: worktreePath, target: workdir }
     ]
     const harnessStatusDir = '/tmp/harness-status'
@@ -253,25 +334,14 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
         volumes.push({ source: resolvedSource, target: vol.target })
       }
     }
+    addAgentAuthVolumes(volumes, mergedEnv, workdir)
     const dockerfile = repoConfig?.dockerfile
-    const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(dockerfile, repoConfig?.buildContext || repoRoot, workdir)}` : (repoConfig?.image || 'node:20-alpine')
-
-    /**
-     * Sane default env vars for read-only containers. HOME and XDG dirs live
-     * under the worktree bind mount so they survive restarts and are writable
-     * even when the container root fs is read-only. User-supplied values win.
-     */
-    const defaultEnv: Record<string, string> = {
-      HOME: `${workdir}/.home`,
-      XDG_CACHE_HOME: `${workdir}/.cache`,
-      XDG_CONFIG_HOME: `${workdir}/.config`,
-      XDG_DATA_HOME: `${workdir}/.local/share`
-    }
-    const mergedEnv: Record<string, string> = { ...defaultEnv, ...(repoConfig?.env || {}) }
+    const image = dockerfile ? `tatsu-worktree:${getDockerfileImageId(dockerfile, repoConfig?.buildContext || repoRoot, workdir)}` : (repoConfig?.image || MANAGED_WORKTREE_IMAGE)
 
     return {
       image,
       ...(dockerfile ? { dockerfile } : {}),
+      ...(!dockerfile && !repoConfig?.image ? { managedDockerfile: MANAGED_WORKTREE_DOCKERFILE } : {}),
       ...(dockerfile ? { buildContext: repoConfig?.buildContext || repoRoot } : {}),
       workdir,
       shell: repoConfig?.shell || '/bin/sh',
@@ -283,6 +353,24 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
 
   async function ensureImage(config: ResolvedWorktreeContainerConfig): Promise<void> {
     const image = config.image
+    if (config.managedDockerfile) {
+      const inspectResult = await docker.run(['inspect', '--type=image', image]).catch((err) => ({ stdout: '', stderr: (err as Error).message, exitCode: 1 }))
+      if (inspectResult.exitCode === 0) {
+        log('worktree-containers', `Image ${image} already exists locally`)
+        return
+      }
+      const buildDir = mkdtempSync(join(tmpdir(), 'tatsu-worktree-image-'))
+      try {
+        const dockerfilePath = join(buildDir, 'Dockerfile')
+        writeFileSync(dockerfilePath, config.managedDockerfile)
+        log('worktree-containers', `Building managed worktree image ${image}`)
+        const result = await docker.run(['build', '-f', dockerfilePath, '-t', image, buildDir], { timeoutMs: 600000 })
+        if (result.exitCode !== 0) throw new Error(`Docker build failed: ${sanitizeStderr(result.stderr)}`)
+      } finally {
+        rmSync(buildDir, { recursive: true, force: true })
+      }
+      return
+    }
     if (config.dockerfile) {
       const inspectResult = await docker.run(['inspect', '--type=image', image]).catch((err) => ({ stdout: '', stderr: (err as Error).message, exitCode: 1 }))
       if (inspectResult.exitCode === 0) {
@@ -336,11 +424,12 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       '--read-only',
       '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m',
       '--tmpfs', '/var/tmp:rw,noexec,nosuid,size=256m',
+      '--tmpfs', `${WORKTREE_CONTAINER_NATIVE_TMPDIR}:rw,exec,nosuid,nodev,size=256m,mode=1777`,
       '--label', `tatsu.worktree.id=${validateLabelValue(id)}`,
       '--label', `tatsu.worktree.path=${encodeAndValidateLabelValue(worktreePath)}`,
       '--label', `tatsu.repo.root=${encodeAndValidateLabelValue(repoRoot)}`,
       '-w', config.workdir,
-      ...config.volumes.flatMap((v) => ['--mount', bindMountArg(v.source, v.target)]),
+      ...config.volumes.flatMap((v) => ['--mount', bindMountArg(v.source, v.target, v.readOnly)]),
       ...Object.entries(config.env).flatMap(([k, v]) => ['-e', `${k}=${v}`]),
       ...config.ports.flatMap((p) => ['-p', `127.0.0.1:${p}:${p}`]),
       config.image,

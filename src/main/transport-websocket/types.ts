@@ -18,4 +18,8 @@ export interface WebSocketServerTransportOptions {
   token?: string
   host?: string
   server?: import('http').Server
+  /** Explicit allowed Origin values. If omitted, localhost and private
+   *  IP ranges are allowed by default (defense-in-depth against DNS
+   *  rebinding). Non-browser clients (no Origin header) are always allowed. */
+  allowedOrigins?: string[]
 }

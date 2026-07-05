@@ -1,0 +1,7 @@
+{
+  "container": {
+    "dockerfile": "Dockerfile.tatsu",
+    "workdir": "/workspace",
+    "shell": "/bin/sh"
+  }
+}

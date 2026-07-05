@@ -85,8 +85,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/zsh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
     await fsm.runPending({ id: 'p2', repoRoot: '/repo', branchName: 'test-branch' })
     expect(containers.execInContainer).toHaveBeenCalledWith('c1', 'pnpm install', expect.objectContaining({ shell: '/bin/zsh' }))
@@ -99,8 +100,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockRejectedValue(new Error('Docker fail')),
       execInContainer: vi.fn(),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
     const result = await fsm.runPending({ id: 'p3', repoRoot: '/repo', branchName: 'test-branch' })
     expect(result.outcome).toBe('error')
@@ -116,8 +118,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockRejectedValue(new Error('Docker fail')),
       execInContainer: vi.fn(),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
     await fsm.runPending({ id: 'p-created-path', repoRoot: '/repo', branchName: 'test-branch', agentKind: 'opencode', model: 'gpt-5.5' })
     const pending = store.getSnapshot().state.worktrees.pending.find((p) => p.id === 'p-created-path')
@@ -143,8 +146,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: 'fail', exitCode: 1 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
     const result = await fsm.runPending({ id: 'p4', repoRoot: '/repo', branchName: 'test-branch' })
@@ -163,7 +167,7 @@ describe('WorktreesFSM container integration', () => {
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
       isContainerRunning: vi.fn().mockResolvedValue(false),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
 
@@ -184,7 +188,7 @@ describe('WorktreesFSM container integration', () => {
       execInContainer: vi.fn(),
       isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/recovered', branch: 'recovered', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers as any, {
       getPersistedWorktreeContainers: () => ({
@@ -217,7 +221,7 @@ describe('WorktreesFSM container integration', () => {
       execInContainer: vi.fn(),
       isContainerRunning: vi.fn(() => new Promise<boolean>((resolve) => { resolvers.push(resolve) })),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([
       { path: '/repo/wt/one', branch: 'one', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' },
       { path: '/repo/wt/two', branch: 'two', head: 'def', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }
@@ -244,8 +248,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c-starting', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
     const dispatchSpy = vi.spyOn(store, 'dispatch')
@@ -275,8 +280,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c-cleanup', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn().mockResolvedValue(undefined),
-    }
+      restartContainer: vi.fn(),    }
     onWorktreeCreated.mockImplementation(() => { throw new Error('pane init failed') })
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
@@ -300,8 +306,9 @@ describe('WorktreesFSM container integration', () => {
         opts.onOutput?.('c')
         return { stdout: '', stderr: '', exitCode: 0 }
       }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const fsm = makeFSM(containers as any, { getEnableWorktreeContainers: () => true })
     const resultPromise = fsm.runPending({ id: 'p-log', repoRoot: '/repo', branchName: 'test-branch' })
@@ -325,8 +332,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn(),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     store.dispatch({
       type: 'worktrees/listChanged',
       payload: [{
@@ -359,8 +367,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn(),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     store.dispatch({
       type: 'worktrees/listChanged',
       payload: [{
@@ -393,8 +402,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn(),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     store.dispatch({
       type: 'worktrees/listChanged',
       payload: [{
@@ -424,7 +434,7 @@ describe('WorktreesFSM container integration', () => {
       createForWorktree: vi.fn().mockRejectedValue(new Error('Docker unavailable')),
       execInContainer: vi.fn(),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     store.dispatch({
       type: 'worktrees/listChanged',
       payload: [{
@@ -458,8 +468,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c-ext', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn().mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 }),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     store.dispatch({
       type: 'worktrees/listChanged',
       payload: [{ path: '/repo/wt/ext', branch: 'ext', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }]
@@ -479,8 +490,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c-pending', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn(() => new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => { resolveExec = resolve })),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn(),
-    }
+      restartContainer: vi.fn(),    }
     // refreshList (called by finishCreate) will add the worktree to the
     // list before the containerUpdated starting dispatch runs.
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
@@ -531,8 +543,9 @@ describe('WorktreesFSM container integration', () => {
       ensureImage: vi.fn(),
       createForWorktree: vi.fn().mockResolvedValue({ id: 'c-ext-cleanup', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
       execInContainer: vi.fn(),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
       stopContainer: vi.fn().mockResolvedValue(undefined),
-    }
+      restartContainer: vi.fn(),    }
     mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/ext', branch: 'ext', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
     const originalDispatch = store.dispatch.bind(store)
     vi.spyOn(store, 'dispatch').mockImplementation((event: Parameters<Store['dispatch']>[0]) => {

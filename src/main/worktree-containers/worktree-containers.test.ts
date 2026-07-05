@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, chmodSync, symlinkSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import type { DockerRunner } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
 import { createWorktreeContainers, defaultDockerRunner, sanitizeStderr } from './worktree-containers'
@@ -429,6 +429,118 @@ describe('resolveContainerConfig', () => {
     expect(config.volumes.some(v => v.source === '/tmp/harness-status')).toBe(true)
   })
 
+  it('mounts existing local agent auth directories into default container env paths', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+      mkdirSync(join(home, '.local', 'share', 'opencode'), { recursive: true })
+      mkdirSync(join(home, '.cache', 'opencode'), { recursive: true })
+      mkdirSync(join(home, '.claude'), { recursive: true })
+      mkdirSync(join(home, '.codex'), { recursive: true })
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+      expect(config.volumes).toEqual(expect.arrayContaining([
+        { source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true },
+        { source: join(home, '.local', 'share', 'opencode'), target: '/workspace/.local/share/opencode', readOnly: false },
+        { source: join(home, '.cache', 'opencode'), target: '/workspace/.cache/opencode', readOnly: false },
+        { source: join(home, '.claude'), target: '/workspace/.home/.claude', readOnly: false },
+        { source: join(home, '.codex'), target: '/workspace/.home/.codex', readOnly: false }
+      ]))
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('mounts host directories for opencode home file references under container HOME', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-file-ref-'))
+    try {
+      const opencodeConfig = join(home, '.config', 'opencode')
+      const envDir = join(home, 'dotfiles', 'opencode', '.config', 'opencode', 'envs')
+      mkdirSync(opencodeConfig, { recursive: true })
+      mkdirSync(envDir, { recursive: true })
+      writeFileSync(join(envDir, 'neon'), 'DATABASE_URL=postgres://example')
+      writeFileSync(join(opencodeConfig, 'opencode.json'), JSON.stringify({ env: ['{file:~/dotfiles/opencode/.config/opencode/envs/neon}'] }))
+      vi.stubEnv('HOME', home)
+
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+
+      expect(config.volumes).toContainEqual({
+        source: dirname(realpathSync(join(envDir, 'neon'))),
+        target: '/workspace/.home/dotfiles/opencode/.config/opencode/envs',
+        readOnly: true
+      })
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves symlinked opencode file references to real parent directory', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-symlink-'))
+    try {
+      const opencodeConfig = join(home, '.config', 'opencode')
+      const envDir = join(home, 'dotfiles', 'opencode', '.config', 'opencode', 'envs')
+      const secretsDir = join(home, 'secrets')
+      mkdirSync(opencodeConfig, { recursive: true })
+      mkdirSync(envDir, { recursive: true })
+      mkdirSync(secretsDir, { recursive: true })
+      writeFileSync(join(secretsDir, 'neon'), 'DATABASE_URL=postgres://example')
+      symlinkSync(join(secretsDir, 'neon'), join(envDir, 'neon'))
+      writeFileSync(join(opencodeConfig, 'opencode.json'), JSON.stringify({ env: ['{file:~/dotfiles/opencode/.config/opencode/envs/neon}'] }))
+      vi.stubEnv('HOME', home)
+
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+
+      expect(config.volumes).toContainEqual({
+        source: dirname(realpathSync(join(envDir, 'neon'))),
+        target: '/workspace/.home/dotfiles/opencode/.config/opencode/envs',
+        readOnly: true
+      })
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('does not mount the same macOS Opencode directory with mixed read-write modes', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-mac-'))
+    try {
+      const macOpencode = join(home, 'Library', 'Application Support', 'opencode')
+      mkdirSync(macOpencode, { recursive: true })
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+      const macMounts = config.volumes.filter((v) => v.source === macOpencode)
+      expect(macMounts).toHaveLength(1)
+      expect(macMounts[0]).toEqual({ source: macOpencode, target: '/workspace/.local/share/opencode', readOnly: false })
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps automatic auth mount targets under workdir when repo env redirects XDG paths', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-unsafe-env-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt', {
+        env: { XDG_CONFIG_HOME: '/tmp/escape' }
+      })
+      expect(config.volumes).toContainEqual({ source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true })
+      expect(config.volumes.some((v) => v.target === '/tmp/escape/opencode')).toBe(false)
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('uses managed Tatsu image by default so opencode is present without repo Dockerfile', () => {
+    const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+    expect(config.image).toMatch(/^tatsu-worktree:/)
+    expect(config.managedDockerfile).toContain('npm install -g opencode-ai@latest')
+  })
+
   it('rejects user volumes that target the worktree mount path', () => {
     const containers = createWorktreeContainers(makeRunner())
     expect(() => containers.resolveContainerConfig('/repo', '/repo/wt', {
@@ -467,6 +579,8 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs.some((a: string) => a.includes('type=bind,source=/repo/wt,target=/workspace'))).toBe(true)
     expect(runArgs).toContain('-e')
     expect(runArgs).toContain('KEY=val')
+    expect(runArgs).toContain('TMPDIR=/tmp/.tatsu-native-tmp')
+    expect(runArgs).toContain('BUN_TMPDIR=/tmp/.tatsu-native-tmp')
     expect(runArgs).toContain('-p')
     expect(runArgs).toContain('127.0.0.1:3000:3000')
     expect(runArgs).toContain('-w')
@@ -474,6 +588,7 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs).toContain('--tmpfs')
     expect(runArgs).toContain('/tmp:rw,noexec,nosuid,size=256m')
     expect(runArgs).toContain('/var/tmp:rw,noexec,nosuid,size=256m')
+    expect(runArgs).toContain('/tmp/.tatsu-native-tmp:rw,exec,nosuid,nodev,size=256m,mode=1777')
   })
 
 
@@ -493,6 +608,32 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs).toContain('XDG_CACHE_HOME=/workspace/.cache')
     expect(runArgs).toContain('XDG_CONFIG_HOME=/workspace/.config')
     expect(runArgs).toContain('XDG_DATA_HOME=/workspace/.local/share')
+    expect(runArgs).toContain('TMPDIR=/tmp/.tatsu-native-tmp')
+    expect(runArgs).toContain('BUN_TMPDIR=/tmp/.tatsu-native-tmp')
+  })
+
+  it('passes read-only mode only for read-only auth mounts', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-run-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+      vi.stubEnv('HOME', home)
+      const runner = makeRunner()
+      runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+        if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+        if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+        return { stdout: '', stderr: '', exitCode: 0 }
+      })
+      const containers = createWorktreeContainers(runner)
+      const config = containers.resolveContainerConfig('/repo', '/repo/wt')
+      await containers.createForWorktree('/repo', '/repo/wt', config)
+      const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.config/opencode,readonly`)
+      expect(runArgs).toContain('type=bind,source=/repo/wt,target=/workspace')
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 
   it('user env overrides default HOME and XDG vars', async () => {
@@ -517,6 +658,8 @@ describe('createForWorktree docker run args', () => {
     // non-overridden defaults still present
     expect(runArgs).toContain('XDG_CONFIG_HOME=/workspace/.config')
     expect(runArgs).toContain('XDG_DATA_HOME=/workspace/.local/share')
+    expect(runArgs).toContain('TMPDIR=/tmp/.tatsu-native-tmp')
+    expect(runArgs).toContain('BUN_TMPDIR=/tmp/.tatsu-native-tmp')
   })
 
   it('default env vars respect custom workdir', async () => {
@@ -529,7 +672,7 @@ describe('createForWorktree docker run args', () => {
     expect(config.env.XDG_DATA_HOME).toBe('/app/.local/share')
   })
 
-  it('tmpfs mounts for /tmp and /var/tmp are always present', async () => {
+  it('tmpfs mounts for noexec temp paths and executable native temp path are always present', async () => {
     const runner = makeRunner()
     runner.run = vi.fn().mockImplementation(async (args: string[]) => {
       if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
@@ -546,6 +689,8 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs[tmpfsIdx + 1]).toBe('/tmp:rw,noexec,nosuid,size=256m')
     expect(runArgs[tmpfsIdx + 2]).toBe('--tmpfs')
     expect(runArgs[tmpfsIdx + 3]).toBe('/var/tmp:rw,noexec,nosuid,size=256m')
+    expect(runArgs[tmpfsIdx + 4]).toBe('--tmpfs')
+    expect(runArgs[tmpfsIdx + 5]).toBe('/tmp/.tatsu-native-tmp:rw,exec,nosuid,nodev,size=256m,mode=1777')
   })
 
   it('uses colon-safe bind mount args and shell-independent keepalive', async () => {
