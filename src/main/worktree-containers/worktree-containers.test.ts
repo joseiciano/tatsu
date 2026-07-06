@@ -452,6 +452,48 @@ describe('resolveContainerConfig', () => {
     }
   })
 
+  it('mounts opencode config under both XDG_CONFIG_HOME and HOME paths in container', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-dual-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode', 'agents'), { recursive: true })
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+      expect(config.volumes).toEqual(expect.arrayContaining([
+        { source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true },
+        { source: join(home, '.config', 'opencode'), target: '/workspace/.home/.config/opencode', readOnly: true }
+      ]))
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('does not duplicate opencode config mount when XDG and HOME targets normalize identically', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-nodup-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+      vi.stubEnv('HOME', home)
+      const runner = makeRunner()
+      runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+        if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+        if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+        return { stdout: '', stderr: '', exitCode: 0 }
+      })
+      const containers = createWorktreeContainers(runner)
+      const config = containers.resolveContainerConfig('/repo', '/repo/wt', {
+        env: { HOME: '/workspace/.home', XDG_CONFIG_HOME: '/workspace/.home/.config' }
+      })
+      await containers.createForWorktree('/repo', '/repo/wt', config)
+      const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+      const opencodeBindCount = runArgs.filter((a: string) => a.includes('opencode') && a.includes('type=bind')).length
+      expect(opencodeBindCount).toBe(1)
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('mounts host directories for opencode home file references under container HOME', () => {
     const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-file-ref-'))
     try {
@@ -630,6 +672,30 @@ describe('createForWorktree docker run args', () => {
       const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
       expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.config/opencode,readonly`)
       expect(runArgs).toContain('type=bind,source=/repo/wt,target=/workspace')
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('bind-mounts opencode config to both XDG and HOME paths in docker run args', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-run-dual-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+      vi.stubEnv('HOME', home)
+      const runner = makeRunner()
+      runner.run = vi.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'version') return { stdout: JSON.stringify({ Server: {} }), stderr: '', exitCode: 0 }
+        if (args[0] === 'inspect') return { stdout: '[{}]', stderr: '', exitCode: 0 }
+        if (args[0] === 'run') return { stdout: 'abc\n', stderr: '', exitCode: 0 }
+        return { stdout: '', stderr: '', exitCode: 0 }
+      })
+      const containers = createWorktreeContainers(runner)
+      const config = containers.resolveContainerConfig('/repo', '/repo/wt')
+      await containers.createForWorktree('/repo', '/repo/wt', config)
+      const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
+      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.config/opencode,readonly`)
+      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.home/.config/opencode,readonly`)
     } finally {
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })

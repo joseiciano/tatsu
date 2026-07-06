@@ -242,6 +242,7 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     const opencodeData = join(hostDataHome, 'opencode')
     const opencodeCache = join(hostCacheHome, 'opencode')
     if (existsSync(opencodeConfig)) addExistingVolume(volumes, opencodeConfig, `${containerConfigHome}/opencode`, true)
+    if (existsSync(opencodeConfig)) addExistingVolume(volumes, opencodeConfig, `${containerHome}/.config/opencode`, true)
     addOpencodeFileReferenceVolumes(volumes, join(opencodeConfig, 'opencode.json'), home, containerHome)
     addExistingVolume(volumes, existsSync(opencodeData) ? opencodeData : macOpencodeHome, `${containerDataHome}/opencode`, false)
     addExistingVolume(volumes, existsSync(opencodeCache) ? opencodeCache : macOpencodeCache, `${containerCacheHome}/opencode`, false)
