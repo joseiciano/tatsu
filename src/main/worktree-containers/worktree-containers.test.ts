@@ -468,6 +468,60 @@ describe('resolveContainerConfig', () => {
     }
   })
 
+  it('sets OPENCODE_CONFIG_DIR and OPENCODE_CONFIG when host has opencode.json', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-ocfg-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode', 'agents'), { recursive: true })
+      writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), '{}')
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/workspace/.config/opencode')
+      expect(config.env.OPENCODE_CONFIG).toBe('/workspace/.config/opencode/opencode.json')
+      expect(config.volumes).toEqual(expect.arrayContaining([
+        { source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true },
+        { source: join(home, '.config', 'opencode'), target: '/workspace/.home/.config/opencode', readOnly: true }
+      ]))
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('does not overwrite OPENCODE_CONFIG_DIR or OPENCODE_CONFIG from repo config env', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-ocfg-override-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode', 'agents'), { recursive: true })
+      writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), '{}')
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt', {
+        env: {
+          OPENCODE_CONFIG_DIR: '/custom/config/dir',
+          OPENCODE_CONFIG: '/custom/config/opencode.json'
+        }
+      })
+      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/custom/config/dir')
+      expect(config.env.OPENCODE_CONFIG).toBe('/custom/config/opencode.json')
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('sets OPENCODE_CONFIG to opencode.jsonc when only jsonc exists', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-ocfg-jsonc-'))
+    try {
+      mkdirSync(join(home, '.config', 'opencode', 'agents'), { recursive: true })
+      writeFileSync(join(home, '.config', 'opencode', 'opencode.jsonc'), '{}')
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/workspace/.config/opencode')
+      expect(config.env.OPENCODE_CONFIG).toBe('/workspace/.config/opencode/opencode.jsonc')
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('does not duplicate opencode config mount when XDG and HOME targets normalize identically', async () => {
     const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-nodup-'))
     try {
