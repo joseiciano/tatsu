@@ -615,6 +615,41 @@ describe('resolveContainerConfig', () => {
     }
   })
 
+  it('bind-mounts symlink targets inside opencode config so absolute symlinks resolve in container', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-symlink-targets-'))
+    try {
+      const opencodeConfig = join(home, '.config', 'opencode')
+      mkdirSync(opencodeConfig, { recursive: true })
+
+      const agentsRealTarget = join(home, 'dotfiles', 'global-ai', 'output', 'opencode', 'agents')
+      const jsonRealTarget = join(home, 'dotfiles', 'global-ai', 'output', 'opencode', 'opencode.json')
+      mkdirSync(agentsRealTarget, { recursive: true })
+      mkdirSync(dirname(jsonRealTarget), { recursive: true })
+      writeFileSync(jsonRealTarget, '{}')
+
+      symlinkSync(agentsRealTarget, join(opencodeConfig, 'agents'))
+      symlinkSync(jsonRealTarget, join(opencodeConfig, 'opencode.json'))
+
+      vi.stubEnv('HOME', home)
+      const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
+
+      const resolvedAgents = realpathSync(agentsRealTarget)
+      const agentsVol = config.volumes.find(v => v.target === resolvedAgents)
+      expect(agentsVol).toBeDefined()
+      expect(agentsVol!.source).toBe(resolvedAgents)
+      expect(agentsVol!.readOnly).toBe(true)
+
+      const resolvedJsonDir = dirname(realpathSync(jsonRealTarget))
+      const jsonVol = config.volumes.find(v => v.target === resolvedJsonDir)
+      expect(jsonVol).toBeDefined()
+      expect(jsonVol!.source).toBe(resolvedJsonDir)
+      expect(jsonVol!.readOnly).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('keeps automatic auth mount targets under workdir when repo env redirects XDG paths', () => {
     const home = mkdtempSync(join(tmpdir(), 'tatsu-agent-home-unsafe-env-'))
     try {

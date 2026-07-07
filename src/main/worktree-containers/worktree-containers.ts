@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
 import { basename, dirname, isAbsolute, join, resolve } from 'path'
 import { log } from '../debug'
@@ -202,6 +202,44 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     return target === root || target.startsWith(`${root}/`) ? target : fallback
   }
 
+  function addOpencodeSymlinkTargetVolumes(volumes: ResolvedWorktreeContainerConfig['volumes'], opencodeConfigDir: string): void {
+    let children: string[]
+    try {
+      children = readdirSync(opencodeConfigDir)
+    } catch {
+      return
+    }
+    for (const child of children) {
+      const childPath = join(opencodeConfigDir, child)
+      let isLink: boolean
+      try {
+        const stats = lstatSync(childPath)
+        isLink = stats.isSymbolicLink()
+      } catch {
+        continue
+      }
+      if (!isLink) continue
+      let resolved: string
+      try {
+        resolved = realpathSync(childPath)
+      } catch {
+        continue
+      }
+      if (!existsSync(resolved)) continue
+      let isDir: boolean
+      try {
+        isDir = statSync(resolved).isDirectory()
+      } catch {
+        continue
+      }
+      if (isDir) {
+        addExistingVolume(volumes, resolved, resolved, true)
+      } else {
+        addExistingVolume(volumes, dirname(resolved), dirname(resolved), true)
+      }
+    }
+  }
+
   function addOpencodeFileReferenceVolumes(volumes: ResolvedWorktreeContainerConfig['volumes'], configPath: string, home: string, containerHome: string): void {
     let configText = ''
     try {
@@ -256,6 +294,7 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
           env.OPENCODE_CONFIG = `${containerConfigHome}/opencode/opencode.jsonc`
         }
       }
+      addOpencodeSymlinkTargetVolumes(volumes, opencodeConfig)
     }
     addOpencodeFileReferenceVolumes(volumes, join(opencodeConfig, 'opencode.json'), home, containerHome)
     addExistingVolume(volumes, existsSync(opencodeData) ? opencodeData : macOpencodeHome, `${containerDataHome}/opencode`, false)
