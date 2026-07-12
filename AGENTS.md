@@ -587,7 +587,7 @@ hard dependency on `gh`.
   message. The headless renderer (web client) renders a polled JPEG
   via `RemoteBrowserView` instead of a native overlay — live screencast
   is a follow-up.
-- **Multi-backend (Tier 1)** — 1 Electron instance can connect to 
+- **Multi-backend (Tier 1)** — 1 Electron instance can connect to
   N backends (the in-process local one + remote `harness-server`
   instances), with a button at the end of the sidebar to swap. 
     - Full design is at `plans/tier-1-multi-backend-ux.md`. 
@@ -642,9 +642,9 @@ This is how you are to behave when working on this repo.
    context. Don't create scratch markdown files or design docs. Intentional
    design docs in `plans/` are the exception.
 
-7. **Surface secrets concerns.** Warn the user once if they paste 
-    a token or password that is now in conversation history
-    and should be rotated.
+7. **Surface secrets concerns.** Warn the user once if they paste
+   a token or password that is now in conversation history
+   and should be rotated.
 
 8. **Don't put boxes around screenshots on the marketing site.** No
    `border`, no `border-radius` wrapper, no glow `box-shadow` framing.
