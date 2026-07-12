@@ -5,6 +5,7 @@ import {
   type HiddenRightPanels,
   type RightPanelKey
 } from '../../../shared/state/repo-configs'
+import { ENABLE_COST } from '../../../shared/constants'
 import { PRStatusPanel, MergeLocallyPanel } from '../PRStatusPanel'
 import { BranchCommitsPanel } from '../BranchCommitsPanel'
 import { ChangedFilesPanel } from '../ChangedFilesPanel'
@@ -66,7 +67,9 @@ export function RightColumn({
 }: RightColumnProps): JSX.Element {
   const backend = useBackend()
   const hidden = effectiveHiddenRightPanels(activeRepoConfig)
-  const order = effectiveRightPanelOrder(activeRepoConfig)
+  const order = effectiveRightPanelOrder(activeRepoConfig).filter(
+    (key) => ENABLE_COST || key !== 'cost'
+  )
 
   const handleChangeHidden = (next: HiddenRightPanels): void => {
     if (!activeRepoRoot) return
@@ -146,6 +149,7 @@ export function RightColumn({
           />
         )
       case 'cost':
+        if (!ENABLE_COST) return null
         return <CostPanel key="cost" worktreePath={activeWorktreeId} />
       case 'scratchpad':
         return <ScratchpadPanel key="scratchpad" worktreePath={activeWorktreeId} />

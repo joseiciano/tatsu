@@ -5,8 +5,6 @@ import {
   Trash2,
   LayoutGrid,
   FilePlus,
-  BarChart3,
-  CalendarDays,
   MessageSquareHeart,
   Keyboard,
   Settings as SettingsIcon,
@@ -28,8 +26,6 @@ interface CollapsedSidebarProps {
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
-  onOpenActivity: () => void
-  onOpenMyWeek: () => void
   onOpenHotkeyCheatsheet: () => void
   onOpenSettings: () => void
 }
@@ -43,8 +39,6 @@ export function CollapsedSidebar({
   onOpenCleanup,
   onOpenCommandCenter,
   onOpenNewProject,
-  onOpenActivity,
-  onOpenMyWeek,
   onOpenHotkeyCheatsheet,
   onOpenSettings
 }: CollapsedSidebarProps): JSX.Element {
@@ -180,22 +174,6 @@ export function CollapsedSidebar({
             className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
           >
             <FolderOpen className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Activity" side="right">
-          <button
-            onClick={onOpenActivity}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <BarChart3 className="icon-sm" />
-          </button>
-        </Tooltip>
-        <Tooltip label="My week" side="right">
-          <button
-            onClick={onOpenMyWeek}
-            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
-          >
-            <CalendarDays className="icon-sm" />
           </button>
         </Tooltip>
         <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="right">

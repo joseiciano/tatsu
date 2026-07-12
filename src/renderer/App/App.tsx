@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type Dispatch, type SetStateAction } from 'react'
 import { useSettings, usePrs, useOnboarding, useHooks, useWorktrees, useTerminals, usePanes, useLastActive, useUpdater, useRepoConfigs, useSnooze, useAnnouncements } from '../store'
 import { useBackend } from '../backend'
-import { useTailLineBuffer } from '../hooks/useTailLineBuffer'
 import { useTabHandlers } from '../hooks/useTabHandlers'
 import { useHotkeyHandlers } from '../hooks/useHotkeyHandlers'
 import { useWorktreeHandlers } from '../hooks/useWorktreeHandlers'
@@ -30,9 +29,8 @@ import { Guide } from '../components/Guide'
 import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { AgentIcon } from '../components/AgentIcon'
 import { InterfaceToggle } from '../components/InterfaceToggle'
-import { Activity } from '../components/Activity'
+import { Activity, type ActivityTab } from '../components/Activity'
 import { Cleanup } from '../components/Cleanup'
-import { CommandCenter } from '../components/CommandCenter'
 import { ReviewScreen } from '../components/ReviewScreen'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
@@ -228,8 +226,8 @@ function DesktopApp(): JSX.Element {
   const [showGuide, setShowGuide] = useState(false)
   const [showMyWeek, setShowMyWeek] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
+  const [activityTab, setActivityTab] = useState<ActivityTab>('command')
   const [showCleanup, setShowCleanup] = useState(false)
-  const [showCommandCenter, setShowCommandCenter] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
@@ -250,10 +248,21 @@ function DesktopApp(): JSX.Element {
   // explicit confirmation separately for the onboarding step checkmarks.
   const [themeChosen, setThemeChosen] = useState(false)
   const [agentChosen, setAgentChosen] = useState(false)
-  // Only subscribe to the PTY stream when CommandCenter is open. Without
-  // this gate, a chatty PTY pegs the renderer with re-renders for output
-  // nobody is currently looking at.
-  const tailLines = useTailLineBuffer(showCommandCenter)
+  const showCommandCenter = showActivity && activityTab === 'command'
+  const setShowCommandCenter = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
+    const nextVisible = typeof next === 'function' ? next(showCommandCenter) : next
+    if (nextVisible) {
+      setShowNewWorktree(false)
+      setShowCleanup(false)
+      setShowReview(false)
+      setReportIssueState(null)
+      setShowNewProject(false)
+      setActivityTab('command')
+      setShowActivity(true)
+    } else if (showCommandCenter) {
+      setShowActivity(false)
+    }
+  }, [showCommandCenter])
   const settings = useSettings()
   const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultAgent } = settings
   // Apply the persisted UI scale to the root html element so every
@@ -401,6 +410,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     const openReport = (detail: OpenReportIssueDetail): void => {
       setShowSettings(false)
       setShowHotkeyCheatsheet(false)
+      setShowCommandCenter(false)
       setReportIssueState(detail)
     }
     const cleanupMenu = backend.onOpenReportIssue(() => openReport({}))
@@ -583,6 +593,25 @@ const setQuestStep = useCallback((next: QuestStep) => {
   const handleUpdateRestart = useCallback(() => {
     void backend.quitAndInstall()
   }, [])
+
+  const closeFullscreenViews = useCallback(() => {
+    setShowNewWorktree(false)
+    setShowActivity(false)
+    setShowCleanup(false)
+    setShowReview(false)
+    setReportIssueState(null)
+    setShowNewProject(false)
+  }, [])
+
+  const toggleCommandCenter = useCallback(() => {
+    if (showCommandCenter) {
+      setShowActivity(false)
+    } else {
+      closeFullscreenViews()
+      setActivityTab('command')
+      setShowActivity(true)
+    }
+  }, [showCommandCenter, closeFullscreenViews])
 
   // All worktree + repo + pending-creation handlers. Also subscribes to
   // external-create events from the harness-control MCP and routes focus
@@ -1328,21 +1357,32 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onDeleteWorktree={handleDeleteWorktree}
             onRefresh={handleRefreshWorktrees}
             repoRoots={repoRoots}
-            onAddRepo={handleAddRepo}
-            onRemoveRepo={handleRemoveRepo}
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenAddBackend={() => setShowAddBackend(true)}
-            onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
-            onOpenActivity={() => setShowActivity(true)}
-            onOpenCleanup={() => setShowCleanup(true)}
-            onOpenCommandCenter={() => {
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setShowCommandCenter(true)
+            onAddRepo={() => {
+              setShowCommandCenter(false)
+              handleAddRepo()
             }}
-            onOpenNewProject={() => setShowNewProject(true)}
-            onOpenMyWeek={() => setShowMyWeek(true)}
+            onRemoveRepo={handleRemoveRepo}
+            onOpenSettings={() => {
+              setShowCommandCenter(false)
+              setShowSettings(true)
+            }}
+            onOpenAddBackend={() => {
+              setShowCommandCenter(false)
+              setShowAddBackend(true)
+            }}
+            onOpenHotkeyCheatsheet={() => {
+              setShowCommandCenter(false)
+              setShowHotkeyCheatsheet(true)
+            }}
+            onOpenCleanup={() => {
+              closeFullscreenViews()
+              setShowCleanup(true)
+            }}
+            onOpenCommandCenter={toggleCommandCenter}
+            onOpenNewProject={() => {
+              closeFullscreenViews()
+              setShowNewProject(true)
+            }}
             width={sidebarWidth}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}
@@ -1357,23 +1397,31 @@ const setQuestStep = useCallback((next: QuestStep) => {
         {!singleScreenMode && !sidebarVisible && (
           <div className="mt-10 shrink-0 flex"><CollapsedSidebar
             onExpand={() => setSidebarVisible(true)}
-            onAddRepo={handleAddRepo}
+            onAddRepo={() => {
+              setShowCommandCenter(false)
+              handleAddRepo()
+            }}
             onNewWorktree={() => {
               setNewWorktreeRepo(undefined)
               setShowNewWorktree(true)
             }}
-            onOpenCleanup={() => setShowCleanup(true)}
-            onOpenCommandCenter={() => {
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setShowCommandCenter(true)
+            onOpenCleanup={() => {
+              closeFullscreenViews()
+              setShowCleanup(true)
             }}
-            onOpenNewProject={() => setShowNewProject(true)}
-            onOpenActivity={() => setShowActivity(true)}
-            onOpenMyWeek={() => setShowMyWeek(true)}
-            onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenCommandCenter={toggleCommandCenter}
+            onOpenNewProject={() => {
+              closeFullscreenViews()
+              setShowNewProject(true)
+            }}
+            onOpenHotkeyCheatsheet={() => {
+              setShowCommandCenter(false)
+              setShowHotkeyCheatsheet(true)
+            }}
+            onOpenSettings={() => {
+              setShowCommandCenter(false)
+              setShowSettings(true)
+            }}
           /></div>
         )}
         {!singleScreenMode && sidebarVisible && (
@@ -1457,13 +1505,20 @@ const setQuestStep = useCallback((next: QuestStep) => {
           <div className="flex-1 min-w-0 flex">
             <Activity
               onClose={() => setShowActivity(false)}
-              onOpenMyWeek={() => {
-                setShowActivity(false)
-                setShowMyWeek(true)
-              }}
               worktrees={worktrees}
+              worktreeStatuses={worktreeStatuses}
+              worktreePendingTools={worktreePendingTools}
               prStatuses={prStatuses}
               mergedPaths={mergedPaths}
+              lastActive={lastActive}
+              tab={activityTab}
+              onTabChange={setActivityTab}
+              onSelectWorktree={(path) => {
+                setShowNewWorktree(false)
+                setShowActivity(false)
+                setShowCleanup(false)
+                setActiveWorktreeId(path)
+              }}
             />
           </div>
         )}
@@ -1478,26 +1533,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
               onBulkDelete={handleBulkDeleteWorktrees}
             />
           </div>
-        )}
-        {showCommandCenter && (
-          <CommandCenter
-            worktrees={worktrees}
-            worktreeStatuses={worktreeStatuses}
-            worktreePendingTools={worktreePendingTools}
-            prStatuses={prStatuses}
-            mergedPaths={mergedPaths}
-            lastActive={lastActive}
-            tailLines={tailLines}
-            terminalTabs={terminalTabs}
-            onClose={() => setShowCommandCenter(false)}
-            onSelect={(path) => {
-              setShowCommandCenter(false)
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setActiveWorktreeId(path)
-            }}
-          />
         )}
         {showReview && activeWorktreeId && (() => {
           const reviewWt = worktrees.find((w) => w.path === activeWorktreeId)

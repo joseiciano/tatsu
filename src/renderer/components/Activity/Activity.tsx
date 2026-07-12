@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Flame, Clock, Zap, GitBranch, GitMerge, RefreshCw, CalendarDays } from 'lucide-react'
+import { ArrowLeft, Flame, Clock, Zap, GitBranch, GitMerge, RefreshCw } from 'lucide-react'
 import type {
   Worktree,
+  PtyStatus,
+  PendingTool,
   ActivityLog,
   ActivityEvent,
   ActivityRecord,
@@ -9,15 +11,23 @@ import type {
   PRStatus
 } from '../../types'
 import { isPRMerged } from '../../../shared/state/prs'
+import { ENABLE_COST, ENABLE_MY_WEEK, ENABLE_TIMELINE } from '../../../shared/constants'
 import { useBackend } from '../../backend'
 import { ActivityCosts } from '../ActivityCosts'
+import { WeeklyWrappedContent } from '../WeeklyWrappedScreen'
+import { CommandCenter } from '../CommandCenter'
 
 interface ActivityProps {
   onClose: () => void
-  onOpenMyWeek: () => void
   worktrees: Worktree[]
+  worktreeStatuses: Record<string, PtyStatus>
+  worktreePendingTools: Record<string, PendingTool | null>
   prStatuses?: Record<string, PRStatus | null>
   mergedPaths?: Record<string, boolean>
+  lastActive: Record<string, number>
+  tab: ActivityTab
+  onTabChange: (tab: ActivityTab) => void
+  onSelectWorktree: (worktreePath: string) => void
 }
 
 type Range = '1h' | '6h' | '24h' | '7d' | '30d' | 'all'
@@ -101,11 +111,36 @@ function isLiveMerged(
   return !!mergedPaths?.[path] || isPRMerged(prStatuses?.[path])
 }
 
-type ActivityTab = 'timeline' | 'costs'
+export type ActivityTab = 'command' | 'timeline' | 'costs' | 'myweek'
 
-export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedPaths }: ActivityProps): JSX.Element {
+const ACTIVITY_TABS: { id: ActivityTab; label: string }[] = [
+  { id: 'command', label: 'Command Center' },
+  ...(ENABLE_TIMELINE ? [{ id: 'timeline' as const, label: 'Timeline' }] : []),
+  ...(ENABLE_COST ? [{ id: 'costs' as const, label: 'Costs' }] : []),
+  ...(ENABLE_MY_WEEK ? [{ id: 'myweek' as const, label: 'My week' }] : [])
+]
+
+function enabledActivityTab(tab: ActivityTab): ActivityTab {
+  if (tab === 'timeline') return ENABLE_TIMELINE ? tab : 'command'
+  if (tab === 'costs') return ENABLE_COST ? tab : 'command'
+  if (tab === 'myweek') return ENABLE_MY_WEEK ? tab : 'command'
+  return tab
+}
+
+export function Activity({
+  onClose,
+  worktrees,
+  worktreeStatuses,
+  worktreePendingTools,
+  prStatuses = {},
+  mergedPaths = {},
+  lastActive,
+  tab,
+  onTabChange,
+  onSelectWorktree
+}: ActivityProps): JSX.Element {
   const backend = useBackend()
-  const [tab, setTab] = useState<ActivityTab>('timeline')
+  const activeTab = enabledActivityTab(tab)
   const [log, setLog] = useState<ActivityLog>({})
   const [range, setRange] = useState<Range>('24h')
   const [now, setNow] = useState(Date.now())
@@ -266,17 +301,9 @@ export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedP
           Back
         </button>
         <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 text-sm font-medium text-fg pointer-events-none">
-          Activity
+          Command Center
         </span>
         <div className="no-drag absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <button
-            onClick={onOpenMyWeek}
-            className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted hover:text-fg-bright hover:bg-surface rounded transition-colors cursor-pointer"
-            title="Weekly review"
-          >
-            <CalendarDays className="icon-sm" />
-            My week
-          </button>
           <button
             onClick={loadLog}
             className="text-muted hover:text-fg-bright transition-colors cursor-pointer p-1"
@@ -294,15 +321,12 @@ export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedP
       </div>
 
       <div className="shrink-0 border-b border-border flex items-center gap-1 px-4 bg-panel">
-        {([
-          ['timeline', 'Timeline'],
-          ['costs', 'Costs']
-        ] as const).map(([id, label]) => (
+          {ACTIVITY_TABS.map(({ id, label }) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => onTabChange(id)}
             className={`px-3 py-2 text-xs transition-colors cursor-pointer border-b-2 -mb-px ${
-              tab === id
+              activeTab === id
                 ? 'text-fg-bright border-accent'
                 : 'text-muted hover:text-fg border-transparent'
             }`}
@@ -313,8 +337,22 @@ export function Activity({ onClose, onOpenMyWeek, worktrees, prStatuses, mergedP
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {tab === 'costs' && <ActivityCosts />}
-        {tab === 'timeline' && (
+        {activeTab === 'command' && (
+          <CommandCenter
+            embedded
+            onClose={onClose}
+            worktrees={worktrees}
+            worktreeStatuses={worktreeStatuses}
+            worktreePendingTools={worktreePendingTools}
+            prStatuses={prStatuses}
+            mergedPaths={mergedPaths}
+            lastActive={lastActive}
+            onSelect={onSelectWorktree}
+          />
+        )}
+        {ENABLE_COST && activeTab === 'costs' && <ActivityCosts />}
+        {ENABLE_MY_WEEK && activeTab === 'myweek' && <WeeklyWrappedContent />}
+        {ENABLE_TIMELINE && activeTab === 'timeline' && (
         <div className="max-w-5xl mx-auto px-8 py-8">
           {/* Range selector */}
           <div className="flex items-center gap-2 mb-6">
