@@ -99,6 +99,7 @@ export interface JsonClaudeChatEntry {
     | 'rate-limit-warning'
     | 'rate-limit-error'
     | 'auth-failure'
+    | 'protocol-version'
   /** For kind === 'error'. Human-readable detail (exitReason, rate-limit
    *  retry-at timestamp, original auth error string, etc.). */
   errorMessage?: string
@@ -357,6 +358,10 @@ export type JsonClaudeEvent =
   | {
       type: 'jsonClaude/userEntriesUnqueued'
       payload: { sessionId: string }
+    }
+  | {
+      type: 'jsonClaude/userEntryUnqueued'
+      payload: { sessionId: string; entryId: string }
     }
   | {
       type: 'jsonClaude/entryRemoved'

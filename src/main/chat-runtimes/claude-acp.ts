@@ -93,7 +93,12 @@ export function resolveClaudeAgentSdkExecutablePath(opts: {
   }
 }
 
-/** Real ACP runtime using @anthropic-ai/claude-agent-sdk.
+/** Claude-specific ACP runtime built on @anthropic-ai/claude-agent-sdk.
+ *
+ *  This is the SDK transport, NOT generic ACP stdio. Generic ACP stdio for
+ *  OpenCode/Codex lives in ./acp-stdio.ts (transport) + ./acp-stdio-client.ts
+ *  (NDJSON JSON-RPC client). Despite the name, ClaudeAcpRuntime does not speak
+ *  the ACP stdio wire protocol — it drives the SDK's query() stream.
  *
  *  Keeps renderer contract on existing `jsonClaude:*` events while swapping
  *  subprocess/jsonl plumbing for SDK query() stream. `persistSession: false` is
