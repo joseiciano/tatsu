@@ -4,11 +4,14 @@ import type {
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
-/** Main-process chat runtime abstraction. Current implementation:
- *  - ClaudeAcpRuntime (uses @anthropic-ai/claude-agent-sdk)
+/** Main-process chat runtime abstraction. Current implementations:
+ *  - ClaudeSdkRuntime (ClaudeAcpRuntime): @anthropic-ai/claude-agent-sdk transport
+ *  - AcpStdioRuntime: shared ACP stdio JSON-RPC transport (OpenCode/Codex)
  *
  *  Renderer still talks to same `jsonClaude:*` backend API; registry keeps
- *  IPC surface stable even though ACP is only registered runtime today. */
+ *  IPC surface stable. Despite the name, ClaudeAcpRuntime is NOT generic ACP
+ *  stdio — it drives the SDK's query() stream. Generic ACP stdio is the
+ *  AcpStdioRuntime + AcpStdioClient pair. */
 export interface ChatRuntime {
   /** Returns true if this runtime currently owns a live session. */
   hasSession(sessionId: string): boolean

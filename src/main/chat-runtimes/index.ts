@@ -6,6 +6,15 @@ import type {
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
+export type { ChatRuntime } from './types'
+export { ClaudeAcpRuntime, resolveClaudeAgentSdkExecutablePath } from './claude-acp'
+export {
+  AcpStdioRuntime,
+  defaultAcpStdioCapabilities,
+  type AcpStdioRuntimeOptions
+} from './acp-stdio'
+export { AcpStdioClient, type AcpStdioClientOptions } from './acp-stdio-client'
+
 /** Main-process registry that holds chat runtimes and routes jsonClaude
  *  operations to the correct implementation. Runtimes are keyed by agent
  *  kind; routing per session reads the session's `agentKind` from the
