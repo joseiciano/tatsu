@@ -8,6 +8,8 @@ function makeSession(
   return {
     sessionId: 's1',
     worktreePath: '/tmp/wt',
+    agentKind: 'claude',
+    runtimeId: 'claude',
     state: 'running',
     exitCode: null,
     exitReason: null,

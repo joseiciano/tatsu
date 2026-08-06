@@ -93,7 +93,8 @@ export function useTabHandlers({
           id: sessionId,
           type: 'json-claude',
           label: 'Chat',
-          sessionId
+          sessionId,
+          agentKind: 'claude'
         },
         paneId
       )

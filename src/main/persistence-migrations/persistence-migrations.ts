@@ -194,6 +194,33 @@ export const migrations: Migration[] = [
       c.themeDark = legacy
     }
     delete c.theme
+  },
+
+  // v7 → v8: backfill `agentKind: 'claude'` on json-claude tabs that
+  // predate the agent-kind metadata. A reopened chat tab must route to the
+  // Claude runtime; without a kind the registry can't resolve it. Walks the
+  // nested pane tree (leaf + split) since v4→v5 converted panes to trees.
+  // Idempotent — tabs already carrying a kind are left untouched.
+  (c) => {
+    const panes = c.panes as Record<string, Record<string, PersistedPaneNode>> | undefined
+    if (!panes || typeof panes !== 'object') return
+    const backfillTab = (tab: PersistedTab): void => {
+      if (tab.type === 'json-claude' && !tab.agentKind) tab.agentKind = 'claude'
+    }
+    const walk = (node: PersistedPaneNode): void => {
+      if (node.type === 'split') {
+        node.children.forEach(walk)
+        return
+      }
+      if (Array.isArray(node.tabs)) node.tabs.forEach(backfillTab)
+    }
+    for (const byWt of Object.values(panes)) {
+      if (!byWt || typeof byWt !== 'object') continue
+      for (const paneTree of Object.values(byWt)) {
+        if (!paneTree || typeof paneTree !== 'object' || !('type' in paneTree)) continue
+        walk(paneTree as PersistedPaneNode)
+      }
+    }
   }
 ]
 

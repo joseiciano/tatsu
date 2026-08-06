@@ -490,7 +490,7 @@ const jsonClaudeStatusDeriver = new JsonClaudeStatusDeriver(store)
 jsonClaudeStatusDeriver.start()
 
 const chatRuntimeRegistry = new ChatRuntimeRegistry(store)
-chatRuntimeRegistry.register('acp', new ClaudeAcpRuntime(store))
+chatRuntimeRegistry.register('claude', new ClaudeAcpRuntime(store))
 
 /** Resolve the GitHub login of whoever owns the configured token, and
  *  dispatch it so the sidebar can route PRs they didn't author into the
@@ -755,20 +755,53 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
   return undefined
 }
 
+/** Look up a json-claude tab's persisted `agentKind` by sessionId (which
+ *  is also the tab id for json-claude tabs). Used when a fresh json-claude
+ *  session starts before its slice entry exists, so the registry can route
+ *  to the right runtime. */
+function findJsonClaudeTabAgentKind(sessionId: string): AgentKind | undefined {
+  const panes = store.getSnapshot().state.terminals.panes
+  for (const tree of Object.values(panes)) {
+    for (const leaf of getLeaves(tree)) {
+      for (const tab of leaf.tabs) {
+        if (tab.id === sessionId && tab.type === 'json-claude') {
+          return tab.agentKind
+        }
+      }
+    }
+  }
+  return undefined
+}
+
 /** Single source of truth for "spin up the json-claude subprocess for
  *  this sessionId". Used by the jsonClaude:start IPC handler, the
  *  panesFSM's startJsonClaudeWithPrompt + startJsonClaude options
  *  (kickoff + wake), so all paths produce the same dispatch + seed +
  *  create order. Idempotent — chat runtime start short-circuits
  *  if the instance is already running. */
-function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
-  if (chatRuntimeRegistry.hasSession(sessionId)) return
-  const capabilities = chatRuntimeRegistry.getRuntimeById('acp').getCapabilities(sessionId)
+function startJsonClaudeSession(
+  sessionId: string,
+  worktreePath: string,
+  agentKind?: AgentKind
+): void {
+  const existing = store.getSnapshot().state.jsonClaude.sessions[sessionId]
+  const kind =
+    existing?.agentKind ?? agentKind ?? findJsonClaudeTabAgentKind(sessionId)
+  if (!kind) {
+    throw new Error(`No agent kind for json-claude session ${sessionId}`)
+  }
+  // Route explicitly by agent kind for the first start — there is no slice
+  // entry yet to route on, and hasSession()/capabilities need a runtime.
+  const runtime = chatRuntimeRegistry.getRuntimeById(kind)
+  if (runtime.hasSession(sessionId)) return
+  const capabilities = runtime.getCapabilities(sessionId)
   store.dispatch({
     type: 'jsonClaude/sessionStarted',
     payload: {
       sessionId,
       worktreePath,
+      agentKind: kind,
+      runtimeId: kind,
       defaultPermissionMode:
         store.getSnapshot().state.settings.jsonModeDefaultPermissionMode,
       capabilities

@@ -68,4 +68,50 @@ describe('mergeWireSnapshot', () => {
     const merged = mergeWireSnapshot(wire)
     expect(merged.settings.customThemes).toEqual([])
   })
+
+  it('preserves a legacy jsonClaude session identity missing agentKind/runtimeId', () => {
+    // An older server ships a jsonClaude slice whose sessions predate the
+    // agentKind/runtimeId fields. mergeWireSnapshot must preserve the
+    // session by reference (identity) rather than clobbering it, so the
+    // reducer's re-attach path can backfill the kind on the next
+    // sessionStarted.
+    const legacySession = {
+      sessionId: 'legacy-1',
+      worktreePath: '/wt/a',
+      state: 'exited' as const,
+      exitCode: 0,
+      exitReason: 'clean',
+      entries: [],
+      entriesHydrated: true,
+      busy: false,
+      permissionMode: 'default' as const,
+      slashCommands: [],
+      autoApprovedDecisions: {},
+      sessionToolApprovals: [],
+      sessionAllowedDecisions: {},
+      capabilities: {
+        canInterrupt: true,
+        canRewind: false,
+        canSetPermissionMode: false,
+        canApproveTools: false,
+        canResume: true,
+        canOpenAuthLogin: false,
+        hasSlashCommands: false,
+        hasCostTracking: false
+      }
+      // no agentKind / runtimeId — pre-metadata wire shape
+    }
+    const wire: WireSnapshotState = {
+      jsonClaude: {
+        // Cast through never: an older server's session legitimately
+        // lacks the new fields, which the typed WireSnapshotState can't
+        // express. The merge must still preserve the object identity.
+        sessions: { 'legacy-1': legacySession as never },
+        pendingApprovals: {}
+      }
+    }
+    const merged = mergeWireSnapshot(wire)
+    // Identity preserved: same session object reference, no throw.
+    expect(merged.jsonClaude.sessions['legacy-1']).toBe(legacySession)
+  })
 })

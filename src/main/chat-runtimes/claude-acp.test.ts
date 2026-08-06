@@ -849,7 +849,7 @@ describe('ClaudeAcpRuntime', () => {
     it('uses stored permission mode when creating ACP query options', () => {
       store.dispatch({
         type: 'jsonClaude/sessionStarted',
-        payload: { sessionId: 's1', worktreePath: '/wt', defaultPermissionMode: 'acceptEdits' }
+        payload: { sessionId: 's1', worktreePath: '/wt', agentKind: 'claude', runtimeId: 'claude', defaultPermissionMode: 'acceptEdits' }
       })
       runtime.start('s1', '/wt')
       runtime.send('s1', 'hello')
