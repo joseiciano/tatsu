@@ -12,12 +12,9 @@ component; the main process gains per-agent runtimes behind the registry,
 and session/tab metadata generalizes so the registry routes per session
 by agent kind instead of hard-coding Claude.
 
-The Claude path today is the reference implementation and stays mostly
-as-is. The current runtime is named `ClaudeAcpRuntime` but it drives
-`@anthropic-ai/claude-agent-sdk`'s `query()` loop, not a generic ACP
-stdio transport. This plan avoids overloading the term "ACP" — Claude
-keeps its SDK transport; OpenCode and Codex share a reusable ACP stdio
-runtime client.
+Claude keeps its existing Agent SDK transport. Despite its name,
+`ClaudeAcpRuntime` is not generic ACP stdio. OpenCode, Codex, and future
+ACP-compatible agents share a generic ACP stdio runtime.
 
 ## Current code facts (anchor for the plan)
 
