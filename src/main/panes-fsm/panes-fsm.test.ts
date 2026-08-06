@@ -167,6 +167,7 @@ describe('PanesFSM.splitPane', () => {
     const cloned = newPane!.tabs[0]
     expect(cloned.type).toBe('json-claude')
     expect('runtime' in cloned).toBe(false)
+    expect(cloned.agentKind).toBe('claude')
   })
 
   it('wraps the source pane in a split node containing both children', () => {
@@ -225,6 +226,7 @@ describe('PanesFSM.ensureInitialized', () => {
     const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
     expect(chatTab).toBeDefined()
     expect('runtime' in chatTab!).toBe(false)
+    expect(chatTab!.agentKind).toBe('claude')
   })
 })
 
@@ -252,6 +254,7 @@ describe('PanesFSM.convertTabType', () => {
     const leaf = tree as PaneLeaf
     const tab = leaf.tabs[0]
     expect(tab.type).toBe('json-claude')
+    expect(tab.agentKind).toBe('claude')
     expect('runtime' in tab).toBe(false)
   })
 

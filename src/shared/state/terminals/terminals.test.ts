@@ -560,7 +560,8 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const leaves = getLeaves(next.panes['/wt/a'])
@@ -569,6 +570,7 @@ describe('terminalsReducer', () => {
     expect(tab.id).toBe('sess-1')
     expect(tab.sessionId).toBe('sess-1')
     expect(tab.label).toBe('Chat')
+    expect(tab.agentKind).toBe('claude')
     expect(leaves[0].activeTabId).toBe('sess-1')
     // Other tabs untouched.
     expect(leaves[0].tabs[1].id).toBe('shell-1')
@@ -589,7 +591,8 @@ describe('terminalsReducer', () => {
         tabId: 'sess-1',
         newId: 'agent-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     const leaves = getLeaves(next.panes['/wt/a'])
@@ -617,7 +620,8 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
@@ -834,7 +838,8 @@ describe('terminalsReducer', () => {
         tabId: 't1',
         newId: 't1-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     expect(noWt).toBe(start)
@@ -845,7 +850,8 @@ describe('terminalsReducer', () => {
         tabId: 't-missing',
         newId: 't-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     expect(noTab).toBe(start)
@@ -868,11 +874,13 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.type).toBe('json-claude')
+    expect(tab.agentKind).toBe('claude')
     expect('runtime' in tab).toBe(false)
   })
 
@@ -893,7 +901,8 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
@@ -918,7 +927,8 @@ describe('terminalsReducer', () => {
         tabId: 'sess-1',
         newId: 'agent-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]

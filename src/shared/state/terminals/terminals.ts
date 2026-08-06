@@ -248,7 +248,8 @@ export function terminalsReducer(
       return changed ? { ...state, sessions: nextSessions } : state
     }
     case 'terminals/tabTypeChanged': {
-      const { worktreePath, tabId, newId, newType, newLabel } = event.payload
+      const { worktreePath, tabId, newId, newType, newLabel, agentKind } =
+        event.payload
       const tree = state.panes[worktreePath]
       if (!tree) return state
       let changed = false
@@ -268,13 +269,14 @@ export function terminalsReducer(
               type: 'json-claude' as const,
               label: newLabel,
               sessionId,
+              agentKind,
               mode: 'awake' as const
             }
           }
           return {
             id: newId,
             type: 'agent' as const,
-            agentKind: 'claude' as const,
+            agentKind,
             label: newLabel,
             sessionId
           }

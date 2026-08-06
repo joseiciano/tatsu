@@ -246,6 +246,7 @@ export class PanesFSM {
         type: 'json-claude',
         label: 'Chat',
         sessionId,
+        agentKind,
         mode: 'awake',
         model
       }
@@ -452,9 +453,13 @@ export class PanesFSM {
         ? sessionId
         : `agent-${wtPath.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`
     const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName('claude')
+    // Preserve the agent kind so the destination tab routes to the same
+    // runtime. json-claude tabs are Claude-only until OpenCode/Codex
+    // runtimes land, so this is effectively 'claude'.
+    const agentKind = tab.agentKind ?? 'claude'
     this.store.dispatch({
       type: 'terminals/tabTypeChanged',
-      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel }
+      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel, agentKind }
     })
     this.opts.persist(this.buildPersistPayload())
   }
@@ -605,6 +610,7 @@ export class PanesFSM {
         type: 'json-claude',
         label: sourceActive!.label,
         sessionId,
+        agentKind: sourceActive!.agentKind ?? 'claude',
         mode: 'awake',
         model: sourceActive!.model
       }

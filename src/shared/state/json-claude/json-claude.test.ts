@@ -14,7 +14,12 @@ const SID = 'session-1'
 function seedSession(state: JsonClaudeState): JsonClaudeState {
   return jsonClaudeReducer(state, {
     type: 'jsonClaude/sessionStarted',
-    payload: { sessionId: SID, worktreePath: WT }
+    payload: {
+      sessionId: SID,
+      worktreePath: WT,
+      agentKind: 'claude',
+      runtimeId: 'claude'
+    }
   })
 }
 
@@ -28,6 +33,30 @@ describe('jsonClaudeReducer', () => {
     expect(next.sessions[SID].busy).toBe(false)
     expect(next.sessions[SID].capabilities).toEqual(defaultAcpCapabilities())
     expect('runtime' in next.sessions[SID]).toBe(false)
+  })
+
+  it('sessionStarted seeds agentKind + runtimeId on a fresh session', () => {
+    const next = seedSession(initialJsonClaude)
+    expect(next.sessions[SID].agentKind).toBe('claude')
+    expect(next.sessions[SID].runtimeId).toBe('claude')
+  })
+
+  it('sessionStarted preserves agentKind + runtimeId across re-attach', () => {
+    let state = seedSession(initialJsonClaude)
+    expect(state.sessions[SID].agentKind).toBe('claude')
+    // Re-attach with a (theoretical) different payload — the existing
+    // session's kind must win so routing stays stable.
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/sessionStarted',
+      payload: {
+        sessionId: SID,
+        worktreePath: WT,
+        agentKind: 'opencode',
+        runtimeId: 'opencode'
+      }
+    })
+    expect(state.sessions[SID].agentKind).toBe('claude')
+    expect(state.sessions[SID].runtimeId).toBe('claude')
   })
 
   it('sessionStateChanged updates state + exit info', () => {
@@ -864,7 +893,7 @@ describe('jsonClaudeReducer', () => {
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId: SID, worktreePath: WT }
+      payload: { sessionId: SID, worktreePath: WT, agentKind: 'claude', runtimeId: 'claude' }
     })
     expect(state.sessions[SID].slashCommands).toEqual(['clear', 'review'])
   })
@@ -1145,7 +1174,7 @@ describe('jsonClaudeReducer', () => {
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId: SID, worktreePath: WT }
+      payload: { sessionId: SID, worktreePath: WT, agentKind: 'claude', runtimeId: 'claude' }
     })
     expect(state.sessions[SID].sessionToolApprovals).toEqual(['Edit', 'Write'])
     expect(state.sessions[SID].sessionAllowedDecisions['toolu_1']).toEqual({
@@ -1300,7 +1329,12 @@ describe('stripJsonClaudeEntries', () => {
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId: 'session-2', worktreePath: '/tmp/wt2' }
+      payload: {
+        sessionId: 'session-2',
+        worktreePath: '/tmp/wt2',
+        agentKind: 'claude',
+        runtimeId: 'claude'
+      }
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/entryAppended',
@@ -1333,6 +1367,8 @@ describe('stripJsonClaudeEntries', () => {
     expect(stripped.sessions[SID].sessionToolApprovals).toEqual(['Edit'])
     expect(stripped.sessions[SID].permissionMode).toBe('default')
     expect(stripped.sessions[SID].worktreePath).toBe(WT)
+    expect(stripped.sessions[SID].agentKind).toBe('claude')
+    expect(stripped.sessions[SID].runtimeId).toBe('claude')
   })
 
   it('preserves pendingApprovals untouched', () => {

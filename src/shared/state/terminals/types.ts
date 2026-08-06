@@ -202,6 +202,9 @@ export type TerminalsEvent =
         newId: string
         newType: 'agent' | 'json-claude'
         newLabel: string
+        /** Agent kind carried onto the destination tab so a converted
+         *  json-claude tab still routes to the right runtime. */
+        agentKind: AgentKind
       }
     }
   | {

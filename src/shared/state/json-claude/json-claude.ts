@@ -31,6 +31,11 @@ export function jsonClaudeReducer(
         existing?.capabilities ??
         event.payload.capabilities ??
         defaultAcpCapabilities()
+      // Preserve agent identity on re-attach so routing stays stable even
+      // if a start payload were ever mislabeled. Fresh sessions take the
+      // kind/id the runtime requested.
+      const agentKind = existing?.agentKind ?? event.payload.agentKind
+      const runtimeId = existing?.runtimeId ?? event.payload.runtimeId
       return {
         ...state,
         sessions: {
@@ -38,6 +43,8 @@ export function jsonClaudeReducer(
           [sessionId]: {
             sessionId,
             worktreePath,
+            agentKind,
+            runtimeId,
             state: 'connecting',
             exitCode: null,
             exitReason: null,
