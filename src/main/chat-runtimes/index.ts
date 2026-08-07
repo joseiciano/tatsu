@@ -14,6 +14,13 @@ export {
   type AcpStdioRuntimeOptions
 } from './acp-stdio'
 export { AcpStdioClient, type AcpStdioClientOptions } from './acp-stdio-client'
+export {
+  BundledRuntimeResolver,
+  codexPlatformPackageId,
+  codexTargetTriple,
+  type RuntimeLaunchConfig,
+  type BundledRuntimeResolverOptions
+} from './runtime-path-resolver'
 
 /** Main-process registry that holds chat runtimes and routes jsonClaude
  *  operations to the correct implementation. Runtimes are keyed by agent
