@@ -195,6 +195,9 @@ jobs:
       - name: Pack tarball
         run: pnpm run pack:headless
 
+      - name: Validate staged runtime closure
+        run: node scripts/smoke-packed-runtimes.mjs
+
       - name: Attach to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

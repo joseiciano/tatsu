@@ -5,6 +5,8 @@ import { join } from 'path'
 import { PtyManager } from './pty-manager'
 import { ChatRuntimeRegistry } from './chat-runtimes'
 import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
+import { AcpStdioRuntime } from './chat-runtimes/acp-stdio'
+import { BundledRuntimeResolver } from './chat-runtimes/runtime-path-resolver'
 import {
   readAttachmentImage,
   writeAttachmentImage
@@ -491,6 +493,30 @@ jsonClaudeStatusDeriver.start()
 
 const chatRuntimeRegistry = new ChatRuntimeRegistry(store)
 chatRuntimeRegistry.register('claude', new ClaudeAcpRuntime(store))
+// OpenCode/Codex chat runtimes are driven over shared ACP stdio, always
+// launched via the bundled executables resolved by BundledRuntimeResolver —
+// never a global CLI/PATH lookup. If a bundled runtime can't be resolved
+// (missing/unsupported platform), constructing the resolver throws a clear
+// startup error before any session could route to it.
+const bundledRuntimeResolver = new BundledRuntimeResolver()
+const openCodeConfig = bundledRuntimeResolver.buildOpenCodeConfig()
+const codexConfig = bundledRuntimeResolver.buildCodexConfig()
+chatRuntimeRegistry.register(
+  'opencode',
+  new AcpStdioRuntime(store, {
+    agentKind: 'opencode',
+    command: openCodeConfig.command,
+    env: openCodeConfig.env
+  })
+)
+chatRuntimeRegistry.register(
+  'codex',
+  new AcpStdioRuntime(store, {
+    agentKind: 'codex',
+    command: codexConfig.command,
+    env: codexConfig.env
+  })
+)
 
 /** Resolve the GitHub login of whoever owns the configured token, and
  *  dispatch it so the sidebar can route PRs they didn't author into the

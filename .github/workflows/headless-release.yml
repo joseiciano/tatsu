@@ -47,6 +47,9 @@ jobs:
       - name: Pack tarball
         run: pnpm run pack:headless
 
+      - name: Validate staged runtime closure
+        run: node scripts/smoke-packed-runtimes.mjs
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:

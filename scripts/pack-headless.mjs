@@ -18,20 +18,25 @@
 //       mcp/{permission-prompt-mcp.js, mcp-bridge.js}
 //       node_modules/
 //         node-pty/, ws/                                 runtime deps externalized by vite
-//         @anthropic-ai/claude-agent-sdk-<platform>/     ACP executable package (npm layout
-//           package.json                                 so require.resolve from main/index.js
-//           claude                                       matches the Electron resolution path)
+//         @anthropic-ai/claude-agent-sdk-<platform>/     ACP executable package
+//         opencode-ai/                                   OpenCode ACP launcher
+//         @agentclientprotocol/codex-acp/                 Codex ACP stdio entry
+//         @openai/codex/                                  Codex base package (resolver anchor)
+//         @openai/codex-<platform>/                      Codex native binary (vendor/<triple>/bin/codex)
 
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { createWriteStream, createReadStream, existsSync, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile, cp, rm, chmod } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import * as tar from 'tar'
+import {
+  stageRuntimeClosure,
+  validateStagedRuntimeClosure
+} from './runtime-closure.mjs'
 
 // Vite 8 / rolldown require Node ≥ 22.12 (or 20.19+, but 22.x is the
 // active LTS line). Bumping this means the .github workflow's
@@ -51,12 +56,6 @@ function detectPlatform() {
   // darwin-x64 is intentionally not packed — see the matrix comment in
   // .github/workflows/headless-release.yml.
   throw new Error(`Unsupported host platform: ${p}-${a}. Run on darwin-arm64, linux-x64, or linux-arm64.`)
-}
-
-const CLAUDE_PLATFORM_PKG = {
-  'darwin-arm64': '@anthropic-ai/claude-agent-sdk-darwin-arm64',
-  'linux-x64': '@anthropic-ai/claude-agent-sdk-linux-x64',
-  'linux-arm64': '@anthropic-ai/claude-agent-sdk-linux-arm64'
 }
 
 async function downloadNodeBinary(platform, nodeDist) {
@@ -117,51 +116,6 @@ function rebuildNodePtyForTargetNode() {
   }
 }
 
-async function copyClaudeBinary(platform, libDir) {
-  const pkgName = CLAUDE_PLATFORM_PKG[platform]
-  if (!pkgName) throw new Error(`No claude-agent-sdk package mapping for ${platform}`)
-  const r = createRequire(join(repoRoot, 'package.json'))
-  const pkgJsonPath = r.resolve(`${pkgName}/package.json`)
-  const srcPkgDir = dirname(pkgJsonPath)
-  if (!existsSync(join(srcPkgDir, 'claude'))) {
-    throw new Error(`claude binary not found at ${join(srcPkgDir, 'claude')}. Run pnpm install first.`)
-  }
-  const destPkgDir = join(libDir, 'node_modules', pkgName)
-  await mkdir(dirname(destPkgDir), { recursive: true })
-  await cp(srcPkgDir, destPkgDir, { recursive: true })
-  await chmod(join(destPkgDir, 'claude'), 0o755)
-}
-
-// vite externalizes runtime npm deps (see vite.headless.config.ts), so
-// `require('node-pty')` and `require('ws')` in the bundled main.js
-// resolve through plain Node lookup at runtime. We ship them as a real
-// node_modules tree next to main.js so resolution Just Works.
-const RUNTIME_PACKAGES = ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk']
-
-async function copyRuntimePackages(libDir) {
-  const destRoot = join(libDir, 'node_modules')
-  await mkdir(destRoot, { recursive: true })
-  for (const name of RUNTIME_PACKAGES) {
-    const src = join(repoRoot, 'node_modules', name)
-    if (!existsSync(src)) {
-      throw new Error(`runtime package missing from node_modules: ${name}`)
-    }
-    const dest = join(destRoot, name)
-    await cp(src, dest, {
-      recursive: true,
-      filter: (path) => {
-        // Skip nested node_modules and obj.target build artifacts to
-        // keep tarball lean — pty.node + spawn-helper are what's needed.
-        if (path.includes(`${name}/node_modules`)) return false
-        if (path.endsWith('.tsbuildinfo')) return false
-        if (path.includes('/build/Release/obj.target')) return false
-        if (path.includes('/build/Release/.deps')) return false
-        return true
-      }
-    })
-  }
-}
-
 async function sha256OfFile(file) {
   const hash = createHash('sha256')
   await pipeline(createReadStream(file), hash)
@@ -201,8 +155,22 @@ async function main() {
   await cp(join(repoRoot, 'dist-headless', 'web-client'), join(libDir, 'web-client'), {
     recursive: true
   })
-  await copyRuntimePackages(libDir)
-  await copyClaudeBinary(platform, libDir)
+
+  // Stage the full runtime dependency closure (node-pty, ws, claude,
+  // opencode, codex) with dereference so pnpm symlinks become real
+  // files and the tarball is self-contained.
+  await stageRuntimeClosure({ repoRoot, libDir, platform })
+
+  // Validate the closure before tarring — catches missing packages or
+  // broken permissions early instead of shipping a bad tarball.
+  const validationErrors = validateStagedRuntimeClosure({ libDir, platform })
+  if (validationErrors.length > 0) {
+    for (const e of validationErrors) {
+      console.error(`[pack-headless] validation error: ${e}`)
+    }
+    throw new Error('Staged runtime closure validation failed')
+  }
+
   await cp(
     join(repoRoot, 'resources', 'permission-prompt-mcp.js'),
     join(libDir, 'mcp', 'permission-prompt-mcp.js')
