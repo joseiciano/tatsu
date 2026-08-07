@@ -741,8 +741,14 @@ const panesFSM = new PanesFSM(store, {
     return getAgent(kind).latestSessionId(wtPath)
   },
   getDefaultAgentKind: () => toAgentKind(store.getSnapshot().state.settings.defaultAgent),
-  getDefaultClaudeTabType: () => {
+  getDefaultTabType: (agentKind) => {
     const s = store.getSnapshot().state.settings
+    if (agentKind === 'opencode') {
+      return s.defaultOpencodeTabType === 'json' ? 'json' : 'xterm'
+    }
+    if (agentKind === 'codex') {
+      return s.defaultCodexTabType === 'json' ? 'json' : 'xterm'
+    }
     return s.defaultClaudeTabType === 'json' ? 'json' : 'xterm'
   },
   // Authoritative PTY teardown when tabs leave the tree. The renderer
@@ -2800,6 +2806,42 @@ function registerIpcHandlers(): void {
       saveConfig(config)
       store.dispatch({
         type: 'settings/defaultClaudeTabTypeChanged',
+        payload: next
+      })
+      return true
+    }
+  )
+
+  transport.onRequest(
+    'config:setDefaultOpencodeTabType',
+    (_ctx, value: 'xterm' | 'json') => {
+      const next: 'xterm' | 'json' = value === 'json' ? 'json' : 'xterm'
+      if (next === 'xterm') {
+        delete config.defaultOpencodeTabType
+      } else {
+        config.defaultOpencodeTabType = 'json'
+      }
+      saveConfig(config)
+      store.dispatch({
+        type: 'settings/defaultOpencodeTabTypeChanged',
+        payload: next
+      })
+      return true
+    }
+  )
+
+  transport.onRequest(
+    'config:setDefaultCodexTabType',
+    (_ctx, value: 'xterm' | 'json') => {
+      const next: 'xterm' | 'json' = value === 'json' ? 'json' : 'xterm'
+      if (next === 'xterm') {
+        delete config.defaultCodexTabType
+      } else {
+        config.defaultCodexTabType = 'json'
+      }
+      saveConfig(config)
+      store.dispatch({
+        type: 'settings/defaultCodexTabTypeChanged',
         payload: next
       })
       return true

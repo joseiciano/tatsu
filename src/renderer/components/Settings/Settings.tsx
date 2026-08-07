@@ -343,6 +343,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     wsTransportPort,
     wsTransportHost,
     defaultClaudeTabType,
+    defaultOpencodeTabType,
+    defaultCodexTabType,
     jsonModeChatDensity,
     uiScale,
     jsonModeSendOnEnter,
@@ -1689,6 +1691,36 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <InterfaceToggle
                       value={defaultClaudeTabType}
                       onChange={(value) => { void backend.setDefaultClaudeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'opencode' && (
+                  <div className="mt-4 pt-4 border-t border-border pl-4 border-l-2 border-l-border ml-1">
+                    <label className="block text-sm font-medium text-fg mb-2">Interface</label>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Opencode tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultOpencodeTabType}
+                      onChange={(value) => { void backend.setDefaultOpencodeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'codex' && (
+                  <div className="mt-4 pt-4 border-t border-border pl-4 border-l-2 border-l-border ml-1">
+                    <label className="block text-sm font-medium text-fg mb-2">Interface</label>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Codex tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultCodexTabType}
+                      onChange={(value) => { void backend.setDefaultCodexTabType(value) }}
                     />
                   </div>
                 )}

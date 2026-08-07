@@ -217,7 +217,7 @@ describe('PanesFSM.ensureInitialized', () => {
       persist: () => {},
       getRepoRootForWorktree: () => undefined,
       getLatestClaudeSessionId: async () => null,
-      getDefaultClaudeTabType: () => 'json'
+      getDefaultTabType: () => 'json'
     })
     const wtPath = '/wt/acp-runtime'
     fsm.ensureInitialized(wtPath)
@@ -302,6 +302,157 @@ describe('PanesFSM.convertTabType', () => {
     const tab = afterJson.tabs[0]
     expect(tab.type).toBe('json-claude')
     expect('runtime' in tab).toBe(false)
+  })
+
+  it('converts opencode agent → json-claude preserving agentKind', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/convert-opencode'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'agent-1', type: 'agent', label: 'Opencode', agentKind: 'opencode', sessionId: 'sess-1' }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.agentKind).toBe('opencode')
+    expect('runtime' in tab).toBe(false)
+  })
+
+  it('converts json-claude → opencode agent preserving agentKind', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/convert-opencode-back'
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: sessionId, type: 'json-claude', label: 'Chat', sessionId, mode: 'awake', agentKind: 'opencode' }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.agentKind).toBe('opencode')
+  })
+
+  it('converts codex agent → json-claude preserving agentKind', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/convert-codex'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'agent-1', type: 'agent', label: 'Codex', agentKind: 'codex', sessionId: 'sess-1' }
+      ],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.agentKind).toBe('codex')
+  })
+
+  it('converts json-claude → codex agent preserving agentKind', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/convert-codex-back'
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: sessionId, type: 'json-claude', label: 'Chat', sessionId, mode: 'awake', agentKind: 'codex' }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const tab = leaf.tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.agentKind).toBe('codex')
+  })
+
+  it('labels a converted agent tab with the agent display name', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/convert-label'
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: sessionId, type: 'json-claude', label: 'Chat', sessionId, mode: 'awake', agentKind: 'opencode' }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    expect(leaf.tabs[0].label).toBe('Opencode')
+  })
+})
+
+describe('PanesFSM.ensureInitialized per-agent default tab type', () => {
+  it('creates a json-claude tab for opencode when its default type is json', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultTabType: (kind) => (kind === 'opencode' ? 'json' : 'xterm')
+    })
+    const wtPath = '/wt/acp-opencode-default'
+    fsm.ensureInitialized(wtPath, { agentKind: 'opencode' })
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
+    expect(chatTab).toBeDefined()
+    expect(chatTab!.agentKind).toBe('opencode')
+  })
+
+  it('creates a json-claude tab for codex when its default type is json', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultTabType: (kind) => (kind === 'codex' ? 'json' : 'xterm')
+    })
+    const wtPath = '/wt/acp-codex-default'
+    fsm.ensureInitialized(wtPath, { agentKind: 'codex' })
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
+    expect(chatTab).toBeDefined()
+    expect(chatTab!.agentKind).toBe('codex')
+  })
+
+  it('does not create a json-claude tab for claude when its default type is xterm', () => {
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultTabType: (kind) => (kind === 'opencode' ? 'json' : 'xterm')
+    })
+    const wtPath = '/wt/acp-claude-default'
+    fsm.ensureInitialized(wtPath, { agentKind: 'claude' })
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
+    expect(chatTab).toBeUndefined()
   })
 })
 

@@ -618,7 +618,7 @@ export function WorkspaceView({
                         : undefined
                     }
                     onSwitchToChat={
-                      tab.type === 'agent' && tab.agentKind === 'claude' && onConvertTabType
+                      tab.type === 'agent' && onConvertTabType
                         ? (): void => onConvertTabType(worktreePath, tab.id, 'json-claude')
                         : undefined
                     }

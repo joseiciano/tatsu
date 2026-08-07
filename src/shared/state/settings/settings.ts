@@ -82,6 +82,10 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, browserToolsMode: event.payload }
     case 'settings/defaultClaudeTabTypeChanged':
       return { ...state, defaultClaudeTabType: event.payload }
+    case 'settings/defaultOpencodeTabTypeChanged':
+      return { ...state, defaultOpencodeTabType: event.payload }
+    case 'settings/defaultCodexTabTypeChanged':
+      return { ...state, defaultCodexTabType: event.payload }
     case 'settings/chatPromotionDismissedChanged':
       return { ...state, chatPromotionDismissed: event.payload }
     case 'settings/autoApprovePermissionsChanged':

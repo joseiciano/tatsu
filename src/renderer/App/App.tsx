@@ -1028,6 +1028,30 @@ const setQuestStep = useCallback((next: QuestStep) => {
                     />
                   </div>
                 )}
+                {agentChosen && defaultAgent === 'opencode' && (
+                  <div className="ml-8 mt-4 pl-4 border-l-2 border-border">
+                    <div className="text-xs text-dim mb-2">
+                      Which interface should new Opencode tabs use?
+                    </div>
+                    <InterfaceToggle
+                      value={settings.defaultOpencodeTabType}
+                      onChange={(value) => { void backend.setDefaultOpencodeTabType(value) }}
+                      size="compact"
+                    />
+                  </div>
+                )}
+                {agentChosen && defaultAgent === 'codex' && (
+                  <div className="ml-8 mt-4 pl-4 border-l-2 border-border">
+                    <div className="text-xs text-dim mb-2">
+                      Which interface should new Codex tabs use?
+                    </div>
+                    <InterfaceToggle
+                      value={settings.defaultCodexTabType}
+                      onChange={(value) => { void backend.setDefaultCodexTabType(value) }}
+                      size="compact"
+                    />
+                  </div>
+                )}
               </div>
 
               <div

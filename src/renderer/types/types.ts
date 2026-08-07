@@ -309,6 +309,8 @@ export interface ElectronAPI {
   setBrowserToolsEnabled(enabled: boolean): Promise<boolean>
   setBrowserToolsMode(mode: 'view' | 'full'): Promise<boolean>
   setDefaultClaudeTabType(value: 'xterm' | 'json'): Promise<boolean>
+  setDefaultOpencodeTabType(value: 'xterm' | 'json'): Promise<boolean>
+  setDefaultCodexTabType(value: 'xterm' | 'json'): Promise<boolean>
   setChatPromotionDismissed(value: boolean): Promise<boolean>
   setJsonModeChatDensity(value: 'compact' | 'comfy'): Promise<boolean>
   setUiScale(value: 'x-small' | 'small' | 'medium' | 'large' | 'x-large'): Promise<boolean>

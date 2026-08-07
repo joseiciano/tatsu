@@ -114,6 +114,9 @@ export function buildInitialAppState(
       browserToolsEnabled: config.browserToolsEnabled !== false,
       browserToolsMode: config.browserToolsMode === 'view' ? 'view' : 'full',
       defaultClaudeTabType: config.defaultClaudeTabType === 'json' ? 'json' : 'xterm',
+      defaultOpencodeTabType:
+        config.defaultOpencodeTabType === 'json' ? 'json' : 'xterm',
+      defaultCodexTabType: config.defaultCodexTabType === 'json' ? 'json' : 'xterm',
       chatPromotionDismissed: config.chatPromotionDismissed === true,
       jsonModeChatDensity: config.jsonModeChatDensity === 'comfy' ? 'comfy' : 'compact',
       uiScale:
