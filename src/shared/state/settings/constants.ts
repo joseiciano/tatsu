@@ -76,6 +76,8 @@ export const initialSettings: SettingsState = {
   browserToolsEnabled: true,
   browserToolsMode: 'full',
   defaultClaudeTabType: 'xterm',
+  defaultOpencodeTabType: 'xterm',
+  defaultCodexTabType: 'xterm',
   chatPromotionDismissed: false,
   autoApprovePermissions: false,
   autoApproveSteerInstructions: '',

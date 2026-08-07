@@ -253,6 +253,10 @@ export function buildBackend(
     setBrowserToolsMode: (mode: 'view' | 'full') => req('config:setBrowserToolsMode', mode),
     setDefaultClaudeTabType: (value: 'xterm' | 'json') =>
       req('config:setDefaultClaudeTabType', value),
+    setDefaultOpencodeTabType: (value: 'xterm' | 'json') =>
+      req('config:setDefaultOpencodeTabType', value),
+    setDefaultCodexTabType: (value: 'xterm' | 'json') =>
+      req('config:setDefaultCodexTabType', value),
     setChatPromotionDismissed: (value: boolean) =>
       req('config:setChatPromotionDismissed', value),
     setJsonModeChatDensity: (value: 'compact' | 'comfy') =>

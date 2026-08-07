@@ -17,17 +17,16 @@ import {
 } from '../../shared/state/terminals'
 import type { PersistedPaneNode } from '../persistence'
 import { agentDisplayName, getAgentInfo } from '../../shared/agent-registry'
-import { log } from '../debug'
 
 interface PanesFSMOptions {
   persist: (panes: Record<string, PaneNode>) => void
   getRepoRootForWorktree: (worktreePath: string) => string | undefined
   getLatestClaudeSessionId: (worktreePath: string) => Promise<string | null>
   getDefaultAgentKind?: () => AgentKind
-  /** Read the default Claude interface setting. When this returns 'json',
-   *  a default Claude agent tab spawns as a json-claude tab instead of
-   *  an xterm-hosted one. */
-  getDefaultClaudeTabType?: () => 'xterm' | 'json'
+  /** Read the default interface setting for a given agent kind. When this
+   *  returns 'json', a default agent tab of that kind spawns as a json-
+   *  claude tab instead of an xterm-hosted one. */
+  getDefaultTabType?: (agentKind: AgentKind) => 'xterm' | 'json'
   /** Tear down the PTY backing a closed tab. Called for agent + shell
    *  tabs when they're removed from the tree (closeTab, restartAgentTab,
    *  clearForWorktree). Authoritative on the main side so PTY lifetime
@@ -228,14 +227,13 @@ export class PanesFSM {
     const model = opts?.model && opts.model.trim() ? opts.model.trim() : undefined
     const shellTabId = `shell-${wtPath}-${Date.now()}`
     // Branch to a json-claude default tab when the user has opted in
-    // and the kind is Claude. teleport sessions stay on xterm (json-
-    // claude has no `--resume <id>` analog for an arbitrary external
-    // session today). initialPrompt is honored for both — for the
-    // json-claude side we pre-spawn the subprocess and send it as the
-    // first message via startJsonClaudeWithPrompt below.
+    // for this agent kind. teleport sessions stay on xterm (json-claude
+    // has no `--resume <id>` analog for an arbitrary external session
+    // today). initialPrompt is honored for both — for the json-claude
+    // side we pre-spawn the subprocess and send it as the first message
+    // via startJsonClaudeWithPrompt below.
     const wantsJson =
-      agentKind === 'claude' &&
-      this.opts.getDefaultClaudeTabType?.() === 'json' &&
+      this.opts.getDefaultTabType?.(agentKind) === 'json' &&
       !opts?.teleportSessionId
     let agentTab: TerminalTab
     let jsonClaudeKickoff: { sessionId: string; initialPrompt?: string; model?: string } | null = null
@@ -432,12 +430,6 @@ export class PanesFSM {
     if (!tab) return
     if (tab.type === newType) return
     if (tab.type !== 'agent' && tab.type !== 'json-claude') return
-    if (tab.type === 'agent' && tab.agentKind && tab.agentKind !== 'claude') {
-      // Only Claude agent tabs have a json-claude counterpart; refuse
-      // to swap a Codex tab.
-      log('panes-fsm', `convertTabType refused for non-claude agent kind=${tab.agentKind}`)
-      return
-    }
     const sessionId = tab.sessionId ?? crypto.randomUUID()
     if (tab.type === 'agent') {
       this.opts.killTabPty?.(tabId)
@@ -452,10 +444,9 @@ export class PanesFSM {
       newType === 'json-claude'
         ? sessionId
         : `agent-${wtPath.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`
-    const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName('claude')
+    const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName(tab.agentKind ?? 'claude')
     // Preserve the agent kind so the destination tab routes to the same
-    // runtime. json-claude tabs are Claude-only until OpenCode/Codex
-    // runtimes land, so this is effectively 'claude'.
+    // runtime.
     const agentKind = tab.agentKind ?? 'claude'
     this.store.dispatch({
       type: 'terminals/tabTypeChanged',

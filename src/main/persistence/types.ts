@@ -89,6 +89,8 @@ export interface Config {
   browserToolsEnabled?: boolean
   browserToolsMode?: 'view' | 'full'
   defaultClaudeTabType?: 'xterm' | 'json'
+  defaultOpencodeTabType?: 'xterm' | 'json'
+  defaultCodexTabType?: 'xterm' | 'json'
   chatPromotionDismissed?: boolean
   autoApprovePermissions?: boolean
   autoApproveSteerInstructions?: string

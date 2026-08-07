@@ -378,6 +378,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     wsTransportPort,
     wsTransportHost,
     defaultClaudeTabType,
+    defaultOpencodeTabType,
+    defaultCodexTabType,
     jsonModeChatDensity,
     uiScale,
     jsonModeSendOnEnter,
@@ -1740,6 +1742,36 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <InterfaceToggle
                       value={defaultClaudeTabType}
                       onChange={(value) => { void backend.setDefaultClaudeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'opencode' && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Opencode tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultOpencodeTabType}
+                      onChange={(value) => { void backend.setDefaultOpencodeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'codex' && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Codex tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultCodexTabType}
+                      onChange={(value) => { void backend.setDefaultCodexTabType(value) }}
                     />
                   </div>
                 )}

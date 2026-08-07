@@ -590,9 +590,8 @@ export function TerminalPanel({
         >
           <SortableContext items={pane.tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
             {pane.tabs.map((tab) => {
-              const isClaudeAgent = tab.type === 'agent' && tab.agentKind === 'claude'
               const isJsonClaude = tab.type === 'json-claude'
-              const convertible = !!onConvertTabType && (isClaudeAgent || isJsonClaude)
+              const convertible = !!onConvertTabType && (tab.type === 'agent' || isJsonClaude)
               return (
                 <SortableTab
                   key={tab.id}
