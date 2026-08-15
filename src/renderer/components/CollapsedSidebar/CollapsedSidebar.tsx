@@ -13,13 +13,15 @@ import {
   Activity,
   ShieldAlert,
   HatGlasses,
-  GitPullRequest
+  GitPullRequest,
+  Bell
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
-import { usePrs, useSettings, useSnooze, useWorktrees } from '../../store'
+import { useAnnouncements, usePrs, useSettings, useSnooze, useWorktrees } from '../../store'
 import { groupWorktrees, type GroupKey } from '../../worktree-sort'
+import { countUnreadAnnouncements } from '../NotificationCenter'
 
 interface CollapsedSidebarProps {
   onExpand: () => void
@@ -29,6 +31,7 @@ interface CollapsedSidebarProps {
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
   onOpenActivity: () => void
+  onOpenNotifications: () => void
   onOpenMyWeek: () => void
   onOpenHotkeyCheatsheet: () => void
   onOpenSettings: () => void
@@ -44,6 +47,7 @@ export function CollapsedSidebar({
   onOpenCommandCenter,
   onOpenNewProject,
   onOpenActivity,
+  onOpenNotifications,
   onOpenMyWeek,
   onOpenHotkeyCheatsheet,
   onOpenSettings
@@ -52,8 +56,20 @@ export function CollapsedSidebar({
   // store so we don't have to thread N more props through App.tsx.
   const worktrees = useWorktrees().list
   const prs = usePrs()
+  const announcements = useAnnouncements()
   const snooze = useSnooze()
-  const viewerLogin = useSettings().viewerLogin
+  const settings = useSettings()
+  const viewerLogin = settings.viewerLogin
+  const unreadAnnouncementCount = useMemo(
+    () =>
+      countUnreadAnnouncements(
+        announcements.items,
+        settings.dismissedAnnouncementIds,
+        settings.announcementsMuted,
+        Date.now()
+      ),
+    [announcements.items, settings.announcementsMuted, settings.dismissedAnnouncementIds]
+  )
   const snoozedPaths = useMemo(() => {
     const m: Record<string, true> = {}
     for (const p of Object.keys(snooze.byPath)) m[p] = true
@@ -188,6 +204,20 @@ export function CollapsedSidebar({
             className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
           >
             <BarChart3 className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Notifications" side="right">
+          <button
+            onClick={onOpenNotifications}
+            className="text-dim hover:text-fg hover:bg-surface rounded px-1 py-1 transition-colors cursor-pointer flex items-center gap-0.5"
+            aria-label="Notifications"
+          >
+            <Bell className="icon-xs" />
+            {unreadAnnouncementCount > 0 && (
+              <span className="text-xs tabular-nums leading-none">
+                {unreadAnnouncementCount > 99 ? '99+' : unreadAnnouncementCount}
+              </span>
+            )}
           </button>
         </Tooltip>
         <Tooltip label="My week" side="right">
