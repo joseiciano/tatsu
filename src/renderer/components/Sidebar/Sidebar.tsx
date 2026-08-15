@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw, SlidersHorizontal, Bell } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
 import { HotkeyBadge } from '../HotkeyBadge'
@@ -45,9 +45,11 @@ interface SidebarProps {
   onOpenConfig: () => void
   onOpenAddBackend: () => void
   onOpenHotkeyCheatsheet: () => void
+  onOpenNotifications: () => void
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
+  unreadAnnouncementCount: number
   width: number
   collapsedGroups: Record<string, boolean>
   onToggleGroup: (scope: string, key: GroupKey) => void
@@ -88,9 +90,11 @@ export function Sidebar({
   onOpenConfig,
   onOpenAddBackend,
   onOpenHotkeyCheatsheet,
+  onOpenNotifications,
   onOpenCleanup,
   onOpenCommandCenter,
   onOpenNewProject,
+  unreadAnnouncementCount,
   width,
   collapsedGroups: _collapsedGroups,
   onToggleGroup,
@@ -289,6 +293,20 @@ export function Sidebar({
             className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
           >
             <FolderOpen className="icon-sm" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Notifications" side="bottom">
+          <button
+            onClick={onOpenNotifications}
+            aria-label="Notifications"
+            className="relative text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <Bell className="icon-sm" />
+            {unreadAnnouncementCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 rounded-full bg-accent text-app text-xs leading-none flex items-center justify-center tabular-nums font-semibold">
+                {unreadAnnouncementCount > 99 ? '99+' : unreadAnnouncementCount}
+              </span>
+            )}
           </button>
         </Tooltip>
         <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="bottom">

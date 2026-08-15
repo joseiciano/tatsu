@@ -31,6 +31,7 @@ import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { AgentIcon } from '../components/AgentIcon'
 import { InterfaceToggle } from '../components/InterfaceToggle'
 import { Activity, type ActivityTab } from '../components/Activity'
+import { NotificationCenter, getActiveAnnouncements, countUnreadAnnouncements } from '../components/NotificationCenter'
 import { Cleanup } from '../components/Cleanup'
 import { ReviewScreen } from '../components/ReviewScreen'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
@@ -235,6 +236,7 @@ function DesktopApp(): JSX.Element {
   const [showMyWeek, setShowMyWeek] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
   const [activityTab, setActivityTab] = useState<ActivityTab>('command')
+  const [showNotifications, setShowNotifications] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
@@ -261,6 +263,7 @@ function DesktopApp(): JSX.Element {
     const nextVisible = typeof next === 'function' ? next(showCommandCenter) : next
     if (nextVisible) {
       setShowNewWorktree(false)
+      setShowNotifications(false)
       setShowCleanup(false)
       setShowReview(false)
       setReportIssueState(null)
@@ -302,21 +305,24 @@ function DesktopApp(): JSX.Element {
 
   const activeAnnouncement = useMemo(() => {
     if (settings.announcementsMuted) return null
-    const dismissed = new Set(settings.dismissedAnnouncementIds)
-    const now = Date.now()
-    const eligible = announcements.items.filter((a) => {
-      if (dismissed.has(a.id)) return false
-      if (a.expiresAt) {
-        const exp = Date.parse(a.expiresAt)
-        if (Number.isFinite(exp) && exp < now) return false
-      }
-      return true
-    })
-    if (eligible.length === 0) return null
-    return eligible.reduce((best, cur) =>
-      Date.parse(cur.publishedAt) > Date.parse(best.publishedAt) ? cur : best
+    return (
+      getActiveAnnouncements(
+        announcements.items,
+        settings.dismissedAnnouncementIds,
+        Date.now()
+      ).list[0] ?? null
     )
   }, [announcements.items, settings.announcementsMuted, settings.dismissedAnnouncementIds])
+  const unreadAnnouncementCount = useMemo(
+    () =>
+      countUnreadAnnouncements(
+        announcements.items,
+        settings.dismissedAnnouncementIds,
+        settings.announcementsMuted,
+        Date.now()
+      ),
+    [announcements.items, settings.dismissedAnnouncementIds, settings.announcementsMuted]
+  )
   // Track which worktrees already have hooks installed so we only prompt once
 
 const setQuestStep = useCallback((next: QuestStep) => {
@@ -605,6 +611,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
   const closeFullscreenViews = useCallback(() => {
     setShowNewWorktree(false)
     setShowActivity(false)
+    setShowNotifications(false)
     setShowCleanup(false)
     setShowReview(false)
     setReportIssueState(null)
@@ -1373,9 +1380,11 @@ const setQuestStep = useCallback((next: QuestStep) => {
             snoozeDefaultDays={settings.snoozeDefaultDays}
             prLoading={prLoading}
             agentCount={agentWorktreeCount}
+            unreadAnnouncementCount={unreadAnnouncementCount}
             onSelectWorktree={(path) => {
               setShowNewWorktree(false)
               setShowActivity(false)
+              setShowNotifications(false)
               setShowCleanup(false)
               setShowCommandCenter(false)
               setActiveWorktreeId(path)
@@ -1415,6 +1424,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowCleanup(true)
             }}
             onOpenCommandCenter={toggleCommandCenter}
+            onOpenNotifications={() => {
+              closeFullscreenViews()
+              setShowNotifications(true)
+            }}
             onOpenNewProject={() => {
               closeFullscreenViews()
               setShowNewProject(true)
@@ -1446,6 +1459,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowCleanup(true)
             }}
             onOpenCommandCenter={toggleCommandCenter}
+            onOpenNotifications={() => {
+              closeFullscreenViews()
+              setShowNotifications(true)
+            }}
             onOpenNewProject={() => {
               closeFullscreenViews()
               setShowNewProject(true)
@@ -1469,7 +1486,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
           if (!paneTree) return null
           const leaves = getLeaves(paneTree)
           if (leaves.length === 0 || !leaves.some((l) => l.tabs.length > 0)) return null
-          const isVisible = !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && wt.path === activeWorktreeId && !pendingDeletionByPath[wt.path]
+          const isVisible = !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && wt.path === activeWorktreeId && !pendingDeletionByPath[wt.path]
           return (
             <div
               key={wt.path}
@@ -1508,7 +1525,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                     singleScreenMode ? 0 : sidebarVisible ? sidebarWidth + 1 : 48
                   }
                   topBarTrailingExtendPx={
-                    !singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null
+                    !singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null
                       ? rightColumnHidden
                         ? 48
                         : rightPanelWidth + 1
@@ -1558,6 +1575,11 @@ const setQuestStep = useCallback((next: QuestStep) => {
             />
           </div>
         )}
+        {showNotifications && (
+          <div className="flex-1 min-w-0 flex">
+            <NotificationCenter onClose={() => setShowNotifications(false)} />
+          </div>
+        )}
         {showCleanup && (
           <div className="flex-1 min-w-0 flex">
             <Cleanup
@@ -1589,12 +1611,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
             </div>
           )
         })()}
-        {!showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !activeWorktreeId && worktrees.length > 0 && (
+        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !activeWorktreeId && worktrees.length > 0 && (
           <div className="flex-1 flex items-center justify-center text-dim">
             Select a worktree to begin
           </div>
         )}
-        {!showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && isPendingId(activeWorktreeId) && (() => {
+        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && isPendingId(activeWorktreeId) && (() => {
           const pending = pendingWorktrees.find((p) => p.id === activeWorktreeId)
           if (!pending) return null
           return (
@@ -1606,7 +1628,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             />
           )
         })()}
-        {!showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && activeWorktreeId && pendingDeletionByPath[activeWorktreeId] && (
+        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && activeWorktreeId && pendingDeletionByPath[activeWorktreeId] && (
           <DeletingWorktreeScreen
             deletion={pendingDeletionByPath[activeWorktreeId]}
             onDismiss={handleDismissPendingDeletion}
@@ -1619,10 +1641,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
         />
         {/* Right panel — hidden on the new-worktree screen so the form gets the full width.
             Pushed down 40px so the workspace tab bar can extend across the top, full width. */}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><ResizeHandle onDelta={handleRightPanelResize} /></div>
         )}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><RightColumn
             width={rightPanelWidth}
             activeWorktreeId={activeWorktreeId}
@@ -1656,7 +1678,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onCollapse={() => setRightColumnHidden(true)}
           /></div>
         )}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><CollapsedRightPanel
             worktreePath={activeWorktreeId}
             onExpand={() => setRightColumnHidden(false)}
