@@ -44,8 +44,8 @@
 
 Grab the latest release from the [releases page](https://github.com/frenchie4111/harness/releases/latest).
 
-- **Apple Silicon (M1/M2/M3/M4):** [Tatsu-2.10.0-arm64.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Tatsu-2.10.0-arm64.dmg)
-- **Intel Mac:** [Tatsu-2.10.0.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Tatsu-2.10.0.dmg)
+- **Apple Silicon (M1/M2/M3/M4):** [Harness-2.10.0-arm64.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Harness-2.10.0-arm64.dmg)
+- **Intel Mac:** [Harness-2.10.0-x64.dmg](https://github.com/frenchie4111/harness/releases/download/v2.10.0/Harness-2.10.0-x64.dmg)
 
 ## Installation
 
@@ -61,23 +61,23 @@ Grab the latest release from the [releases page](https://github.com/frenchie4111
 
 ### Linux
 
-Grab `Tatsu-<version>.deb` or `Tatsu-<version>.AppImage` from the [releases page](https://github.com/frenchie4111/harness/releases/latest).
+Grab `Harness-<version>.deb` or `Harness-<version>.AppImage` from the [releases page](https://github.com/frenchie4111/harness/releases/latest).
 
 **Ubuntu / Debian (.deb)** — the recommended option:
 
 ```sh
-sudo apt install ./Tatsu-<version>.deb
+sudo apt install ./Harness-<version>.deb
 ```
 
 The postinstall script handles the `chrome-sandbox` SUID bit automatically, so this works on Ubuntu 24.04+ out of the box.
 
-`.deb` users get an in-app banner when a new version is available, but updates are manual — re-download the new `.deb` from [GitHub Releases](https://github.com/frenchie4111/harness/releases/latest) and `sudo apt install ./Tatsu-<version>.deb`. (AppImage / macOS users get auto-updates.)
+`.deb` users get an in-app banner when a new version is available, but updates are manual — re-download the new `.deb` from [GitHub Releases](https://github.com/frenchie4111/harness/releases/latest) and `sudo apt install ./Harness-<version>.deb`. (AppImage / macOS users get auto-updates.)
 
 **AppImage** — for distros without `dpkg`:
 
 ```sh
-chmod +x Tatsu-<version>.AppImage
-./Tatsu-<version>.AppImage
+chmod +x Harness-<version>.AppImage
+./Harness-<version>.AppImage
 ```
 
 If you hit `The SUID sandbox helper binary was found, but is not configured correctly` on Ubuntu 24.04+, either install the `.deb` instead or relax the AppArmor unprivileged-userns restriction:
@@ -152,7 +152,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
 4. **Remove app data** (optional, for a fully clean uninstall):
 
    ```sh
-   rm -rf ~/Library/Application\ Support/Tatsu
+   rm -rf ~/Library/Application\ Support/Harness
    rm -rf ~/Library/Preferences/org.mikelyons.harness.plist
    rm -rf ~/Library/Saved\ Application\ State/org.mikelyons.harness.savedState
    rm -rf ~/Library/Caches/org.mikelyons.harness

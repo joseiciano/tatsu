@@ -16,10 +16,10 @@
 //     `BrowserWindow`-aware browser:setBounds, updater RPCs).
 //
 // Construction split:
-//   - `createDesktopShell` runs synchronously, before anything that
-//     reads `userDataDir()` is touched. It applies the dev-mode userData
-//     override (so persistence/secrets/debug all see "Tatsu (Dev)"),
-//     creates the BrowserManager, and wires the ElectronServerTransport.
+//   - `applyDevModeOverride` runs synchronously before anything reads
+//     `userDataDir()`, pinning persistence/secrets/debug to the established
+//     Harness data directories. `createDesktopShell` then creates the
+//     BrowserManager and wires the ElectronServerTransport.
 //   - `startDesktopShell` is called after index.ts has registered all
 //     mode-agnostic IPC handlers. It registers the desktop-only
 //     handlers, builds the menu, opens the first window, kicks off the
@@ -88,22 +88,22 @@ export function resolveWebClientDir(): string {
     : join(__dirname, '../web-client')
 }
 
-/** Dev mode uses a sibling userData dir so a running dev instance doesn't
- *  fight with the installed prod app over config.json / activity.json /
- *  secrets.enc / etc. Must run before any module reads userDataDir() —
- *  that's `loadConfig()` in index.ts — so index.ts calls this right
- *  after requiring desktop-shell, not inside `createDesktopShell`
- *  (which only runs later, once the store + config exist). */
+/** Use the established Harness userData directories despite the customer-facing
+ *  product name. Dev mode uses a sibling directory so a running dev instance
+ *  doesn't fight with the installed app over config.json / activity.json /
+ *  secrets.enc / etc. Must run before any module reads userDataDir() — that's
+ *  `loadConfig()` in index.ts — so index.ts calls this right after requiring
+ *  desktop-shell, not inside `createDesktopShell` (which only runs later, once
+ *  the store + config exist). */
 export function applyDevModeOverride(): void {
-  if (!app.isPackaged) {
-    app.setPath('userData', join(app.getPath('appData'), 'Tatsu (Dev)'))
-  }
+  const directoryName = app.isPackaged ? 'Harness' : 'Harness (Dev)'
+  app.setPath('userData', join(app.getPath('appData'), directoryName))
 }
 
 /** First call that needs the store. Constructs the BrowserManager +
  *  Electron transport that index.ts wires into the compound transport.
- *  The dev-mode userData override happens earlier via
- *  `applyDevModeOverride()` — see that function for why. */
+ *  The userData override happens earlier via `applyDevModeOverride()` —
+ *  see that function for why. */
 export function createDesktopShell(init: DesktopShellInit): DesktopShellEarlyHandle {
   const browserManager = new BrowserManager()
   const transport = new ElectronServerTransport(init.store, init.perfMonitor)

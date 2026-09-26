@@ -182,7 +182,7 @@ const files = ['README.md'];
 for (const f of files) {
   if (!fs.existsSync(f)) continue;
   let content = fs.readFileSync(f, 'utf-8');
-  content = content.replace(/Tatsu-\d+\.\d+\.\d+/g, \`Tatsu-\${v}\`);
+  content = content.replace(/Harness-\d+\.\d+\.\d+/g, \`Harness-\${v}\`);
   content = content.replace(/releases\/download\/v\d+\.\d+\.\d+/g, \`releases/download/v\${v}\`);
   fs.writeFileSync(f, content);
 }
@@ -293,8 +293,8 @@ ${CHANGES}${CONTRIBUTORS_SECTION}
 
 ### Installing
 
-- **Apple Silicon:** \`Tatsu-${VERSION}-arm64.dmg\`
-- **Intel:** \`Tatsu-${VERSION}.dmg\`
+- **Apple Silicon:** \`Harness-${VERSION}-arm64.dmg\`
+- **Intel:** \`Harness-${VERSION}-x64.dmg\`
 
 Drag \`Tatsu.app\` to Applications, then launch it. Existing installs will auto-update.
 EOF
