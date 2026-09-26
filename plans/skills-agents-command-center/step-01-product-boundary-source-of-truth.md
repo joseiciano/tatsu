@@ -1,14 +1,14 @@
 ---
 goal: Define the skills, agents, and commands sync product boundary and source-of-truth contract
 date_created: 2026-09-24
-last_updated: 2026-09-24
-status: 'Planned'
+last_updated: 2026-09-26
+status: 'Completed'
 tags: [feature, architecture, product-boundary, harness-config]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan establishes the binding product contract for Tatsu's skills, agent definitions, and commands management feature before runtime implementation begins. It turns the product boundary in [implementation-details.md](./implementation-details.md) into deterministic terminology, source-of-truth rules, mutation safeguards, and downstream acceptance criteria. This step is documentation-only and is the first part of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md); completing it does not complete the feature.
 
@@ -47,14 +47,14 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
 
 - **GOAL-001**: Establish one authoritative resource and harness boundary that every later step references.
 
-- [ ] **TASK-001**: Update `plans/skills-agents-command-center/implementation-details.md` so its Product Boundary section declares the canonical `agents | skills | commands` logical resource set and uses the definitions in REQ-002 through REQ-004.
+- [x] **TASK-001**: Update `plans/skills-agents-command-center/implementation-details.md` so its Product Boundary section declares the canonical `agents | skills | commands` logical resource set and uses the definitions in REQ-002 through REQ-004.
   - State that resource types are logical categories; filesystem layouts and support are selected by per-harness resolvers.
   - Preserve the existing user-facing labels `Agents`, `Skills`, and `Commands`.
-- [ ] **TASK-002**: Record the first-version harness matrix in `plans/skills-agents-command-center/implementation-details.md`.
+- [x] **TASK-002**: Record the first-version harness matrix in `plans/skills-agents-command-center/implementation-details.md`.
   - Mark `claude`, `codex`, and `opencode` as the managed harness scope.
   - Mark `pi` as explicitly deferred rather than unsupported forever.
   - Require unsupported or unknown resource combinations to remain visible and disabled instead of being omitted or assigned guessed paths.
-- [ ] **TASK-003**: Separate plugin inventory from managed resource semantics in `plans/skills-agents-command-center/implementation-details.md`.
+- [x] **TASK-003**: Separate plugin inventory from managed resource semantics in `plans/skills-agents-command-center/implementation-details.md`.
   - Allow the UI to identify plugin-provided resources under the originating harness.
   - State that plugin installation, conversion, and cross-harness copying are outside the first implementation.
 
@@ -62,7 +62,7 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
 
 - **GOAL-002**: Make every synchronization direction, scope, and confirmation boundary deterministic before persistence or transport APIs are designed.
 
-- [ ] **TASK-004**: Add a source-of-truth operation matrix to `plans/skills-agents-command-center/implementation-details.md` with the following exact behavior:
+- [x] **TASK-004**: Add a source-of-truth operation matrix to `plans/skills-agents-command-center/implementation-details.md` with the following exact behavior:
 
   | Operation | Reads | Writes | Required user gate |
   |---|---|---|---|
@@ -74,12 +74,12 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
   | Direct update | User draft and current resource | Backup plus one existing resource | Explicit Save confirmation |
   | Direct delete | Current resource | Backup plus removal of one existing resource | Explicit Delete confirmation |
 
-- [ ] **TASK-005**: Define conflict behavior in `plans/skills-agents-command-center/implementation-details.md` and `plans/skills-agents-command-center/step-09-sync-conflict-ux.md`.
+- [x] **TASK-005**: Define conflict behavior in `plans/skills-agents-command-center/implementation-details.md` and `plans/skills-agents-command-center/step-09-sync-conflict-ux.md`.
   - Key each plan by `${agentKind}:${resourceType}`.
   - Require the modal to display disk-only, config-only, and content-changed entries before presenting the three outcomes in REQ-013.
   - Invalidate a displayed plan when a new scan changes either side; applying a stale plan must require regeneration and reconfirmation.
   - Define `Cancel` and modal dismissal as no-op outcomes.
-- [ ] **TASK-006**: Propagate the canonical mutation rules into the service, persistence, transport, and acceptance plans.
+- [x] **TASK-006**: Propagate the canonical mutation rules into the service, persistence, transport, and acceptance plans.
   - Update `step-02-main-process-harness-config-service.md` to separate plan generation from confirmed application.
   - Update `step-05-persist-tatsu-managed-config.md` so persisted desired state is distinct from disk inventory.
   - Update `step-06-transport-request-handlers.md` so mutating requests accept a confirmed scoped plan or a direct confirmed action rather than arbitrary paths.
@@ -89,15 +89,15 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
 
 - **GOAL-003**: Encode aliasing, portability, and backup rules so later phases cannot introduce duplicate resources or destructive unconfirmed writes.
 
-- [ ] **TASK-007**: Define Claude skill/command alias behavior in `plans/skills-agents-command-center/implementation-details.md`, `step-03-harness-capability-metadata.md`, and `step-10-skill-command-conversion.md`.
+- [x] **TASK-007**: Define Claude skill/command alias behavior in `plans/skills-agents-command-center/implementation-details.md`, `step-03-harness-capability-metadata.md`, and `step-10-skill-command-conversion.md`.
   - One physical Claude resource may appear in both logical views.
   - Both views must resolve to the same stable resource identity and underlying path.
   - Create-skill/create-command conversion must return that identity when the alias already exists.
-- [ ] **TASK-008**: Define the backup invariant in `plans/skills-agents-command-center/implementation-details.md`, `step-02-main-process-harness-config-service.md`, and `step-14-acceptance-criteria.md`.
+- [x] **TASK-008**: Define the backup invariant in `plans/skills-agents-command-center/implementation-details.md`, `step-02-main-process-harness-config-service.md`, and `step-14-acceptance-criteria.md`.
   - Create a dated backup from the unmodified bytes before overwrite or delete.
   - Abort the original mutation if backup creation fails.
   - Exclude brand-new files from backup creation only when the target does not already exist.
-- [ ] **TASK-009**: Reconcile `plans/skills-agents-command-center/step-15-open-questions.md` with this boundary.
+- [x] **TASK-009**: Reconcile `plans/skills-agents-command-center/step-15-open-questions.md` with this boundary.
   - Remove the already-decided sync-scope question.
   - Keep exact harness directory conventions, repo-local versus global discovery roots, and nested skill asset support open for their owning resolver steps.
   - State that none of those resolver questions may weaken the confirmation, backup, alias, or no-cross-harness-copy invariants established here.
