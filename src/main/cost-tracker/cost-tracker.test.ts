@@ -1,16 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-
 // Controlled fs mock: readFileSync returns a JSONL transcript fixture
 // which we override per-test. existsSync is unused by parseTranscript
 // (it just lets readFileSync throw), so leaving the real one in place
 // is fine.
 const readFileSyncMock = vi.fn((..._args: unknown[]) => '')
+let statusWatchCallback:
+  | ((eventType: string, filename: string | Buffer | null) => void)
+  | undefined
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs')
   return {
     ...actual,
-    readFileSync: (...args: unknown[]) => readFileSyncMock(...args)
+    readFileSync: (...args: unknown[]) => readFileSyncMock(...args),
+    watch: (...args: unknown[]) => {
+      statusWatchCallback = args[1] as typeof statusWatchCallback
+      return { close: vi.fn() }
+    }
   }
 })
 
@@ -18,13 +24,16 @@ vi.mock('electron', () => ({
   app: { getPath: () => '/tmp', setPath: () => {}, isPackaged: false }
 }))
 
+import { writeFileSync } from 'fs'
 import { Store } from '../store'
+import { cleanupTerminalLog, watchStatusDir } from '../hooks'
 import { CostTracker } from '.'
 
 describe('CostTracker — JSON-mode wiring', () => {
   beforeEach(() => {
     readFileSyncMock.mockReset()
     readFileSyncMock.mockReturnValue('')
+    statusWatchCallback = undefined
   })
 
   afterEach(() => {
@@ -169,6 +178,50 @@ describe('CostTracker — JSON-mode wiring', () => {
     tracker.stop()
 
     expect(store.getSnapshot().state.costs.byTerminal[sessionId]).toBeUndefined()
+  })
+
+  it('does not dispatch usageUpdated for a Stop transcript without model usage', () => {
+    const terminalId = 'terminal-stop-no-model'
+    const statusFilename = `${terminalId}.ndjson`
+    const statusPath = `/tmp/harness-status/${statusFilename}`
+    const sessionId = 'sess-stop-no-model'
+    const transcriptPath = '/tmp/transcript-stop-no-model.jsonl'
+    readFileSyncMock.mockReturnValue(
+      JSON.stringify({ type: 'session_meta', payload: { id: sessionId } }) + '\n'
+    )
+
+    const store = new Store()
+    const usageUpdated = vi.fn()
+    const unsubscribe = store.subscribe((event) => {
+      if (event.type === 'costs/usageUpdated') usageUpdated()
+    })
+    const tracker = new CostTracker(store)
+    let stopWatching: (() => void) | undefined
+
+    try {
+      stopWatching = watchStatusDir(store)
+      tracker.start()
+      tracker.setClientInterested('client-A', true)
+
+      writeFileSync(
+        statusPath,
+        JSON.stringify({
+          event: 'Stop',
+          ts: 1_700_000_000,
+          payload: { session_id: sessionId, transcript_path: transcriptPath }
+        }) + '\n'
+      )
+      const notifyStatusChange = statusWatchCallback
+      if (!notifyStatusChange) throw new Error('status watcher callback was not registered')
+      notifyStatusChange('change', statusFilename)
+
+      expect(usageUpdated).not.toHaveBeenCalled()
+    } finally {
+      tracker.stop()
+      unsubscribe()
+      stopWatching?.()
+      cleanupTerminalLog(terminalId)
+    }
   })
 
   it('skips parsing while no client is interested, then backfills on first interest', () => {
