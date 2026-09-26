@@ -281,7 +281,6 @@ src/
         ├── useViewport/           # Viewport size subscription
         ├── useWatchedQuery/       # Polled async query helper
         ├── useJsonClaudeApprovals/# Json Claude approval helpers
-        ├── useTailLineBuffer/     # Rolling tail-line cache for CommandCenter
         ├── useTabHandlers/        # All pane/tab mutation handlers (addTab, splitPane, …)
         ├── useWorktreeHandlers/   # All worktree+repo+pending-creation handlers
         └── useHotkeyHandlers/     # Sidebar-aware hotkey action map + keystroke binding

@@ -100,7 +100,7 @@ export function Hero() {
           <Gap />
           <Bubble kind="rcvd">Nice, that's pretty sick</Bubble>
           <Bubble kind="rcvd">
-            Hey! Just downloaded harness and have an immediate feature request. cmd+d to split my
+            Hey! Just downloaded Tatsu and have an immediate feature request. cmd+d to split my
             tab
           </Bubble>
           <Gap />
