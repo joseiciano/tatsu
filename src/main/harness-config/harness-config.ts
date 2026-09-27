@@ -25,6 +25,7 @@ import type {
   HarnessConfigDesiredResource,
   HarnessConfigFileRef,
   HarnessConfigFilesystem,
+  HarnessConfigErrorCode,
   HarnessConfigMutationPlan,
   HarnessConfigReadResult,
   HarnessConfigResourceResolver,
@@ -41,6 +42,8 @@ import { HarnessConfigError, harnessConfigScopeKey } from './types'
 const RESOURCE_TYPES: readonly HarnessConfigResourceType[] = ['agents', 'skills', 'commands']
 const MANAGED_HARNESSES: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
 const BACKUP_SUFFIX = /\.x-backup-\d{8}T\d{9}Z(?:-\d+)?$/
+const MAX_LIVE_PLANS = 64
+const MAX_ATTEMPTED_PLAN_IDS = 512
 
 const unsupported = (identity: string, reason: string): HarnessConfigResourceResolver => ({
   supported: false,
@@ -291,9 +294,27 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   constructor(deps: HarnessConfigServiceDeps = {}) {
     this.deps = deps
-    this.fs = deps.filesystem ?? deps.fs ?? nodeFilesystem
+    this.fs = deps.filesystem ?? nodeFilesystem
     this.clock = deps.clock ?? Date.now
     this.uuid = deps.uuid ?? randomUUID
+  }
+
+  private rememberPlan(planId: string, plan: PrivatePlan): void {
+    while (this.plans.size >= MAX_LIVE_PLANS) {
+      const oldest = this.plans.keys().next().value
+      if (oldest === undefined) break
+      this.plans.delete(oldest)
+    }
+    this.plans.set(planId, plan)
+  }
+
+  private rememberAttempted(planId: string): void {
+    while (this.attemptedPlanIds.size >= MAX_ATTEMPTED_PLAN_IDS) {
+      const oldest = this.attemptedPlanIds.values().next().value
+      if (oldest === undefined) break
+      this.attemptedPlanIds.delete(oldest)
+    }
+    this.attemptedPlanIds.add(planId)
   }
 
   scan(scope: HarnessConfigScope): HarnessConfigFileRef[] {
@@ -406,7 +427,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         generatedAt,
         fingerprint
       }
-      this.plans.set(publicPlan.planId, {
+      this.rememberPlan(publicPlan.planId, {
         publicPlan,
         scopeKey: harnessConfigScopeKey(scope),
         direction: 'adopt-from-disk',
@@ -432,6 +453,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         throw new HarnessConfigError('invalid-name', 'This harness resource does not support creation')
       }
       const relativePath = descriptor.nameToRelativePath(name)
+      this.assertDiscoverableDepth(descriptor, relativePath)
       const target = this.resolveCandidate(descriptor, relativePath, false)
       const state = this.snapshot(scope)
       if (this.fs.existsSync(target.absolutePath) || state.disk.some(({ ref }) => ref.relativePath === target.relativePath)) {
@@ -453,7 +475,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         updatedAt: this.clock()
       }
       return this.storeMutationPlan(scope, 'create', ref, content, state)
-    })
+    }, 'write-failed')
   }
 
   prepareUpdate(scope: HarnessConfigScope, id: string, content: string): HarnessConfigMutationPlan {
@@ -471,7 +493,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         updatedAt: this.clock()
       }
       return this.storeMutationPlan(scope, 'update', ref, content, state, entry.descriptor)
-    })
+    }, 'write-failed')
   }
 
   prepareDelete(scope: HarnessConfigScope, id: string): HarnessConfigMutationPlan {
@@ -480,15 +502,15 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const entry = state.disk.find(({ ref }) => ref.id === id)
       if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
       return this.storeMutationPlan(scope, 'delete', cloneRef(entry.ref), undefined, state, entry.descriptor)
-    })
+    }, 'write-failed')
   }
 
   prepareCommandFromSkill(scope: HarnessConfigScope, id: string): HarnessConfigConversionResult {
-    return this.guard('prepareCommandFromSkill', () => this.prepareConversion(scope, id, 'skills', 'commands'))
+    return this.guard('prepareCommandFromSkill', () => this.prepareConversion(scope, id, 'skills', 'commands'), 'write-failed')
   }
 
   prepareSkillFromCommand(scope: HarnessConfigScope, id: string): HarnessConfigConversionResult {
-    return this.guard('prepareSkillFromCommand', () => this.prepareConversion(scope, id, 'commands', 'skills'))
+    return this.guard('prepareSkillFromCommand', () => this.prepareConversion(scope, id, 'commands', 'skills'), 'write-failed')
   }
 
   async applyPlan(request: HarnessConfigApplyRequest): Promise<HarnessConfigApplyResult> {
@@ -589,23 +611,31 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     })
   }
 
-  private guard<T>(operation: string, action: () => T): T {
+  private guard<T>(
+    operation: string,
+    action: () => T,
+    fallbackCode: HarnessConfigErrorCode = 'read-failed'
+  ): T {
     try {
       return action()
     } catch (error) {
       this.logFailure(operation, error)
       if (error instanceof HarnessConfigError) throw error
-      throw new HarnessConfigError('read-failed', `Harness configuration ${operation} failed`, { cause: error })
+      throw new HarnessConfigError(fallbackCode, `Harness configuration ${operation} failed`, { cause: error })
     }
   }
 
-  private async guardAsync<T>(operation: string, action: () => Promise<T>): Promise<T> {
+  private async guardAsync<T>(
+    operation: string,
+    action: () => Promise<T>,
+    fallbackCode: HarnessConfigErrorCode = 'write-failed'
+  ): Promise<T> {
     try {
       return await action()
     } catch (error) {
       this.logFailure(operation, error)
       if (error instanceof HarnessConfigError) throw error
-      throw new HarnessConfigError('write-failed', `Harness configuration ${operation} failed`, { cause: error })
+      throw new HarnessConfigError(fallbackCode, `Harness configuration ${operation} failed`, { cause: error })
     }
   }
 
@@ -675,6 +705,10 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const rootKey = descriptor.rootKey
     if (!rootKey) throw new HarnessConfigError('unsupported-scope', 'The resolver has no verified known root')
     const configured = this.deps.knownRoots?.[rootKey]
+    // OPENCODE_CONFIG_DIR has no verified contract with the managed entrypoints this
+    // service knows (agents/skills/commands subdirectories). Honoring it would point
+    // scans at a root whose layout we cannot verify; silently ignoring it would scan
+    // the wrong root. Fail closed instead: no explicit knownRoots entry, no opencode scope.
     if (
       this.openCodeCustom?.trim() &&
       configured === undefined &&
@@ -721,6 +755,10 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path is unsafe')
     }
+    // Reject sibling-prefix confusion: a first segment named "<root-basename>-…"
+    // (e.g. "agents-backup/", "agents-helper/" beside an "agents" root) is the shape
+    // of a sibling directory masquerading as managed content. TEST-006 requires
+    // rejecting prefix-sibling paths rather than trusting config-supplied refs.
     if (root && segments[0].startsWith(`${basename(root)}-`)) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path is unsafe')
     }
@@ -812,6 +850,13 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       name.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
     ) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource name is unsafe')
+    }
+  }
+
+  private assertDiscoverableDepth(descriptor: HarnessConfigResourceResolver, relativePath: string): void {
+    const depth = relativePath.split('/').length - 1
+    if (depth > (descriptor.maxDepth ?? Number.POSITIVE_INFINITY)) {
+      throw new HarnessConfigError('invalid-name', 'The derived resource path is outside the managed discovery boundary')
     }
   }
 
@@ -1024,7 +1069,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   }
 
   private diskFingerprint(entries: DiskEntry[]): string {
-    return sha256(JSON.stringify(entries.map(({ ref }) => [ref.id, ref.relativePath, ref.hash, ref.updatedAt])))
+    return sha256(JSON.stringify(entries.map(({ ref }) => [ref.id, ref.relativePath, ref.hash])))
   }
 
   private configFingerprint(resources: HarnessConfigDesiredResource[]): string {
@@ -1069,7 +1114,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     state: SnapshotState,
     operations: DiskOperation[]
   ): void {
-    this.plans.set(publicPlan.planId, {
+    this.rememberPlan(publicPlan.planId, {
       publicPlan,
       scopeKey: harnessConfigScopeKey(publicPlan.scope),
       direction: publicPlan.direction,
@@ -1105,7 +1150,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       generatedAt: this.clock(),
       fingerprint
     }
-    this.plans.set(publicPlan.planId, {
+    this.rememberPlan(publicPlan.planId, {
       publicPlan,
       scopeKey: harnessConfigScopeKey(scope),
       direction,
@@ -1285,7 +1330,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
         try {
           if (this.fs.existsSync(backup)) this.fs.unlinkSync(backup)
-        } catch {
+        } catch (cleanupError) {
+          this.logFailure('backup cleanup', cleanupError)
         }
         throw new HarnessConfigError('backup-failed', 'Unable to create the resource backup', { cause: error })
       }
@@ -1302,7 +1348,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     } catch (error) {
       try {
         if (this.fs.existsSync(temporary)) this.fs.unlinkSync(temporary)
-      } catch {
+      } catch (cleanupError) {
+        this.logFailure('temporary-file cleanup', cleanupError)
       }
       throw new HarnessConfigError('write-failed', 'Unable to atomically write the harness resource', { cause: error })
     }
@@ -1387,7 +1434,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   private consumePlan(planId: string): void {
     this.plans.delete(planId)
-    this.attemptedPlanIds.add(planId)
+    this.rememberAttempted(planId)
   }
 }
 

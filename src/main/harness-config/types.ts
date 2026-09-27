@@ -137,7 +137,7 @@ export type HarnessConfigPlanDirection =
 export interface HarnessConfigSyncPlan {
   planId: string
   scope: HarnessConfigScope
-  direction: 'sync-to-disk' | 'adopt-from-disk'
+  direction: Extract<HarnessConfigPlanDirection, 'sync-to-disk' | 'adopt-from-disk'>
   status: HarnessConfigComparisonStatus
   diskOnly: HarnessConfigFileRef[]
   configOnly: HarnessConfigFileRef[]
@@ -149,7 +149,7 @@ export interface HarnessConfigSyncPlan {
 export interface HarnessConfigMutationPlan {
   planId: string
   scope: HarnessConfigScope
-  direction: 'create' | 'update' | 'delete'
+  direction: Extract<HarnessConfigPlanDirection, 'create' | 'update' | 'delete'>
   resource: HarnessConfigFileRef
   generatedAt: number
   fingerprint: string
@@ -213,7 +213,6 @@ export interface HarnessConfigServiceDeps {
     resources: HarnessConfigDesiredResource[]
   ) => void | Promise<void>
   filesystem?: HarnessConfigFilesystem
-  fs?: HarnessConfigFilesystem
   log?: (category: string, message: string, data?: unknown) => void
   formatErr?: (error: unknown) => string
 }
