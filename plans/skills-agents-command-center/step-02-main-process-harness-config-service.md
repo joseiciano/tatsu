@@ -1,14 +1,14 @@
 ---
 goal: Implement a safe main-process service for harness configuration discovery, drift planning, and confirmed mutation
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-09-26
+status: 'Completed'
 tags: [feature, architecture, filesystem, harness-config, security]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan adds the main-process package that discovers and manages harness-facing agent definitions, skills, and commands for Claude Code, Codex, and OpenCode. It converts the product contract in [implementation-details.md](./implementation-details.md) and [Step 1](./step-01-product-boundary-source-of-truth.md) into a testable filesystem boundary: scans and comparisons of the disk inventory are read-only; every comparison, generated plan, and confirmed application is isolated to one `${agentKind}:${resourceType}` scope; and mutation of disk or Tatsu config occurs only by applying a current confirmed plan. This is Step 2 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md); transport, shared state, persistence wiring, and UI remain later steps.
 
@@ -62,36 +62,36 @@ The service MUST implement the [source-of-truth operation matrix](./implementati
 
 - **GOAL-001**: Establish one deterministic, main-only domain model for roots, physical identity, aliases, plans, operations, and structured failures.
 
-- [ ] **TASK-001**: Create `src/main/harness-config/types.ts` with the unions, scope and canonical scope-key helper, resolver, file-ref, Tatsu config resource, sync-plan, mutation-plan, apply-result, dependency, filesystem-adapter, and `HarnessConfigError` contracts required by REQ-002 through REQ-023.
+- [x] **TASK-001**: Create `src/main/harness-config/types.ts` with the unions, scope and canonical scope-key helper, resolver, file-ref, Tatsu config resource, sync-plan, mutation-plan, apply-result, dependency, filesystem-adapter, and `HarnessConfigError` contracts required by REQ-002 through REQ-023.
   - Make `agentKind` required on every scope and plan and constrain `resourceType` to `agents | skills | commands`.
   - Define error codes for unsupported scope, invalid name, unsafe path, unknown resource, unconfirmed plan, unknown plan, stale plan, collision, backup failure, read failure, write failure, delete failure, and Tatsu config persistence failure.
   - Keep executable plan operations and content private to the implementation; public plans expose summaries and fingerprints only.
-- [ ] **TASK-002**: Add the closed resolver table in `src/main/harness-config/harness-config.ts` from resolver conventions verified by existing repository integration or authoritative harness documentation; record the verification source beside each supported descriptor.
+- [x] **TASK-002**: Add the closed resolver table in `src/main/harness-config/harness-config.ts` from resolver conventions verified by existing repository integration or authoritative harness documentation; record the verification source beside each supported descriptor.
   - Keep resource types logical: each descriptor owns its known-root resolver, managed entrypoint boundary, discovery rule, and logical-name-to-relative-path conversion without exposing concrete paths to renderer code.
   - Mark any harness/resource combination whose root or entrypoint convention is not verified as unsupported. Do not infer a path from another harness, a home-directory convention, an executable name, or an adjacent vendor file.
   - Convert descriptor-produced relative paths to `/` separators before identity, sorting, or persistence, and emit verified Claude skill aliases in the Commands view without duplicating physical IDs or Tatsu config records.
-- [ ] **TASK-003**: Implement exact allowlist validation, resolver-owned known-root resolution, logical-name validation, lexical containment, nearest-existing-ancestor realpath containment, backup exclusion, SHA-256 hashing, physical ID generation, and deterministic sort helpers in `harness-config.ts`.
+- [x] **TASK-003**: Implement exact allowlist validation, resolver-owned known-root resolution, logical-name validation, lexical containment, nearest-existing-ancestor realpath containment, backup exclusion, SHA-256 hashing, physical ID generation, and deterministic sort helpers in `harness-config.ts`.
   - Reject symlinks during recursive discovery by using directory-entry/lstat information and never following symbolic-link directories.
   - Reconstruct normalized absolute paths only in main from the selected descriptor and its known root; keep helpers module-private unless a test must assert a public contract through the service.
-- [ ] **TASK-004**: Create `src/main/harness-config/index.ts` and export only the service factory/class plus public types and error contracts from the package barrel.
+- [x] **TASK-004**: Create `src/main/harness-config/index.ts` and export only the service factory/class plus public types and error contracts from the package barrel.
 
 ### Implementation Phase 2: Implement read-only inventory and planning
 
 - **GOAL-002**: Produce current, scoped inventories and immutable drift plans without mutating disk or Tatsu config.
 
-- [ ] **TASK-005**: Implement `HarnessConfigService.scan(scope)` and `readFile(id)` in `harness-config.ts`.
+- [x] **TASK-005**: Implement `HarnessConfigService.scan(scope)` and `readFile(id)` in `harness-config.ts`.
   - Recursively enumerate only each resolver's allowed depth and filename pattern, collect `lstat`/`stat` metadata, hash exact bytes, and return deterministic refs.
   - Mark a disk ref `managed` only when the canonical physical ID exists in the freshly loaded desired resources for the same harness and canonical scope.
   - Resolve reads from a fresh recognized inventory and return `{ ref, content, hash }`; reject unknown or newly unsafe IDs.
-- [ ] **TASK-006**: Implement `planSync(scope)` as scoped disk-inventory-versus-Tatsu-config comparison with the status precedence in REQ-015.
+- [x] **TASK-006**: Implement `planSync(scope)` as scoped disk-inventory-versus-Tatsu-config comparison with the status precedence in REQ-015.
   - Return a transport-safe comparison only; do not allocate a plan ID, retain executable operations, or allow its fingerprint to be passed to `applyPlan`.
   - Build config-only refs only when the selected verified resolver can derive and confine the target path; otherwise reject instead of synthesizing a path.
   - Classify an ID as changed only when both sides exist and their exact SHA-256 hashes differ; canonicalize Claude aliases so one physical skill cannot appear simultaneously as disk-only and config-only across views.
-- [ ] **TASK-007**: Implement `planSyncToDisk(scope)` and `planAdoptFromDisk(scope)` as scoped, non-mutating actionable-plan generators with private plan records.
+- [x] **TASK-007**: Implement `planSyncToDisk(scope)` and `planAdoptFromDisk(scope)` as scoped, non-mutating actionable-plan generators with private plan records.
   - Capture the canonical scope key, sorted disk inventory fingerprint, Tatsu config fingerprint, resolver identity, operation snapshots, and exact content needed for apply.
   - Store plans under injected UUIDs; return only the serializable public plan. Plan generation MUST perform zero disk and Tatsu config writes; application happens exclusively through `applyPlan({ scope, planId, confirmed: true })` after the user confirms that specific plan.
   - Generate no operations and preserve `status: 'synced'` when the selected scope already matches.
-- [ ] **TASK-008**: Implement `prepareCreate`, `prepareUpdate`, and `prepareDelete` as scoped, non-mutating plan generators, and `prepareCommandFromSkill`/`prepareSkillFromCommand` as scoped, non-mutating, prepare-only conversion methods returning the exact `alias | existing | draft` `HarnessConfigConversionResult` from REQ-027 (no conversion plan is created; Step 10 owns the draft-create write path through the direct-create contract).
+- [x] **TASK-008**: Implement `prepareCreate`, `prepareUpdate`, and `prepareDelete` as scoped, non-mutating plan generators, and `prepareCommandFromSkill`/`prepareSkillFromCommand` as scoped, non-mutating, prepare-only conversion methods returning the exact `alias | existing | draft` `HarnessConfigConversionResult` from REQ-027 (no conversion plan is created; Step 10 owns the draft-create write path through the direct-create contract).
   - Reject destination collisions before storing a direct-mutation plan; conversion collisions instead return `{ status: 'existing', ref }` without writing.
   - For a Claude alias conversion in either direction, return `{ status: 'alias', ref }` carrying the existing stable physical ref without creating a plan or a file.
   - Never generate an operation whose source and destination harness differ; plugin provenance MUST NOT become conversion or copy input.
@@ -100,37 +100,37 @@ The service MUST implement the [source-of-truth operation matrix](./implementati
 
 - **GOAL-003**: Execute only current confirmed plans with fail-closed backup, path, rollback, and persistence behavior.
 
-- [ ] **TASK-009**: Implement `applyPlan({ scope, planId, confirmed })` with single-use lookup, explicit confirmation enforcement, exact `${agentKind}:${resourceType}` scope/resolver binding, fresh disk inventory and Tatsu config fingerprint recomputation, and all-operation preflight before mutation.
+- [x] **TASK-009**: Implement `applyPlan({ scope, planId, confirmed })` with single-use lookup, explicit confirmation enforcement, exact `${agentKind}:${resourceType}` scope/resolver binding, fresh disk inventory and Tatsu config fingerprint recomputation, and all-operation preflight before mutation.
   - Return without mutation and without consuming the plan when `confirmed !== true`. Reject an absent plan. Reject and consume a reused, scope-mismatched, resolver-changed, or stale stored plan; stale rejection requires plan regeneration and a new explicit confirmation.
   - Mark a confirmed current plan attempted before its first side effect so it cannot be replayed; consume it on success or failure.
   - Return structured `applied`, `resultingRefs`, and `requiresRescan: true` fields without dispatching store events.
-- [ ] **TASK-010**: Implement atomic create/overwrite and guarded delete primitives.
+- [x] **TASK-010**: Implement atomic create/overwrite and guarded delete primitives.
   - Immediately before every filesystem operation, reconstruct the target from the current main resolver, normalize it, and revalidate lexical and realpath containment in the selected known root.
   - For an existing target, read and retain its unmodified bytes once; create the exclusive dated backup from those bytes and verify backup completion before overwrite or delete. Then write replacements through a unique sibling temporary file and rename into place.
   - Abort on any backup failure before unlink or overwrite, leaving the original untouched. Revalidate absence and skip backup creation only for a genuinely new target.
-- [ ] **TASK-011**: Implement direct-mutation Tatsu config updates and rollback.
+- [x] **TASK-011**: Implement direct-mutation Tatsu config updates and rollback.
   - After a successful disk create/update/delete, replace only the affected canonical Tatsu config scope.
   - On Tatsu config persistence failure, delete a just-created target or restore an overwritten/deleted target from the backup bytes, log both the persistence error and any rollback error, then throw `desired-state-failed`.
   - Leave successful backups in place even after rollback.
-- [ ] **TASK-012**: Implement direction-specific application semantics.
+- [x] **TASK-012**: Implement direction-specific application semantics.
   - `sync-to-disk` applies its stable ordered disk operations in only the selected known root and never calls `replaceDesiredScope`.
   - `adopt-from-disk` calls `replaceDesiredScope` exactly once to replace only the selected `${agentKind}:${resourceType}` portion of Tatsu config and performs zero harness filesystem writes.
   - Conversions are prepare-only: an `alias` result returns the existing Claude ref without mutation, and a `draft` result is saved only through the confirmed direct-create path with the same-harness guard — never through a conversion plan. No application path copies plugin payloads or resources to another harness.
-- [ ] **TASK-013**: Wrap every public operation with consistent `harness-config` error logging and normalize unexpected Node errors into stable `HarnessConfigError` codes without swallowing the original cause.
+- [x] **TASK-013**: Wrap every public operation with consistent `harness-config` error logging and normalize unexpected Node errors into stable `HarnessConfigError` codes without swallowing the original cause.
 
 ### Implementation Phase 4: Prove service contracts
 
 - **GOAL-004**: Verify resolver behavior, drift classification, confirmation gates, path confinement, backup ordering, stale-plan rejection, and rollback using isolated temporary roots.
 
-- [ ] **TASK-014**: Create `src/main/harness-config/harness-config.test.ts` using Vitest, `mkdtempSync`, and `rmSync(..., { recursive: true, force: true })`; import the service from `.` and inject explicit temporary known roots, timestamps, UUIDs, resolver descriptors, and Tatsu config callbacks.
-- [ ] **TASK-015**: Add resolver and inventory tests for each supported verified descriptor plus unsupported/unverified combinations, deterministic sorting, byte-exact hashes, stable physical IDs, backup exclusion, symlink exclusion, and Claude skill/command alias identity. Assert unsupported pairs never receive a guessed path.
-- [ ] **TASK-016**: Add comparison and plan-generation tests covering all four statuses, disk-only/config-only/changed lists, same-ID unchanged files, exact `${agentKind}:${resourceType}` isolation, canonical alias deduplication, same-harness conversion, collision refusal, and prohibition of cross-harness or plugin-payload operations. Assert both sync-to-disk and adopt-from-disk generation perform zero writes and retain the exact scoped snapshots reviewed for confirmation.
-- [ ] **TASK-017**: Add mutation safety tests proving cancel/dismiss and `confirmed !== true` are no-ops; unknown, reused, scope-mismatched, resolver-changed, process-lost, and stale plans perform zero writes; disk-inventory or Tatsu config changes after generation cause stale rejection and require a newly generated confirmed plan; traversal, absolute-path, prefix-sibling, separator-variant, and symlink-ancestor escapes are rejected; and parent directories are created only for a valid confirmed create.
-- [ ] **TASK-018**: Add backup and failure-order tests proving overwrite and delete backups contain the exact unmodified pre-change bytes, the complete backup precedes the destructive operation, unique collision suffixes are used, every injected backup read/create/write failure leaves the original untouched, atomic-write failure removes temporary files, genuinely new files create no backup, and Tatsu config failure restores or removes the disk target as required.
-- [ ] **TASK-019**: Add direction tests proving sync-to-disk creates/overwrites/deletes only inside the selected normalized main-resolved known root, adopt-from-disk performs no harness writes and replaces one Tatsu config scope, partial apply reports completed operations and requires rescan, and plugin provenance, plugin payloads, and harness settings files remain untouched.
-- [ ] **TASK-020**: Run `npx vitest run src/main/harness-config/harness-config.test.ts`, `pnpm typecheck`, and `pnpm build`; resolve every failure without weakening validation or confirmation rules.
-- [ ] **TASK-021**: Review downstream Steps 3 through 6 and update only incompatible type assumptions: capability metadata must match the resolver matrix, Step 4 must share the serializable public ref/plan shape without importing main code, Step 5 must persist canonical desired resources, and Step 6 must call prepare/apply rather than direct mutations.
-- [ ] **TASK-022**: Commit the service as one focused change with message `feat: add harness config service` and push the current branch immediately after the commit succeeds.
+- [x] **TASK-014**: Create `src/main/harness-config/harness-config.test.ts` using Vitest, `mkdtempSync`, and `rmSync(..., { recursive: true, force: true })`; import the service from `.` and inject explicit temporary known roots, timestamps, UUIDs, resolver descriptors, and Tatsu config callbacks.
+- [x] **TASK-015**: Add resolver and inventory tests for each supported verified descriptor plus unsupported/unverified combinations, deterministic sorting, byte-exact hashes, stable physical IDs, backup exclusion, symlink exclusion, and Claude skill/command alias identity. Assert unsupported pairs never receive a guessed path.
+- [x] **TASK-016**: Add comparison and plan-generation tests covering all four statuses, disk-only/config-only/changed lists, same-ID unchanged files, exact `${agentKind}:${resourceType}` isolation, canonical alias deduplication, same-harness conversion, collision refusal, and prohibition of cross-harness or plugin-payload operations. Assert both sync-to-disk and adopt-from-disk generation perform zero writes and retain the exact scoped snapshots reviewed for confirmation.
+- [x] **TASK-017**: Add mutation safety tests proving cancel/dismiss and `confirmed !== true` are no-ops; unknown, reused, scope-mismatched, resolver-changed, process-lost, and stale plans perform zero writes; disk-inventory or Tatsu config changes after generation cause stale rejection and require a newly generated confirmed plan; traversal, absolute-path, prefix-sibling, separator-variant, and symlink-ancestor escapes are rejected; and parent directories are created only for a valid confirmed create.
+- [x] **TASK-018**: Add backup and failure-order tests proving overwrite and delete backups contain the exact unmodified pre-change bytes, the complete backup precedes the destructive operation, unique collision suffixes are used, every injected backup read/create/write failure leaves the original untouched, atomic-write failure removes temporary files, genuinely new files create no backup, and Tatsu config failure restores or removes the disk target as required.
+- [x] **TASK-019**: Add direction tests proving sync-to-disk creates/overwrites/deletes only inside the selected normalized main-resolved known root, adopt-from-disk performs no harness writes and replaces one Tatsu config scope, partial apply reports completed operations and requires rescan, and plugin provenance, plugin payloads, and harness settings files remain untouched.
+- [x] **TASK-020**: Run `npx vitest run src/main/harness-config/harness-config.test.ts`, `pnpm typecheck`, and `pnpm build`; resolve every failure without weakening validation or confirmation rules.
+- [x] **TASK-021**: Review downstream Steps 3 through 6 and update only incompatible type assumptions: capability metadata must match the resolver matrix, Step 4 must share the serializable public ref/plan shape without importing main code, Step 5 must persist canonical desired resources, and Step 6 must call prepare/apply rather than direct mutations.
+- [x] **TASK-022**: Commit the service as one focused change with message `feat: add harness config service` and push the current branch immediately after the commit succeeds.
 
 ## 3. Alternatives
 

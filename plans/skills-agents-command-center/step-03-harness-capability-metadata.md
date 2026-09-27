@@ -29,20 +29,20 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 
 - **REQ-006**: Export `isHarnessConfigCapabilityEnabled(capability)` as the single presentation predicate; it MUST return `true` only when `capability.status === 'supported'` and `false` for both `unsupported` and `unknown`. Static capability status MUST NOT be derived from whether a directory or file currently exists on the user's machine because a confirmed create may create a missing directory.
 - **REQ-007**: Runtime layout availability, environment overrides, version-specific resolver failures, and installed-layout errors MUST remain owned by `src/main/harness-config/`. A runtime failure for a statically `supported` pair MUST be presented as that operation's structured error; it MUST NOT rewrite registry metadata to `unknown`. The `unknown` status is reserved for a pair whose resolver/management contract is not specified, including deferred Pi.
-- **REQ-008**: Populate the capability matrix exactly as follows, matching the resolver contract in Step 2 while distinguishing explicit deferral from known non-support:
+- **REQ-008**: Populate the capability matrix exactly as follows, matching the resolver contract verified and implemented in Step 2 while distinguishing explicit deferral from known non-support:
 
   | Agent kind | Agents | Skills | Commands |
   |---|---:|---:|---:|
   | `claude` | Supported | Supported | Supported |
-  | `codex` | Supported | Supported | Supported |
+  | `codex` | Supported | Supported | Unsupported — no verified custom-command filesystem contract |
   | `opencode` | Supported | Supported | Supported |
   | `pi` | Unknown — explicitly deferred | Unknown — explicitly deferred | Unknown — explicitly deferred |
 
 - **REQ-009**: Use the exact user-facing labels `Agents`, `Skills`, and `Commands` for their corresponding resource types across every agent entry.
-- **REQ-010**: Every `unsupported` or `unknown` capability MUST include a non-empty explanatory `notes` value. For all three Pi capabilities, use `Pi config management is deferred; its resource capabilities and layouts are not yet specified.` so the future Config UI can render an accurate disabled state without declaring Pi permanently unsupported.
+- **REQ-010**: Every `unsupported` or `unknown` capability MUST include a non-empty explanatory `notes` value. For Codex Commands, explain that Tatsu has no verified first-version custom-command filesystem contract. For all three Pi capabilities, use `Pi config management is deferred; its resource capabilities and layouts are not yet specified.` so the future Config UI can render an accurate disabled state without declaring Pi permanently unsupported.
 - **REQ-011**: The Claude `skills` capability MUST set `aliasResourceTypes: ['commands']` and explain in `notes` that Claude skills also appear in the Commands view as the same physical resource. One physical Claude skill exposed through both logical views MUST resolve in both views to one stable `id` and the same underlying path; create-skill/create-command conversion MUST return that existing identity and path rather than create a duplicate. File identity and conversion behavior are owned by Step 2 and Step 10, not by this metadata layer.
 - **REQ-012**: The Claude `commands` capability MUST remain independently supported because native Claude command files are also resolved. It MUST NOT set a reciprocal `aliasResourceTypes: ['skills']`; the file-level `canonicalResourceType` and `aliasResourceTypes` from Step 2 determine whether an individual Commands row is a skill alias. A native command and a skill alias therefore share a logical view without being treated as the same kind of physical resource.
-- **REQ-013**: Codex Skills MUST be marked `supported` to match Step 2's `skills/*/SKILL.md` resolver contract. If that resolver contract changes after vendor verification, update the resolver, this matrix, explanatory notes, and tests in the same change rather than allowing shared metadata and main-process behavior to diverge.
+- **REQ-013**: Codex Agents and Skills MUST be marked `supported`, and Codex Commands MUST be marked `unsupported`, to match Step 2's verified resolver contract. If vendor verification changes that resolver contract, update the resolver, this matrix, explanatory notes, and tests in the same change rather than allowing shared metadata and main-process behavior to diverge.
 - **REQ-014**: Capability metadata MUST NOT contain absolute paths, home-directory expansions, environment-variable values, resolver roots, or OS-specific separators. Labels and notes MAY describe behavior but MUST remain filesystem-neutral.
 - **REQ-015**: `src/shared/agent-registry/agent-registry.ts` MUST remain safe to import in the renderer, main process, preload, and web client; it MUST NOT import Node filesystem, path, OS, process-environment, or Electron APIs.
 - **REQ-016**: Existing registry behavior MUST remain unchanged: registry ordering stays `claude`, `codex`, `opencode`, `pi`; `getAgentInfo`, `agentDisplayName`, `getNextAgentKind`, and `cycleAltAgent` preserve their current results.
@@ -74,7 +74,7 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
   - Dependency: TASK-002.
   - Preserve agent ordering and all existing non-capability values.
   - Use the stable capability order `agents`, `skills`, `commands` for each agent.
-  - Give Claude, Codex, and OpenCode rows `status: 'supported'`.
+  - Give all Claude and OpenCode rows `status: 'supported'`; give Codex Agents and Skills `status: 'supported'` and Codex Commands `status: 'unsupported'` with the required explanatory note.
   - Give all Pi rows `status: 'unknown'` and the exact deferred note from REQ-010; do not use `unsupported`, because Pi support is undecided rather than known to be permanently unavailable.
 - [ ] **TASK-004**: Encode Claude alias behavior in the capability rows without collapsing native commands into skill aliases.
   - Dependency: TASK-003.
@@ -105,7 +105,7 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 - [ ] **TASK-008**: Add presentation-state tests and retain the existing cycle tests unchanged.
   - Dependency: TASK-005.
   - Assert through `getAgentInfo` that all three Pi capabilities remain present, have `status: 'unknown'`, expose the exact non-empty deferred note from REQ-010, and are disabled by `isHarnessConfigCapabilityEnabled`.
-  - Construct one valid `unsupported` capability fixture with a non-empty note and assert the predicate disables it; assert a supported registry capability is enabled. This covers every status branch without falsely assigning a currently managed harness/resource pair an unsupported status.
+  - Assert the Codex Commands capability is `unsupported`, carries the exact non-empty explanation from REQ-010, and is disabled; assert a supported registry capability is enabled. This covers every status branch without inventing support for an unverified resolver pair.
   - Assert the predicate never uses the label, notes, alias metadata, filesystem state, or agent kind to infer enablement.
 
 ### Implementation Phase 3: Verify and deliver the registry change
@@ -167,7 +167,7 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 - **RISK-003**: Vendor layout support or the resource union can change after this plan is implemented. REQ-003 and REQ-013 require one canonical shared union plus an atomic resolver, metadata, notes, and test update so main and renderer never advertise different types or capabilities.
 - **RISK-004**: Adding required nested metadata to `AgentInfo` can break registry fixtures or object literals outside the defining file. Current callsite research found `AGENT_REGISTRY` consumers but no additional `AgentInfo` object construction; `pnpm typecheck` remains the authoritative guard.
 - **RISK-005**: Showing Pi as disabled may be mistaken for permanent non-support. Its `unknown` status and required deferred note preserve the undecided scope rather than declaring Pi incapable.
-- **ASSUMPTION-001**: Step 2's current resolver matrix is accepted for this plan, including Codex Skills support.
+- **ASSUMPTION-001**: Step 2's verified resolver matrix is accepted for this plan, including Codex Agents and Skills support and Codex Commands non-support.
 - **ASSUMPTION-002**: Capability labels and status notes are product copy shared by all clients and therefore belong in shared metadata, while runtime error details continue to come from the main service.
 - **ASSUMPTION-003**: Capability-level aliases describe possible cross-view exposure; individual file refs from Step 2 remain authoritative for stable identity, underlying path, plugin provenance, and whether a particular row is an alias.
 - **ASSUMPTION-004**: No installed-version probe is required in Step 3; installed-layout failures are runtime errors for statically supported capabilities, while `unknown` is reserved for unspecified or deferred capability contracts.
