@@ -111,6 +111,27 @@ interface SearchItem {
   element: HTMLElement
 }
 
+type PickerKeyboardEvent = Pick<KeyboardEvent, 'key' | 'preventDefault' | 'stopPropagation'>
+
+export function dismissPickerOnEscape(event: PickerKeyboardEvent, closePicker: () => void): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  closePicker()
+}
+
+export function reindexRevealedRowsAfterRemoval(
+  revealed: ReadonlySet<number>,
+  removedIndex: number
+): Set<number> {
+  const reindexed = new Set<number>()
+  for (const index of revealed) {
+    if (index < removedIndex) reindexed.add(index)
+    else if (index > removedIndex) reindexed.add(index - 1)
+  }
+  return reindexed
+}
+
 function cleanText(el: Element): string {
   return (el.textContent ?? '').replace(/\s+/g, ' ').trim()
 }
@@ -1832,7 +1853,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       <input type="checkbox" checked={nameClaudeSessions} onChange={(e) => { void backend.setNameClaudeSessions(e.target.checked) }} className="accent-current icon-base cursor-pointer" />
                       <div>
                         <span className="text-sm font-medium text-fg">Name sessions by worktree</span>
-                        <p className="text-xs text-dim mt-0.5">Passes <code className="bg-panel px-1 rounded">--name &quot;repo/branch&quot;</code> to Claude.</p>
+                        <p className="text-xs text-dim mt-0.5">Passes <code className="bg-panel px-1 rounded">--name &quot;repo/branch&quot;</code> to Claude and Pi.</p>
                       </div>
                     </label>
                   </div>
@@ -2320,7 +2341,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                           <span className="text-dim text-xs">=</span>
                           <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setPiEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setPiEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
                           <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setPiRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
-                          <Tooltip label="Remove"><button onClick={() => { setPiEnvRows((prev) => prev.filter((_, i) => i !== index)); setPiEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                          <Tooltip label="Remove"><button onClick={() => { setPiEnvRows((prev) => prev.filter((_, i) => i !== index)); setPiRevealedEnvRows((prev) => reindexRevealedRowsAfterRemoval(prev, index)); setPiEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
                         </div>
                       )
                     })}
@@ -3598,7 +3619,7 @@ function ThemeModePicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3687,7 +3708,7 @@ function EditorPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3783,7 +3804,7 @@ function MergeStrategyPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3872,7 +3893,7 @@ function WorktreeBasePicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3969,7 +3990,7 @@ function WorktreeDetailPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -4050,7 +4071,7 @@ function DefaultAgentPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -4131,7 +4152,7 @@ function ModelPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)

@@ -405,12 +405,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
   // Report Issue — triggered from the Help menu, the sidebar, the
   // Settings Support section, and the openReportIssueFor() helper (used
   // by the error boundary). Closes any open overlay (Settings, hotkey
-  // cheatsheet) so the full-screen report takes over the center area.
+  // cheatsheet, or Activity/Command Center) so the report takes over.
   useEffect(() => {
     const openReport = (detail: OpenReportIssueDetail): void => {
       setShowSettings(false)
       setShowHotkeyCheatsheet(false)
-      setShowCommandCenter(false)
+      setShowActivity(false)
       setReportIssueState(detail)
     }
     const cleanupMenu = backend.onOpenReportIssue(() => openReport({}))

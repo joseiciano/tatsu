@@ -109,7 +109,7 @@ Coverage rule: every file below is in scope. Primary component files follow thei
 - `branch-name`: `branch-name/branch-name.ts`, `branch-name/index.ts`
 - `build-backend`: `build-backend/build-backend.ts`, `build-backend/index.ts`
 - `fuzzy`: `fuzzy/fuzzy.ts`, `fuzzy/index.ts`
-- `hooks`: `hooks/useActiveTheme/index.ts`, `hooks/useActiveTheme/useActiveTheme.ts`, `hooks/useHotkeyHandlers/index.ts`, `hooks/useHotkeyHandlers/useHotkeyHandlers.ts`, `hooks/useHotkeys/index.ts`, `hooks/useHotkeys/useHotkeys.ts`, `hooks/useJsonClaudeApprovals/index.ts`, `hooks/useJsonClaudeApprovals/useJsonClaudeApprovals.ts`, `hooks/useMetaHeld/index.ts`, `hooks/useMetaHeld/useMetaHeld.ts`, `hooks/useSystemColorScheme/index.ts`, `hooks/useSystemColorScheme/useSystemColorScheme.ts`, `hooks/useTabHandlers/index.ts`, `hooks/useTabHandlers/useTabHandlers.ts`, `hooks/useTailLineBuffer/index.ts`, `hooks/useTailLineBuffer/useTailLineBuffer.ts`, `hooks/useViewport/index.ts`, `hooks/useViewport/useViewport.ts`, `hooks/useWatchedQuery/index.ts`, `hooks/useWatchedQuery/useWatchedQuery.ts`, `hooks/useWorktreeHandlers/index.ts`, `hooks/useWorktreeHandlers/useWorktreeHandlers.ts`
+- `hooks`: `hooks/useActiveTheme/index.ts`, `hooks/useActiveTheme/useActiveTheme.ts`, `hooks/useHotkeyHandlers/index.ts`, `hooks/useHotkeyHandlers/useHotkeyHandlers.ts`, `hooks/useHotkeys/index.ts`, `hooks/useHotkeys/useHotkeys.ts`, `hooks/useJsonClaudeApprovals/index.ts`, `hooks/useJsonClaudeApprovals/useJsonClaudeApprovals.ts`, `hooks/useMetaHeld/index.ts`, `hooks/useMetaHeld/useMetaHeld.ts`, `hooks/useSystemColorScheme/index.ts`, `hooks/useSystemColorScheme/useSystemColorScheme.ts`, `hooks/useTabHandlers/index.ts`, `hooks/useTabHandlers/useTabHandlers.ts`, `hooks/useViewport/index.ts`, `hooks/useViewport/useViewport.ts`, `hooks/useWatchedQuery/index.ts`, `hooks/useWatchedQuery/useWatchedQuery.ts`, `hooks/useWorktreeHandlers/index.ts`, `hooks/useWorktreeHandlers/useWorktreeHandlers.ts`
 - `hotkeys`: `hotkeys/constants.ts`, `hotkeys/hotkeys.ts`, `hotkeys/index.ts`, `hotkeys/types.ts`
 - `main`: `main/index.ts`, `main/main.tsx`
 - `monaco-setup`: `monaco-setup/index.ts`, `monaco-setup/monaco-setup.ts`
@@ -149,7 +149,6 @@ Coverage rule: every file below is in scope. Primary component files follow thei
 - `hooks/useWorktreeHandlers.ts`
 - `hooks/useHotkeyHandlers.ts`
 - `hooks/useHotkeys.ts`
-- `hooks/useTailLineBuffer.ts`
 - `hooks/useMetaHeld.ts`
 - `hooks/useViewport.ts`
 - `hooks/useActiveTheme.ts`
@@ -266,7 +265,7 @@ Move into dumb layer:
 - markup-only branching based on props
 
 Phase 0 notes:
-- hook/store/backend calls: `useSettings`, `usePrs`, `useOnboarding`, `useHooks`, `useWorktrees`, `useTerminals`, `usePanes`, `useLastActive`, `useUpdater`, `useRepoConfigs`, `useSnooze`, `useAnnouncements`, `useBackend`, `useTailLineBuffer`, `useTabHandlers`, `useHotkeyHandlers`, `useWorktreeHandlers`, `useActiveTheme`, `useViewport`
+- hook/store/backend calls: `useSettings`, `usePrs`, `useOnboarding`, `useHooks`, `useWorktrees`, `useTerminals`, `usePanes`, `useLastActive`, `useUpdater`, `useRepoConfigs`, `useSnooze`, `useAnnouncements`, `useBackend`, `useTabHandlers`, `useHotkeyHandlers`, `useWorktreeHandlers`, `useActiveTheme`, `useViewport`
 - orchestration state: active worktree/pane, sidebar/right-panel sizing, collapsed groups/repos, unified repos, modal/open-screen flags, review mode selection
 - tiny UI state: banner dismissals, onboarding preview toggles, announcement menu open state, local theme/agent chooser staging
 - stable prop boundary: derived layout props for sidebar, workspace, right column, overlays, onboarding, review state

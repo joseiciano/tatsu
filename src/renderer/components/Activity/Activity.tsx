@@ -141,6 +141,7 @@ export function Activity({
 }: ActivityProps): JSX.Element {
   const backend = useBackend()
   const activeTab = enabledActivityTab(tab)
+  const activeTabLabel = ACTIVITY_TABS.find(({ id }) => id === activeTab)!.label
   const [log, setLog] = useState<ActivityLog>({})
   const [range, setRange] = useState<Range>('24h')
   const [now, setNow] = useState(Date.now())
@@ -301,7 +302,7 @@ export function Activity({
           Back
         </button>
         <span className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 text-sm font-medium text-fg pointer-events-none">
-          Command Center
+          {activeTabLabel}
         </span>
         <div className="no-drag absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
           <button

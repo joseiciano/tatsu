@@ -2,20 +2,20 @@
 
 ## Goal
 
-Add Pi (`https://pi.dev/`) as fourth supported terminal agent next to Claude Code, Codex, and Opencode.
+This plan added Pi (`https://pi.dev/`) as the fourth supported terminal agent next to Claude Code, Codex, and Opencode.
 
-First ship should make Pi available anywhere existing terminal-backed agents work:
+The initial implementation made Pi available anywhere existing terminal-backed agents work:
 
 - Settings default-agent picker
 - New worktree agent picker
 - `+` alternate-agent tab cycling
 - persisted tabs and worktrees
-- terminal status dots (`processing`, `waiting`, `needs-approval`)
+- terminal status dots (`processing` and `waiting`; Pi has no `needs-approval` flow)
 - restart / resume where Pi session files allow it
 - per-agent command, model, and env var settings
 - headless/control-server API agent selection
 
-Do not block first ship on JSON-mode chat, MCP, or cost tracking. Pi has its own RPC/SDK paths, but current app already has a clean terminal-agent abstraction. Start there.
+JSON-mode chat, MCP, and cost tracking were intentionally kept out of the initial implementation. Pi has its own RPC/SDK paths, while the app already had a clean terminal-agent abstraction.
 
 ## Pi facts that shape design
 
@@ -69,7 +69,9 @@ Resolved questions (verified from Pi docs):
 3. **`--session <path|id>` behavior** — Accepts both absolute file path and partial UUID. Session files live at `~/.pi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl` where `<path>` is cwd with `/` replaced by `--`. Store absolute path from `getSessionFile()`, pass to `--session` for resume.
 4. **Extension auto-loading** — Yes. Files in `~/.pi/agent/extensions/*.ts` are auto-discovered and loaded for every Pi session with no extra enablement. Loaded via jiti (TypeScript without compilation). Project-local `.pi/extensions/` requires project trust; global scope does not.
 
-## Current codebase map
+## Pre-implementation codebase baseline (historical)
+
+This snapshot records the tree before Pi support landed. In the current tree, both `AgentKind` and `AgentKindSetting` include `'pi'`, and `AgentIcon` has dedicated Claude, Codex, Opencode, and Pi icons. The narrower unions and missing-icon notes below are historical.
 
 ### Canonical agent types
 
@@ -192,7 +194,9 @@ Why this path:
 
 Do not use Pi RPC mode for terminal tabs. RPC mode is future fit for dedicated React chat tabs, not xterm-hosted TUI tabs.
 
-## Implementation phases
+## Implemented plan
+
+The sequence below is the plan used to implement Pi terminal-agent support. Phases 0–8 describe the completed rollout; phases 9–10 remain explicitly scoped follow-ups. Imperative wording is retained as a historical record.
 
 ### Phase 0 — verify Pi behavior manually
 
@@ -624,7 +628,9 @@ Future chat plan:
 
 Do this after terminal support proves useful.
 
-## Detailed file checklist
+## Pre-implementation detailed file checklist (historical)
+
+The unchecked boxes preserve the original planning state; the initial Pi terminal-agent implementation described above is now present in the tree.
 
 ### Shared state
 

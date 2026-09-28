@@ -214,14 +214,19 @@ describe('mcp-bridge create_worktree', () => {
     expect(postCall).toBeUndefined()
   })
 
-  it('forwards agentKind + model to POST /worktrees and reports them in result text', async () => {
+  it.each([
+    { agentKind: 'claude', displayLabel: 'Claude' },
+    { agentKind: 'codex', displayLabel: 'Codex' },
+    { agentKind: 'opencode', displayLabel: 'OpenCode' },
+    { agentKind: 'pi', displayLabel: 'Pi' }
+  ])('forwards $agentKind and reports $displayLabel in result text', async ({ agentKind, displayLabel }) => {
     stub = await startStub((req, body, res) => {
       if (req.url === '/scope') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify({ scope: null, browser: { enabled: true, mode: 'full' } }))
       }
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ path: '/tmp/wt-codex', branch: 'feat' }))
+      res.end(JSON.stringify({ path: '/tmp/wt-agent', branch: 'feat' }))
     })
     bridge = spawnBridge(stub.port, 'tok')
 
@@ -233,22 +238,21 @@ describe('mcp-bridge create_worktree', () => {
       method: 'tools/call',
       params: {
         name: 'create_worktree',
-        arguments: { branchName: 'feat', agentKind: 'codex', model: 'gpt-5' }
+        arguments: { branchName: 'feat', agentKind, model: 'test-model' }
       }
     })
     const response = await bridge.next()
 
     expect(response.result.isError).toBeFalsy()
     const text = response.result.content[0].text
-    expect(text).toContain('Codex')
-    expect(text).toContain('gpt-5')
+    expect(text).toContain(displayLabel)
+    expect(text).toContain('test-model')
 
     const postCall = stub.captured.find((c) => c.method === 'POST' && c.url === '/worktrees')
     expect(postCall).toBeDefined()
-    expect(postCall.body.agentKind).toBe('codex')
-    expect(postCall.body.model).toBe('gpt-5')
+    expect(postCall.body.agentKind).toBe(agentKind)
+    expect(postCall.body.model).toBe('test-model')
   })
-
   it('rejects unknown agentKind locally without hitting the server', async () => {
     stub = await startStub((req, body, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' })
