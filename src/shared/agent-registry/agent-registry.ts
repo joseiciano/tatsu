@@ -1,5 +1,27 @@
 import type { AgentKind } from '../state/terminals'
 
+export type HarnessConfigResourceType = 'agents' | 'skills' | 'commands'
+export type HarnessConfigCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
+
+export type AgentConfigCapability =
+  | {
+      resourceType: HarnessConfigResourceType
+      label: string
+      status: 'supported'
+      notes?: string
+      aliasResourceTypes?: readonly HarnessConfigResourceType[]
+    }
+  | {
+      resourceType: HarnessConfigResourceType
+      label: string
+      status: 'unsupported' | 'unknown'
+      notes: string
+    }
+
+export function isHarnessConfigCapabilityEnabled(capability: AgentConfigCapability): boolean {
+  return capability.status === 'supported'
+}
+
 export interface AgentInfo {
   kind: AgentKind
   displayName: string
@@ -8,13 +30,85 @@ export interface AgentInfo {
    * first spawn. If false, the agent assigns its own ID and Harness
    * discovers it from the first hook event. */
   assignsSessionId: boolean
+  configCapabilities: readonly AgentConfigCapability[]
 }
 
 export const AGENT_REGISTRY: AgentInfo[] = [
-  { kind: 'claude', displayName: 'Claude Code', vendor: 'Anthropic', assignsSessionId: true },
-  { kind: 'codex', displayName: 'Codex', vendor: 'OpenAI', assignsSessionId: false },
-  { kind: 'opencode', displayName: 'Opencode', vendor: 'Opencode', assignsSessionId: false },
-  { kind: 'pi', displayName: 'Pi', vendor: 'Earendil', assignsSessionId: false }
+  {
+    kind: 'claude',
+    displayName: 'Claude Code',
+    vendor: 'Anthropic',
+    assignsSessionId: true,
+    configCapabilities: [
+      { resourceType: 'agents', label: 'Agents', status: 'supported' },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'supported',
+        notes: 'Claude skills also appear in the Commands view as the same physical resource.',
+        aliasResourceTypes: ['commands']
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'supported',
+        notes: 'Includes native Claude commands and aliases of Claude skills.'
+      }
+    ]
+  },
+  {
+    kind: 'codex',
+    displayName: 'Codex',
+    vendor: 'OpenAI',
+    assignsSessionId: false,
+    configCapabilities: [
+      { resourceType: 'agents', label: 'Agents', status: 'supported' },
+      { resourceType: 'skills', label: 'Skills', status: 'supported' },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'unsupported',
+        notes: 'Tatsu has no verified first-version custom-command filesystem contract.'
+      }
+    ]
+  },
+  {
+    kind: 'opencode',
+    displayName: 'Opencode',
+    vendor: 'Opencode',
+    assignsSessionId: false,
+    configCapabilities: [
+      { resourceType: 'agents', label: 'Agents', status: 'supported' },
+      { resourceType: 'skills', label: 'Skills', status: 'supported' },
+      { resourceType: 'commands', label: 'Commands', status: 'supported' }
+    ]
+  },
+  {
+    kind: 'pi',
+    displayName: 'Pi',
+    vendor: 'Earendil',
+    assignsSessionId: false,
+    configCapabilities: [
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'unknown',
+        notes: 'Pi config management is deferred; its resource capabilities and layouts are not yet specified.'
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'unknown',
+        notes: 'Pi config management is deferred; its resource capabilities and layouts are not yet specified.'
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'unknown',
+        notes: 'Pi config management is deferred; its resource capabilities and layouts are not yet specified.'
+      }
+    ]
+  }
 ]
 
 export interface ModelOption {
