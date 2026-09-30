@@ -1,7 +1,8 @@
 import type { Dirent, Stats } from 'fs'
+import type { HarnessConfigResourceType } from '../../shared/agent-registry'
 import type { AgentKind } from '../../shared/state/terminals'
 
-export type HarnessConfigResourceType = 'agents' | 'skills' | 'commands'
+export type { HarnessConfigResourceType }
 export type ManagedHarnessKind = Extract<AgentKind, 'claude' | 'codex' | 'opencode'>
 
 export interface HarnessConfigScope {
