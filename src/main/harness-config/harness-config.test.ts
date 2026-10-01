@@ -674,9 +674,34 @@ describe('scoped comparison and non-mutating actionable plans', () => {
     expect(claudePlan.diskOnly).not.toBe(codexPlan.diskOnly)
     expect(claudePlan.diskOnly.every((ref) => ref.agentKind === 'claude')).toBe(true)
     expect(codexPlan.diskOnly.every((ref) => ref.agentKind === 'codex')).toBe(true)
-    const claudeDiskOnlyLengthBefore = claudePlan.diskOnly.length
-    codexPlan.diskOnly.push({ ...codexPlan.diskOnly[0] })
-    expect(claudePlan.diskOnly).toHaveLength(claudeDiskOnlyLengthBefore)
+  })
+
+  it('reports drift only in the Claude Skills scope while other harness Skills scopes stay synced', () => {
+    const fixture = makeFixture()
+    const claudeSkills = { agentKind: 'claude', resourceType: 'skills' }
+    const codexSkills = { agentKind: 'codex', resourceType: 'skills' }
+    const opencodeSkills = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, claudeSkills, 'claude-skills', /SKILL\.md$/)
+    addResolver(fixture, codexSkills, 'codex-skills', /SKILL\.md$/)
+    addResolver(fixture, opencodeSkills, 'opencode-skills', /SKILL\.md$/)
+    put(fixture.roots['claude-skills'], 'drift/SKILL.md', 'claude drift')
+    put(fixture.roots['codex-skills'], 'shared/SKILL.md', 'codex bytes')
+    put(fixture.roots['opencode-skills'], 'shared/SKILL.md', 'opencode bytes')
+    fixture.desired.resources = [
+      refToDesired(fixture.service.scan(codexSkills)[0], 'codex bytes'),
+      refToDesired(fixture.service.scan(opencodeSkills)[0], 'opencode bytes')
+    ]
+
+    const claudePlan = fixture.service.planSyncToDisk(claudeSkills)
+    expect(claudePlan.status).toBe('disk-only')
+    expect(claudePlan.diskOnly.map((ref) => ref.relativePath)).toEqual(['drift/SKILL.md'])
+    for (const scope of [codexSkills, opencodeSkills]) {
+      const plan = fixture.service.planSyncToDisk(scope)
+      expect(plan.status).toBe('synced')
+      expect(plan.diskOnly).toEqual([])
+      expect(plan.configOnly).toEqual([])
+      expect(plan.changed).toEqual([])
+    }
   })
 
   it('generates sync and adopt plans without writes and keeps executable content private', () => {
