@@ -437,3 +437,55 @@ describe('v6 → v7: legacy theme → themeMode + themeLight/themeDark', () => {
     expect(c.theme).toBeUndefined()
   })
 })
+
+describe('v7 → v8: introduce harnessConfig', () => {
+  it('seeds an empty version-1 harnessConfig when the key is absent', () => {
+    const c: AnyConfig = { repoRoots: ['/a/repo'] }
+    runOne(7, c)
+    expect(c.harnessConfig).toEqual({ version: 1, resources: [] })
+  })
+
+  it('preserves an existing version-1 harnessConfig byte-for-byte, including resource content and alias metadata', () => {
+    const existing = {
+      version: 1,
+      resources: [
+        {
+          id: 'res-1',
+          agentKind: 'claude',
+          resourceType: 'skills',
+          aliasResourceTypes: ['commands'],
+          relativePath: 'my-skill/SKILL.md',
+          label: 'My Skill',
+          content: '# My Skill\n\nDo the thing.',
+          hash: 'abc123',
+          updatedAt: 1700000000000
+        }
+      ]
+    }
+    const c: AnyConfig = { harnessConfig: JSON.parse(JSON.stringify(existing)) }
+    runOne(7, c)
+    expect(c.harnessConfig).toEqual(existing)
+  })
+
+  it('does not overwrite a present malformed harnessConfig object', () => {
+    const malformed = { not: 'a valid shape' }
+    const c: AnyConfig = { harnessConfig: malformed }
+    runOne(7, c)
+    expect(c.harnessConfig).toBe(malformed)
+  })
+
+  it('does not overwrite a present harnessConfig with an unknown nested version', () => {
+    const future = { version: 2, resources: [], somethingNew: true }
+    const c: AnyConfig = { harnessConfig: future }
+    runOne(7, c)
+    expect(c.harnessConfig).toBe(future)
+  })
+
+  it('end-to-end: a pristine config converges on an empty harnessConfig at the current schema version', () => {
+    const c: AnyConfig = { repoRoot: '/Users/mike/projects/harness' }
+    runMigrations(c)
+    expect(c.harnessConfig).toEqual({ version: 1, resources: [] })
+    expect(c.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(SCHEMA_VERSION).toBe(8)
+  })
+})
