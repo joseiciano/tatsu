@@ -131,6 +131,17 @@ describe('createControlRateLimiter', () => {
     expect(limiter.allow(requestFrom('127.0.0.1', 'term-a'), 0)).toBe(true)
     expect(limiter.allow(requestFrom('127.0.0.2', 'term-a'), 0)).toBe(true)
   })
+
+  it('hasCapacity reports remaining budget without consuming it', () => {
+    const limiter = createControlRateLimiter({ capacity: 1, refillPerSecond: 1 })
+    const req = requestFrom('127.0.0.1')
+
+    expect(limiter.hasCapacity(req, 0)).toBe(true)
+    expect(limiter.hasCapacity(req, 0)).toBe(true)
+    expect(limiter.allow(req, 0)).toBe(true)
+    expect(limiter.hasCapacity(req, 0)).toBe(false)
+    expect(limiter.hasCapacity(req, 1000)).toBe(true)
+  })
 })
 
 describe('validateBrowserNavigationUrl', () => {

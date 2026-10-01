@@ -64,6 +64,12 @@ export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
       }
       return consumeToken(bucket, capacity, refillPerSecond, now)
     },
+    hasCapacity(req: IncomingMessage, now = Date.now()): boolean {
+      const bucket = buckets.get(keyFn(req))
+      if (!bucket) return true
+      const elapsedMs = Math.max(0, now - bucket.updatedAt)
+      return Math.min(capacity, bucket.tokens + (elapsedMs / 1000) * refillPerSecond) >= 1
+    },
     sweep,
     size: () => buckets.size
   }
@@ -109,8 +115,12 @@ function allowControlRequest(req: IncomingMessage): boolean {
   return controlRateLimiter.allow(req)
 }
 
-function allowPreAuthRequest(req: IncomingMessage): boolean {
-  return preAuthRateLimiter.allow(req)
+function preAuthBudgetAvailable(req: IncomingMessage): boolean {
+  return preAuthRateLimiter.hasCapacity(req)
+}
+
+function recordFailedAuth(req: IncomingMessage): void {
+  preAuthRateLimiter.allow(req)
 }
 
 export function validateBrowserNavigationUrl(raw: string): { url: string } | { error: string } {
@@ -220,12 +230,15 @@ async function handleRequest(
 ): Promise<void> {
   // Pre-auth IP-only rate limit gate — keyed solely by remoteAddress so that
   // brute-force token guessing by varying X-Harness-Terminal-Id is throttled.
-  if (!allowPreAuthRequest(req)) {
+  // Only failed auth attempts drain the budget, so authenticated traffic
+  // from local agents isn't capped by it.
+  if (!preAuthBudgetAvailable(req)) {
     return sendJson(res, 429, { error: 'rate limit exceeded' })
   }
 
   const auth = req.headers.authorization
   if (!safeEqualToken(auth, 'Bearer ' + token)) {
+    recordFailedAuth(req)
     res.writeHead(401)
     res.end('unauthorized')
     return
