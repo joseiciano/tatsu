@@ -295,7 +295,18 @@ export class PanesFSM {
       tab.type === 'json-claude' && tab.mode === undefined
         ? { ...tab, mode: 'awake' }
         : tab
-    const tree = this.getTree(wtPath)
+    let tree = this.getTree(wtPath)
+    if (!tree || !hasAnyTabs(tree)) {
+      // Adopt the persisted tree before it gets shadowed: once a live
+      // tree with tabs exists, ensureInitialized never promotes the
+      // sleeping one and buildPersistPayload lets the live tree win,
+      // dropping the user's restored tabs from disk.
+      const sleeping = this.sleepingPanes.get(wtPath)
+      if (sleeping && hasAnyTabs(sleeping)) {
+        this.sleepingPanes.delete(wtPath)
+        tree = sleeping
+      }
+    }
     if (!tree) {
       const pane: PaneLeaf = {
         type: 'leaf',
@@ -307,7 +318,8 @@ export class PanesFSM {
       return
     }
     const leaves = getLeaves(tree)
-    const targetId = paneId || leaves[0].id
+    const targetId =
+      paneId && leaves.some((l) => l.id === paneId) ? paneId : leaves[0].id
     const updated = mapLeaves(tree, (leaf) => {
       if (leaf.id !== targetId) return leaf
       return {

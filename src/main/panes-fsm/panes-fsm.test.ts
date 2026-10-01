@@ -364,3 +364,46 @@ describe('PanesFSM.restoreFromConfig', () => {
     expect(chatTab && 'runtime' in chatTab).toBe(false)
   })
 })
+
+describe('PanesFSM.addTab', () => {
+  it('adopts a sleeping tree instead of replacing it', async () => {
+    const persisted: Record<string, PaneNode>[] = []
+    const store = new Store()
+    const fsm = new PanesFSM(store, {
+      persist: (p) => persisted.push(p),
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null
+    })
+    const wtPath = '/wt/sleeping'
+    await fsm.restoreFromConfig({
+      _ignored: {
+        [wtPath]: {
+          type: 'leaf',
+          id: 'pane-1',
+          tabs: [{ id: 'sh-1', type: 'shell', label: 'Shell' }],
+          activeTabId: 'sh-1'
+        }
+      }
+    })
+    fsm.addTab(wtPath, { id: 'sh-2', type: 'shell', label: 'Shell 2' })
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    expect(leaf.id).toBe('pane-1')
+    expect(leaf.tabs.map((t) => t.id)).toEqual(['sh-1', 'sh-2'])
+    const saved = persisted[persisted.length - 1][wtPath] as PaneLeaf
+    expect(saved.tabs.map((t) => t.id)).toEqual(['sh-1', 'sh-2'])
+  })
+
+  it('falls back to the first pane when paneId does not exist', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/missing-pane'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'sh-1', type: 'shell', label: 'Shell' }],
+      activeTabId: 'sh-1'
+    })
+    fsm.addTab(wtPath, { id: 'sh-2', type: 'shell', label: 'Shell 2' }, 'pane-gone')
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    expect(leaf.tabs.map((t) => t.id)).toEqual(['sh-1', 'sh-2'])
+  })
+})
