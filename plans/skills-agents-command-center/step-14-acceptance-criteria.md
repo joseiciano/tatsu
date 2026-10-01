@@ -100,9 +100,9 @@ Identifiers below are declared once here and mirror Step 1's canonical declarati
 - [x] **TASK-010**: Verify Claude alias identity.
   - Locate one physical Claude resource exposed in both Skills and Commands; observe both aliases carry the same stable identity and resolve to the same physical path (REQ-017).
   - Run create-command on an existing skill alias and create-skill on an existing command alias; observe each conversion returns the existing identity and produces no duplicate disk file or Tatsu config entry (REQ-017).
-- [x] **TASK-011**: Verify plugin provenance and cross-harness boundaries.
+- [ ] **TASK-011**: Verify plugin provenance and cross-harness boundaries.
   - Observe plugin provenance only as metadata on inventoried resources under the originating harness; observe no `plugins` resource type, independent plugin row, or plugin mutation payload (REQ-001, REQ-018).
-  - Verified negatively only: inventoried resources carry no plugin provenance field yet (optional per Step 2 ASSUMPTION-005), and plugin files under harness roots are never surfaced as a resource type or copied (`src/main/harness-config/harness-config.test.ts`).
+  - Open gap: inventoried resources carry no plugin provenance field yet (optional per Step 2 ASSUMPTION-005), and a plugin-layout file under a managed root (e.g. `plugin/SKILL.md` under the Claude skills root) is inventoried as an ordinary resource row (`src/main/harness-config/harness-config.test.ts`, "rejects conversion across harnesses and ignores plugin payload/settings files"), so the provenance and no-independent-plugin-row clauses are not yet observable. No `plugins` resource type exists and no cross-harness plugin copy occurs.
   - Inspect every plan and action surface and observe no automatic plugin copy, install, or translation and no automatic cross-harness payload; every plan remains within one `${agentKind}:${resourceType}` scope (REQ-011, REQ-018).
 
 ## 3. Alternatives
