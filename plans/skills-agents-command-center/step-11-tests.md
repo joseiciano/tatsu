@@ -1,14 +1,14 @@
 ---
 goal: Consolidate cross-layer regression coverage for the skills-agents-commands-sync feature
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-10-01
+status: 'Completed'
 tags: [test, harness-config, shared-state, agent-registry, regression, security]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan implements Step 11 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It audits and completes the four declared test files so that every critical behavior of the feature — path safety, drift classification, confirmed mutation, backups, alias identity, and scope isolation — is defended by a failing-on-bug regression test. It uses the feature goals, scope, and source-of-truth rules in [implementation-details.md](./implementation-details.md).
 
