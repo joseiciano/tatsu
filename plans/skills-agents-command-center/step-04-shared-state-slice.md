@@ -1,14 +1,14 @@
 ---
 goal: Add shared harness configuration inventory and comparison state
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-10-01
+status: 'Completed'
 tags: [feature, shared-state, harness-config, sync]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
  This plan adds the shared `harnessConfig` state slice that mirrors lightweight harness resource inventory, scoped non-authorizing comparisons, request status, and scan/sync timestamps between Tatsu's main process and every renderer client. It implements Step 4 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md) using the product contract in [implementation-details.md](./implementation-details.md); actionable synchronization plans remain request-scoped and main-bound, while filesystem discovery, file content, Tatsu-config persistence, transport handlers, and editor drafts remain owned by other steps.
 
@@ -48,11 +48,11 @@ tags: [feature, shared-state, harness-config, sync]
 
 - **GOAL-001**: Establish one browser-safe domain contract for harness scopes, resource references, non-authorizing comparisons, request-scoped synchronization plans, state, and events.
 
-- [ ] **TASK-001**: Create `src/shared/state/harness-config/types.ts` and import `HarnessConfigResourceType` from `src/shared/agent-registry` plus `AgentKind` from the terminals slice barrel.
+- [x] **TASK-001**: Create `src/shared/state/harness-config/types.ts` and import `HarnessConfigResourceType` from `src/shared/agent-registry` plus `AgentKind` from the terminals slice barrel.
   - Define `ManagedHarnessKind`, `HarnessConfigScope`, `HarnessConfigScopeKey`, `HarnessConfigFileRef`, `HarnessConfigSyncDirection`, `HarnessConfigSyncStatus`, `HarnessConfigChangedRef`, `HarnessConfigComparison`, `HarnessConfigSyncPlan`, `HarnessConfigState`, and `HarnessConfigEvent` exactly as required by REQ-002 through REQ-016.
   - Type `comparisons` as a scope-keyed partial record of `HarnessConfigComparison`; keep `HarnessConfigSyncPlan` available only as a request/response DTO, never as a state field or state-event payload.
   - Use mutable arrays in state to match existing slice contracts, but use only serializable primitive/object/array fields.
-- [ ] **TASK-002**: Define the seven-event discriminated union in `types.ts` with exact payloads.
+- [x] **TASK-002**: Define the seven-event discriminated union in `types.ts` with exact payloads.
   - `loadingChanged`: `boolean`.
   - `resourcesLoaded`: `{ scope: HarnessConfigScope; resources: HarnessConfigFileRef[]; scannedAt: number }`.
   - `comparisonLoaded`: `HarnessConfigComparison`.
@@ -61,79 +61,79 @@ tags: [feature, shared-state, harness-config, sync]
   - `resourceDeleted`: `{ agentKind: ManagedHarnessKind; resourceType: HarnessConfigResourceType; id: string }`.
   - `errorChanged`: `string | null`.
   - Do not add a sync-plan-loaded event; a comparison carries no optional success timestamp.
-- [ ] **TASK-003**: Create `src/shared/state/harness-config/index.ts` and export every public type and reducer helper through `export * from './types'` and `export * from './harness-config'`.
+- [x] **TASK-003**: Create `src/shared/state/harness-config/index.ts` and export every public type and reducer helper through `export * from './types'` and `export * from './harness-config'`.
   - Do not expose a second deep-import path from `src/shared/state/index.ts`; that root may re-export the package types only through `./harness-config`.
 
 ### Implementation Phase 2: Implement the identity-safe reducer
 
 - **GOAL-002**: Apply scoped inventory, comparison, and confirmed-success events without cross-harness leakage, renderer authorization state, or avoidable reference churn.
 
-- [ ] **TASK-004**: Create `src/shared/state/harness-config/harness-config.ts` with `initialHarnessConfig` and `harnessConfigScopeKey(scope)`.
+- [x] **TASK-004**: Create `src/shared/state/harness-config/harness-config.ts` with `initialHarnessConfig` and `harnessConfigScopeKey(scope)`.
   - Initialize `resources` to `{ agents: [], skills: [], commands: [] }`, `comparisons` to `{}`, `loading` to `false`, `error` to `null`, and both timestamps to `null`.
   - Return keys in the exact `${scope.agentKind}:${scope.resourceType}` format.
-- [ ] **TASK-005**: Implement `harnessConfigReducer` branches for `loadingChanged` and `errorChanged`.
+- [x] **TASK-005**: Implement `harnessConfigReducer` branches for `loadingChanged` and `errorChanged`.
   - Return the original state when the incoming primitive equals the stored value.
   - Change only the targeted field and preserve all other references.
-- [ ] **TASK-006**: Implement scoped `resourcesLoaded` replacement.
+- [x] **TASK-006**: Implement scoped `resourcesLoaded` replacement.
   - Validate behavior by scope rather than trusting that the map is globally replaced: remove only entries whose `agentKind` matches `scope.agentKind` from `resources[scope.resourceType]`, merge the supplied scoped resources, and leave the other two resource arrays untouched.
   - Keep unaffected ref objects, apply the deterministic ordering from REQ-019, reuse the existing target array when its ordered object sequence is unchanged, and set `lastScannedAt` to `scannedAt`.
-- [ ] **TASK-007**: Implement `comparisonLoaded` using `harnessConfigScopeKey(comparison.scope)`.
+- [x] **TASK-007**: Implement `comparisonLoaded` using `harnessConfigScopeKey(comparison.scope)`.
   - Replace only that comparison-map entry and retain all other harness/resource comparisons.
   - Reuse `comparisons` and return the original state when the stored comparison is the same object.
   - Never change `lastSyncedAt` from comparison status or `comparedAt`; the event has no plan ID, fingerprint, direction, or success timestamp.
-- [ ] **TASK-008**: Implement `syncApplied` as the sole reducer path that records sync/adopt success.
+- [x] **TASK-008**: Implement `syncApplied` as the sole reducer path that records sync/adopt success.
   - Update only `lastSyncedAt` from `payload.syncedAt`, retain resources and comparisons by reference, and return the original state when the timestamp is unchanged.
   - Consume the required scope only as success-event context; do not derive, retain, or expose plan authority from it.
-- [ ] **TASK-009**: Implement `resourceUpserted` with `findIndex + slice`.
+- [x] **TASK-009**: Implement `resourceUpserted` with `findIndex + slice`.
   - Select the array from `payload.resourceType` and match by `payload.agentKind + payload.id`.
   - Return state when the existing entry is the same object; replace only the matched slot when present; otherwise insert at the deterministic sorted position.
   - Preserve both sibling entry references and the other resource-array references.
-- [ ] **TASK-010**: Implement `resourceDeleted` with `findIndex + slice`.
+- [x] **TASK-010**: Implement `resourceDeleted` with `findIndex + slice`.
   - Search only `resources[payload.resourceType]` for the matching `agentKind + id`.
   - Return the original state when absent; otherwise remove the one matching slot while preserving every untouched ref and unrelated array.
-- [ ] **TASK-011**: Add exhaustive default handling for `HarnessConfigEvent` and ensure no reducer event clears `error` implicitly.
+- [x] **TASK-011**: Add exhaustive default handling for `HarnessConfigEvent` and ensure no reducer event clears `error` implicitly.
   - Error clearing remains an explicit `harnessConfig/errorChanged` event so transport handlers control request lifecycle deterministically.
 
 ### Implementation Phase 3: Integrate the root state and wire merge
 
 - **GOAL-003**: Make the new slice part of the authoritative main state, renderer mirror, event union, and version-skew-safe snapshot contract.
 
-- [ ] **TASK-012**: Update `src/shared/state/index.ts` to import `initialHarnessConfig`, `harnessConfigReducer`, `HarnessConfigEvent`, and `HarnessConfigState` from `./harness-config` and re-export all public harness-config contracts needed by main, preload, and renderer consumers.
+- [x] **TASK-012**: Update `src/shared/state/index.ts` to import `initialHarnessConfig`, `harnessConfigReducer`, `HarnessConfigEvent`, and `HarnessConfigState` from `./harness-config` and re-export all public harness-config contracts needed by main, preload, and renderer consumers.
   - Add `harnessConfig: HarnessConfigState` to `AppState`.
   - Add `HarnessConfigEvent` to `StateEvent`.
   - Add `harnessConfig: initialHarnessConfig` to `initialState`.
-- [ ] **TASK-013**: Add the `harnessConfig/` route to `rootReducer`.
+- [x] **TASK-013**: Add the `harnessConfig/` route to `rootReducer`.
   - Invoke only `harnessConfigReducer(state.harnessConfig, event as HarnessConfigEvent)`.
   - If the slice reducer returns the current slice object, return the current root state; otherwise replace only `state.harnessConfig`.
-- [ ] **TASK-014**: Add `harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }` to `mergeWireSnapshot`.
+- [x] **TASK-014**: Add `harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }` to `mergeWireSnapshot`.
   - Preserve the existing per-slice shallow-merge strategy and do not deep-merge inventory or comparison maps.
 
 ### Implementation Phase 4: Prove behavior and deliver
 
 - **GOAL-004**: Verify every event, scoping invariant, authority boundary, reference-identity guarantee, and snapshot-skew path before committing the slice.
 
-- [ ] **TASK-015**: Create `src/shared/state/harness-config/harness-config.test.ts` with typed file-ref, comparison, plan, scope, and state fixture builders; import the package API from `.`.
+- [x] **TASK-015**: Create `src/shared/state/harness-config/harness-config.test.ts` with typed file-ref, comparison, plan, scope, and state fixture builders; import the package API from `.`.
   - Keep fixtures content-free and use stable timestamps, hashes, IDs, and paths.
   - Use plan fixtures only to prove the distinct public DTO shape; never place them in state or a state event.
-- [ ] **TASK-016**: Add at least one reducer test for each of the seven event variants.
+- [x] **TASK-016**: Add at least one reducer test for each of the seven event variants.
   - Assert the exact target-field change and prove unrelated fields, resource arrays, comparison entries, and timestamps remain unchanged.
   - Prove `comparisonLoaded` cannot change `lastSyncedAt`, while a distinct `syncApplied` updates only `lastSyncedAt` after the producer's successful confirmed sync/adopt path.
-- [ ] **TASK-017**: Add scoped inventory and comparison isolation tests.
+- [x] **TASK-017**: Add scoped inventory and comparison isolation tests.
   - Prove loading one Claude resource scope preserves Codex and OpenCode rows in the same logical array and preserves the other two logical arrays by reference.
   - Prove Skills and Commands comparisons for the same harness occupy different keys, and the same resource type for two harnesses occupies different keys.
   - Prove a same-ID Claude alias in another logical view is not removed by a scoped delete.
-- [ ] **TASK-018**: Add reducer identity and ordering tests.
+- [x] **TASK-018**: Add reducer identity and ordering tests.
   - Prove missing deletes, identical loading/error values, same-object comparisons, unchanged success timestamps, and same-object upserts return the original state.
   - Prove upsert and delete preserve untouched sibling object references, use deterministic harness/path/id ordering, and do not allocate unrelated resource arrays.
   - Prove a repeated `resourcesLoaded` event with the same scoped object sequence preserves the resource-array reference while updating `lastScannedAt`.
-- [ ] **TASK-019**: Update `src/shared/state/wire-merge.test.ts` with one missing-slice case and one partial-slice case.
+- [x] **TASK-019**: Update `src/shared/state/wire-merge.test.ts` with one missing-slice case and one partial-slice case.
   - Assert an older snapshot with no `harnessConfig` receives `initialHarnessConfig`.
   - Assert a snapshot carrying inventory, comparisons, and loading but omitting `lastSyncedAt` preserves sent values and fills `lastSyncedAt` from the initial default.
-- [ ] **TASK-020**: Run `npx vitest run src/shared/state/harness-config/harness-config.test.ts src/shared/state/wire-merge.test.ts`, then run `pnpm typecheck` and `pnpm build`; resolve every failure without weakening scoping, comparison/plan separation, serializability, or identity assertions.
-- [ ] **TASK-021**: Update `src/main/harness-config/types.ts` and `src/main/harness-config/index.ts` to remove duplicate public file-ref, scope, resource-type, changed-ref, comparison, and sync-plan declarations in favor of imports and re-exports from `src/shared/state/harness-config` and `src/shared/agent-registry`.
+- [x] **TASK-020**: Run `npx vitest run src/shared/state/harness-config/harness-config.test.ts src/shared/state/wire-merge.test.ts`, then run `pnpm typecheck` and `pnpm build`; resolve every failure without weakening scoping, comparison/plan separation, serializability, or identity assertions.
+- [x] **TASK-021**: Update `src/main/harness-config/types.ts` and `src/main/harness-config/index.ts` to remove duplicate public file-ref, scope, resource-type, changed-ref, comparison, and sync-plan declarations in favor of imports and re-exports from `src/shared/state/harness-config` and `src/shared/agent-registry`.
   - Keep actionable plans request-scoped, keep private executable operations, content snapshots, fingerprints used for apply validation, and filesystem-only error internals in main, and never route an actionable plan through shared state.
   - Do not implement transport or persistence behavior in this step.
-- [ ] **TASK-022**: Commit the slice, root integration, and tests as one focused change with message `feat: add harness config shared state`, then run `git push origin <current-branch>` immediately after the commit succeeds.
+- [x] **TASK-022**: Commit the slice, root integration, and tests as one focused change with message `feat: add harness config shared state`, then run `git push origin <current-branch>` immediately after the commit succeeds.
   - Do not include unrelated working-tree changes.
 
 ## 3. Alternatives

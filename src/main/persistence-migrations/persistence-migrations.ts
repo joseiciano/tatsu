@@ -194,6 +194,16 @@ export const migrations: Migration[] = [
       c.themeDark = legacy
     }
     delete c.theme
+  },
+
+  // v7 → v8: introduce `harnessConfig` — Tatsu-managed harness agent/skill/
+  // command Tatsu config. Only seeds a fresh empty version-1 object when the
+  // key is absent; an existing value (including a future-version shape) is
+  // left untouched so this migration can never erase Tatsu config.
+  (c) => {
+    if (c.harnessConfig === undefined) {
+      c.harnessConfig = { version: 1, resources: [] }
+    }
   }
 ]
 
