@@ -438,13 +438,9 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
   return result
 }
 
-// One long-lived HarnessConfigService bound to the long-lived `config`
-// object via Step 5's synchronous, throwing persistence path (not the
-// debounced saveConfig() used elsewhere) so a confirmed sync/adopt/
-// create/update/delete either persists before returning or throws and
-// leaves Tatsu config untouched. Registered on the compound transport
-// before either transport starts accepting external connections so no
-// desktop/headless client can race the handler registration below.
+// Uses the synchronous, throwing persistence path (not the debounced
+// saveConfig()) so a confirmed mutation either persists before
+// returning or throws and leaves Tatsu config untouched.
 const harnessConfigService = createHarnessConfigService({
   loadDesiredResources: () => getPersistedHarnessConfigResources(config),
   replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)

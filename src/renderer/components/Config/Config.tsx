@@ -5,6 +5,7 @@ import { getAgentInfo, isHarnessConfigCapabilityEnabled, type AgentInfo } from '
 import {
   harnessConfigScopeKey,
   type HarnessConfigFileRef,
+  type HarnessConfigRequestError,
   type HarnessConfigResourceType,
   type HarnessConfigScope,
   type HarnessConfigScopeKey,
@@ -83,6 +84,10 @@ function findBadge(
   return 'synced'
 }
 
+function requestFailureMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : 'The request failed'
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
@@ -111,6 +116,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const [draft, setDraft] = useState('')
   const [savedContent, setSavedContent] = useState('')
   const [readBusy, setReadBusy] = useState(false)
+  const [readFailed, setReadFailed] = useState(false)
   const [mutationBusy, setMutationBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -175,7 +181,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     }))
   }, [])
 
+  const invalidateRead = useCallback(() => {
+    readTokenRef.current += 1
+    setReadBusy(false)
+    setReadFailed(false)
+  }, [])
+
   const resetPageLocalState = useCallback(() => {
+    invalidateRead()
     setSelected(null)
     setSelectedRef(null)
     setEditorMode('empty')
@@ -183,7 +196,6 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setCreateName('')
     setDraft('')
     setSavedContent('')
-    setReadBusy(false)
     setMutationBusy(false)
     setActionError(null)
     setScopeStatusState({})
@@ -195,7 +207,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDialogActionError(null)
     setDialogActionNotice(null)
     setDialogReviewUsable(true)
-  }, [])
+  }, [invalidateRead])
 
   // REQ-009: an active-backend switch invalidates every page-local
   // chain immediately — bump the generation first so anything still in
@@ -246,6 +258,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
           return
         }
         setScopeStatus(key, { busy: false, error: null })
+      } catch (err) {
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+        setScopeStatus(key, { busy: false, error: requestFailureMessage(err) })
       } finally {
         const scannedSet = scannedRef.current.get(backendId) ?? new Set<HarnessConfigScopeKey>()
         scannedSet.add(key)
@@ -284,12 +299,41 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       for (const resourceType of resourceTypes) {
         const scope: HarnessConfigScope = { agentKind, resourceType }
         const key = harnessConfigScopeKey(scope)
-        const result = await backend.compareHarnessConfig({ scope })
+        let error: string | null
+        try {
+          const result = await backend.compareHarnessConfig({ scope })
+          error = result.ok ? null : result.error.message
+        } catch (err) {
+          error = requestFailureMessage(err)
+        }
         if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
-        setScopeStatus(key, { error: result.ok ? null : result.error.message })
+        setScopeStatus(key, { error })
       }
     },
     [backend, setScopeStatus]
+  )
+
+  const rescanAfterFailedApply = useCallback(
+    async (
+      error: HarnessConfigRequestError,
+      agentKind: ManagedHarnessKind,
+      resourceTypes: readonly HarnessConfigResourceType[],
+      backendId: string,
+      generation: number
+    ) => {
+      if (!error.requiresRescan && !error.applied?.length) return
+      for (const resourceType of resourceTypes) {
+        const scope: HarnessConfigScope = { agentKind, resourceType }
+        try {
+          await backend.scanHarnessConfig({ scope })
+        } catch {
+          // refreshComparisons below surfaces any persistent transport failure.
+        }
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      }
+      await refreshComparisons(agentKind, resourceTypes, backendId, generation)
+    },
+    [backend, refreshComparisons]
   )
 
   // ---- Derived resource groups ----
@@ -358,17 +402,18 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         comparison.diskOnly.some((r) => r.id === selected.id) ||
         comparison.changed.some((c) => c.disk.id === selected.id))
     if (existsInComparison) return
+    invalidateRead()
     setSelected(null)
     setSelectedRef(null)
     setEditorMode('empty')
     setDraft('')
     setSavedContent('')
-    setReadBusy(false)
-  }, [harnessConfig.resources, harnessConfig.comparisons, selected])
+  }, [harnessConfig.resources, harnessConfig.comparisons, selected, invalidateRead])
 
   // ---- Tab / filter / search transitions (REQ-025) ----
 
   const clearSelectionAndEditor = useCallback(() => {
+    invalidateRead()
     setSelected(null)
     setSelectedRef(null)
     setEditorMode('empty')
@@ -377,7 +422,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDraft('')
     setSavedContent('')
     setActionError(null)
-  }, [])
+  }, [invalidateRead])
 
   const handleTabChange = useCallback(
     (tab: HarnessConfigResourceType) => {
@@ -412,7 +457,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         selected &&
         selected.scope.agentKind === scope.agentKind &&
         selected.scope.resourceType === scope.resourceType &&
-        selected.id === id
+        selected.id === id &&
+        !readFailed
       ) {
         return
       }
@@ -429,8 +475,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       setSelected({ scope, id })
       setSelectedRef(ref)
       setEditorMode('edit')
+      setReadFailed(false)
 
       if (!ref.existsOnDisk) {
+        readTokenRef.current += 1
         setDraft('')
         setSavedContent('')
         setReadBusy(false)
@@ -446,16 +494,24 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       const generation = backendGenerationRef.current
 
       void (async () => {
-        const result = await backend.readHarnessConfigFile({ scope, id })
-        if (
-          activeBackendIdRef.current !== backendId ||
-          backendGenerationRef.current !== generation ||
-          readTokenRef.current !== token
-        ) {
+        const isCurrent = (): boolean =>
+          activeBackendIdRef.current === backendId &&
+          backendGenerationRef.current === generation &&
+          readTokenRef.current === token
+        let result: Awaited<ReturnType<typeof backend.readHarnessConfigFile>>
+        try {
+          result = await backend.readHarnessConfigFile({ scope, id })
+        } catch (err) {
+          if (!isCurrent()) return
+          setReadBusy(false)
+          setReadFailed(true)
+          setActionError(requestFailureMessage(err))
           return
         }
+        if (!isCurrent()) return
         if (!result.ok) {
           setReadBusy(false)
+          setReadFailed(true)
           setActionError(result.error.message)
           return
         }
@@ -465,7 +521,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setReadBusy(false)
       })()
     },
-    [selected, confirmDiscard, groupsNoSearch, backend, activeBackend.id]
+    [selected, readFailed, confirmDiscard, groupsNoSearch, backend, activeBackend.id]
   )
 
   // ---- Create ----
@@ -473,6 +529,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const handleEnterCreate = useCallback(
     (scope: HarnessConfigScope) => {
       if (!confirmDiscard()) return
+      invalidateRead()
       setSelected(null)
       setSelectedRef(null)
       setCreateScope(scope)
@@ -482,10 +539,11 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       setEditorMode('create')
       setActionError(null)
     },
-    [confirmDiscard]
+    [confirmDiscard, invalidateRead]
   )
 
   const handleCancelCreate = useCallback(() => {
+    readTokenRef.current += 1
     setCreateScope(null)
     setCreateName('')
     setDraft('')
@@ -507,6 +565,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const generation = backendGenerationRef.current
     const scope = createScope
     const content = draft
+    const editorToken = readTokenRef.current
     const scopeKey = harnessConfigScopeKey(scope)
     setScopeStatus(scopeKey, { busy: true })
 
@@ -525,6 +584,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
       if (!applyResult.ok) {
         setActionError(applyResult.error.message)
+        await rescanAfterFailedApply(applyResult.error, scope.agentKind, affectedResourceTypes(scope, null), backendId, generation)
         return
       }
 
@@ -533,29 +593,35 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         ? (applyResult.value.resultingRefs.find((ref) => ref.id === createdId) ?? null)
         : null
 
-      setCreateScope(null)
-      setCreateName('')
+      if (readTokenRef.current === editorToken) {
+        readTokenRef.current += 1
+        setCreateScope(null)
+        setCreateName('')
 
-      if (resultingRef) {
-        setSelected({ scope, id: resultingRef.id })
-        setSelectedRef(resultingRef)
-        setEditorMode('edit')
-        setDraft(content)
-        setSavedContent(content)
-      } else {
-        setDraft('')
-        setSavedContent('')
-        setEditorMode('empty')
+        if (resultingRef) {
+          setSelected({ scope, id: resultingRef.id })
+          setSelectedRef(resultingRef)
+          setEditorMode('edit')
+          setDraft(content)
+          setSavedContent(content)
+        } else {
+          setDraft('')
+          setSavedContent('')
+          setEditorMode('empty')
+        }
       }
 
       await refreshComparisons(scope.agentKind, affectedResourceTypes(scope, resultingRef), backendId, generation)
+    } catch (err) {
+      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      setActionError(requestFailureMessage(err))
     } finally {
       if (activeBackendIdRef.current === backendId && backendGenerationRef.current === generation) {
         setMutationBusy(false)
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [createScope, createName, draft, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+  }, [createScope, createName, draft, mutationBusy, activeBackend.id, backend, refreshComparisons, rescanAfterFailedApply, setScopeStatus])
 
   // ---- Update (save) ----
 
@@ -575,6 +641,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const id = selected.id
     const content = draft
     const preMutationRef = selectedRef
+    const editorToken = readTokenRef.current
     const scopeKey = harnessConfigScopeKey(scope)
     setScopeStatus(scopeKey, { busy: true })
 
@@ -593,21 +660,33 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
       if (!applyResult.ok) {
         setActionError(applyResult.error.message)
+        await rescanAfterFailedApply(
+          applyResult.error,
+          scope.agentKind,
+          affectedResourceTypes(scope, preMutationRef),
+          backendId,
+          generation
+        )
         return
       }
 
-      const readResult = await backend.readHarnessConfigFile({ scope, id })
-      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
-      if (readResult.ok) {
-        setSelectedRef(readResult.value.ref)
-        setDraft(readResult.value.content)
-        setSavedContent(readResult.value.content)
-      } else {
-        // The write already succeeded — fall back to treating the content we
-        // just wrote as the new saved baseline so the editor doesn't stay
-        // stuck "dirty", and surface the re-read failure so it isn't silent.
-        setSavedContent(content)
-        setActionError(`Saved, but failed to refresh the file: ${readResult.error.message}`)
+      if (readTokenRef.current === editorToken) {
+        const readToken = ++readTokenRef.current
+        const readResult = await backend.readHarnessConfigFile({ scope, id })
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+        if (readTokenRef.current === readToken) {
+          if (readResult.ok) {
+            setSelectedRef(readResult.value.ref)
+            setDraft(readResult.value.content)
+            setSavedContent(readResult.value.content)
+          } else {
+            // The write already succeeded — fall back to treating the content we
+            // just wrote as the new saved baseline so the editor doesn't stay
+            // stuck "dirty", and surface the re-read failure so it isn't silent.
+            setSavedContent(content)
+            setActionError(`Saved, but failed to refresh the file: ${readResult.error.message}`)
+          }
+        }
       }
 
       await refreshComparisons(
@@ -616,13 +695,16 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         backendId,
         generation
       )
+    } catch (err) {
+      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      setActionError(requestFailureMessage(err))
     } finally {
       if (activeBackendIdRef.current === backendId && backendGenerationRef.current === generation) {
         setMutationBusy(false)
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [selected, selectedRef, draft, savedContent, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+  }, [selected, selectedRef, draft, savedContent, mutationBusy, activeBackend.id, backend, refreshComparisons, rescanAfterFailedApply, setScopeStatus])
 
   // ---- Delete ----
 
@@ -640,6 +722,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const scope = selected.scope
     const id = selected.id
     const preMutationRef = selectedRef
+    const editorToken = readTokenRef.current
     const scopeKey = harnessConfigScopeKey(scope)
     setScopeStatus(scopeKey, { busy: true })
 
@@ -658,14 +741,24 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
       if (!applyResult.ok) {
         setActionError(applyResult.error.message)
+        await rescanAfterFailedApply(
+          applyResult.error,
+          scope.agentKind,
+          affectedResourceTypes(scope, preMutationRef),
+          backendId,
+          generation
+        )
         return
       }
 
-      setSelected(null)
-      setSelectedRef(null)
-      setEditorMode('empty')
-      setDraft('')
-      setSavedContent('')
+      if (readTokenRef.current === editorToken) {
+        invalidateRead()
+        setSelected(null)
+        setSelectedRef(null)
+        setEditorMode('empty')
+        setDraft('')
+        setSavedContent('')
+      }
 
       await refreshComparisons(
         scope.agentKind,
@@ -673,13 +766,16 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         backendId,
         generation
       )
+    } catch (err) {
+      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      setActionError(requestFailureMessage(err))
     } finally {
       if (activeBackendIdRef.current === backendId && backendGenerationRef.current === generation) {
         setMutationBusy(false)
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [selected, selectedRef, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+  }, [selected, selectedRef, mutationBusy, activeBackend.id, backend, refreshComparisons, rescanAfterFailedApply, setScopeStatus, invalidateRead])
 
   const handleResetDraft = useCallback(() => setDraft(savedContent), [savedContent])
 
@@ -733,7 +829,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       const key = harnessConfigScopeKey(scope)
       setScopeStatus(key, { busy: true, error: null, notice: null })
       void (async () => {
-        const result = await backend.compareHarnessConfig({ scope })
+        let result: Awaited<ReturnType<typeof backend.compareHarnessConfig>>
+        try {
+          result = await backend.compareHarnessConfig({ scope })
+        } catch (err) {
+          if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+          setScopeStatus(key, { busy: false, error: requestFailureMessage(err) })
+          return
+        }
         if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
         if (!result.ok) {
           setScopeStatus(key, { busy: false, error: result.error.message })
@@ -978,7 +1081,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
-  const canEdit = editorView.kind === 'edit' && !readBusy && !mutationBusy
+  const canEdit = editorView.kind === 'edit' && !readBusy && !readFailed && !mutationBusy
   const canSave = canEdit && draft !== savedContent
   const canDelete = canEdit
 
