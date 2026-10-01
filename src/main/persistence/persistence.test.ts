@@ -111,6 +111,24 @@ describe('getPersistedHarnessConfigResources', () => {
     expect(out).toEqual([r])
   })
 
+  it('accepts a resource with aliasResourceTypes omitted (optional on the reused contract) as having no aliases', () => {
+    const r = resource()
+    delete (r as { aliasResourceTypes?: unknown }).aliasResourceTypes
+    const config: Config = { ...bareConfig(), harnessConfig: { version: 1, resources: [r] } }
+    const out = getPersistedHarnessConfigResources(config)
+    expect(out).toEqual([{ ...r, aliasResourceTypes: [] }])
+  })
+
+  it('preserves a canonicalResourceType that agrees with resourceType, and rejects one that disagrees', () => {
+    const agreeing = resource({ canonicalResourceType: 'agents' })
+    const config: Config = { ...bareConfig(), harnessConfig: { version: 1, resources: [agreeing] } }
+    expect(getPersistedHarnessConfigResources(config)[0].canonicalResourceType).toBe('agents')
+
+    const disagreeing = resource({ canonicalResourceType: 'skills' })
+    const badConfig: Config = { ...bareConfig(), harnessConfig: { version: 1, resources: [disagreeing] } }
+    expect(() => getPersistedHarnessConfigResources(badConfig)).toThrow(/Invalid Tatsu config/)
+  })
+
   it('does not share array/object references with the source Config', () => {
     const r = resource()
     const config: Config = { ...bareConfig(), harnessConfig: { version: 1, resources: [r] } }

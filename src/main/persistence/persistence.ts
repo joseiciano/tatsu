@@ -112,7 +112,10 @@ function isValidRelativePath(value: unknown): value is string {
 function isValidAliasResourceTypes(
   resourceType: HarnessConfigResourceType,
   value: unknown
-): value is HarnessConfigResourceType[] {
+): value is HarnessConfigResourceType[] | undefined {
+  // `aliasResourceTypes` is optional on the canonical HarnessConfigDesiredResource
+  // contract this type reuses verbatim — absent means "no aliases", not malformed.
+  if (value === undefined) return true
   if (!Array.isArray(value)) return false
   if (!value.every((type) => typeof type === 'string' && RESOURCE_TYPE_SET.has(type))) return false
   if (value.includes(resourceType)) return false
@@ -127,6 +130,17 @@ function validatePersistedHarnessConfigResource(raw: unknown): PersistedHarnessC
   if (typeof r.resourceType !== 'string' || !RESOURCE_TYPE_SET.has(r.resourceType)) invalidHarnessConfig('invalid resourceType', r)
   const resourceType = r.resourceType as HarnessConfigResourceType
   if (!isValidAliasResourceTypes(resourceType, r.aliasResourceTypes)) invalidHarnessConfig('invalid aliasResourceTypes', r)
+  // `canonicalResourceType` is optional on the reused contract too. `resourceType`
+  // is already required to be canonical (REQ-002), so when present it must agree —
+  // preserved through the round trip rather than silently dropped.
+  if (r.canonicalResourceType !== undefined) {
+    if (typeof r.canonicalResourceType !== 'string' || !RESOURCE_TYPE_SET.has(r.canonicalResourceType)) {
+      invalidHarnessConfig('invalid canonicalResourceType', r)
+    }
+    if (r.canonicalResourceType !== resourceType) {
+      invalidHarnessConfig('canonicalResourceType does not match the canonical resourceType', r)
+    }
+  }
   if (!isValidRelativePath(r.relativePath)) invalidHarnessConfig('invalid relativePath', r)
   if (typeof r.label !== 'string') invalidHarnessConfig('invalid label', r)
   if (typeof r.content !== 'string') invalidHarnessConfig('invalid content', r)
@@ -139,7 +153,8 @@ function validatePersistedHarnessConfigResource(raw: unknown): PersistedHarnessC
     id: r.id,
     agentKind: r.agentKind as ManagedHarnessKind,
     resourceType,
-    aliasResourceTypes: [...(r.aliasResourceTypes as HarnessConfigResourceType[])],
+    ...(r.canonicalResourceType !== undefined ? { canonicalResourceType: resourceType } : {}),
+    aliasResourceTypes: [...((r.aliasResourceTypes as HarnessConfigResourceType[] | undefined) ?? [])],
     relativePath: r.relativePath as string,
     label: r.label as string,
     content: r.content as string,
