@@ -1,14 +1,14 @@
 ---
 goal: Record the open questions that remain after the product boundary and source-of-truth decisions, and lock the invariants those questions may not weaken
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-10-01
+status: 'Completed'
 tags: [feature, open-questions, harness-config, resolver, documentation]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This step reconciles the plan set's open-questions ledger with the accepted product boundary in [step-01-product-boundary-source-of-truth.md](./step-01-product-boundary-source-of-truth.md) and [implementation-details.md](./implementation-details.md). It is documentation-only. The sync-scope question is resolved, not open. Only the three resolver-owned discovery questions remain open, and their answers cannot weaken confirmation, backup, alias identity, scoped mutation, or no-cross-harness/plugin-copy invariants. This step owns no runtime behavior and makes no new product decisions.
 
@@ -31,13 +31,17 @@ This step reconciles the plan set's open-questions ledger with the accepted prod
 
 - **GOAL-001**: Produce one authoritative ledger that retains only the three genuinely open resolver questions with explicit owners after the accepted boundary.
 
-- [ ] **TASK-001**: Record the sync-scope question as resolved with a pointer to the deciding sources.
+- [x] **TASK-001**: Record the sync-scope question as resolved with a pointer to the deciding sources.
   - Quote the resolved rule: every comparison and mutation is scoped by `${agentKind}:${resourceType}`; no global cross-harness sync exists in the initial implementation.
   - Cite [step-01-product-boundary-source-of-truth.md](./step-01-product-boundary-source-of-truth.md) REQ-011 and ALT-003, and the operation matrix in [implementation-details.md](./implementation-details.md).
-- [ ] **TASK-002**: Keep exactly three resolver questions open with their owning steps: exact harness directory conventions per harness/version, repo-local versus global discovery roots, and nested skill asset support, all explicitly deferred to Steps 2 and 3.
+  - Recorded as REQ-001 above.
+- [x] **TASK-002**: Keep exactly three resolver questions open with their owning steps: exact harness directory conventions per harness/version, repo-local versus global discovery roots, and nested skill asset support, all explicitly deferred to Steps 2 and 3.
   - For each, record only the open dimension and owner; do not answer it here.
-- [ ] **TASK-003**: Exclude settled source-of-truth direction, mutation scope, managed resource scope, harness scope, and mutation safeguards from the open-question ledger.
-- [ ] **TASK-004**: Record the invariant protection statement from REQ-005 so resolver answers cannot weaken confirmation, backup, alias identity, scoped mutation, or no-cross-harness/plugin-copy rules.
+  - Recorded as REQ-002, REQ-003, and REQ-004 above; no answer is supplied for any of them.
+- [x] **TASK-003**: Exclude settled source-of-truth direction, mutation scope, managed resource scope, harness scope, and mutation safeguards from the open-question ledger.
+  - Confirmed: REQ-006 (source-of-truth direction), REQ-011 referenced via REQ-001 (mutation scope), REQ-007 (managed resource union and harness scope), and REQ-005's listed safeguards are all recorded as settled, not as open questions, and REQ-008 constrains the ledger to exactly REQ-002 through REQ-004.
+- [x] **TASK-004**: Record the invariant protection statement from REQ-005 so resolver answers cannot weaken confirmation, backup, alias identity, scoped mutation, or no-cross-harness/plugin-copy rules.
+  - Recorded as REQ-005 above.
 
 ## 3. Files
 
