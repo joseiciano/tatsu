@@ -16,6 +16,7 @@ export type AgentConfigCapability =
       label: string
       status: 'unsupported' | 'unknown'
       notes: string
+      aliasResourceTypes?: never
     }
 
 export function isHarnessConfigCapabilityEnabled(capability: AgentConfigCapability): boolean {

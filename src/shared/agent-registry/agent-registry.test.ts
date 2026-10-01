@@ -19,6 +19,25 @@ type ExpectedCapability = {
   notes?: string
   aliasResourceTypes?: readonly HarnessConfigResourceType[]
 }
+const unsupportedCapabilityWithAlias = {
+  resourceType: 'commands',
+  status: 'unsupported',
+  label: 'Commands',
+  notes: 'unsupported',
+  aliasResourceTypes: ['skills']
+} as const
+// @ts-expect-error Unsupported capabilities cannot carry aliases.
+const unsupportedCapability: AgentConfigCapability = unsupportedCapabilityWithAlias
+
+const unknownCapabilityWithAlias = {
+  resourceType: 'agents',
+  status: 'unknown',
+  label: 'Agents',
+  notes: 'unknown',
+  aliasResourceTypes: ['skills']
+} as const
+// @ts-expect-error Unknown capabilities cannot carry aliases.
+const unknownCapability: AgentConfigCapability = unknownCapabilityWithAlias
 
 const expectedAgentCapabilities: readonly {
   kind: RegistryAgentKind
