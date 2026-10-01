@@ -3008,10 +3008,10 @@ function registerIpcHandlers(): void {
         ...(input.color ? { color: input.color } : {}),
         ...(input.initials ? { initials: input.initials } : {})
       }
+      await setSecret(`backend-token:${id}`, token)
       const list = (config.connections ?? []).slice()
       list.push(conn)
       config.connections = list
-      await setSecret(`backend-token:${id}`, token)
       saveConfig(config)
       return conn
     }
