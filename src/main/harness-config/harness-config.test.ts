@@ -1029,7 +1029,7 @@ describe('backups, atomic writes, rollback, and partial application', () => {
     expect(backupFiles(fixture.roots.agents)).toHaveLength(1)
     expect(desired.replaceDesiredScope).toHaveBeenCalledTimes(1)
     expect(targetExistedAtPersist).toEqual([false])
-    expect(desired.resources).toEqual([seeded])
+    expect(fixture.service.planSync(scope).status).toBe('synced')
 
     // Control run: with a working desired-state store, the same delete plan
     // flow removes the file from disk and updates desired state only after
