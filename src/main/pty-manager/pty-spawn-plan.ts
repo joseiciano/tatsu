@@ -52,15 +52,6 @@ function isExecModeArgs(args: string[]): boolean {
 export function buildPtySpawnPlan(input: PtySpawnInput): PtySpawnPlan {
   const { id, cwd, command, args, extraEnv, isShell, resolver } = input
 
-  // Validate extraEnv keys
-  if (extraEnv) {
-    for (const key of Object.keys(extraEnv)) {
-      if (!ENV_KEY_RE.test(key)) {
-        return { kind: 'error', message: `Invalid env key: "${key}". Environment variable names must match /^[A-Za-z_][A-Za-z0-9_]*$/` }
-      }
-    }
-  }
-
   // Resolve container target
   const target = resolver?.(id, cwd)
   if (!target) {
@@ -84,6 +75,14 @@ export function buildPtySpawnPlan(input: PtySpawnInput): PtySpawnPlan {
       ? `Container "${target.name}" is stopped. Restart or recreate it from Settings → Worktrees.`
       : `Container "${target.name}" is in error state${target.error ? `: ${target.error}` : ''}. Recreate it from Settings → Worktrees.`
     return { kind: 'error', message: hint }
+  }
+
+  if (extraEnv) {
+    for (const key of Object.keys(extraEnv)) {
+      if (!ENV_KEY_RE.test(key)) {
+        return { kind: 'error', message: `Invalid env key: "${key}". Environment variable names must match /^[A-Za-z_][A-Za-z0-9_]*$/` }
+      }
+    }
   }
 
   const rel = relative(target.worktreePath, cwd)

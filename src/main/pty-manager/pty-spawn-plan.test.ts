@@ -198,8 +198,21 @@ describe('buildPtySpawnPlan', () => {
     expect(plan.kind).toBe('spawn')
   })
 
-  it('invalid env key returns clear error', () => {
+  it('invalid env key on host path still spawns', () => {
     const plan = buildPtySpawnPlan(hostInput({ extraEnv: { 'BAD-KEY': 'val' } }))
+    expect(plan.kind).toBe('spawn')
+  })
+
+  it('invalid env key on container path returns clear error', () => {
+    const resolver: WorktreeContainerResolver = () => ({
+      worktreePath: '/worktrees/my-project',
+      name: 'tatsu-wt-my-project-abc',
+      shell: '/bin/bash',
+      workdir: '/workspace',
+      status: 'running',
+      error: undefined
+    })
+    const plan = buildPtySpawnPlan(hostInput({ resolver, extraEnv: { 'BAD-KEY': 'val' } }))
     expect(plan.kind).toBe('error')
     if (plan.kind !== 'error') return
     expect(plan.message).toMatch(/invalid.*env.*key/i)
