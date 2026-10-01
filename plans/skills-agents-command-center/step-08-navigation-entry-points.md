@@ -2,13 +2,13 @@
 goal: Add desktop navigation entry points for the harness Config workbench
 date_created: 2026-09-25
 last_updated: 2026-09-25
-status: 'Planned'
+status: 'Completed'
 tags: [feature, renderer, react, navigation, harness-config]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan implements Step 8 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It makes the Config workbench from [Step 7](./step-07-config-page-shell.md) reachable from the desktop application through a renderer-local full-screen overlay, a persistent expanded-sidebar footer button, and a button on the no-repository onboarding/home surface. The work follows the feature goals and Config terminology in [implementation-details.md](./implementation-details.md).
 
