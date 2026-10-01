@@ -7,6 +7,9 @@ export type { RepoConfig }
 
 const REPO_CONFIG_FILENAME = '.harness.json'
 const cache = new Map<string, RepoConfig>()
+const rawCache = new Map<string, Record<string, unknown>>()
+
+const RAW_PRESERVED_KEYS = ['container', 'setupCommand', 'teardownCommand', 'mergeStrategy'] as const
 
 const VALID_MERGE_STRATEGIES = new Set(['squash', 'merge-commit', 'fast-forward'])
 
@@ -269,11 +272,13 @@ export function loadRepoConfig(repoRoot: string): RepoConfig {
   const path = configPath(repoRoot)
   if (!existsSync(path)) {
     cache.set(repoRoot, {})
+    rawCache.delete(repoRoot)
     return {}
   }
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as RepoConfig
-    const clean = parsed && typeof parsed === 'object' ? parsed : {}
+    const clean = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    rawCache.set(repoRoot, structuredClone(clean) as Record<string, unknown>)
     validateNonContainerFields(clean, path)
     if (clean.container) {
       const validation = validateContainerConfig(clean.container, repoRoot)
@@ -289,11 +294,37 @@ export function loadRepoConfig(repoRoot: string): RepoConfig {
   } catch (err) {
     log('repo-config', `failed to load ${path}: ${(err as Error).message}`)
     cache.set(repoRoot, {})
+    rawCache.delete(repoRoot)
     return {}
   }
 }
 
-export function saveRepoConfig(repoRoot: string, next: RepoConfig): RepoConfig {
+export function updateRepoConfig(repoRoot: string, patch: Record<string, unknown>): RepoConfig {
+  const current = loadRepoConfig(repoRoot)
+  const merged: RepoConfig = { ...current }
+  for (const [k, v] of Object.entries(patch || {})) {
+    if (v === null || v === undefined) {
+      delete (merged as Record<string, unknown>)[k]
+    } else {
+      ;(merged as Record<string, unknown>)[k] = v
+    }
+  }
+  const raw = rawCache.get(repoRoot)
+  const preserved: Record<string, unknown> = {}
+  if (raw) {
+    for (const key of RAW_PRESERVED_KEYS) {
+      if (key in (patch || {})) continue
+      if (raw[key] !== undefined) preserved[key] = raw[key]
+    }
+  }
+  return saveRepoConfig(repoRoot, merged, preserved)
+}
+
+export function saveRepoConfig(
+  repoRoot: string,
+  next: RepoConfig,
+  preservedRaw: Record<string, unknown> = {}
+): RepoConfig {
   // Validate non-container fields first (drop non-string setupCommand/teardownCommand, invalid mergeStrategy)
   const validated: RepoConfig = { ...next }
   validateNonContainerFields(validated, configPath(repoRoot))
@@ -322,27 +353,34 @@ export function saveRepoConfig(repoRoot: string, next: RepoConfig): RepoConfig {
     cleaned.rightPanelOrder = [...next.rightPanelOrder]
   }
 
+  const toWrite: Record<string, unknown> = { ...cleaned }
   if (next.container) {
     const validation = validateContainerConfig(next.container, repoRoot)
     if (validation.valid) {
       cleaned.container = validation.config
+      toWrite.container = next.container
     } else {
       log('repo-config', `Invalid container config: ${validation.error}`)
     }
   }
+  for (const [key, value] of Object.entries(preservedRaw)) {
+    if (value !== undefined) toWrite[key] = value
+  }
 
-  const hasAny = Object.keys(cleaned).some((k) => k !== 'version')
+  const hasAny = Object.keys(toWrite).some((k) => k !== 'version')
   const path = configPath(repoRoot)
   try {
     if (!hasAny) {
       if (existsSync(path)) unlinkSync(path)
       cache.set(repoRoot, {})
+      rawCache.delete(repoRoot)
       return {}
     }
     const tmpPath = `${path}.tmp.${process.pid}`
-    writeFileSync(tmpPath, JSON.stringify(cleaned, null, 2) + '\n')
+    writeFileSync(tmpPath, JSON.stringify(toWrite, null, 2) + '\n')
     renameSync(tmpPath, path)
     cache.set(repoRoot, cleaned)
+    rawCache.set(repoRoot, structuredClone(toWrite))
     return cleaned
   } catch (err) {
     log('repo-config', `failed to save ${path}: ${(err as Error).message}`)
@@ -351,6 +389,11 @@ export function saveRepoConfig(repoRoot: string, next: RepoConfig): RepoConfig {
 }
 
 export function invalidateRepoConfigCache(repoRoot?: string): void {
-  if (repoRoot) cache.delete(repoRoot)
-  else cache.clear()
+  if (repoRoot) {
+    cache.delete(repoRoot)
+    rawCache.delete(repoRoot)
+  } else {
+    cache.clear()
+    rawCache.clear()
+  }
 }

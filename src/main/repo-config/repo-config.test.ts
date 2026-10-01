@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync, mkdtempSync, symlinkSync, readFileSync, existsSync, readdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { loadRepoConfig, saveRepoConfig, invalidateRepoConfigCache } from './repo-config'
+import { loadRepoConfig, saveRepoConfig, updateRepoConfig, invalidateRepoConfigCache } from './repo-config'
 import type { RepoConfig } from '../../shared/state/repo-configs'
 
 const tempDirs: string[] = []
@@ -393,6 +393,51 @@ describe('saveRepoConfig atomic write', () => {
     const leftovers = readdirSync(dir).filter(f => f.includes('.tmp.'))
     expect(leftovers).toEqual([])
 
+    invalidateRepoConfigCache(dir)
+  })
+})
+
+describe('updateRepoConfig preserves on-disk fields', () => {
+  it('keeps relative container paths when patching an unrelated field', () => {
+    const dir = makeTempDir('rc-test-update-rel-')
+    writeFileSync(join(dir, 'Dockerfile.tatsu'), 'FROM node:20\n')
+    const raw = { container: { dockerfile: 'Dockerfile.tatsu', volumes: [{ source: './cache', target: '/cache' }] } }
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify(raw))
+    invalidateRepoConfigCache(dir)
+
+    const saved = updateRepoConfig(dir, { setupCommand: 'pnpm install' })
+    const onDisk = JSON.parse(readFileSync(join(dir, '.harness.json'), 'utf8'))
+    expect(onDisk.container).toEqual(raw.container)
+    expect(onDisk.setupCommand).toBe('pnpm install')
+    invalidateRepoConfigCache(dir)
+    expect(saved.container).toEqual(loadRepoConfig(dir).container)
+    invalidateRepoConfigCache(dir)
+  })
+
+  it('keeps an invalid container section on disk when patching an unrelated field', () => {
+    const dir = makeTempDir('rc-test-update-invalid-')
+    const raw = { container: { image: 'n', dockerfile: './D' }, mergeStrategy: 'bogus' }
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify(raw))
+    invalidateRepoConfigCache(dir)
+
+    const saved = updateRepoConfig(dir, { setupCommand: 'make' })
+    expect(saved.container).toBeUndefined()
+    expect(saved.mergeStrategy).toBeUndefined()
+    const onDisk = JSON.parse(readFileSync(join(dir, '.harness.json'), 'utf8'))
+    expect(onDisk.container).toEqual(raw.container)
+    expect(onDisk.mergeStrategy).toBe('bogus')
+    invalidateRepoConfigCache(dir)
+  })
+
+  it('removes a field the patch explicitly clears', () => {
+    const dir = makeTempDir('rc-test-update-clear-')
+    writeFileSync(join(dir, '.harness.json'), JSON.stringify({ container: { image: 'node:20' }, setupCommand: 'make' }))
+    invalidateRepoConfigCache(dir)
+
+    updateRepoConfig(dir, { container: null })
+    const onDisk = JSON.parse(readFileSync(join(dir, '.harness.json'), 'utf8'))
+    expect(onDisk.container).toBeUndefined()
+    expect(onDisk.setupCommand).toBe('make')
     invalidateRepoConfigCache(dir)
   })
 })

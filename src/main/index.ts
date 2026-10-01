@@ -63,7 +63,7 @@ import {
   type PersistedPaneNode,
   type QuestStep
 } from './persistence'
-import { loadRepoConfig, saveRepoConfig, type RepoConfig } from './repo-config'
+import { loadRepoConfig, updateRepoConfig, type RepoConfig } from './repo-config'
 import { createNewProject, type GitignorePreset } from './repo-create'
 import { resolveRepoPath } from './repo-resolve'
 import { registerRepoRoot } from './repo-roots'
@@ -1656,16 +1656,7 @@ function registerIpcHandlers(): void {
 
   transport.onRequest('repoConfig:set', (_ctx, repoRoot: string, next: Record<string, unknown>) => {
     if (!repoRoot) return null
-    const current = loadRepoConfig(repoRoot)
-    const merged: RepoConfig = { ...current }
-    for (const [k, v] of Object.entries(next || {})) {
-      if (v === null || v === undefined) {
-        delete (merged as Record<string, unknown>)[k]
-      } else {
-        ;(merged as Record<string, unknown>)[k] = v
-      }
-    }
-    const saved = saveRepoConfig(repoRoot, merged)
+    const saved = updateRepoConfig(repoRoot, next || {})
     store.dispatch({
       type: 'repoConfigs/changed',
       payload: { repoRoot, config: saved }
