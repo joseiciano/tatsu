@@ -26,7 +26,7 @@ import {
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
-import { createCommandFromSkill, createSkillFromCommand, slugifyLogicalName } from './conversion'
+import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
 import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
@@ -1204,7 +1204,10 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (!descriptor.nameToRelativePath) {
       throw new HarnessConfigError('invalid-name', 'The destination resolver cannot derive a resource path')
     }
-    const destinationName = this.conversionDestinationName(source.ref)
+    const destinationName = conversionDestinationName({
+      name: this.conversionName(source.ref),
+      label: source.ref.label
+    })
     const target = this.resolveCandidate(descriptor, descriptor.nameToRelativePath(destinationName), false)
     let existingTarget
     try {
@@ -1246,16 +1249,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       relativePath: target.relativePath,
       label: this.labelFor(target.relativePath, descriptor.canonicalResourceType ?? destinationType),
       content: draft.content
-    }
-  }
-
-  /** REQ-003: `slugifyLogicalName(label)`, falling back to the source
-   *  logical name only when the label itself slugifies to nothing. */
-  private conversionDestinationName(ref: HarnessConfigFileRef): string {
-    try {
-      return slugifyLogicalName(ref.label)
-    } catch {
-      return slugifyLogicalName(this.conversionName(ref))
     }
   }
 
