@@ -1192,9 +1192,10 @@ describe('sync/adopt direction and conversion preparation', () => {
     // TEST-006: no harness-directory file changed — a byte-exact snapshot of
     // the entire temporary root (not just a filename listing) is unchanged.
     expect(snapshotTree(fixture.root)).toEqual(beforeTree)
-    // TEST-006: other desired scopes were preserved, not touched or dropped.
-    expect(fixture.desired.resources.filter((r) => r.agentKind === 'codex')).toHaveLength(1)
-    expect(fixture.desired.resources.find((r) => r.agentKind === 'codex')).toEqual(otherDesired)
+    // TEST-006: the service hands persistence only the selected scope's
+    // resources; preserving other scopes on write is defended by the
+    // replacePersistedHarnessConfigScope tests in persistence.test.ts.
+    expect(adopted.every((r: DesiredResource) => r.agentKind === 'claude')).toBe(true)
   })
   it('preserves canonical Claude skill aliases when creating native command', async () => {
     const existing = {
