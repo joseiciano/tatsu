@@ -2,13 +2,13 @@
 goal: Implement scoped sync conflict review, confirmation, and stale-plan recovery in the Config page
 date_created: 2026-09-25
 last_updated: 2026-09-25
-status: 'Planned'
+status: 'Completed'
 tags: [feature, renderer, react, harness-config, sync, conflict-ux]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-green)
 
 This plan implements Step 9 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It turns Step 7's read-only drift preview into the explicit conflict-resolution boundary defined by [implementation-details.md](./implementation-details.md): users review disk-only, config-only, and content-changed files for one `${agentKind}:${resourceType}` scope, then choose exactly one outcome: `Sync Tatsu config to disk`, `Adopt current disk files into Tatsu config`, or `Cancel` without mutation.
 
