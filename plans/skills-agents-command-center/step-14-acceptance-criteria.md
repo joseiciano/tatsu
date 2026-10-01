@@ -1,14 +1,14 @@
 ---
 goal: Define end-to-end observable acceptance criteria for the skills, agents, and commands sync boundary
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-10-01
+status: 'Completed'
 tags: [feature, acceptance-criteria, product-boundary, harness-config]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan defines the end-to-end acceptance contract for Tatsu's skills, agents, and commands management feature. It restates the binding product boundary from [step-01-product-boundary-source-of-truth.md](./step-01-product-boundary-source-of-truth.md) and the canonical terms and operation matrix in [implementation-details.md](./implementation-details.md) as observable, testable criteria: every mutation direction, every user gate, and every safety invariant must be verifiable against file-system effects, config effects, and UI states. Requirement identifiers here mirror the canonical identifiers declared in Step 1; this plan declares no new requirement semantics and MUST NOT redefine synchronization direction or confirmation semantics (DEP-005). Test implementation details are owned by [step-11-tests.md](./step-11-tests.md); this plan stays at the acceptance-contract level.
 
@@ -49,20 +49,20 @@ Identifiers below are declared once here and mirror Step 1's canonical declarati
 
 - **GOAL-001**: Prove every mutation direction from the operation matrix is executable and gated exactly as specified, while scan/compare stay read-only.
 
-- [ ] **TASK-001**: Verify sync to disk end to end for a `${agentKind}:${resourceType}` scope.
+- [x] **TASK-001**: Verify sync to disk end to end for a `${agentKind}:${resourceType}` scope.
   - Generate a plan that captures the selected Tatsu config snapshot; before confirmation, observe zero disk writes and zero Tatsu config changes.
   - Confirm that specific plan; observe its captured Tatsu config snapshot written to the selected harness directory and only the selected disk scope changed.
   - Observe Tatsu config and all non-selected disk scopes remain byte-identical; repeat with a second scope to prove scope isolation (REQ-009, REQ-011).
-- [ ] **TASK-002**: Verify adopt from disk end to end for a `${agentKind}:${resourceType}` scope.
+- [x] **TASK-002**: Verify adopt from disk end to end for a `${agentKind}:${resourceType}` scope.
   - Generate a plan that captures the selected disk inventory snapshot; before confirmation, observe zero disk writes and zero Tatsu config changes.
   - Confirm that specific plan; observe its captured disk inventory snapshot written to only the selected Tatsu config scope.
   - Observe disk inventory and all non-selected Tatsu config scopes remain byte-identical (REQ-010, REQ-011).
-- [ ] **TASK-003**: Verify direct mutations carry their explicit gates per the operation matrix.
+- [x] **TASK-003**: Verify direct mutations carry their explicit gates per the operation matrix.
   - Direct create: observe exactly one new target resource only after the explicit Create action; without that action, observe zero disk writes and zero config changes (REQ-014).
   - Direct update: observe the target resource change only after an explicit Save confirmation and only after a dated backup captures the prior bytes; without that confirmation, observe zero disk writes and zero config changes (REQ-014, REQ-016).
   - Direct delete: observe the target resource disappear only after an explicit Delete confirmation and only after a dated backup captures the prior bytes; without that confirmation, observe zero disk writes and zero config changes (REQ-014, REQ-016).
   - For every direct mutation, observe all non-target `${agentKind}:${resourceType}` scopes remain byte-identical (REQ-011).
-- [ ] **TASK-004**: Verify scan and compare are read-only.
+- [x] **TASK-004**: Verify scan and compare are read-only.
   - Run scan over known harness roots and observe it reads discovered files into disk inventory while producing zero disk writes and zero Tatsu config changes.
   - Run compare over disk inventory and Tatsu config and observe it classifies disk-only, config-only, and content-changed entries while producing zero disk writes and zero Tatsu config changes.
   - Include unmanaged user files and observe those files remain byte-identical (REQ-014, CON-003).
@@ -71,17 +71,17 @@ Identifiers below are declared once here and mirror Step 1's canonical declarati
 
 - **GOAL-002**: Prove stale plans cannot mutate, cancellation mutates nothing, and backups protect every destructive write.
 
-- [ ] **TASK-005**: Verify stale-plan and absent-plan rejection.
+- [x] **TASK-005**: Verify stale-plan and absent-plan rejection.
   - Generate a sync to disk plan, externally change its source or target state, and rescan; attempt to apply the formerly confirmed plan and observe rejection with zero disk writes and zero config changes.
   - Generate an adopt from disk plan, change disk inventory or Tatsu config so its snapshot is no longer current, and attempt to apply the formerly confirmed plan; observe the same rejection.
   - Attempt sync to disk and adopt from disk with no confirmed plan at all; observe rejection with zero disk writes and zero config changes.
   - In every rejection, observe a regeneration-and-reconfirmation requirement surfaced to the user (REQ-015).
-- [ ] **TASK-006**: Verify exact conflict outcomes and no-ops.
+- [x] **TASK-006**: Verify exact conflict outcomes and no-ops.
   - Create a conflict for one `${agentKind}:${resourceType}` scope and observe separate disk-only, config-only, and content-changed entries, each labeled with its originating harness and logical resource type (REQ-012, REQ-013, GUD-002).
   - Observe exactly these three outcomes and no fourth path: `Sync Tatsu config to disk`, `Adopt current disk files into Tatsu config`, and `Cancel` (REQ-013).
   - Choose `Sync Tatsu config to disk`, confirm its plan, and observe only the selected disk scope receives the captured Tatsu config snapshot; choose `Adopt current disk files into Tatsu config`, confirm its plan, and observe only the selected Tatsu config scope receives the captured disk inventory snapshot.
   - Open and dismiss the modal, then repeat and choose `Cancel`; for both paths observe disk inventory and Tatsu config remain byte-identical (REQ-015).
-- [ ] **TASK-007**: Verify the backup invariant across all destructive flows.
+- [x] **TASK-007**: Verify the backup invariant across all destructive flows.
   - For overwrite, delete, and sync-to-disk replacement of an existing file, observe a dated backup containing the original unmodified bytes is created before the original is changed or removed (REQ-016).
   - For a brand-new file target, observe no backup is created because no prior file exists (REQ-016).
   - Force backup failure before each destructive flow and observe the destructive write never begins, the original file remains byte-identical, no partial target state exists, and no success is reported (SEC-001).
@@ -90,16 +90,16 @@ Identifiers below are declared once here and mirror Step 1's canonical declarati
 
 - **GOAL-003**: Prove the resource union, harness scope, unsupported-combination handling, alias identity, plugin rules, and path safety hold end to end.
 
-- [ ] **TASK-008**: Verify the resource union and harness scope.
+- [x] **TASK-008**: Verify the resource union and harness scope.
   - Observe every inventory and mutation surface exposes exactly `agents | skills | commands` for `claude`, `codex`, and `opencode` (REQ-001, REQ-005).
   - Observe `pi` appears only as explicitly deferred and offers no managed mutation actions (REQ-005).
-- [ ] **TASK-009**: Verify unsupported combinations and path safety.
+- [x] **TASK-009**: Verify unsupported combinations and path safety.
   - For every unsupported harness/resource combination, observe a visible, disabled capability state with an explanation, no guessed path, and no mutation available (REQ-006).
   - Attempt a mutation whose target resolves outside known harness configuration roots and observe rejection with zero filesystem effect (SEC-002, PAT-001).
-- [ ] **TASK-010**: Verify Claude alias identity.
+- [x] **TASK-010**: Verify Claude alias identity.
   - Locate one physical Claude resource exposed in both Skills and Commands; observe both aliases carry the same stable identity and resolve to the same physical path (REQ-017).
   - Run create-command on an existing skill alias and create-skill on an existing command alias; observe each conversion returns the existing identity and produces no duplicate disk file or Tatsu config entry (REQ-017).
-- [ ] **TASK-011**: Verify plugin provenance and cross-harness boundaries.
+- [x] **TASK-011**: Verify plugin provenance and cross-harness boundaries.
   - Observe plugin provenance only as metadata on inventoried resources under the originating harness; observe no `plugins` resource type, independent plugin row, or plugin mutation payload (REQ-001, REQ-018).
   - Inspect every plan and action surface and observe no automatic plugin copy, install, or translation and no automatic cross-harness payload; every plan remains within one `${agentKind}:${resourceType}` scope (REQ-011, REQ-018).
 
