@@ -1,43 +1,19 @@
-// Transport adapter for the harness configuration feature (Step 6 of
-// plans/skills-agents-command-center). Registers exactly fifteen
-// request channels on the shared compound transport, translating
-// untrusted renderer payloads into validated calls against the
-// main-only `HarnessConfigService`, and mirroring successful disk
-// inventory / comparison results into the shared store.
-//
-// Authority model (see implementation-details.md's operation matrix):
-// read-only observation and non-mutating plan-generation channels never
-// reach `service.applyPlan`. Every mutation channel requires a
-// previously generated, still-current plan recorded in the private
-// `bindings` map below, keyed by `planId` and carrying the one
-// mutation channel and exact `${agentKind}:${resourceType}` scope it is
-// allowed to apply through. A plan is consumed (deleted) the moment a
-// matching, confirmed apply attempt is made, so it can never be
-// replayed — success, failure, or partial failure all leave it gone.
-//
-// Dependencies are typed by the narrow methods this file actually
-// calls (`HarnessConfigTransportLike`, `HarnessConfigStoreLike`) so
-// `harness-config-transport.test.ts` can supply deterministic fakes
-// without importing Electron or starting a server.
-
 import { toAgentKind } from '../agent-kind'
 import { HarnessConfigError, harnessConfigScopeKey, type HarnessConfigService } from '../harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import type {
+  HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
-  HarnessConfigConversionRequest,
   HarnessConfigConversionResult,
   HarnessConfigEvent,
   HarnessConfigFileRef,
   HarnessConfigMutationPlan,
   HarnessConfigPrepareCreateRequest,
-  HarnessConfigPrepareDeleteRequest,
   HarnessConfigPrepareUpdateRequest,
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestError,
-  HarnessConfigRequestErrorCode,
   HarnessConfigRequestResult,
   HarnessConfigResourceType,
   HarnessConfigScanResult,
@@ -46,8 +22,6 @@ import type {
   HarnessConfigSyncPlan,
   ManagedHarnessKind
 } from '../../shared/state/harness-config'
-
-// --- Narrow adapter dependency contracts (TASK-004) ---
 
 export interface HarnessConfigConnectionContext {
   clientId: string
@@ -68,12 +42,12 @@ export interface RegisterHarnessConfigRequestHandlersDeps {
   transport: HarnessConfigTransportLike
   store: HarnessConfigStoreLike
   service: HarnessConfigService
-  /** Deterministic clock for scan/sync timestamps; defaults to `Date.now`. */
   now?: () => number
-  /** Test seam for SEC-003 logging; defaults to the shared debug logger. */
   log?: (category: string, message: string, data?: unknown) => void
   formatErr?: (error: unknown) => string
 }
+
+const MAX_LIVE_BINDINGS = 64
 
 const MANAGED_AGENT_KINDS: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
 const RESOURCE_TYPES: readonly HarnessConfigResourceType[] = ['agents', 'skills', 'commands']
@@ -102,8 +76,6 @@ type MutationChannel =
   | typeof CHANNEL.deleteFile
   | typeof CHANNEL.syncToDisk
   | typeof CHANNEL.adoptFromDisk
-
-// --- Boundary validation (TASK-005) ---
 
 class HarnessConfigValidationError extends Error {}
 
@@ -163,7 +135,7 @@ function parseScopeOnlyRequest(raw: unknown): HarnessConfigScopeRequest {
   return { scope: parseManagedScope(obj.scope) }
 }
 
-function parseReadRequest(raw: unknown): HarnessConfigReadRequest {
+function parseScopeIdRequest(raw: unknown): HarnessConfigReadRequest {
   const obj = requireObject(raw)
   assertExactKeys(obj, ['scope', 'id'])
   return { scope: parseManagedScope(obj.scope), id: parseNonEmptyString(obj.id, 'id') }
@@ -189,13 +161,7 @@ function parsePrepareUpdateRequest(raw: unknown): HarnessConfigPrepareUpdateRequ
   }
 }
 
-function parsePrepareDeleteRequest(raw: unknown): HarnessConfigPrepareDeleteRequest {
-  const obj = requireObject(raw)
-  assertExactKeys(obj, ['scope', 'id'])
-  return { scope: parseManagedScope(obj.scope), id: parseNonEmptyString(obj.id, 'id') }
-}
-
-function parseMutationRequest(raw: unknown): { scope: HarnessConfigScope; planId: string; confirmed: boolean } {
+function parseMutationRequest(raw: unknown): HarnessConfigApplyRequest {
   const obj = requireObject(raw)
   assertExactKeys(obj, ['scope', 'planId', 'confirmed'])
   return {
@@ -205,23 +171,18 @@ function parseMutationRequest(raw: unknown): { scope: HarnessConfigScope; planId
   }
 }
 
-function parseConversionRequest(raw: unknown): HarnessConfigConversionRequest {
-  const obj = requireObject(raw)
-  assertExactKeys(obj, ['scope', 'id'])
-  return { scope: parseManagedScope(obj.scope), id: parseNonEmptyString(obj.id, 'id') }
-}
-
 function toRequestError(error: unknown): HarnessConfigRequestError {
   if (error instanceof HarnessConfigValidationError) {
     return { code: 'invalid-request', message: error.message }
   }
   if (error instanceof HarnessConfigError) {
-    return { code: error.code as HarnessConfigRequestErrorCode, message: error.message }
+    const requestError: HarnessConfigRequestError = { code: error.code, message: error.message }
+    if (error.applied) requestError.applied = error.applied.map((op) => ({ ...op }))
+    if (error.requiresRescan) requestError.requiresRescan = true
+    return requestError
   }
   return { code: 'internal-error', message: 'The harness configuration request failed unexpectedly' }
 }
-
-// --- Plan bindings (REQ-009/REQ-010) ---
 
 interface PlanBinding {
   mutationChannel: MutationChannel
@@ -255,14 +216,21 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   const bindings = new Map<string, PlanBinding>()
   let inFlight = 0
 
+  function bindPlan(planId: string, binding: PlanBinding): void {
+    bindings.delete(planId)
+    while (bindings.size >= MAX_LIVE_BINDINGS) {
+      const oldest = bindings.keys().next().value
+      if (oldest === undefined) break
+      bindings.delete(oldest)
+    }
+    bindings.set(planId, binding)
+  }
+
   function logUnexpected(error: unknown): void {
     log('harness-config', 'transport request failed unexpectedly', formatErr(error))
   }
 
-  // One lifecycle wrapper for all fifteen handlers (TASK-006): clears
-  // the slice error at request start, tracks the in-flight counter so
-  // overlapping requests can't clear loading early (REQ-019), and maps
-  // every thrown error to the structured response envelope.
+  // In-flight counter so overlapping requests can't clear loading early.
   async function withLifecycle<T>(action: () => Promise<T> | T): Promise<HarnessConfigRequestResult<T>> {
     store.dispatch({ type: 'harnessConfig/errorChanged', payload: null })
     if (inFlight === 0) store.dispatch({ type: 'harnessConfig/loadingChanged', payload: true })
@@ -292,11 +260,8 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     }
   }
 
-  // REQ-015/TASK-012: rescan every logical scope the binding captured
-  // (selected + canonical + alias), following any further aliases the
-  // rescan itself turns up, each scope at most once, never crossing
-  // `agentKind`, and never letting a scan failure throw (it must not
-  // hide the apply result that triggered this refresh).
+  // Scan failures are swallowed so they never hide the apply result
+  // that triggered this refresh.
   async function refreshAfterApply(agentKind: ManagedHarnessKind, initialScopes: HarnessConfigScope[]): Promise<void> {
     const scannedAt = now()
     const seen = new Set<string>()
@@ -346,7 +311,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   }
 
   async function handleRead(raw: unknown): Promise<HarnessConfigReadFileResult> {
-    const { scope, id } = parseReadRequest(raw)
+    const { scope, id } = parseScopeIdRequest(raw)
     const result = service.readFile(id)
     const belongsToScope =
       result.ref.agentKind === scope.agentKind &&
@@ -369,7 +334,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   async function handlePrepareCreate(raw: unknown): Promise<HarnessConfigMutationPlan> {
     const { scope, name, content } = parsePrepareCreateRequest(raw)
     const plan = service.prepareCreate(scope, name, content)
-    bindings.set(plan.planId, {
+    bindPlan(plan.planId, {
       mutationChannel: CHANNEL.createFile,
       scopeKey: harnessConfigScopeKey(scope),
       refreshScopes: collectRefreshScopes(scope, [plan.resource])
@@ -380,7 +345,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   async function handlePrepareUpdate(raw: unknown): Promise<HarnessConfigMutationPlan> {
     const { scope, id, content } = parsePrepareUpdateRequest(raw)
     const plan = service.prepareUpdate(scope, id, content)
-    bindings.set(plan.planId, {
+    bindPlan(plan.planId, {
       mutationChannel: CHANNEL.updateFile,
       scopeKey: harnessConfigScopeKey(scope),
       refreshScopes: collectRefreshScopes(scope, [plan.resource])
@@ -389,9 +354,9 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   }
 
   async function handlePrepareDelete(raw: unknown): Promise<HarnessConfigMutationPlan> {
-    const { scope, id } = parsePrepareDeleteRequest(raw)
+    const { scope, id } = parseScopeIdRequest(raw)
     const plan = service.prepareDelete(scope, id)
-    bindings.set(plan.planId, {
+    bindPlan(plan.planId, {
       mutationChannel: CHANNEL.deleteFile,
       scopeKey: harnessConfigScopeKey(scope),
       refreshScopes: collectRefreshScopes(scope, [plan.resource])
@@ -402,7 +367,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   async function handlePlanSyncToDisk(raw: unknown): Promise<HarnessConfigSyncPlan> {
     const { scope } = parseScopeOnlyRequest(raw)
     const plan = service.planSyncToDisk(scope)
-    bindings.set(plan.planId, {
+    bindPlan(plan.planId, {
       mutationChannel: CHANNEL.syncToDisk,
       scopeKey: harnessConfigScopeKey(scope),
       refreshScopes: collectRefreshScopes(scope, syncPlanRefs(plan))
@@ -413,7 +378,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   async function handlePlanAdoptFromDisk(raw: unknown): Promise<HarnessConfigSyncPlan> {
     const { scope } = parseScopeOnlyRequest(raw)
     const plan = service.planAdoptFromDisk(scope)
-    bindings.set(plan.planId, {
+    bindPlan(plan.planId, {
       mutationChannel: CHANNEL.adoptFromDisk,
       scopeKey: harnessConfigScopeKey(scope),
       refreshScopes: collectRefreshScopes(scope, syncPlanRefs(plan))
@@ -422,21 +387,17 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   }
 
   async function handlePrepareCommandFromSkill(raw: unknown): Promise<HarnessConfigConversionResult> {
-    const { scope, id } = parseConversionRequest(raw)
+    const { scope, id } = parseScopeIdRequest(raw)
     return service.prepareCommandFromSkill(scope, id)
   }
 
   async function handlePrepareSkillFromCommand(raw: unknown): Promise<HarnessConfigConversionResult> {
-    const { scope, id } = parseConversionRequest(raw)
+    const { scope, id } = parseScopeIdRequest(raw)
     return service.prepareSkillFromCommand(scope, id)
   }
 
-  // Shared bound-plan apply path for all five mutation channels
-  // (TASK-010/TASK-011). A plan is usable only through the exact
-  // channel and scope it was bound to; any mismatch — or a bare
-  // `confirmed: false` — is rejected before `applyPlan` is ever
-  // reached, and a matching-but-unconfirmed binding is invalidated so
-  // it cannot be replayed with `confirmed: true` later.
+  // A matching-but-unconfirmed binding is invalidated so it cannot be
+  // replayed later with `confirmed: true`.
   function makeApplyHandler(mutationChannel: MutationChannel): (raw: unknown) => Promise<HarnessConfigApplyResult> {
     return async (raw: unknown) => {
       const { scope, planId, confirmed } = parseMutationRequest(raw)

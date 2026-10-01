@@ -354,6 +354,32 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect(store.eventsOfType('harnessConfig/syncApplied')).toHaveLength(0)
     })
 
+    it('bounds live plan bindings by evicting the oldest unapplied plan', async () => {
+      let counter = 0
+      const { transport, service } = setup({
+        prepareCreate: vi.fn((scope: HarnessConfigScope) => makeMutationPlan({ scope, planId: `plan-${counter++}` }))
+      })
+      for (let i = 0; i < 65; i++) {
+        await transport.call('harnessConfig:prepareCreate', { scope: SKILLS_SCOPE, name: 'foo', content: 'c' })
+      }
+
+      const evicted = (await transport.call('harnessConfig:createFile', {
+        scope: SKILLS_SCOPE,
+        planId: 'plan-0',
+        confirmed: true
+      })) as { ok: false; error: { code: string } }
+      expect(evicted.ok).toBe(false)
+      expect(evicted.error.code).toBe('unknown-plan')
+      expect(service.applyPlan).not.toHaveBeenCalled()
+
+      const newest = (await transport.call('harnessConfig:createFile', {
+        scope: SKILLS_SCOPE,
+        planId: 'plan-64',
+        confirmed: true
+      })) as { ok: boolean }
+      expect(newest.ok).toBe(true)
+    })
+
     it('rejects an unconfirmed plan and invalidates it against replay', async () => {
       const plan = makeMutationPlan()
       const { transport, service } = setup({ prepareCreate: vi.fn(() => plan) })
@@ -518,6 +544,10 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect(result.ok).toBe(false)
       expect(result.error.code).toBe('write-failed')
       expect(result.error.message).toBe('disk write failed partway')
+      expect(result.error).toMatchObject({
+        applied: [{ type: 'overwrite', id: 'ref-1', relativePath: 'foo/SKILL.md' }],
+        requiresRescan: true
+      })
       expect(service.scan).toHaveBeenCalled()
       expect(store.eventsOfType('harnessConfig/resourcesLoaded').length).toBeGreaterThan(0)
       expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toHaveLength(1)
