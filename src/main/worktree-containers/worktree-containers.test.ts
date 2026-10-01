@@ -396,6 +396,42 @@ describe('resolveContainerConfig', () => {
     })).toThrow(/[Vv]olume source.*resolves outside repo root/)
   })
 
+  it('accepts realpath-resolved volume sources when repoRoot is reached through a symlink', () => {
+    const base = mkdtempSync(join(tmpdir(), 'tatsu-vol-symlink-'))
+    try {
+      const realRepo = join(base, 'real-repo')
+      mkdirSync(join(realRepo, 'cache'), { recursive: true })
+      const linkedRepo = join(base, 'linked-repo')
+      symlinkSync(realRepo, linkedRepo)
+      const containers = createWorktreeContainers(makeRunner())
+      const realSource = realpathSync(join(realRepo, 'cache'))
+      const config = containers.resolveContainerConfig(linkedRepo, join(linkedRepo, 'wt'), {
+        volumes: [{ source: realSource, target: '/cache' }, { source: join(linkedRepo, 'cache'), target: '/cache2' }]
+      })
+      expect(config.volumes.some(v => v.target === '/cache')).toBe(true)
+      expect(config.volumes.some(v => v.target === '/cache2')).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects in-repo symlinked volume sources that point outside the repo', () => {
+    const base = mkdtempSync(join(tmpdir(), 'tatsu-vol-escape-'))
+    try {
+      const repo = join(base, 'repo')
+      const outside = join(base, 'outside')
+      mkdirSync(repo)
+      mkdirSync(outside)
+      symlinkSync(outside, join(repo, 'escape'))
+      const containers = createWorktreeContainers(makeRunner())
+      expect(() => containers.resolveContainerConfig(repo, join(repo, 'wt'), {
+        volumes: [{ source: 'escape', target: '/data' }]
+      })).toThrow(/[Vv]olume source.*resolves outside repo root/)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
   it('allows relative in-repo source and normalizes it in returned config', () => {
     const containers = createWorktreeContainers(makeRunner())
     const config = containers.resolveContainerConfig('/repo', '/repo/wt', {

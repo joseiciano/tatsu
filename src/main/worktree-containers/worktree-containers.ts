@@ -80,6 +80,14 @@ export function sanitizeStderr(stderr: string): string {
   return redacted.length > 500 ? redacted.slice(0, 500) + '...(truncated)' : redacted
 }
 
+function realpathOrSelf(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
+}
+
 /**
  * Create a default {@link DockerRunner} that spawns `docker` CLI
  * subprocesses. Output is capped at 1 MiB per stream and commands
@@ -381,8 +389,11 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
         // Built-in mounts (worktree bind, /tmp/harness-status) are always safe.
         // Use resolve() to normalize traversal (e.g. ../outside, /repo/../etc) before comparison.
         const resolvedSource = vol.source.startsWith('/') ? resolve(vol.source) : resolve(repoRoot, vol.source)
-        const normalizedRoot = resolve(repoRoot)
-        if (resolvedSource !== normalizedRoot && !resolvedSource.startsWith(normalizedRoot + '/')) {
+        const allowedRoots = [resolve(repoRoot), realpathOrSelf(resolve(repoRoot))]
+        const realSource = realpathOrSelf(resolvedSource)
+        const isInsideRoot = (p: string): boolean => allowedRoots.some((root) => p === root || p.startsWith(root + '/'))
+        const insideRoot = isInsideRoot(resolvedSource) && isInsideRoot(realSource)
+        if (!insideRoot) {
           throw new Error(`Volume source '${vol.source}' resolves outside repo root: ${resolvedSource}`)
         }
         volumes.push({ source: resolvedSource, target: vol.target })
