@@ -619,16 +619,26 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       const destinationNoun = target === 'commands' ? 'command' : 'skill'
 
       void (async () => {
-        const result =
-          target === 'commands'
-            ? await backend.prepareHarnessConfigCommandFromSkill({ scope, id })
-            : await backend.prepareHarnessConfigSkillFromCommand({ scope, id })
+        let result: Awaited<ReturnType<typeof backend.prepareHarnessConfigCommandFromSkill>> | null = null
+        let thrown: unknown = null
+        try {
+          result =
+            target === 'commands'
+              ? await backend.prepareHarnessConfigCommandFromSkill({ scope, id })
+              : await backend.prepareHarnessConfigSkillFromCommand({ scope, id })
+        } catch (err) {
+          thrown = err
+        }
 
         conversionPendingRef.current.delete(pendingKey)
         const stillCurrent = activeBackendIdRef.current === backendId && backendGenerationRef.current === generation
         setConversionPending(new Set(conversionPendingRef.current))
         if (!stillCurrent) return
 
+        if (!result) {
+          setScopeStatus(scopeKey, { error: thrown instanceof Error ? thrown.message : String(thrown) })
+          return
+        }
         if (!result.ok) {
           setScopeStatus(scopeKey, { error: result.error.message })
           return

@@ -1161,6 +1161,12 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
     expect(extractFrontMatterDescription(tooLong)).toBeNull()
   })
 
+  it('extracts descriptions from CRLF files and ignores block scalar indicators', () => {
+    expect(extractFrontMatterDescription('---\r\ndescription: Windows line\r\n---\r\nbody')).toBe('Windows line')
+    expect(extractFrontMatterDescription('---\ndescription: >-\n  folded\n---\n')).toBeNull()
+    expect(extractFrontMatterDescription('---\ndescription: |\n  literal\n---\n')).toBeNull()
+  })
+
   it('createCommandFromSkill rejects a non-skills source', () => {
     expect(() =>
       createCommandFromSkill({
