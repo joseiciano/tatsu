@@ -15,7 +15,7 @@ import {
 } from 'fs'
 import { createHash } from 'crypto'
 import { tmpdir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { basename, dirname, join, resolve } from 'path'
 
 import { createHarnessConfigService } from '.'
 import {
@@ -1045,6 +1045,30 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft).not.toHaveProperty('planId')
     expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
     expect(readdirSync(fixture.roots.skills)).toEqual(['source'])
+  })
+
+  it('reports an existing destination that differs only by case on a case-insensitive filesystem', () => {
+    const caseInsensitiveLstat = (path: string) => {
+      try {
+        return lstatSync(path)
+      } catch (error) {
+        const dir = dirname(path)
+        const match = readdirSync(dir).find((entry) => entry.toLowerCase() === basename(path).toLowerCase())
+        if (!match) throw error
+        return lstatSync(join(dir, match))
+      }
+    }
+    const fixture = makeFixture({ fs: { lstatSync: caseInsensitiveLstat } })
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'MySkill/SKILL.md', 'source')
+    put(fixture.roots.skills, 'MySkill.md', 'existing destination')
+    const source = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareCommandFromSkill(scope, source.id)
+    expect(conversion.status).toBe('existing')
+    expect(conversion.ref.relativePath).toBe('MySkill.md')
   })
 
   it('rejects conversion across harnesses and ignores plugin payload/settings files', async () => {
