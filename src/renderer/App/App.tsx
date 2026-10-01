@@ -6,7 +6,7 @@ import { useHotkeyHandlers } from '../hooks/useHotkeyHandlers'
 import { useWorktreeHandlers } from '../hooks/useWorktreeHandlers'
 import type { Worktree, TerminalTab, PtyStatus, PendingTool, QuestStep, PendingWorktree, UpdaterStatus, RepoConfig, PaneNode } from '../types'
 import { getLeaves, findLeaf } from '../../shared/state/terminals'
-import { CheckCircle2, FolderOpen } from 'lucide-react'
+import { CheckCircle2, FolderOpen, SlidersHorizontal } from 'lucide-react'
 import { BUILT_IN_THEMES_BY_MODE } from '../themes'
 import { SCALES, scaleSpec } from '../../shared/state/settings'
 import { useActiveTheme } from '../hooks/useActiveTheme'
@@ -24,6 +24,7 @@ import { RightColumn } from '../components/RightColumn'
 import { CollapsedSidebar } from '../components/CollapsedSidebar'
 import { CollapsedRightPanel } from '../components/CollapsedRightPanel'
 import { Settings } from '../components/Settings'
+import { Config } from '../components/Config'
 import { WeeklyWrappedScreen } from '../components/WeeklyWrappedScreen'
 import { Guide } from '../components/Guide'
 import { AGENT_REGISTRY } from '../../shared/agent-registry'
@@ -223,6 +224,7 @@ function DesktopApp(): JSX.Element {
   // right away instead of waiting on the modal.
   const [showSettings, setShowSettings] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | undefined>(undefined)
+  const [showConfig, setShowConfig] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [showMyWeek, setShowMyWeek] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
@@ -812,6 +814,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
     </div>
   ) : null
 
+  const configOverlay = showConfig ? (
+    <div className="fixed inset-0 z-50">
+      <Config onClose={() => setShowConfig(false)} />
+    </div>
+  ) : null
+
   const myWeekOverlay = showMyWeek ? (
     <div className="fixed inset-0 z-50 flex">
       <WeeklyWrappedScreen onClose={() => setShowMyWeek(false)} />
@@ -1164,6 +1172,23 @@ const setQuestStep = useCallback((next: QuestStep) => {
               </div>
             </div>
 
+            <div className="mt-6 pt-4 border-t border-border/60">
+              <button
+                type="button"
+                onClick={() => setShowConfig(true)}
+                aria-label="Open Config: manage agent definitions, skills, and commands"
+                className="w-full flex items-center gap-3 rounded-xl border border-border bg-panel p-4 text-left transition-colors hover:border-border-strong cursor-pointer"
+              >
+                <SlidersHorizontal className="icon-base text-dim shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-fg-bright text-sm font-medium">Open Config</div>
+                  <div className="text-xs text-dim mt-0.5">
+                    Manage agent definitions, skills, and commands before opening your first repository.
+                  </div>
+                </div>
+              </button>
+            </div>
+
             <div className="mt-6 pt-5 border-t border-border/60 text-center">
               <button
                 onClick={() => setShowGuide(true)}
@@ -1176,6 +1201,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
         </div>
       </div>
       {settingsOverlay}
+      {configOverlay}
       {myWeekOverlay}
       {repoPickerOverlay}
       {repoAddPromptOverlay}
@@ -1365,6 +1391,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onOpenSettings={() => {
               setShowCommandCenter(false)
               setShowSettings(true)
+            }}
+            onOpenConfig={() => {
+              setShowCommandCenter(false)
+              setShowConfig(true)
             }}
             onOpenAddBackend={() => {
               setShowCommandCenter(false)
@@ -1639,6 +1669,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
       </div>
     </div>
     {settingsOverlay}
+    {configOverlay}
     {myWeekOverlay}
     {repoPickerOverlay}
     {repoAddPromptOverlay}

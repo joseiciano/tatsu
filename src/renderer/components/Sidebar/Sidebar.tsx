@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
 import { HotkeyBadge } from '../HotkeyBadge'
@@ -42,6 +42,7 @@ interface SidebarProps {
   onAddRepo: () => void
   onRemoveRepo: (repoRoot: string) => Promise<void>
   onOpenSettings: () => void
+  onOpenConfig: () => void
   onOpenAddBackend: () => void
   onOpenHotkeyCheatsheet: () => void
   onOpenCleanup: () => void
@@ -84,6 +85,7 @@ export function Sidebar({
   onAddRepo,
   onRemoveRepo,
   onOpenSettings,
+  onOpenConfig,
   onOpenAddBackend,
   onOpenHotkeyCheatsheet,
   onOpenCleanup,
@@ -554,6 +556,20 @@ export function Sidebar({
           the user has added at least one remote. See plans/
           tier-1-multi-backend-ux.md §A. */}
       <BackendChipStrip onAddBackend={onOpenAddBackend} />
+
+      {/* Bottom icon row — currently just Config, but structured as a
+          row so future bottom-pinned launchers can join it. */}
+      <div className="border-t border-border p-2 flex justify-center items-center gap-1 shrink-0">
+        <Tooltip label="Config" side="top">
+          <button
+            onClick={onOpenConfig}
+            aria-label="Open Config"
+            className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal className="icon-sm" />
+          </button>
+        </Tooltip>
+      </div>
 
       {calendarFor && (
         <SnoozeCalendar
