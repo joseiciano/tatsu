@@ -469,6 +469,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   )
 
   const handleCancelCreate = useCallback(() => {
+    readTokenRef.current += 1
     setCreateScope(null)
     setCreateName('')
     setDraft('')
@@ -490,6 +491,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const generation = backendGenerationRef.current
     const scope = createScope
     const content = draft
+    const editorToken = readTokenRef.current
     const scopeKey = harnessConfigScopeKey(scope)
     setScopeStatus(scopeKey, { busy: true })
 
@@ -516,19 +518,22 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         ? (applyResult.value.resultingRefs.find((ref) => ref.id === createdId) ?? null)
         : null
 
-      setCreateScope(null)
-      setCreateName('')
+      if (readTokenRef.current === editorToken) {
+        readTokenRef.current += 1
+        setCreateScope(null)
+        setCreateName('')
 
-      if (resultingRef) {
-        setSelected({ scope, id: resultingRef.id })
-        setSelectedRef(resultingRef)
-        setEditorMode('edit')
-        setDraft(content)
-        setSavedContent(content)
-      } else {
-        setDraft('')
-        setSavedContent('')
-        setEditorMode('empty')
+        if (resultingRef) {
+          setSelected({ scope, id: resultingRef.id })
+          setSelectedRef(resultingRef)
+          setEditorMode('edit')
+          setDraft(content)
+          setSavedContent(content)
+        } else {
+          setDraft('')
+          setSavedContent('')
+          setEditorMode('empty')
+        }
       }
 
       await refreshComparisons(scope.agentKind, affectedResourceTypes(scope, resultingRef), backendId, generation)
@@ -558,6 +563,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const id = selected.id
     const content = draft
     const preMutationRef = selectedRef
+    const editorToken = readTokenRef.current
     const scopeKey = harnessConfigScopeKey(scope)
     setScopeStatus(scopeKey, { busy: true })
 
@@ -579,18 +585,23 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         return
       }
 
-      const readResult = await backend.readHarnessConfigFile({ scope, id })
-      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
-      if (readResult.ok) {
-        setSelectedRef(readResult.value.ref)
-        setDraft(readResult.value.content)
-        setSavedContent(readResult.value.content)
-      } else {
-        // The write already succeeded — fall back to treating the content we
-        // just wrote as the new saved baseline so the editor doesn't stay
-        // stuck "dirty", and surface the re-read failure so it isn't silent.
-        setSavedContent(content)
-        setActionError(`Saved, but failed to refresh the file: ${readResult.error.message}`)
+      if (readTokenRef.current === editorToken) {
+        const readToken = ++readTokenRef.current
+        const readResult = await backend.readHarnessConfigFile({ scope, id })
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+        if (readTokenRef.current === readToken) {
+          if (readResult.ok) {
+            setSelectedRef(readResult.value.ref)
+            setDraft(readResult.value.content)
+            setSavedContent(readResult.value.content)
+          } else {
+            // The write already succeeded — fall back to treating the content we
+            // just wrote as the new saved baseline so the editor doesn't stay
+            // stuck "dirty", and surface the re-read failure so it isn't silent.
+            setSavedContent(content)
+            setActionError(`Saved, but failed to refresh the file: ${readResult.error.message}`)
+          }
+        }
       }
 
       await refreshComparisons(
@@ -623,6 +634,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const scope = selected.scope
     const id = selected.id
     const preMutationRef = selectedRef
+    const editorToken = readTokenRef.current
     const scopeKey = harnessConfigScopeKey(scope)
     setScopeStatus(scopeKey, { busy: true })
 
@@ -644,11 +656,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         return
       }
 
-      setSelected(null)
-      setSelectedRef(null)
-      setEditorMode('empty')
-      setDraft('')
-      setSavedContent('')
+      if (readTokenRef.current === editorToken) {
+        invalidateRead()
+        setSelected(null)
+        setSelectedRef(null)
+        setEditorMode('empty')
+        setDraft('')
+        setSavedContent('')
+      }
 
       await refreshComparisons(
         scope.agentKind,
@@ -662,7 +677,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [selected, selectedRef, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+  }, [selected, selectedRef, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus, invalidateRead])
 
   const handleResetDraft = useCallback(() => setDraft(savedContent), [savedContent])
 
