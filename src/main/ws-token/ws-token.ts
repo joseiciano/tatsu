@@ -12,6 +12,7 @@
 
 import { randomBytes, timingSafeEqual } from 'crypto'
 import { getSecret, setSecret } from '../secrets'
+import { log } from '../debug'
 
 const SECRET_KEY = 'wsAuthToken'
 
@@ -23,7 +24,11 @@ export async function getOrCreateWsToken(): Promise<string> {
 
 export async function rotateWsToken(): Promise<string> {
   const token = randomBytes(32).toString('hex')
-  await setSecret(SECRET_KEY, token)
+  try {
+    await setSecret(SECRET_KEY, token)
+  } catch (err) {
+    log('ws-token', 'failed to persist ws token; using ephemeral token', err instanceof Error ? err.message : err)
+  }
   return token
 }
 
