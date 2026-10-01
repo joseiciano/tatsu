@@ -271,4 +271,43 @@ describe('WebSocketClientTransport', () => {
       await new Promise<void>((r) => server.close(() => r()))
     }
   })
+
+  it('mints a fresh session token on every sessionQuery reconnect', async () => {
+    const token = 'session-token'
+    const seenSessions: Array<string | null> = []
+    let serverSocket: WSType | null = null
+    const { port, server } = await startStubServer(token, {
+      onVerify: (_queryToken, _authHeader, sessionParam) => {
+        seenSessions.push(sessionParam)
+      },
+      onConnection: (ws) => {
+        serverSocket = ws
+      }
+    })
+    const refreshSessionToken = vi.fn(async () => token)
+    const client = new WebSocketClientTransport({
+      url: `ws://127.0.0.1:${port}`,
+      token,
+      tokenTransport: 'sessionQuery',
+      refreshSessionToken,
+      initialBackoffMs: 25,
+      WebSocketCtor: WSClient as unknown as typeof WebSocket
+    })
+
+    try {
+      await client.connect()
+      expect(refreshSessionToken).not.toHaveBeenCalled()
+
+      serverSocket!.close()
+      serverSocket = null
+      await new Promise((r) => setTimeout(r, 200))
+
+      expect(refreshSessionToken).toHaveBeenCalledTimes(1)
+      expect(seenSessions).toEqual([token, token])
+      expect(serverSocket).not.toBeNull()
+    } finally {
+      client.close()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
+  })
 })

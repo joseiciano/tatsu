@@ -17,6 +17,9 @@ export interface WebSocketClientTransportOptions {
   url: string
   token: string
   tokenTransport?: WebSocketTokenTransport
+  /** For `sessionQuery`: mints a fresh one-time session token. Session
+   *  tokens are consumed on first use, so every reconnect needs a new one. */
+  refreshSessionToken?: () => Promise<string>
   /** Callback fired after each successful (re)connect, once the client
    *  has finished refetching the snapshot. The callee is expected to
    *  reset its local mirror to `snapshot`. */

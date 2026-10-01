@@ -43,17 +43,20 @@ export class WebSocketClientTransport implements ClientTransport {
   private readonly initialBackoffMs: number
   private readonly maxBackoffMs: number
   private readonly WebSocketCtor: typeof WebSocket
+  private sessionToken: string
+  private sessionTokenUsed = false
 
   constructor(private readonly opts: WebSocketClientTransportOptions) {
     this.initialBackoffMs = opts.initialBackoffMs ?? 250
     this.maxBackoffMs = opts.maxBackoffMs ?? 5000
     this.backoffMs = this.initialBackoffMs
     this.WebSocketCtor = opts.WebSocketCtor ?? WebSocket
+    this.sessionToken = opts.token
   }
 
   async connect(): Promise<void> {
     if (this.connectPromise) return this.connectPromise
-    this.connectPromise = this.openSocket()
+    this.connectPromise = this.prepareAndOpen()
     // TODO(#75-followup): callers sometimes report `Uncaught (in promise)
     // Error: websocket failed to open` on the first failed connect even
     // though every known awaiter has a catch. Suspect: a secondary
@@ -126,6 +129,21 @@ export class WebSocketClientTransport implements ClientTransport {
     }
   }
 
+  private async prepareAndOpen(): Promise<void> {
+    if (this.opts.tokenTransport === 'sessionQuery' && this.sessionTokenUsed && this.opts.refreshSessionToken) {
+      try {
+        this.sessionToken = await this.opts.refreshSessionToken()
+        this.sessionTokenUsed = false
+      } catch (err) {
+        this.connectPromise = null
+        this.opts.onConnectionChange?.(false, 'failed to refresh session')
+        if (!this.closed) this.scheduleReconnect()
+        throw err
+      }
+    }
+    return this.openSocket()
+  }
+
   private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = new URL(this.opts.url)
@@ -142,7 +160,8 @@ export class WebSocketClientTransport implements ClientTransport {
           headers: { Authorization: `Bearer ${this.opts.token}` }
         })
       } else if (this.opts.tokenTransport === 'sessionQuery') {
-        url.searchParams.set('session', this.opts.token)
+        url.searchParams.set('session', this.sessionToken)
+        this.sessionTokenUsed = true
         ws = new this.WebSocketCtor(url.toString())
       } else {
         url.searchParams.set('token', this.opts.token)

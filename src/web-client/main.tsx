@@ -88,7 +88,8 @@ async function boot(): Promise<void> {
   const transport = new WebSocketClientTransport({
     url: wsUrl,
     token: sessionToken,
-    tokenTransport: 'sessionQuery'
+    tokenTransport: 'sessionQuery',
+    refreshSessionToken: () => exchangeForSessionToken(wsUrl, rootToken)
   })
   // Connect up front so the first getStateSnapshot() call inside the
   // dynamically imported renderer modules doesn't race the open

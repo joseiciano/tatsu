@@ -88,6 +88,7 @@ export function AddBackendModal({ isOpen, onClose }: AddBackendModalProps): JSX.
         url: parseResult.parsed.wsUrl,
         token: sessionToken,
         tokenTransport: 'sessionQuery',
+        refreshSessionToken: () => exchangeForSessionToken(parseResult.parsed.wsUrl, parseResult.parsed.token),
         onConnectionChange: (connected, reason) => {
           if (!savedId) return
           registry.setStatus(savedId, {

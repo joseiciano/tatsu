@@ -483,6 +483,7 @@ export async function hydrateRemoteBackend(
       url: conn.url,
       token: sessionToken,
       tokenTransport: 'sessionQuery',
+      refreshSessionToken: () => exchangeForSessionToken(conn.url, rootToken),
       onConnectionChange: (connected, reason) => {
         reg.setStatus(conn.id, {
           state: connected ? 'connected' : 'disconnected',
