@@ -557,8 +557,6 @@ export function Sidebar({
           tier-1-multi-backend-ux.md §A. */}
       <BackendChipStrip onAddBackend={onOpenAddBackend} />
 
-      {/* Bottom icon row — currently just Config, but structured as a
-          row so future bottom-pinned launchers can join it. */}
       <div className="border-t border-border p-2 flex justify-center items-center gap-1 shrink-0">
         <Tooltip label="Config" side="top">
           <button

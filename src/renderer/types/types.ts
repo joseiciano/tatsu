@@ -17,6 +17,7 @@ import type { AddRepoResult } from '../../shared/repo-pick'
 export type { AddRepoResult }
 
 import type {
+  HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
   HarnessConfigConversionRequest,
@@ -34,6 +35,7 @@ import type {
   HarnessConfigSyncPlan
 } from '../../shared/state/harness-config'
 export type {
+  HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
   HarnessConfigConversionRequest,
@@ -617,13 +619,6 @@ export interface ElectronAPI {
   connectionsGetToken(id: string): Promise<string | null>
   connectionsHasToken(id: string): Promise<boolean>
 
-  // Harness configuration (skills/agents/commands command center, Step 6).
-  // Every method follows the ACTIVE backend — a remote Config page must
-  // read and mutate that backend's harness directories and mirrored
-  // state, not the local Electron host (ALT-008). No method accepts a
-  // renderer-constructed path, ref, hash, fingerprint, or plan; mutation
-  // methods accept only `{ scope, planId, confirmed }` from a
-  // previously returned plan.
   scanHarnessConfig(
     request: HarnessConfigScopeRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigScanResult>>
@@ -649,19 +644,19 @@ export interface ElectronAPI {
     request: HarnessConfigScopeRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
   createHarnessConfigFile(
-    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+    request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   updateHarnessConfigFile(
-    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+    request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   deleteHarnessConfigFile(
-    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+    request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   syncHarnessConfigToDisk(
-    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+    request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   adoptHarnessConfigFromDisk(
-    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+    request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   prepareHarnessConfigCommandFromSkill(
     request: HarnessConfigConversionRequest
