@@ -6,6 +6,7 @@ import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
   type HarnessConfigFileRef,
+  type HarnessConfigRequestError,
   type HarnessConfigResourceType,
   type HarnessConfigScope,
   type HarnessConfigScopeKey,
@@ -283,6 +284,29 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     [backend, setScopeStatus]
   )
 
+  const rescanAfterFailedApply = useCallback(
+    async (
+      error: HarnessConfigRequestError,
+      agentKind: ManagedHarnessKind,
+      resourceTypes: readonly HarnessConfigResourceType[],
+      backendId: string,
+      generation: number
+    ) => {
+      if (!error.requiresRescan && !error.applied?.length) return
+      for (const resourceType of resourceTypes) {
+        const scope: HarnessConfigScope = { agentKind, resourceType }
+        try {
+          await backend.scanHarnessConfig({ scope })
+        } catch {
+          // refreshComparisons below surfaces any persistent transport failure.
+        }
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      }
+      await refreshComparisons(agentKind, resourceTypes, backendId, generation)
+    },
+    [backend, refreshComparisons]
+  )
+
   // ---- Derived resource groups ----
 
   const searchActive = searchQuery.trim().length > 0
@@ -531,6 +555,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
       if (!applyResult.ok) {
         setActionError(applyResult.error.message)
+        await rescanAfterFailedApply(applyResult.error, scope.agentKind, affectedResourceTypes(scope, null), backendId, generation)
         return
       }
 
@@ -567,7 +592,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [createScope, createName, draft, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+  }, [createScope, createName, draft, mutationBusy, activeBackend.id, backend, refreshComparisons, rescanAfterFailedApply, setScopeStatus])
 
   // ---- Update (save) ----
 
@@ -606,6 +631,13 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
       if (!applyResult.ok) {
         setActionError(applyResult.error.message)
+        await rescanAfterFailedApply(
+          applyResult.error,
+          scope.agentKind,
+          affectedResourceTypes(scope, preMutationRef),
+          backendId,
+          generation
+        )
         return
       }
 
@@ -643,7 +675,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [selected, selectedRef, draft, savedContent, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+  }, [selected, selectedRef, draft, savedContent, mutationBusy, activeBackend.id, backend, refreshComparisons, rescanAfterFailedApply, setScopeStatus])
 
   // ---- Delete ----
 
@@ -680,6 +712,13 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
       if (!applyResult.ok) {
         setActionError(applyResult.error.message)
+        await rescanAfterFailedApply(
+          applyResult.error,
+          scope.agentKind,
+          affectedResourceTypes(scope, preMutationRef),
+          backendId,
+          generation
+        )
         return
       }
 
@@ -707,7 +746,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setScopeStatus(scopeKey, { busy: false })
       }
     }
-  }, [selected, selectedRef, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus, invalidateRead])
+  }, [selected, selectedRef, mutationBusy, activeBackend.id, backend, refreshComparisons, rescanAfterFailedApply, setScopeStatus, invalidateRead])
 
   const handleResetDraft = useCallback(() => setDraft(savedContent), [savedContent])
 
