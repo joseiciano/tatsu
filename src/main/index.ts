@@ -1024,6 +1024,7 @@ store.subscribe((event) => {
   const orphanContainers = findPersistedWorktreeContainerOrphans(liveWorktrees, config.worktreeContainers)
   let pruned = false
   for (const { path, container } of orphanContainers) {
+    if (existsSync(path)) continue
     log('worktree-containers', `orphan container metadata for missing worktree ${path}; container ${container.name}${container.id ? ` (${container.id})` : ''} may need manual cleanup`)
     delete config.worktreeContainers[path]
     pruned = true
