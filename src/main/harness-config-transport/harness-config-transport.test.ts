@@ -504,6 +504,41 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect((applied[0] as { payload: { scope: HarnessConfigScope } }).payload.scope).toEqual(SKILLS_SCOPE)
     })
 
+    it('a successful apply still dispatches syncApplied stamped at apply time when the post-apply comparison fails', async () => {
+      const plan = makeSyncPlan()
+      let applyResolvedAt = -1
+      const { transport, store, now } = setup({
+        planSyncToDisk: vi.fn(() => plan),
+        planSync: vi.fn(() => {
+          throw new HarnessConfigError('read-failed', 'compare failed')
+        }),
+        scan: vi.fn(() => [makeRef()]),
+        applyPlan: vi.fn(async () => {
+          applyResolvedAt = now()
+          return {
+            scope: SKILLS_SCOPE,
+            planId: plan.planId,
+            applied: [],
+            resultingRefs: [],
+            requiresRescan: true as const
+          }
+        })
+      })
+      await transport.call('harnessConfig:planSyncToDisk', { scope: SKILLS_SCOPE })
+
+      const result = (await transport.call('harnessConfig:syncToDisk', {
+        scope: SKILLS_SCOPE,
+        planId: plan.planId,
+        confirmed: true
+      })) as { ok: true }
+
+      expect(result.ok).toBe(true)
+      expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toHaveLength(0)
+      const applied = store.eventsOfType('harnessConfig/syncApplied')
+      expect(applied).toHaveLength(1)
+      expect((applied[0] as { payload: { syncedAt: number } }).payload.syncedAt).toBe(applyResolvedAt)
+    })
+
     it('a sync-to-disk plan cannot be applied through adoptFromDisk', async () => {
       const plan = makeSyncPlan()
       const { transport, service } = setup({ planSyncToDisk: vi.fn(() => plan) })

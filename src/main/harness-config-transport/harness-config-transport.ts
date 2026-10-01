@@ -293,12 +293,11 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     }
   }
 
-  function dispatchPostApplyComparison(scope: HarnessConfigScope, succeeded: boolean): void {
+  function dispatchPostApplyComparison(scope: HarnessConfigScope, syncedAt: number | null): void {
     const comparison = tryCompareAfterApply(scope)
-    if (!comparison) return
-    store.dispatch({ type: 'harnessConfig/comparisonLoaded', payload: comparison })
-    if (succeeded) {
-      store.dispatch({ type: 'harnessConfig/syncApplied', payload: { scope, syncedAt: now() } })
+    if (comparison) store.dispatch({ type: 'harnessConfig/comparisonLoaded', payload: comparison })
+    if (syncedAt !== null) {
+      store.dispatch({ type: 'harnessConfig/syncApplied', payload: { scope, syncedAt } })
     }
   }
 
@@ -417,11 +416,12 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
         result = await service.applyPlan({ scope, planId, confirmed: true })
       } catch (error) {
         await refreshAfterApply(scope.agentKind, refreshScopes)
-        if (isDirectionalChannel(mutationChannel)) dispatchPostApplyComparison(scope, false)
+        if (isDirectionalChannel(mutationChannel)) dispatchPostApplyComparison(scope, null)
         throw error
       }
+      const syncedAt = now()
       await refreshAfterApply(scope.agentKind, refreshScopes)
-      if (isDirectionalChannel(mutationChannel)) dispatchPostApplyComparison(scope, true)
+      if (isDirectionalChannel(mutationChannel)) dispatchPostApplyComparison(scope, syncedAt)
       return result
     }
   }
