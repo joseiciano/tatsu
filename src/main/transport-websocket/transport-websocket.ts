@@ -179,12 +179,16 @@ export class WebSocketServerTransport implements ServerTransport {
     this.disconnectCallbacks.push(callback)
   }
 
-  private isOriginAllowed(origin: string): boolean {
+  private isOriginAllowed(origin: string, hostHeader: string | undefined): boolean {
     if (this.opts.allowedOrigins?.includes(origin)) return true
     try {
       const parsed = new URL(origin)
+      if (parsed.protocol === 'file:') return true
+      if (hostHeader && parsed.host.toLowerCase() === hostHeader.toLowerCase()) return true
       const host = parsed.hostname
-      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true
+      if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1') {
+        return true
+      }
       if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(host)) return true
       return false
     } catch {
@@ -201,7 +205,7 @@ export class WebSocketServerTransport implements ServerTransport {
     // 0. Origin validation (defense-in-depth against DNS rebinding).
     // Non-browser clients (curl, CLI) don't send Origin and are allowed.
     const origin = req.headers['origin']
-    if (origin && !this.isOriginAllowed(origin)) {
+    if (origin && !this.isOriginAllowed(origin, req.headers['host'])) {
       log('ws-transport', 'rejected ws handshake from disallowed origin', origin)
       cb(false, 403, 'origin not allowed')
       return

@@ -58,6 +58,65 @@ function authedClient(port: number, token: string): WSClient {
   })
 }
 
+function originClient(port: number, token: string, origin: string, host?: string): WSClient {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+  if (host) headers.Host = host
+  return new WSClient(`ws://127.0.0.1:${port}/`, { origin, headers })
+}
+
+describe('WebSocketServerTransport origin validation', () => {
+  async function expectOrigin(origin: string, allowed: boolean, host?: string): Promise<void> {
+    const store = new Store()
+    const port = randomPort()
+    const server = new WebSocketServerTransport(store, { port, token: 'secret' })
+    server.start()
+    await new Promise((r) => setTimeout(r, 25))
+    const ws = originClient(port, 'secret', origin, host)
+    try {
+      if (allowed) {
+        await waitOpen(ws)
+      } else {
+        await expect(waitOpen(ws)).rejects.toBeTruthy()
+      }
+    } finally {
+      ws.close()
+      server.stop()
+    }
+  }
+
+  it('allows file:// origins from the packaged desktop app', async () => {
+    await expectOrigin('file://', true)
+  })
+
+  it('allows same-origin requests whose Origin host matches the Host header', async () => {
+    await expectOrigin('http://tatsu.tailnet.ts.net:8080', true, 'tatsu.tailnet.ts.net:8080')
+  })
+
+  it('allows same-origin requests from a public IP', async () => {
+    await expectOrigin('http://203.0.113.7:9000', true, '203.0.113.7:9000')
+  })
+
+  it('rejects an origin whose host differs from the Host header only by port', async () => {
+    await expectOrigin('http://tatsu.tailnet.ts.net:9999', false, 'tatsu.tailnet.ts.net:8080')
+  })
+
+  it('allows bracketed IPv6 loopback origins', async () => {
+    await expectOrigin('http://[::1]:5173', true)
+  })
+
+  it('allows localhost origins', async () => {
+    await expectOrigin('http://localhost:5173', true)
+  })
+
+  it('rejects cross-origin web origins', async () => {
+    await expectOrigin('https://evil.example.com', false)
+  })
+
+  it('rejects opaque null origins', async () => {
+    await expectOrigin('null', false)
+  })
+})
+
 describe('WebSocketServerTransport', () => {
   it('rejects clients without a valid token', async () => {
     const store = new Store()
