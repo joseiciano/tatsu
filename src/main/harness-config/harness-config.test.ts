@@ -744,9 +744,10 @@ describe('scoped comparison and non-mutating actionable plans', () => {
     const fixture = makeFixture()
     const scope = { agentKind: 'codex', resourceType: 'agents' }
     addResolver(fixture, scope, 'codex-agents', /^AGENTS(?:\.override)?\.md$/)
+    const beforeTree = snapshotTree(fixture.root)
 
     await rejectsCode(() => fixture.service.prepareCreate(scope, 'notes', 'content'), 'unsafe-path')
-    expect(readdirSync(fixture.roots['codex-agents'])).toEqual([])
+    expect(snapshotTree(fixture.root)).toEqual(beforeTree)
     expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
   })
 
@@ -756,12 +757,12 @@ describe('scoped comparison and non-mutating actionable plans', () => {
     const fixture = setupComparison()
     const scope = { agentKind: 'claude', resourceType: 'agents' }
     put(fixture.roots.agents, 'existing.md', 'keep')
+    const beforeTree = snapshotTree(fixture.root)
 
     await rejectsCode(() => fixture.service.prepareUpdate(scope, 'nonexistent-id', 'new'), 'unknown-resource')
     await rejectsCode(() => fixture.service.prepareDelete(scope, 'nonexistent-id'), 'unknown-resource')
 
-    expect(readdirSync(fixture.roots.agents)).toEqual(['existing.md'])
-    expect(readFileSync(join(fixture.roots.agents, 'existing.md'), 'utf8')).toBe('keep')
+    expect(snapshotTree(fixture.root)).toEqual(beforeTree)
     expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
   })
 })
@@ -1005,7 +1006,11 @@ describe('backups, atomic writes, rollback, and partial application', () => {
       updatedAt: NOW
     }
     const desired = makeDesired([seeded])
-    desired.replaceDesiredScope.mockImplementation(() => { throw new Error('config unavailable') })
+    const targetExistedAtPersist: boolean[] = []
+    desired.replaceDesiredScope.mockImplementation(() => {
+      targetExistedAtPersist.push(existsSync(target))
+      throw new Error('config unavailable')
+    })
     const fixture = makeFixture({
       deps: {
         loadDesiredResources: desired.loadDesiredResources,
@@ -1023,6 +1028,8 @@ describe('backups, atomic writes, rollback, and partial application', () => {
     expect(readFileSync(target, 'utf8')).toBe('before delete')
     expect(backupFiles(fixture.roots.agents)).toHaveLength(1)
     expect(desired.replaceDesiredScope).toHaveBeenCalledTimes(1)
+    expect(targetExistedAtPersist).toEqual([false])
+    expect(desired.resources).toEqual([seeded])
 
     // Control run: with a working desired-state store, the same delete plan
     // flow removes the file from disk and updates desired state only after
@@ -1035,6 +1042,15 @@ describe('backups, atomic writes, rollback, and partial application', () => {
       relativePath: 'delete-me-control.md'
     }
     const controlDesired = makeDesired([controlSeeded])
+    const persistControl = controlDesired.replaceDesiredScope.getMockImplementation() as (
+      scope: Scope,
+      resources: DesiredResource[]
+    ) => void
+    const controlTargetExistedAtPersist: boolean[] = []
+    controlDesired.replaceDesiredScope.mockImplementation((controlScope: Scope, resources: DesiredResource[]) => {
+      controlTargetExistedAtPersist.push(existsSync(controlTarget))
+      persistControl(controlScope, resources)
+    })
     const controlService = makeFixture({
       root: fixture.root,
       roots: fixture.roots,
@@ -1050,6 +1066,8 @@ describe('backups, atomic writes, rollback, and partial application', () => {
     await controlService.applyPlan({ scope, planId: controlPlan.planId, confirmed: true })
     expect(existsSync(controlTarget)).toBe(false)
     expect(controlDesired.replaceDesiredScope).toHaveBeenCalledTimes(1)
+    expect(controlTargetExistedAtPersist).toEqual([false])
+    expect(controlDesired.resources.some((r) => r.relativePath === 'delete-me-control.md')).toBe(false)
   })
 
   it('reports one completed overwrite and requires rescan when second atomic rename fails', async () => {
