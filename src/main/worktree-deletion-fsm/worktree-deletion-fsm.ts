@@ -104,6 +104,7 @@ export class WorktreeDeletionFSM {
         type: 'worktrees/pendingDeletionUpdated',
         payload: { path, patch: { phase: 'removing-worktree' } }
       })
+      await removeWorktree(repoRoot, path, force)
       if (container && this.opts.containers) {
         try {
           await this.opts.containers.stopContainer(container.id)
@@ -113,7 +114,6 @@ export class WorktreeDeletionFSM {
         }
         this.store.dispatch({ type: 'worktrees/containerUpdated', payload: { path, container: undefined } })
       }
-      await removeWorktree(repoRoot, path, force)
 
       // Clear the pending entry and refresh the list so the sidebar row
       // disappears in one render.

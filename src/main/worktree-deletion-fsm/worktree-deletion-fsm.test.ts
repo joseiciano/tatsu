@@ -300,6 +300,38 @@ describe('WorktreeDeletionFSM container cleanup', () => {
     expect(worktreesFSM.refreshList).not.toHaveBeenCalled()
   })
 
+  it('keeps the companion container when removeWorktree fails', async () => {
+    vi.mocked(removeWorktree).mockRejectedValueOnce(new Error('worktree is dirty'))
+    const containers = { stopContainer: vi.fn(async () => undefined) }
+    const worktreesFSM = { refreshList: vi.fn(async () => undefined) }
+    const container = { id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' as const }
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{
+        path: '/repo/wt/feature',
+        branch: 'feature',
+        head: 'abc',
+        isBare: false,
+        isMain: false,
+        createdAt: 0,
+        repoRoot: '/repo',
+        container
+      }]
+    })
+    const fsm = new WorktreeDeletionFSM(store, {
+      getGlobalTeardownCmd: () => '',
+      worktreesFSM,
+      containers,
+    } as any)
+
+    await (fsm as any).run({ repoRoot: '/repo', path: '/repo/wt/feature', branch: 'feature' })
+
+    expect(containers.stopContainer).not.toHaveBeenCalled()
+    expect(store.getSnapshot().state.worktrees.list[0]?.container).toEqual(container)
+    const pending = store.getSnapshot().state.worktrees.pendingDeletions.find((d) => d.path === '/repo/wt/feature')
+    expect(pending?.phase).toBe('failed')
+  })
+
   it('caps and throttles teardown logs', async () => {
     vi.useFakeTimers()
     const dispatchSpy = vi.spyOn(store, 'dispatch')
