@@ -741,7 +741,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         }
         setScopeStatus(key, { busy: false, error: null })
         if (result.value.status === 'synced') {
-          if (dialogReview?.scopeKey === key) closeDialog()
+          if (openDialogScopeKeyRef.current === key) closeDialog()
           showScopeNotice(key, 'Already in sync', backendId, generation)
           return
         }
@@ -768,7 +768,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setDialogOpen(true)
       })()
     },
-    [activeBackend.id, backend, setScopeStatus, dialogReview, closeDialog, showScopeNotice]
+    [activeBackend.id, backend, setScopeStatus, closeDialog, showScopeNotice]
   )
 
   // TASK-009/TASK-010/TASK-011: one outcome-dispatching handler for both
