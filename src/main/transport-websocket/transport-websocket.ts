@@ -55,6 +55,7 @@ import { safeEqualToken, consumeSessionToken } from '../ws-token'
 import type { ServerFrame, ClientFrame, WebSocketServerTransportOptions } from './types'
 import { SLOW_IPC_MS } from './constants'
 
+const WS_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024
 const WS_RATE_LIMIT_CAPACITY = 100
 const WS_RATE_LIMIT_REFILL_PER_SECOND = 100
 const WS_SIGNAL_RATE_LIMIT_CAPACITY = 1_000
@@ -104,14 +105,14 @@ export class WebSocketServerTransport implements ServerTransport {
     if (this.opts.server) {
       this.wss = new WebSocketServer({
         server: this.opts.server,
-        maxPayload: 1024 * 1024,
+        maxPayload: WS_MAX_PAYLOAD_BYTES,
         verifyClient: (info, cb) => this.verify(info.req, cb)
       })
     } else {
       this.wss = new WebSocketServer({
         host,
         port: this.opts.port,
-        maxPayload: 1024 * 1024,
+        maxPayload: WS_MAX_PAYLOAD_BYTES,
         verifyClient: (info, cb) => this.verify(info.req, cb)
       })
     }
