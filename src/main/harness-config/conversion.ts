@@ -46,7 +46,7 @@ export function extractFrontMatterDescription(content: string): string | null {
   let description: string | null = null
   let closed = false
   for (let i = 1; i < scanLimit; i += 1) {
-    const line = lines[i]
+    const line = lines[i].replace(/\r$/, '')
     if (line.trim() === '---') {
       closed = true
       break
@@ -57,6 +57,7 @@ export function extractFrontMatterDescription(content: string): string | null {
     }
   }
   if (!closed) return null
+  if (description !== null && /^[|>][+-]?\d*$/.test(description)) return null
   return description
 }
 

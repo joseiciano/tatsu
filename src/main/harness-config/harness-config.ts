@@ -1217,9 +1217,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (existingTarget?.isSymbolicLink()) {
       throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the conversion destination unsafe')
     }
-    const existing = existingTarget
-      ? this.scanDisk(destinationScope, this.loadDesired()).find(({ ref }) => ref.relativePath === target.relativePath)
-      : undefined
+    const destinationEntries = existingTarget ? this.scanDisk(destinationScope, this.loadDesired()) : []
+    const foldedTarget = target.relativePath.toLowerCase()
+    const existing =
+      destinationEntries.find(({ ref }) => ref.relativePath === target.relativePath) ??
+      destinationEntries.find(({ ref }) => ref.relativePath.toLowerCase() === foldedTarget)
     if (existing) return { status: 'existing', ref: cloneRef(existing.ref) }
     // Fresh content is read only now that alias/existing resolution has
     // determined generation is actually required (REQ-008).

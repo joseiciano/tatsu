@@ -41,12 +41,12 @@ import type {
 import type { ElectronAPI } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
 import type {
+  HarnessConfigApplyRequest,
   HarnessConfigConversionRequest,
   HarnessConfigPrepareCreateRequest,
   HarnessConfigPrepareDeleteRequest,
   HarnessConfigPrepareUpdateRequest,
   HarnessConfigReadRequest,
-  HarnessConfigScope,
   HarnessConfigScopeRequest
 } from '../types'
 
@@ -579,9 +579,6 @@ export function buildBackend(
     connectionsGetToken: (id: string) => reqLocal('connections:getToken', id),
     connectionsHasToken: (id: string) => reqLocal('connections:hasToken', id),
 
-    // Harness configuration (skills/agents/commands command center,
-    // Step 6). Active-routed — a remote Config page manages that
-    // backend's own harness directories and mirrored state (ALT-008).
     scanHarnessConfig: (request: HarnessConfigScopeRequest) => req('harnessConfig:scan', request),
     readHarnessConfigFile: (request: HarnessConfigReadRequest) =>
       req('harnessConfig:readFile', request),
@@ -597,15 +594,15 @@ export function buildBackend(
       req('harnessConfig:planSyncToDisk', request),
     planHarnessConfigAdoptFromDisk: (request: HarnessConfigScopeRequest) =>
       req('harnessConfig:planAdoptFromDisk', request),
-    createHarnessConfigFile: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+    createHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:createFile', request),
-    updateHarnessConfigFile: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+    updateHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:updateFile', request),
-    deleteHarnessConfigFile: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+    deleteHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:deleteFile', request),
-    syncHarnessConfigToDisk: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+    syncHarnessConfigToDisk: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:syncToDisk', request),
-    adoptHarnessConfigFromDisk: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+    adoptHarnessConfigFromDisk: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:adoptFromDisk', request),
     prepareHarnessConfigCommandFromSkill: (request: HarnessConfigConversionRequest) =>
       req('harnessConfig:prepareCommandFromSkill', request),
