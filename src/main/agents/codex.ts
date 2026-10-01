@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { log } from '../debug'
-import { makeHookCommand } from '../hooks'
+import { makeHookScript } from '../hooks'
 import type { AgentSpawnOpts } from './index'
 
 function shellQuote(s: string): string {
@@ -10,9 +10,11 @@ function shellQuote(s: string): string {
 }
 
 // Codex strips unknown fields when it normalizes hooks.json, so dedup
-// recognizes our entries by the status-dir path baked into the hook
-// command instead of a sidecar marker.
+// recognizes our entries by their command text instead of a sidecar
+// marker: the script name for current entries, the status-dir path for
+// legacy inline `bash -c` entries.
 const HARNESS_HOOK_COMMAND_SIGNATURE = '/tmp/harness-status'
+const HOOK_SCRIPT_NAME = 'harness-hook.sh'
 
 export const defaultCommand = 'codex'
 export const assignsSessionId = false
@@ -38,6 +40,16 @@ function globalHooksPath(): string {
   return join(homedir(), '.codex', 'hooks.json')
 }
 
+function hookScriptPath(): string {
+  return join(homedir(), '.codex', HOOK_SCRIPT_NAME)
+}
+
+// Kept byte-stable on purpose: Codex skips a hook until the user trusts it
+// in /hooks, keyed on this command's hash.
+export function makeCodexHookCommand(event: string): string {
+  return `bash ${shellQuote(hookScriptPath())} ${event}`
+}
+
 function worktreeHooksPath(worktreePath: string): string {
   return join(worktreePath, '.codex', 'hooks.json')
 }
@@ -56,6 +68,13 @@ function writeHooksFile(path: string, data: CodexHooksFile): void {
   writeFileSync(path, JSON.stringify(data, null, 2))
 }
 
+function writeHookScript(): void {
+  const path = hookScriptPath()
+  const dir = join(path, '..')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(path, makeHookScript(), { mode: 0o755 })
+}
+
 function makeHarnessHookEntry(command: string): CodexHookEntry {
   return {
     hooks: [{ type: 'command', command, timeout: 5 }]
@@ -64,7 +83,9 @@ function makeHarnessHookEntry(command: string): CodexHookEntry {
 
 function isHarnessHookEntry(entry: CodexHookEntry): boolean {
   return !!entry.hooks?.some(
-    (h) => typeof h.command === 'string' && h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE)
+    (h) =>
+      typeof h.command === 'string' &&
+      (h.command.includes(HOOK_SCRIPT_NAME) || h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE))
   )
 }
 
@@ -113,6 +134,7 @@ export function installHooks(): void {
   log('hooks', `installing Codex hooks into ${path}`)
 
   ensureCodexHooksEnabled()
+  writeHookScript()
 
   const data = readHooksFile(path)
   if (!data.hooks) data.hooks = {}
@@ -123,13 +145,15 @@ export function installHooks(): void {
 
   for (const event of hookEvents) {
     if (!data.hooks[event]) data.hooks[event] = []
-    data.hooks[event].push(makeHarnessHookEntry(makeHookCommand(event)))
+    data.hooks[event].push(makeHarnessHookEntry(makeCodexHookCommand(event)))
   }
 
   writeHooksFile(path, data)
 }
 
 export function uninstallHooks(): void {
+  const script = hookScriptPath()
+  if (existsSync(script)) unlinkSync(script)
   const path = globalHooksPath()
   if (!existsSync(path)) return
   const data = readHooksFile(path)

@@ -1757,6 +1757,12 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     The hook only emits when <code className="bg-panel px-1 rounded">$HARNESS_TERMINAL_ID</code>{' '}
                     is set — sessions you launch outside Tatsu are untouched.
                   </p>
+                  <p className="text-xs text-dim mb-3">
+                    Codex skips new hooks until you approve them. After installing, open a Codex
+                    tab, run <code className="bg-panel px-1 rounded">/hooks</code>, and trust the
+                    entries that run <code className="bg-panel px-1 rounded">~/.codex/harness-hook.sh</code>.
+                    You only need to do this once.
+                  </p>
                   <div className="flex items-center gap-2">
                     {hooksConsent === 'accepted' ? (
                       <>
