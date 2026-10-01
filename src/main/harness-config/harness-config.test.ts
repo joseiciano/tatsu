@@ -1154,9 +1154,14 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(readFileSync(join(fixture.roots['claude-agents'], 'overwrite.md'), 'utf8')).toBe('new bytes')
     expect(existsSync(join(fixture.roots['claude-agents'], 'remove.md'))).toBe(false)
     expect(tempFiles(fixture.roots['claude-agents'])).toEqual([])
+    const backups = backupFiles(fixture.roots['claude-agents'])
+    expect(backups).toHaveLength(2)
+    expect(
+      backups.map((name) => readFileSync(join(fixture.roots['claude-agents'], name), 'utf8')).sort()
+    ).toEqual(['obsolete bytes', 'old bytes'])
 
     // Nothing was created in the parent temp directory or the sibling root.
-    expect(existsSync(join(fixture.root, 'created.md'))).toBe(false)
+    expect(readdirSync(fixture.root).sort()).toEqual(['claude-agents', 'codex-agents'])
     expect(readdirSync(fixture.roots['codex-agents'])).toEqual(['sibling.md'])
     expect(readFileSync(join(fixture.roots['codex-agents'], 'sibling.md'), 'utf8')).toBe('sibling bytes')
   })
