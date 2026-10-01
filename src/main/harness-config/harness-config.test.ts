@@ -847,6 +847,47 @@ describe('confirmation, staleness, and path security', () => {
       'stale-plan'
     )
   })
+  // TEST-015: delete and sync-to-disk plans share the update plan's gate —
+  // `confirmed: false`, a missing `confirmed`, an unknown plan id, and a
+  // reused plan id all reject with zero disk or desired-state changes, while
+  // the confirmed control run proves the gate is the confirmation value.
+  it.each([
+    ['delete', (fixture: Fixture, scope: Scope) => fixture.service.prepareDelete(scope, fixture.service.scan(scope)[0].id)],
+    ['sync-to-disk', (fixture: Fixture, scope: Scope) => {
+      fixture.desired.resources = [
+        refToDesired(fixture.service.scan(scope)[0], 'desired'),
+        refToDesired({ id: physicalId('claude', 'agents', 'created.md'), agentKind: 'claude', relativePath: 'created.md', resourceType: 'agents' }, 'created')
+      ]
+      return fixture.service.planSyncToDisk(scope)
+    }]
+  ] as const)('rejects unconfirmed, unknown, and reused %s plans without writing', async (kind, prepare) => {
+    const { fixture, scope, target } = createFixture()
+    const plan = prepare(fixture, scope)
+    const before = snapshotTree(fixture.root)
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }), 'unconfirmed-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId }), 'unconfirmed-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: 'missing', confirmed: true }), 'unknown-plan')
+    expect(snapshotTree(fixture.root)).toEqual(before)
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    if (kind === 'delete') {
+      expect(existsSync(target)).toBe(false)
+      expect(fixture.desired.replaceDesiredScope).toHaveBeenCalledTimes(1)
+    } else {
+      expect(readFileSync(target, 'utf8')).toBe('desired')
+      expect(readFileSync(join(fixture.roots.agents, 'created.md'), 'utf8')).toBe('created')
+      expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+    }
+    const afterControl = snapshotTree(fixture.root)
+    const callsAfterControl = fixture.desired.replaceDesiredScope.mock.calls.length
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+    expect(snapshotTree(fixture.root)).toEqual(afterControl)
+    expect(fixture.desired.replaceDesiredScope).toHaveBeenCalledTimes(callsAfterControl)
+  })
+
   it.each([
     ['disk', (fixture: Fixture, scope: Scope) => put(fixture.roots.agents, 'new.md', 'drift')],
     ['desired config', (fixture: Fixture) => { fixture.desired.resources.push({ id: physicalId('claude', 'agents', 'x.md'), agentKind: 'claude', resourceType: 'agents', relativePath: 'x.md', content: 'x', hash: hashBytes('x'), updatedAt: NOW }) }],
@@ -1484,6 +1525,51 @@ describe('sync/adopt direction and conversion preparation', () => {
     const second = fixture.service.prepareCommandFromSkill(scope, source.id) as Conversion
     expect(second.status).toBe('existing')
     expect(second.ref.relativePath).toBe('repeat.md')
+  })
+
+  // TEST-010: command-to-skill conversion mirrors TEST-009 — a repeated run
+  // and an independent existing destination both return the existing ref
+  // without writing, overwriting, or duplicating the skill file.
+  it('repeated command-to-skill conversion and an existing destination return existing without writes', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'opencode-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'opencode-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['opencode-commands'], 'ops/deploy.md', 'deploy body')
+    put(fixture.roots['opencode-commands'], 'release.md', 'release body')
+    put(fixture.roots['opencode-skills'], 'release/SKILL.md', 'independent skill')
+    const sources = fixture.service.scan(scope)
+    const deploy = sources.find((ref: FileRef) => ref.relativePath === 'ops/deploy.md') as FileRef
+    const release = sources.find((ref: FileRef) => ref.relativePath === 'release.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, deploy.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.relativePath).toBe('ops-deploy/SKILL.md')
+    put(fixture.roots['opencode-skills'], 'ops-deploy/SKILL.md', first.content as string)
+    const before = snapshotTree(fixture.root)
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, deploy.id)
+    const again = fixture.service.prepareSkillFromCommand(scope, deploy.id)
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('ops-deploy/SKILL.md')
+    expect(again).toEqual(repeat)
+
+    const existing = fixture.service.prepareSkillFromCommand(scope, release.id)
+    expect(existing.status).toBe('existing')
+    expect(existing.ref.relativePath).toBe('release/SKILL.md')
+    expect(existing).not.toHaveProperty('planId')
+
+    expect(snapshotTree(fixture.root)).toEqual(before)
+    expect(readFileSync(join(fixture.roots['opencode-skills'], 'release/SKILL.md'), 'utf8')).toBe('independent skill')
+    expect(fixture.service.scan(destination).map((ref: FileRef) => ref.relativePath)).toEqual([
+      'ops-deploy/SKILL.md',
+      'release/SKILL.md'
+    ])
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
   })
 
   it('keeps nested Claude commands with the same basename distinct via path-qualified names', () => {
