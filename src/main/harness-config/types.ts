@@ -1,18 +1,12 @@
 import type { Dirent, Stats } from 'fs'
 import type { HarnessConfigResourceType } from '../../shared/agent-registry'
-import type { AgentKind } from '../../shared/state/terminals'
-
-export type { HarnessConfigResourceType }
-export type ManagedHarnessKind = Extract<AgentKind, 'claude' | 'codex' | 'opencode'>
-
-export interface HarnessConfigScope {
-  agentKind: ManagedHarnessKind
-  resourceType: HarnessConfigResourceType
-}
-
-export function harnessConfigScopeKey(scope: HarnessConfigScope): string {
-  return `${scope.agentKind}:${scope.resourceType}`
-}
+import type {
+  HarnessConfigComparison,
+  HarnessConfigFileRef,
+  HarnessConfigScope,
+  HarnessConfigSyncPlan,
+  ManagedHarnessKind
+} from '../../shared/state/harness-config'
 
 export type HarnessConfigErrorCode =
   | 'unsupported-scope'
@@ -85,21 +79,6 @@ export interface HarnessResolver {
   resources: Partial<Record<HarnessConfigResourceType, HarnessConfigResourceResolver>>
 }
 
-export interface HarnessConfigFileRef {
-  id: string
-  agentKind: ManagedHarnessKind
-  resourceType: HarnessConfigResourceType
-  canonicalResourceType: HarnessConfigResourceType
-  aliasResourceTypes: HarnessConfigResourceType[]
-  label: string
-  relativePath: string
-  absolutePath: string
-  hash: string
-  existsOnDisk: boolean
-  managed: boolean
-  updatedAt: number
-}
-
 export interface HarnessConfigDesiredResource {
   id: string
   agentKind: ManagedHarnessKind
@@ -113,44 +92,12 @@ export interface HarnessConfigDesiredResource {
   updatedAt: number
 }
 
-export type HarnessConfigComparisonStatus = 'synced' | 'disk-only' | 'config-only' | 'conflict'
-export interface HarnessConfigChangedRef {
-  disk: HarnessConfigFileRef
-  config: HarnessConfigFileRef
-}
-
-export interface HarnessConfigComparison {
-  scope: HarnessConfigScope
-  status: HarnessConfigComparisonStatus
-  diskOnly: HarnessConfigFileRef[]
-  configOnly: HarnessConfigFileRef[]
-  changed: HarnessConfigChangedRef[]
-  comparedAt: number
-}
-
-export type HarnessConfigPlanDirection =
-  | 'sync-to-disk'
-  | 'adopt-from-disk'
-  | 'create'
-  | 'update'
-  | 'delete'
-
-export interface HarnessConfigSyncPlan {
-  planId: string
-  scope: HarnessConfigScope
-  direction: Extract<HarnessConfigPlanDirection, 'sync-to-disk' | 'adopt-from-disk'>
-  status: HarnessConfigComparisonStatus
-  diskOnly: HarnessConfigFileRef[]
-  configOnly: HarnessConfigFileRef[]
-  changed: HarnessConfigChangedRef[]
-  generatedAt: number
-  fingerprint: string
-}
+export type HarnessConfigMutationDirection = 'create' | 'update' | 'delete'
 
 export interface HarnessConfigMutationPlan {
   planId: string
   scope: HarnessConfigScope
-  direction: Extract<HarnessConfigPlanDirection, 'create' | 'update' | 'delete'>
+  direction: HarnessConfigMutationDirection
   resource: HarnessConfigFileRef
   generatedAt: number
   fingerprint: string

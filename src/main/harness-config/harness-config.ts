@@ -14,30 +14,35 @@ import type { Stats } from 'fs'
 import { homedir } from 'os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path'
 
+import type { HarnessConfigResourceType } from '../../shared/agent-registry'
+import {
+  harnessConfigScopeKey,
+  type HarnessConfigComparison,
+  type HarnessConfigFileRef,
+  type HarnessConfigScope,
+  type HarnessConfigSyncDirection,
+  type HarnessConfigSyncPlan,
+  type HarnessConfigSyncStatus,
+  type ManagedHarnessKind
+} from '../../shared/state/harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
-  HarnessConfigComparison,
-  HarnessConfigComparisonStatus,
   HarnessConfigConversionResult,
   HarnessConfigDesiredResource,
-  HarnessConfigFileRef,
   HarnessConfigFilesystem,
   HarnessConfigErrorCode,
+  HarnessConfigMutationDirection,
   HarnessConfigMutationPlan,
   HarnessConfigReadResult,
   HarnessConfigResourceResolver,
-  HarnessConfigResourceType,
-  HarnessConfigScope,
   HarnessConfigService,
   HarnessConfigServiceDeps,
-  HarnessConfigSyncPlan,
-  HarnessResolver,
-  ManagedHarnessKind
+  HarnessResolver
 } from './types'
-import { HarnessConfigError, harnessConfigScopeKey } from './types'
+import { HarnessConfigError } from './types'
 
 const RESOURCE_TYPES: readonly HarnessConfigResourceType[] = ['agents', 'skills', 'commands']
 const MANAGED_HARNESSES: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
@@ -193,7 +198,7 @@ type DiskOperation = {
 type PrivatePlan = {
   publicPlan: HarnessConfigSyncPlan | HarnessConfigMutationPlan
   scopeKey: string
-  direction: 'sync-to-disk' | 'adopt-from-disk' | 'create' | 'update' | 'delete'
+  direction: HarnessConfigSyncDirection | HarnessConfigMutationDirection
   diskFingerprint: string
   configFingerprint: string
   resolverIdentity: string
@@ -268,7 +273,7 @@ function comparisonStatus(
   diskOnly: readonly unknown[],
   configOnly: readonly unknown[],
   changed: readonly unknown[]
-): HarnessConfigComparisonStatus {
+): HarnessConfigSyncStatus {
   const categories = Number(diskOnly.length > 0) + Number(configOnly.length > 0) + Number(changed.length > 0)
   if (categories === 0) return 'synced'
   if (categories > 1 || changed.length > 0) return 'conflict'

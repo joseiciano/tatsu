@@ -12,6 +12,7 @@ import { initialJsonClaude } from '../../shared/state/json-claude'
 import { initialSnooze } from '../../shared/state/snooze'
 import { initialAnnouncements } from '../../shared/state/announcements'
 import { initialScratchpad } from '../../shared/state/scratchpad'
+import { initialHarnessConfig } from '../../shared/state/harness-config'
 import {
   initialSettings,
   DEFAULT_LIGHT_THEME,
@@ -70,6 +71,7 @@ export function buildInitialAppState(
     snooze: config.snooze ? { byPath: { ...config.snooze } } : initialSnooze,
     announcements: initialAnnouncements,
     scratchpad: { byWorktreePath: flattenScratchpadNotes(config.scratchpadNotes) },
+    harnessConfig: initialHarnessConfig,
     settings: {
       ...initialSettings,
       themeMode:
