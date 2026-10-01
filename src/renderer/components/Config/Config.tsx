@@ -499,10 +499,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         return
       }
 
-      const resultingRef =
-        applyResult.value.resultingRefs.find(
-          (ref) => ref.agentKind === scope.agentKind && ref.resourceType === scope.resourceType
-        ) ?? applyResult.value.resultingRefs[0] ?? null
+      const createdId = applyResult.value.applied.find((op) => op.type === 'create')?.id
+      const resultingRef = createdId
+        ? (applyResult.value.resultingRefs.find((ref) => ref.id === createdId) ?? null)
+        : null
 
       setCreateScope(null)
       setCreateName('')
