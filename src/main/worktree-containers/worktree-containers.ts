@@ -5,7 +5,7 @@ import { homedir, tmpdir } from 'os'
 import { basename, dirname, isAbsolute, join, resolve } from 'path'
 import { log } from '../debug'
 import { commandArgsForShell } from '../shell-quote'
-import { WORKTREE_CONTAINER_NATIVE_TMPDIR } from './constants'
+import { WORKTREE_CONTAINER_HOME, WORKTREE_CONTAINER_NATIVE_TMPDIR } from './constants'
 import type { DockerRunner, DockerRunResult, DockerRunOptions, ResolvedWorktreeContainerConfig, CreatedWorktreeContainer, WorktreeContainers } from './types'
 import type { RepoContainerConfig } from '../../shared/state/repo-configs'
 
@@ -206,8 +206,8 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
   function authTargetBase(value: string | undefined, fallback: string, workdir: string): string {
     if (!value || !isAbsolute(value)) return fallback
     const target = normalizeMountTarget(value)
-    const root = normalizeMountTarget(workdir)
-    return target === root || target.startsWith(`${root}/`) ? target : fallback
+    const roots = [normalizeMountTarget(workdir), WORKTREE_CONTAINER_HOME]
+    return roots.some((root) => target === root || target.startsWith(`${root}/`)) ? target : fallback
   }
 
   function addOpencodeSymlinkTargetVolumes(volumes: ResolvedWorktreeContainerConfig['volumes'], opencodeConfigDir: string): void {
@@ -277,10 +277,10 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     const hostConfigHome = process.env.XDG_CONFIG_HOME || join(home, '.config')
     const hostDataHome = process.env.XDG_DATA_HOME || join(home, '.local', 'share')
     const hostCacheHome = process.env.XDG_CACHE_HOME || join(home, '.cache')
-    const containerHome = authTargetBase(env.HOME, `${workdir}/.home`, workdir)
-    const containerConfigHome = authTargetBase(env.XDG_CONFIG_HOME, `${workdir}/.config`, workdir)
-    const containerDataHome = authTargetBase(env.XDG_DATA_HOME, `${workdir}/.local/share`, workdir)
-    const containerCacheHome = authTargetBase(env.XDG_CACHE_HOME, `${workdir}/.cache`, workdir)
+    const containerHome = authTargetBase(env.HOME, WORKTREE_CONTAINER_HOME, workdir)
+    const containerConfigHome = authTargetBase(env.XDG_CONFIG_HOME, `${WORKTREE_CONTAINER_HOME}/.config`, workdir)
+    const containerDataHome = authTargetBase(env.XDG_DATA_HOME, `${WORKTREE_CONTAINER_HOME}/.local/share`, workdir)
+    const containerCacheHome = authTargetBase(env.XDG_CACHE_HOME, `${WORKTREE_CONTAINER_HOME}/.cache`, workdir)
 
     const macOpencodeHome = join(home, 'Library', 'Application Support', 'opencode')
     const macOpencodeCache = join(home, 'Library', 'Caches', 'opencode')
@@ -367,10 +367,10 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
     const workdir = repoConfig?.workdir || '/workspace'
     const worktreeMountTarget = normalizeMountTarget(workdir)
     const defaultEnv: Record<string, string> = {
-      HOME: `${workdir}/.home`,
-      XDG_CACHE_HOME: `${workdir}/.cache`,
-      XDG_CONFIG_HOME: `${workdir}/.config`,
-      XDG_DATA_HOME: `${workdir}/.local/share`,
+      HOME: WORKTREE_CONTAINER_HOME,
+      XDG_CACHE_HOME: `${WORKTREE_CONTAINER_HOME}/.cache`,
+      XDG_CONFIG_HOME: `${WORKTREE_CONTAINER_HOME}/.config`,
+      XDG_DATA_HOME: `${WORKTREE_CONTAINER_HOME}/.local/share`,
       TMPDIR: WORKTREE_CONTAINER_NATIVE_TMPDIR,
       BUN_TMPDIR: WORKTREE_CONTAINER_NATIVE_TMPDIR
     }
@@ -490,6 +490,7 @@ export function createWorktreeContainers(runner?: DockerRunner): WorktreeContain
       '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m',
       '--tmpfs', '/var/tmp:rw,noexec,nosuid,size=256m',
       '--tmpfs', `${WORKTREE_CONTAINER_NATIVE_TMPDIR}:rw,exec,nosuid,nodev,size=256m,mode=1777`,
+      '--tmpfs', `${WORKTREE_CONTAINER_HOME}:rw,exec,nosuid,nodev,size=1g,mode=1777`,
       '--label', `tatsu.worktree.id=${validateLabelValue(id)}`,
       '--label', `tatsu.worktree.path=${encodeAndValidateLabelValue(worktreePath)}`,
       '--label', `tatsu.repo.root=${encodeAndValidateLabelValue(repoRoot)}`,

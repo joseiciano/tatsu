@@ -476,11 +476,11 @@ describe('resolveContainerConfig', () => {
       vi.stubEnv('HOME', home)
       const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
       expect(config.volumes).toEqual(expect.arrayContaining([
-        { source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true },
-        { source: join(home, '.local', 'share', 'opencode'), target: '/workspace/.local/share/opencode', readOnly: false },
-        { source: join(home, '.cache', 'opencode'), target: '/workspace/.cache/opencode', readOnly: false },
-        { source: join(home, '.claude'), target: '/workspace/.home/.claude', readOnly: false },
-        { source: join(home, '.codex'), target: '/workspace/.home/.codex', readOnly: false }
+        { source: join(home, '.config', 'opencode'), target: '/home/tatsu/.config/opencode', readOnly: true },
+        { source: join(home, '.local', 'share', 'opencode'), target: '/home/tatsu/.local/share/opencode', readOnly: false },
+        { source: join(home, '.cache', 'opencode'), target: '/home/tatsu/.cache/opencode', readOnly: false },
+        { source: join(home, '.claude'), target: '/home/tatsu/.claude', readOnly: false },
+        { source: join(home, '.codex'), target: '/home/tatsu/.codex', readOnly: false }
       ]))
     } finally {
       vi.unstubAllEnvs()
@@ -495,8 +495,8 @@ describe('resolveContainerConfig', () => {
       vi.stubEnv('HOME', home)
       const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
       expect(config.volumes).toEqual(expect.arrayContaining([
-        { source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true },
-        { source: join(home, '.config', 'opencode'), target: '/workspace/.home/.config/opencode', readOnly: true }
+        { source: join(home, '.config', 'opencode'), target: '/home/tatsu/.config/opencode', readOnly: true },
+        { source: join(home, '.config', 'opencode'), target: '/home/tatsu/.config/opencode', readOnly: true }
       ]))
     } finally {
       vi.unstubAllEnvs()
@@ -511,11 +511,11 @@ describe('resolveContainerConfig', () => {
       writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), '{}')
       vi.stubEnv('HOME', home)
       const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
-      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/workspace/.config/opencode')
-      expect(config.env.OPENCODE_CONFIG).toBe('/workspace/.config/opencode/opencode.json')
+      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/home/tatsu/.config/opencode')
+      expect(config.env.OPENCODE_CONFIG).toBe('/home/tatsu/.config/opencode/opencode.json')
       expect(config.volumes).toEqual(expect.arrayContaining([
-        { source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true },
-        { source: join(home, '.config', 'opencode'), target: '/workspace/.home/.config/opencode', readOnly: true }
+        { source: join(home, '.config', 'opencode'), target: '/home/tatsu/.config/opencode', readOnly: true },
+        { source: join(home, '.config', 'opencode'), target: '/home/tatsu/.config/opencode', readOnly: true }
       ]))
     } finally {
       vi.unstubAllEnvs()
@@ -550,8 +550,8 @@ describe('resolveContainerConfig', () => {
       writeFileSync(join(home, '.config', 'opencode', 'opencode.jsonc'), '{}')
       vi.stubEnv('HOME', home)
       const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
-      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/workspace/.config/opencode')
-      expect(config.env.OPENCODE_CONFIG).toBe('/workspace/.config/opencode/opencode.jsonc')
+      expect(config.env.OPENCODE_CONFIG_DIR).toBe('/home/tatsu/.config/opencode')
+      expect(config.env.OPENCODE_CONFIG).toBe('/home/tatsu/.config/opencode/opencode.jsonc')
     } finally {
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })
@@ -572,7 +572,7 @@ describe('resolveContainerConfig', () => {
       })
       const containers = createWorktreeContainers(runner)
       const config = containers.resolveContainerConfig('/repo', '/repo/wt', {
-        env: { HOME: '/workspace/.home', XDG_CONFIG_HOME: '/workspace/.home/.config' }
+        env: { HOME: '/home/tatsu', XDG_CONFIG_HOME: '/home/tatsu/.config' }
       })
       await containers.createForWorktree('/repo', '/repo/wt', config)
       const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
@@ -599,7 +599,7 @@ describe('resolveContainerConfig', () => {
 
       expect(config.volumes).toContainEqual({
         source: dirname(realpathSync(join(envDir, 'neon'))),
-        target: '/workspace/.home/dotfiles/opencode/.config/opencode/envs',
+        target: '/home/tatsu/dotfiles/opencode/.config/opencode/envs',
         readOnly: true
       })
     } finally {
@@ -626,7 +626,7 @@ describe('resolveContainerConfig', () => {
 
       expect(config.volumes).toContainEqual({
         source: dirname(realpathSync(join(envDir, 'neon'))),
-        target: '/workspace/.home/dotfiles/opencode/.config/opencode/envs',
+        target: '/home/tatsu/dotfiles/opencode/.config/opencode/envs',
         readOnly: true
       })
     } finally {
@@ -644,7 +644,7 @@ describe('resolveContainerConfig', () => {
       const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt')
       const macMounts = config.volumes.filter((v) => v.source === macOpencode)
       expect(macMounts).toHaveLength(1)
-      expect(macMounts[0]).toEqual({ source: macOpencode, target: '/workspace/.local/share/opencode', readOnly: false })
+      expect(macMounts[0]).toEqual({ source: macOpencode, target: '/home/tatsu/.local/share/opencode', readOnly: false })
     } finally {
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })
@@ -694,7 +694,7 @@ describe('resolveContainerConfig', () => {
       const config = createWorktreeContainers(makeRunner()).resolveContainerConfig('/repo', '/repo/wt', {
         env: { XDG_CONFIG_HOME: '/tmp/escape' }
       })
-      expect(config.volumes).toContainEqual({ source: join(home, '.config', 'opencode'), target: '/workspace/.config/opencode', readOnly: true })
+      expect(config.volumes).toContainEqual({ source: join(home, '.config', 'opencode'), target: '/home/tatsu/.config/opencode', readOnly: true })
       expect(config.volumes.some((v) => v.target === '/tmp/escape/opencode')).toBe(false)
     } finally {
       vi.unstubAllEnvs()
@@ -756,6 +756,7 @@ describe('createForWorktree docker run args', () => {
     expect(runArgs).toContain('/tmp:rw,noexec,nosuid,size=256m')
     expect(runArgs).toContain('/var/tmp:rw,noexec,nosuid,size=256m')
     expect(runArgs).toContain('/tmp/.tatsu-native-tmp:rw,exec,nosuid,nodev,size=256m,mode=1777')
+    expect(runArgs).toContain('/home/tatsu:rw,exec,nosuid,nodev,size=1g,mode=1777')
   })
 
 
@@ -771,10 +772,10 @@ describe('createForWorktree docker run args', () => {
     const config = containers.resolveContainerConfig('/repo', '/repo/wt', { image: 'node:20-alpine' })
     await containers.createForWorktree('/repo', '/repo/wt', config)
     const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
-    expect(runArgs).toContain('HOME=/workspace/.home')
-    expect(runArgs).toContain('XDG_CACHE_HOME=/workspace/.cache')
-    expect(runArgs).toContain('XDG_CONFIG_HOME=/workspace/.config')
-    expect(runArgs).toContain('XDG_DATA_HOME=/workspace/.local/share')
+    expect(runArgs).toContain('HOME=/home/tatsu')
+    expect(runArgs).toContain('XDG_CACHE_HOME=/home/tatsu/.cache')
+    expect(runArgs).toContain('XDG_CONFIG_HOME=/home/tatsu/.config')
+    expect(runArgs).toContain('XDG_DATA_HOME=/home/tatsu/.local/share')
     expect(runArgs).toContain('TMPDIR=/tmp/.tatsu-native-tmp')
     expect(runArgs).toContain('BUN_TMPDIR=/tmp/.tatsu-native-tmp')
   })
@@ -795,7 +796,7 @@ describe('createForWorktree docker run args', () => {
       const config = containers.resolveContainerConfig('/repo', '/repo/wt')
       await containers.createForWorktree('/repo', '/repo/wt', config)
       const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
-      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.config/opencode,readonly`)
+      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/home/tatsu/.config/opencode,readonly`)
       expect(runArgs).toContain('type=bind,source=/repo/wt,target=/workspace')
     } finally {
       vi.unstubAllEnvs()
@@ -819,8 +820,8 @@ describe('createForWorktree docker run args', () => {
       const config = containers.resolveContainerConfig('/repo', '/repo/wt')
       await containers.createForWorktree('/repo', '/repo/wt', config)
       const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
-      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.config/opencode,readonly`)
-      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/workspace/.home/.config/opencode,readonly`)
+      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/home/tatsu/.config/opencode,readonly`)
+      expect(runArgs).toContain(`type=bind,source=${join(home, '.config', 'opencode')},target=/home/tatsu/.config/opencode,readonly`)
     } finally {
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })
@@ -844,23 +845,23 @@ describe('createForWorktree docker run args', () => {
     const runArgs = ((runner.run as any).mock.calls.find((c: any) => c[0][0] === 'run'))[0]
     expect(runArgs).toContain('HOME=/custom/home')
     expect(runArgs).toContain('XDG_CACHE_HOME=/custom/cache')
-    expect(runArgs).not.toContain('HOME=/workspace/.home')
-    expect(runArgs).not.toContain('XDG_CACHE_HOME=/workspace/.cache')
+    expect(runArgs).not.toContain('HOME=/home/tatsu')
+    expect(runArgs).not.toContain('XDG_CACHE_HOME=/home/tatsu/.cache')
     // non-overridden defaults still present
-    expect(runArgs).toContain('XDG_CONFIG_HOME=/workspace/.config')
-    expect(runArgs).toContain('XDG_DATA_HOME=/workspace/.local/share')
+    expect(runArgs).toContain('XDG_CONFIG_HOME=/home/tatsu/.config')
+    expect(runArgs).toContain('XDG_DATA_HOME=/home/tatsu/.local/share')
     expect(runArgs).toContain('TMPDIR=/tmp/.tatsu-native-tmp')
     expect(runArgs).toContain('BUN_TMPDIR=/tmp/.tatsu-native-tmp')
   })
 
-  it('default env vars respect custom workdir', async () => {
+  it('default HOME and XDG vars stay outside a custom workdir mount', async () => {
     const runner = makeRunner()
     const containers = createWorktreeContainers(runner)
     const config = containers.resolveContainerConfig('/repo', '/repo/wt', { workdir: '/app' })
-    expect(config.env.HOME).toBe('/app/.home')
-    expect(config.env.XDG_CACHE_HOME).toBe('/app/.cache')
-    expect(config.env.XDG_CONFIG_HOME).toBe('/app/.config')
-    expect(config.env.XDG_DATA_HOME).toBe('/app/.local/share')
+    expect(config.env.HOME).toBe('/home/tatsu')
+    expect(config.env.XDG_CACHE_HOME).toBe('/home/tatsu/.cache')
+    expect(config.env.XDG_CONFIG_HOME).toBe('/home/tatsu/.config')
+    expect(config.env.XDG_DATA_HOME).toBe('/home/tatsu/.local/share')
   })
 
   it('tmpfs mounts for noexec temp paths and executable native temp path are always present', async () => {
