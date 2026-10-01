@@ -1111,7 +1111,7 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft.name).toBe('my-skill')
     expect(draft.relativePath).toBe('my-skill.md')
     expect(draft.content).toBe(
-      '---\ndescription: Does a thing\n---\n\nUse the my-skill skill.\n\n<!-- Converted by Tatsu from opencode skills My Skill/SKILL.md -->\n'
+      '---\ndescription: Does a thing\n---\n\nUse the My Skill skill.\n\n<!-- Converted by Tatsu from opencode skills My Skill/SKILL.md -->\n'
     )
   })
 
@@ -1131,7 +1131,7 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft.name).toBe('deploy-now')
     expect(draft.relativePath).toBe('deploy-now/SKILL.md')
     expect(draft.content).toBe(
-      '# deploy-now\n\nUse this skill when the user requests the `deploy-now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
+      '# deploy-now\n\nUse this skill when the user requests the `Deploy Now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
     )
   })
 
@@ -1150,6 +1150,40 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(second.status).toBe('existing')
     expect(second.ref.relativePath).toBe('repeat.md')
   })
+
+  it('keeps nested Claude commands with the same basename distinct via path-qualified names', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    const destination = { agentKind: 'claude', resourceType: 'skills' }
+    addResolver(fixture, scope, 'claude-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['claude-commands'], 'frontend/review.md', 'frontend review')
+    put(fixture.roots['claude-commands'], 'backend/review.md', 'backend review')
+    const sources = fixture.service.scan(scope)
+    const frontend = sources.find((ref: FileRef) => ref.relativePath === 'frontend/review.md') as FileRef
+    const backend = sources.find((ref: FileRef) => ref.relativePath === 'backend/review.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, frontend.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.name).toBe('frontend-review')
+    expect(first.relativePath).toBe('frontend-review/SKILL.md')
+    expect(first.content).toBe(
+      '# frontend-review\n\nUse this skill when the user requests the `review` command behavior.\n\n<!-- Converted by Tatsu from claude commands frontend/review.md -->\n'
+    )
+    put(fixture.roots['claude-skills'], 'frontend-review/SKILL.md', first.content as string)
+
+    const second = fixture.service.prepareSkillFromCommand(scope, backend.id) as AnyRecord
+    expect(second.status).toBe('draft')
+    expect(second.name).toBe('backend-review')
+    expect(second.relativePath).toBe('backend-review/SKILL.md')
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, frontend.id) as Conversion
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('frontend-review/SKILL.md')
+  })
 })
 
 describe('conversion content generators (TEST-001/TEST-002)', () => {
@@ -1158,8 +1192,9 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
     expect(slugifyLogicalName('  __Weird///Name__  ')).toBe('weird-name')
     expect(slugifyLogicalName('already-slug')).toBe('already-slug')
     const long = 'a'.repeat(90)
-    expect(slugifyLogicalName(long)).toBe('a'.repeat(80))
-    expect(slugifyLogicalName(`${'a'.repeat(79)}-!!!`)).toBe('a'.repeat(79))
+    expect(slugifyLogicalName(long)).toBe('a'.repeat(64))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}-!!!`)).toBe('a'.repeat(63))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}/review`)).toBe('a'.repeat(63))
   })
 
   it('throws invalid-name when a label has no derivable slug', () => {
@@ -1217,16 +1252,41 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
     ).toThrow()
   })
 
-  it('falls back to the source logical name when the label has no derivable slug', () => {
+  it('prefers the path-qualified logical name over the label', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: 'frontend/review',
+      label: 'review',
+      relativePath: 'frontend/review.md',
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe('frontend-review')
+  })
+
+  it('falls back to the label when name has no derivable slug', () => {
     const draft = createCommandFromSkill({
       agentKind: 'codex',
       resourceType: 'skills',
-      name: 'fallback-name',
-      label: '!!!',
-      relativePath: 'fallback-name/SKILL.md',
+      name: '!!!',
+      label: 'Fallback Label',
+      relativePath: '!!!/SKILL.md',
       content: 'body'
     })
-    expect(draft.destinationName).toBe('fallback-name')
+    expect(draft.destinationName).toBe('fallback-label')
+  })
+
+  it('caps destination names at 64 characters', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: `${'x'.repeat(40)}/${'y'.repeat(40)}`,
+      label: 'y'.repeat(40),
+      relativePath: `${'x'.repeat(40)}/${'y'.repeat(40)}.md`,
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe(`${'x'.repeat(40)}-${'y'.repeat(23)}`)
+    expect(draft.destinationName).toHaveLength(64)
   })
 })
 
