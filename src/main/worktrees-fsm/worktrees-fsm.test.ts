@@ -158,6 +158,28 @@ describe('WorktreesFSM container integration', () => {
     expect(wt?.container?.status).toBe('running')
   })
 
+  it('treats a rejected container setup exec as setup failure and passes script env', async () => {
+    const containers = {
+      checkDockerAvailable: vi.fn(async () => ({ ok: true })),
+      resolveContainerConfig: vi.fn(() => ({ image: 'n', workdir: '/w', shell: '/bin/sh', env: {}, ports: [], volumes: [] })),
+      ensureImage: vi.fn(),
+      createForWorktree: vi.fn().mockResolvedValue({ id: 'c1', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'running' } as CreatedWorktreeContainer),
+      execInContainer: vi.fn().mockRejectedValue(new Error('Docker command timed out after 300000ms')),
+      isContainerRunning: vi.fn().mockResolvedValue(true),
+      stopContainer: vi.fn(),
+      restartContainer: vi.fn(),    }
+    mockedListWorktrees.mockResolvedValue([{ path: '/repo/wt/test-branch', branch: 'test-branch', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }])
+    const fsm = makeFSM(containers, { getEnableWorktreeContainers: () => true })
+    const result = await fsm.runPending({ id: 'p-exec-reject', repoRoot: '/repo', branchName: 'test-branch' })
+    expect(result.outcome).toBe('setup-failed')
+    expect(containers.execInContainer).toHaveBeenCalledWith('c1', 'pnpm install', expect.objectContaining({
+      env: { HARNESS_WORKTREE_PATH: '/w', HARNESS_BRANCH: 'test-branch', HARNESS_REPO_ROOT: '/repo' }
+    }))
+    expect(containers.stopContainer).not.toHaveBeenCalled()
+    const pending = store.getSnapshot().state.worktrees.pending.find((p) => p.id === 'p-exec-reject')
+    expect(pending?.setupLog).toContain('timed out')
+  })
+
   it('marks container stopped when setup leaves it not running', async () => {
     const containers = {
       checkDockerAvailable: vi.fn(async () => ({ ok: true })),

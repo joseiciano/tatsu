@@ -18,6 +18,14 @@ import type { Worktree, PendingWorktree } from '../../shared/state/worktrees'
 import { hydratePersistedWorktreeContainers } from '../build-initial-state'
 import type { PersistedWorktreeContainer } from '../persistence'
 
+export function containerScriptEnv(workdir: string, branch: string, repoRoot: string): Record<string, string> {
+  return {
+    HARNESS_WORKTREE_PATH: workdir,
+    HARNESS_BRANCH: branch,
+    HARNESS_REPO_ROOT: repoRoot
+  }
+}
+
 const MAX_SETUP_LOG_CHARS = 100_000
 const SETUP_LOG_THROTTLE_MS = 100
 
@@ -369,21 +377,28 @@ export class WorktreesFSM {
         const containers = this.opts.containers
         if (!containers) throw new Error('Container support not available')
         let streamed = false
-        const execResult = await containers.execInContainer(
-          container.id,
-          setupCmd,
-          {
-            workdir: container.workdir,
-            shell: container.shell,
-            onOutput: (chunk) => {
-              streamed = true
-              setupLog.append(chunk)
+        try {
+          const execResult = await containers.execInContainer(
+            container.id,
+            setupCmd,
+            {
+              workdir: container.workdir,
+              shell: container.shell,
+              env: containerScriptEnv(container.workdir, created.branch, repoRoot),
+              onOutput: (chunk) => {
+                streamed = true
+                setupLog.append(chunk)
+              }
             }
+          )
+          result = { ok: execResult.exitCode === 0, exitCode: execResult.exitCode, stdout: execResult.stdout, stderr: execResult.stderr }
+          if (!streamed && (execResult.stdout || execResult.stderr)) {
+            setupLog.replace(execResult.stderr ? [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') : execResult.stdout)
           }
-        )
-        result = { ok: execResult.exitCode === 0, exitCode: execResult.exitCode, stdout: execResult.stdout, stderr: execResult.stderr }
-        if (!streamed && (execResult.stdout || execResult.stderr)) {
-          setupLog.replace(execResult.stderr ? [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') : execResult.stdout)
+        } catch (execErr) {
+          const message = execErr instanceof Error ? execErr.message : String(execErr)
+          setupLog.append(`\n${message}\n`)
+          result = { ok: false, exitCode: -1, stdout: '', stderr: message }
         }
       } else {
         result = await runWorktreeScript(
@@ -478,7 +493,8 @@ export class WorktreesFSM {
       if (!containers) throw new Error('Container support not available')
       const result = await containers.execInContainer(container.id, setupCmd, {
         workdir: container.workdir,
-        shell: container.shell
+        shell: container.shell,
+        env: containerScriptEnv(container.workdir, ctx.branch, ctx.repoRoot)
       })
       if (result.exitCode !== 0) throw new Error(`Setup script failed with exit code ${result.exitCode}`)
       return
@@ -569,7 +585,7 @@ export class WorktreesFSM {
           const container = (existing.container?.status === 'running' || existing.container?.status === 'starting')
             ? existing.container as CreatedWorktreeContainer
             : await this.maybeCreateContainer(id, current.repoRoot, existing.path)
-          return this.finishCreateWithContainerCleanup({
+          return await this.finishCreateWithContainerCleanup({
             id,
             repoRoot: current.repoRoot,
             created: existing,
@@ -586,7 +602,7 @@ export class WorktreesFSM {
           const container = (refreshedExisting.container?.status === 'running' || refreshedExisting.container?.status === 'starting')
             ? refreshedExisting.container as CreatedWorktreeContainer
             : await this.maybeCreateContainer(id, current.repoRoot, refreshedExisting.path)
-          return this.finishCreateWithContainerCleanup({
+          return await this.finishCreateWithContainerCleanup({
             id,
             repoRoot: current.repoRoot,
             created: refreshedExisting,

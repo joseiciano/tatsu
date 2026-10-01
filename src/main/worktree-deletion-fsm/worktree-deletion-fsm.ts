@@ -2,7 +2,7 @@ import { removeWorktree, runWorktreeScript } from '../worktree'
 import { loadRepoConfig } from '../repo-config'
 import { log } from '../debug'
 import type { Store } from '../store'
-import type { WorktreesFSM } from '../worktrees-fsm'
+import { containerScriptEnv, type WorktreesFSM } from '../worktrees-fsm'
 import type { WorktreeContainers } from '../worktree-containers'
 import type { PendingDeletion } from '../../shared/state/worktrees'
 
@@ -73,6 +73,7 @@ export class WorktreeDeletionFSM {
             ? await this.opts.containers.execInContainer(container.id, teardownCmd, {
               workdir: container.workdir,
               shell: container.shell,
+              env: containerScriptEnv(container.workdir, branch, repoRoot),
               onOutput: (chunk) => {
                 teardownLog.append(chunk)
               }
