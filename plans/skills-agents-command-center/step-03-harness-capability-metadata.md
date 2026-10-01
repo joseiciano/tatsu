@@ -1,23 +1,23 @@
 ---
 goal: Add shared harness configuration capability metadata to the agent registry
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-09-30
+status: 'Completed'
 tags: [feature, metadata, agent-registry, harness-config]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan extends Tatsu's shared agent registry with declarative metadata describing whether each logical harness configuration resource is supported, unsupported, or unknown/deferred. It translates the feature goals and scope in [implementation-details.md](./implementation-details.md), the product boundary in [Step 1](./step-01-product-boundary-source-of-truth.md), and the resolver matrix in [Step 2](./step-02-main-process-harness-config-service.md) into a renderer-safe capability contract with visible fail-closed states, without exposing home-directory assumptions or resolved filesystem paths. This is Step 3 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md); completing it does not implement discovery, persistence, transport, shared inventory state, or UI.
 
 ## 1. Requirements & Constraints
 
 - **REQ-001**: Define and export the canonical shared `HarnessConfigResourceType = 'agents' | 'skills' | 'commands'` union from `src/shared/agent-registry/agent-registry.ts`; this union MUST contain exactly the three logical resource types established by the product boundary. `plugins` MUST NOT be added to this union.
-- **REQ-002**: Define and export `HarnessConfigCapabilityStatus = 'supported' | 'unsupported' | 'unknown'` and `AgentConfigCapability` from `src/shared/agent-registry/agent-registry.ts`. Model `AgentConfigCapability` as a discriminated union with common `resourceType: HarnessConfigResourceType` and `label: string` fields: the `supported` branch MAY carry `notes?: string` and `aliasResourceTypes?: readonly HarnessConfigResourceType[]`; the `unsupported | unknown` branch MUST carry `notes: string` and MUST NOT carry `aliasResourceTypes`.
-- **REQ-003**: `HarnessConfigResourceType` MUST be the single type-level source for Step 2's resolver service, this capability metadata, and later shared state. `src/main/harness-config/` may re-export it from its package barrel but MUST NOT declare an independent duplicate union. `aliasResourceTypes` MUST mean that physical resources canonical to this supported capability can also appear in the named logical views; it MUST NOT mean that every native resource in the target view is an alias, and it MUST NOT contain the capability's own `resourceType`.
-- **REQ-004**: Extend `AgentInfo` with `configCapabilities: readonly AgentConfigCapability[]`. Every entry in `AGENT_REGISTRY` MUST supply this property so consumers never infer support from `kind`, vendor, executable availability, or filesystem state.
+- **REQ-002**: Define and export `HarnessConfigCapabilityStatus = 'supported' | 'unsupported' | 'unknown'` and `AgentConfigCapability` from `src/shared/agent-registry/agent-registry.ts`. Model `AgentConfigCapability` as a discriminated union with common `resourceType: HarnessConfigResourceType` and `label: string` fields: the `supported` branch MAY carry `notes?: string` and `aliasResourceTypes?: readonly HarnessConfigResourceType[]`; the `unsupported | unknown` branch MUST carry `notes: string` and MUST declare `aliasResourceTypes?: never` so structural values cannot carry aliases.
+- **REQ-003**: `HarnessConfigResourceType` MUST be the single type-level source for Step 2's resolver service, this capability metadata, and later shared state. Before TASK-001 begins, `src/main/harness-config/types.ts` MUST already import the type from the shared agent-registry barrel and MAY re-export that imported type, but MUST NOT declare an independent duplicate union. If Step 2 still owns a duplicate declaration, Step 3 is blocked until Step 2 is corrected in its own scope; CON-001 MUST NOT be used to leave the duplicate in place. `aliasResourceTypes` MUST mean that physical resources canonical to this supported capability can also appear in the named logical views; it MUST NOT mean that every native resource in the target view is an alias, and it MUST NOT contain the capability's own `resourceType`.
+- **REQ-004**: Extend `AgentInfo` with `configCapabilities: readonly AgentConfigCapability[]`. Before making the field required, audit every `AgentInfo` reference, structural object constructor, fixture, and persistence or transport boundary in `src/`. Migrate every in-repository constructor atomically. `AgentInfo` is code-owned registry metadata, not a persisted or transported wire contract, so this step MUST NOT add a compatibility default for the current repository shape; if the audit discovers untyped runtime input or deserialization of `AgentInfo`, amend this plan's file scope and add explicit boundary validation or migration before making the field required. Every entry in `AGENT_REGISTRY` MUST supply this property so consumers never infer support from `kind`, vendor, executable availability, or filesystem state.
 - **REQ-005**: Every agent MUST declare exactly one visible capability for each resource type, in the stable order `agents`, `skills`, `commands`. Duplicate or omitted resource types are invalid registry data. A capability remains in this array regardless of status; consumers MUST NOT filter out `unsupported` or `unknown` rows.
 - **REQ-005A**: Capability presentation MUST use this exhaustive policy and MUST NOT treat an unrecognized status as enabled:
 
@@ -48,7 +48,7 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 - **REQ-016**: Existing registry behavior MUST remain unchanged: registry ordering stays `claude`, `codex`, `opencode`, `pi`; `getAgentInfo`, `agentDisplayName`, `getNextAgentKind`, and `cycleAltAgent` preserve their current results.
 - **REQ-017**: The package barrel `src/shared/agent-registry/index.ts` MUST remain the public import surface. Its existing `export * from './agent-registry'` MUST expose `HarnessConfigResourceType`, `HarnessConfigCapabilityStatus`, `AgentConfigCapability`, and `isHarnessConfigCapabilityEnabled` without a deep import or a second shared export path.
 - **REQ-017A**: Plugin information is provenance metadata on an inventoried physical resource under its originating harness. A plugin MUST NOT be a fourth `HarnessConfigResourceType`, capability row, or `aliasResourceTypes` value; plugin provenance MUST NOT imply automatic installation, conversion, or copying to another harness.
-- **CON-001**: This step is limited to `src/shared/agent-registry/agent-registry.ts` and `src/shared/agent-registry/agent-registry.test.ts`; it MUST NOT add main-process resolvers, shared state, transport handlers, persistence fields, or UI components.
+- **CON-001**: After TASK-000 verifies its prerequisites, implementation is limited to `src/shared/agent-registry/agent-registry.ts` and `src/shared/agent-registry/agent-registry.test.ts`; it MUST NOT add main-process resolvers, shared state, transport handlers, persistence fields, or UI components. A failed prerequisite MUST block this step and trigger an explicit plan-scope correction; it MUST NOT be bypassed with a duplicate type, an optional `configCapabilities` field, a cast, or an unvalidated runtime default.
 - **CON-002**: Pi remains a launchable `AgentKind` and registry entry, but harness configuration management for Pi is explicitly deferred by Step 1. This step MUST represent that deferral as three visible `unknown` capabilities that are disabled by the same predicate as `unsupported`, rather than removing Pi, declaring permanent non-support, or guessing layouts.
 - **CON-003**: No new runtime or development dependency is permitted.
 - **GUD-001**: Keep the capability table explicit in each `AgentInfo` entry. Do not introduce factories, inheritance, or a second lookup map for twelve static rows; direct data is easier to audit against the resolver matrix.
@@ -60,23 +60,29 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 ### Implementation Phase 1: Define the capability contract
 
 - **GOAL-001**: Add a complete, renderer-safe capability model to every shared agent registry entry while preserving existing registry behavior.
+- [x] **TASK-000**: Complete the type-ownership and `AgentInfo` migration preflight before editing the registry.
+  - Verify that `src/main/harness-config/types.ts` imports `HarnessConfigResourceType` from `../../shared/agent-registry`, may re-export that imported type, and contains no independent declaration of the union. Search the rest of `src/` for additional declarations. If any duplicate exists, stop Step 3 and correct Step 2 in its declared scope before continuing.
+  - Use language-server references for `AgentInfo` when a TypeScript language server is available, then search for structural constructors, fixtures, persistence schemas, transport payloads, and deserialization boundaries that may not name the interface directly.
+  - Record the complete constructor inventory in the task execution output. The expected repository shape is that `AGENT_REGISTRY` is the only `AgentInfo` constructor and that consumers receive registry-owned values through `getAgentInfo` or `AGENT_REGISTRY`; do not treat that expectation as a substitute for the audit.
+  - If another in-repository constructor exists, add its file to this plan and migrate it atomically. If untyped runtime input can produce `AgentInfo`, add explicit boundary validation or migration and its tests before making `configCapabilities` required. Do not use an optional field, cast, or silent default to preserve an obsolete shape.
 
-- [ ] **TASK-001**: In `src/shared/agent-registry/agent-registry.ts`, add the exported canonical `HarnessConfigResourceType` and `HarnessConfigCapabilityStatus` unions plus the discriminated `AgentConfigCapability` type immediately before `AgentInfo`.
+- [x] **TASK-001**: In `src/shared/agent-registry/agent-registry.ts`, add the exported canonical `HarnessConfigResourceType` and `HarnessConfigCapabilityStatus` unions plus the discriminated `AgentConfigCapability` type immediately before `AgentInfo`.
+  - Dependency: TASK-000.
   - Use the branches, required non-supported notes, and supported-only readonly alias array from REQ-001 through REQ-003 exactly.
   - Treat the shared resource union as the dependency source for `src/main/harness-config/` and later shared-state types; shared code MUST NOT import a main-process type.
   - Do not add `plugins` to either union or represent plugin provenance as a capability.
-- [ ] **TASK-002**: Extend `AgentInfo` with `configCapabilities: readonly AgentConfigCapability[]` and export `isHarnessConfigCapabilityEnabled`.
+- [x] **TASK-002**: Extend `AgentInfo` with `configCapabilities: readonly AgentConfigCapability[]` and export `isHarnessConfigCapabilityEnabled`.
   - Dependency: TASK-001.
   - Keep `kind`, `displayName`, `vendor`, and `assignsSessionId` unchanged.
   - Do not make `configCapabilities` optional; optional metadata would force consumers to interpret absence and could enable unsupported operations.
   - Implement the predicate as the exhaustive fail-closed presentation boundary from REQ-006: only `status === 'supported'` returns `true`.
-- [ ] **TASK-003**: Expand all four `AGENT_REGISTRY` entries with the exact three-row capability matrix from REQ-008 through REQ-013.
+- [x] **TASK-003**: Expand all four `AGENT_REGISTRY` entries with the exact three-row capability matrix from REQ-008 through REQ-013.
   - Dependency: TASK-002.
   - Preserve agent ordering and all existing non-capability values.
   - Use the stable capability order `agents`, `skills`, `commands` for each agent.
   - Give all Claude and OpenCode rows `status: 'supported'`; give Codex Agents and Skills `status: 'supported'` and Codex Commands `status: 'unsupported'` with the required explanatory note.
   - Give all Pi rows `status: 'unknown'` and the exact deferred note from REQ-010; do not use `unsupported`, because Pi support is undecided rather than known to be permanently unavailable.
-- [ ] **TASK-004**: Encode Claude alias behavior in the capability rows without collapsing native commands into skill aliases.
+- [x] **TASK-004**: Encode Claude alias behavior in the capability rows without collapsing native commands into skill aliases.
   - Dependency: TASK-003.
   - Set only the Claude Skills row to `aliasResourceTypes: ['commands']`.
   - Set its note to `Claude skills also appear in the Commands view as the same physical resource.`
@@ -88,21 +94,21 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 
 - **GOAL-002**: Prove that the registry exposes a total, exact capability matrix, a fail-closed supported/unsupported/unknown presentation policy, and enough alias context for later UI work.
 
-- [ ] **TASK-005**: Update `src/shared/agent-registry/agent-registry.test.ts` to import `AGENT_REGISTRY`, `getAgentInfo`, and `isHarnessConfigCapabilityEnabled` from `.` alongside the existing cycle helpers.
+- [x] **TASK-005**: Update `src/shared/agent-registry/agent-registry.test.ts` to import `AGENT_REGISTRY`, `getAgentInfo`, and `isHarnessConfigCapabilityEnabled` from `.` alongside the existing cycle helpers.
   - Dependency: GOAL-001.
   - Keep tests inside the package and avoid deep imports from `./agent-registry`.
-- [ ] **TASK-006**: Add a table-driven test that asserts the complete observable capability objects for each `AgentKind`.
+- [x] **TASK-006**: Add a table-driven test that asserts the complete observable capability objects for each `AgentKind`.
   - Dependency: TASK-005.
   - For every row, assert the exact `resourceType`, `status`, `label`, `notes`, and `aliasResourceTypes` value, including omitted optional fields.
   - Assert exactly three capabilities in the required `agents`, `skills`, `commands` order so duplicate or missing rows fail and `plugins` cannot enter the managed resource union through registry data.
   - Include Pi so future additions cannot accidentally inherit Claude or another harness's support.
-- [ ] **TASK-007**: Add focused alias-invariant tests.
+- [x] **TASK-007**: Add focused alias-invariant tests.
   - Dependency: TASK-005.
   - Assert that the Claude Skills capability has exactly `aliasResourceTypes: ['commands']` and the exact explanatory note from TASK-004.
   - Assert that the Claude Commands capability is independently `supported`, has the exact note from TASK-004, and has no reciprocal alias declaration.
   - Iterate every capability and assert that `aliasResourceTypes` never contains its own `resourceType`; assert that Codex, OpenCode, and Pi advertise no capability-level aliases.
   - Treat Step 2's resolver test that scans the same Claude skill through Skills and Commands and receives one `id` and one underlying path as the behavioral proof of synonymy; this registry test proves the metadata that requests the second logical view without inventing a second identity.
-- [ ] **TASK-008**: Add presentation-state tests and retain the existing cycle tests unchanged.
+- [x] **TASK-008**: Add presentation-state tests and retain the existing cycle tests unchanged.
   - Dependency: TASK-005.
   - Assert through `getAgentInfo` that all three Pi capabilities remain present, have `status: 'unknown'`, expose the exact non-empty deferred note from REQ-010, and are disabled by `isHarnessConfigCapabilityEnabled`.
   - Assert the Codex Commands capability is `unsupported`, carries the exact non-empty explanation from REQ-010, and is disabled; assert a supported registry capability is enabled. This covers every status branch without inventing support for an unverified resolver pair.
@@ -112,17 +118,17 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 
 - **GOAL-003**: Demonstrate that the shared metadata contract passes focused behavior checks and remains compatible with all current consumers.
 
-- [ ] **TASK-009**: Run `npx vitest run src/shared/agent-registry/agent-registry.test.ts` and resolve every failure without weakening exact matrix or alias assertions.
+- [x] **TASK-009**: Run `npx vitest run src/shared/agent-registry/agent-registry.test.ts` and resolve every failure without weakening exact matrix or alias assertions.
   - Dependency: GOAL-002.
-- [ ] **TASK-010**: Run `pnpm typecheck` and resolve every error across main, preload, renderer, and web-client consumers of `AgentInfo` and `AGENT_REGISTRY`.
+- [x] **TASK-010**: Run `pnpm typecheck` and resolve every error across main, preload, renderer, and web-client consumers of `AgentInfo` and `AGENT_REGISTRY`.
   - Dependency: TASK-009.
   - Do not add casts or optional chaining to hide an incomplete registry entry.
-- [ ] **TASK-011**: Run `pnpm build` and resolve any desktop or web bundle failure caused by the shared contract change.
+- [x] **TASK-011**: Run `pnpm build` and resolve any desktop or web bundle failure caused by the shared contract change.
   - Dependency: TASK-010.
   - Confirm from the build result that the shared registry remains browser-safe and introduces no Node-only dependency.
-- [ ] **TASK-012**: Review the final diff against Step 2's resolver matrix and type contract, then verify that `HarnessConfigResourceType` has no independently declared duplicate; `plugins` appears in no resource/status/alias union; and no path, environment variable value, filesystem API, persistence behavior, transport handler, state mutation, or UI code entered this step.
+- [x] **TASK-012**: Review the final diff against Step 2's resolver matrix and type contract, then repeat TASK-000's checks: verify that `HarnessConfigResourceType` has no independently declared duplicate; every discovered `AgentInfo` constructor supplies the required capability matrix; no persistence or transport boundary accepts an obsolete `AgentInfo` shape; `plugins` appears in no resource/status/alias union; and no path, environment variable value, filesystem API, persistence behavior, transport handler, state mutation, or UI code entered this step.
   - Dependency: TASK-011.
-- [ ] **TASK-013**: Commit only the two runtime/test files in CON-001 with message `feat: add harness config capability metadata`, then run `git push origin <current-branch>` immediately after the commit succeeds.
+- [x] **TASK-013**: Commit only the two runtime/test files in CON-001 with message `feat: add harness config capability metadata`, then run `git push origin <current-branch>` immediately after the commit succeeds.
   - Dependency: TASK-012.
   - Do not include unrelated working-tree changes in the commit.
 
@@ -139,7 +145,7 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 
 - **DEP-001**: [implementation-details.md](./implementation-details.md) defines the feature goals, exactly three logical resource views, source-of-truth model, Claude skill/command caveat, and plugin provenance boundary.
 - **DEP-002**: [Step 1](./step-01-product-boundary-source-of-truth.md) limits the first managed harness scope to Claude, Codex, and OpenCode, requires unsupported or unknown combinations to remain visible and disabled, and explicitly defers Pi config management.
-- **DEP-003**: [Step 2](./step-02-main-process-harness-config-service.md) is authoritative for the current resolver matrix and physical alias semantics. Its `src/main/harness-config/` implementation MUST import and, if needed, re-export the canonical `HarnessConfigResourceType` from the shared agent-registry barrel rather than declaring the union again; capability statuses must match that resolver matrix without copying paths into shared metadata. Its Claude alias fixtures are the behavioral authority for one stable `id` and underlying path across both logical views.
+- **DEP-003**: [Step 2](./step-02-main-process-harness-config-service.md) is authoritative for the current resolver matrix and physical alias semantics and MUST be complete before this step begins. As a hard precondition, its `src/main/harness-config/types.ts` implementation MUST import and, if needed, re-export the canonical `HarnessConfigResourceType` from the shared agent-registry barrel rather than declaring the union again; TASK-000 blocks Step 3 if this is not true. Capability statuses must match that resolver matrix without copying paths into shared metadata. Its Claude alias fixtures are the behavioral authority for one stable `id` and underlying path across both logical views.
 - **DEP-004**: `src/shared/state/terminals/types.ts` defines `AgentKind = 'claude' | 'codex' | 'opencode' | 'pi'`; every member requires a complete capability table even when every capability is `unknown`.
 - **DEP-005**: `src/shared/agent-registry/index.ts` already re-exports `agent-registry.ts` and requires no edit for the new contracts and predicate to be public.
 - **DEP-006**: Steps 7, 9, and 10 will consume this metadata for enabled/disabled controls, conflict scope presentation, and conversion actions; they must render non-supported rows, use main-service file refs and confirmed plans as mutation authority, and preserve physical alias identity.
@@ -159,13 +165,15 @@ This plan extends Tatsu's shared agent registry with declarative metadata descri
 - **TEST-006**: `pnpm typecheck` exits successfully across all TypeScript project references and enforces the discriminated-union note and alias restrictions.
 - **TEST-007**: `pnpm build` exits successfully for desktop and web-client bundles.
 - **TEST-008**: Run identifier declaration validation from the `plan-implementation-plan` skill against this file; duplicate TASK/GOAL declarations and duplicate bullet-style declaration identifiers MUST both produce zero results.
+- **TEST-009**: The TASK-000 `AgentInfo` audit identifies every named reference, structural constructor, fixture, persistence schema, transport payload, and deserialization boundary. The check passes only when each constructor is included in the declared file scope and migrated atomically, and when no unvalidated runtime boundary can supply the obsolete shape.
+- **TEST-010**: The TASK-000 type-ownership check proves `src/main/harness-config/types.ts` imports and only re-exports `HarnessConfigResourceType` from the shared agent-registry barrel and that no independent declaration remains anywhere under `src/`; otherwise Step 3 remains blocked.
 
 ## 7. Risks & Assumptions
 
 - **RISK-001**: Consumers may misread static `status: 'supported'` as proof that an installed layout exists. REQ-006 and REQ-007 define it as Tatsu resolver support; runtime scans and structured service errors remain authoritative for the local machine.
 - **RISK-002**: A reciprocal Claude alias declaration could make native command files appear to be skills and cause duplicate or incorrect conversion behavior. REQ-011 and REQ-012 intentionally model only skill resources appearing in Commands, while Step 2 preserves one stable physical identity and path for the actual alias.
 - **RISK-003**: Vendor layout support or the resource union can change after this plan is implemented. REQ-003 and REQ-013 require one canonical shared union plus an atomic resolver, metadata, notes, and test update so main and renderer never advertise different types or capabilities.
-- **RISK-004**: Adding required nested metadata to `AgentInfo` can break registry fixtures or object literals outside the defining file. Current callsite research found `AGENT_REGISTRY` consumers but no additional `AgentInfo` object construction; `pnpm typecheck` remains the authoritative guard.
+- **RISK-004**: Adding required nested metadata to `AgentInfo` can break registry fixtures, structural object literals, or untyped runtime inputs outside the defining file. TASK-000 requires a repository-wide reference, constructor, fixture, persistence, transport, and deserialization audit before the type changes. The current baseline has `AGENT_REGISTRY` as the only constructor and does not serialize `AgentInfo`, so no compatibility default is warranted; any contrary discovery requires an explicit scope amendment plus atomic constructor migration or boundary validation before implementation continues.
 - **RISK-005**: Showing Pi as disabled may be mistaken for permanent non-support. Its `unknown` status and required deferred note preserve the undecided scope rather than declaring Pi incapable.
 - **ASSUMPTION-001**: Step 2's verified resolver matrix is accepted for this plan, including Codex Agents and Skills support and Codex Commands non-support.
 - **ASSUMPTION-002**: Capability labels and status notes are product copy shared by all clients and therefore belong in shared metadata, while runtime error details continue to come from the main service.
