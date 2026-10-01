@@ -5,6 +5,7 @@ import type {
   HarnessConfigScope,
   HarnessConfigScopeKey,
   HarnessConfigState,
+  HarnessConfigSyncStatus,
   ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import type { AgentConfigCapability, AgentInfo } from '../../../shared/agent-registry'
@@ -145,12 +146,72 @@ export interface ConfigEditorProps {
   onReset: () => void
 }
 
+// --- Step 9: scoped sync conflict review/apply contracts ---
+
+export type ConfigSyncStage = 'idle' | 'planning' | 'applying'
+
+export type ConfigSyncFreshPlanDecision = 'already-synced' | 'review-refreshed-plan' | 'apply-fresh-plan'
+
+/** One render-ready file row inside a conflict section. Wraps the
+ *  shared `HarnessConfigFileRef` rather than restating its fields
+ *  (REQ-006/REQ-007). */
+export interface ConfigSyncFileRow {
+  /** Stable React key. */
+  key: string
+  ref: HarnessConfigFileRef
+  sourceLabel: 'Disk' | 'Tatsu config'
+  updatedAtLabel: string
+  /** `sha256:<first 12 chars>` — the default visual label (REQ-007). */
+  hashShortLabel: string
+  /** Complete `sha256:<hash>` — used only in `title`/accessible-label. */
+  hashFullLabel: string
+}
+
+/** One content-changed pair: the disk side and the Tatsu config side of
+ *  the same logical resource, rendered as two explicitly labeled sides
+ *  of one row (REQ-008). */
+export interface ConfigSyncChangedRow {
+  key: string
+  disk: ConfigSyncFileRow
+  config: ConfigSyncFileRow
+}
+
+export interface ConfigSyncReviewSections {
+  diskOnly: ConfigSyncFileRow[]
+  configOnly: ConfigSyncFileRow[]
+  changed: ConfigSyncChangedRow[]
+}
+
+/** Renderer-local, non-authorizing projection of either a returned
+ *  `HarnessConfigComparison` or the discarded public comparison data of
+ *  a `HarnessConfigSyncPlan`. Carries no `planId`, `direction`, or
+ *  `fingerprint` — see REQ-011/REQ-013/SEC-001. `reviewKey` is the
+ *  `configSyncReviewKey` of the underlying comparison/plan and is what
+ *  a fresh plan is checked against before it may be applied. */
+export interface ConfigSyncReview {
+  scope: HarnessConfigScope
+  scopeKey: HarnessConfigScopeKey
+  status: HarnessConfigSyncStatus
+  sections: ConfigSyncReviewSections
+  reviewKey: string
+  timestampLabel: string
+}
+
 export interface ConfigSyncDialogProps {
   open: boolean
-  comparison: HarnessConfigComparison | null
+  review: ConfigSyncReview | null
   agentDisplayName: string
   resourceLabel: string
-  onClose: () => void
+  stage: ConfigSyncStage
+  /** False once a consumed plan's recovery comparison has itself failed
+   *  (REQ-017) — the displayed review can no longer be trusted to drive
+   *  another apply until the user cancels and starts Sync again. */
+  reviewUsable: boolean
+  actionError: string | null
+  actionNotice: string | null
+  onSyncToDisk: () => void
+  onAdoptFromDisk: () => void
+  onCancel: () => void
 }
 
 /** Input to the pure list-derivation helper. Everything here is either

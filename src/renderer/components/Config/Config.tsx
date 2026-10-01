@@ -4,17 +4,18 @@ import { useActiveBackend, useHarnessConfig, useSettings } from '../../store'
 import { getAgentInfo, isHarnessConfigCapabilityEnabled, type AgentInfo } from '../../../shared/agent-registry'
 import {
   harnessConfigScopeKey,
-  type HarnessConfigComparison,
   type HarnessConfigFileRef,
   type HarnessConfigResourceType,
   type HarnessConfigScope,
   type HarnessConfigScopeKey,
+  type HarnessConfigSyncDirection,
   type ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import { ConfigTabs } from './ConfigTabs'
 import { ConfigResourceList, buildConfigResourceGroups } from './ConfigResourceList'
 import { ConfigEditor } from './ConfigEditor'
 import { ConfigSyncDialog } from './ConfigSyncDialog'
+import { decideFreshPlanOutcome, toConfigSyncReview } from './config-sync-review'
 import type {
   ConfigAgentFilter,
   ConfigAgentFilterOption,
@@ -23,6 +24,8 @@ import type {
   ConfigProps,
   ConfigResourceGroup,
   ConfigSelection,
+  ConfigSyncReview,
+  ConfigSyncStage,
   ConfigTabDefinition
 } from './types'
 
@@ -116,7 +119,15 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   >({})
 
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [dialogComparison, setDialogComparison] = useState<HarnessConfigComparison | null>(null)
+  // Step 9: the displayed review is a non-authorizing projection of
+  // either a `HarnessConfigComparison` or a discarded plan's public
+  // comparison data (REQ-011/REQ-013) — never the plan itself, which is
+  // kept only in the request-scoped closure that generated it (TASK-007).
+  const [dialogReview, setDialogReview] = useState<ConfigSyncReview | null>(null)
+  const [dialogStage, setDialogStage] = useState<ConfigSyncStage>('idle')
+  const [dialogActionError, setDialogActionError] = useState<string | null>(null)
+  const [dialogActionNotice, setDialogActionNotice] = useState<string | null>(null)
+  const [dialogReviewUsable, setDialogReviewUsable] = useState(true)
 
   // Session bookkeeping — plain refs so they never themselves trigger a
   // render; every async chain captures these at call time and re-checks
@@ -127,6 +138,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const scannedRef = useRef<Map<string, Set<HarnessConfigScopeKey>>>(new Map())
   const pendingScanRef = useRef<Map<string, Set<HarnessConfigScopeKey>>>(new Map())
   const syncNoticeTimeoutsRef = useRef<Map<HarnessConfigScopeKey, number>>(new Map())
+  // Bumped on every dialog open/replace/dismiss/backend-switch so an
+  // in-flight planner/apply continuation can tell it's been superseded
+  // (REQ-021, TASK-012).
+  const dialogTokenRef = useRef(0)
 
   const clearSyncNoticeTimeouts = useCallback(() => {
     for (const timeoutId of syncNoticeTimeoutsRef.current.values()) {
@@ -164,8 +179,13 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setMutationBusy(false)
     setActionError(null)
     setScopeStatusState({})
+    dialogTokenRef.current += 1
     setDialogOpen(false)
-    setDialogComparison(null)
+    setDialogReview(null)
+    setDialogStage('idle')
+    setDialogActionError(null)
+    setDialogActionNotice(null)
+    setDialogReviewUsable(true)
   }, [])
 
   // REQ-009: an active-backend switch invalidates every page-local
@@ -654,7 +674,47 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
   const handleResetDraft = useCallback(() => setDraft(savedContent), [savedContent])
 
-  // ---- Sync preview (REQ-027, REQ-028, CON-002) ----
+  // ---- Sync preview + scoped conflict review/apply (Step 9) ----
+
+  // Shared by the already-synced path and a successful apply — both
+  // report a transient scope-level notice rather than mutating any
+  // group/row data optimistically (REQ-019, ALT-007).
+  const showScopeNotice = useCallback(
+    (key: HarnessConfigScopeKey, notice: string, backendId: string, generation: number) => {
+      setScopeStatus(key, { notice, error: null })
+      const existingTimeout = syncNoticeTimeoutsRef.current.get(key)
+      if (existingTimeout !== undefined) window.clearTimeout(existingTimeout)
+      const timeoutId = window.setTimeout(() => {
+        syncNoticeTimeoutsRef.current.delete(key)
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+        setScopeStatus(key, { notice: null })
+      }, 2500)
+      syncNoticeTimeoutsRef.current.set(key, timeoutId)
+    },
+    [setScopeStatus]
+  )
+
+  // REQ-020/TASK-012: the single no-op dismissal path for Cancel, the
+  // close icon, Escape, and backdrop. Bumps the dialog token *before*
+  // clearing state so a planning continuation still in flight sees a
+  // stale token when it resumes and aborts without applying. Applying
+  // can't be dismissed — the renderer can't cancel an in-progress
+  // main-process mutation (REQ-020) — so this is a no-op while
+  // `dialogStage === 'applying'`.
+  const closeDialog = useCallback(() => {
+    dialogTokenRef.current += 1
+    setDialogOpen(false)
+    setDialogReview(null)
+    setDialogStage('idle')
+    setDialogActionError(null)
+    setDialogActionNotice(null)
+    setDialogReviewUsable(true)
+  }, [])
+
+  const handleDialogCancel = useCallback(() => {
+    if (dialogStage === 'applying') return
+    closeDialog()
+  }, [dialogStage, closeDialog])
 
   const handleSync = useCallback(
     (scope: HarnessConfigScope) => {
@@ -671,30 +731,156 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         }
         setScopeStatus(key, { busy: false, error: null })
         if (result.value.status === 'synced') {
-          setScopeStatus(key, { notice: 'Synced' })
-          const existingTimeout = syncNoticeTimeoutsRef.current.get(key)
-          if (existingTimeout !== undefined) window.clearTimeout(existingTimeout)
-          const timeoutId = window.setTimeout(() => {
-            syncNoticeTimeoutsRef.current.delete(key)
-            if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
-            setScopeStatus(key, { notice: null })
-          }, 2500)
-          syncNoticeTimeoutsRef.current.set(key, timeoutId)
+          if (dialogReview?.scopeKey === key) closeDialog()
+          showScopeNotice(key, 'Already in sync', backendId, generation)
           return
         }
+        dialogTokenRef.current += 1
         setDialogAgentName(getAgentInfo(scope.agentKind).displayName)
         setDialogResourceLabel(TABS.find((t) => t.id === scope.resourceType)?.label ?? scope.resourceType)
-        setDialogComparison(result.value)
+        setDialogReview(toConfigSyncReview(result.value))
+        setDialogStage('idle')
+        setDialogActionError(null)
+        setDialogActionNotice(null)
+        setDialogReviewUsable(true)
         setDialogOpen(true)
       })()
     },
-    [activeBackend.id, backend, setScopeStatus]
+    [activeBackend.id, backend, setScopeStatus, dialogReview, closeDialog, showScopeNotice]
   )
 
-  const handleCloseDialog = useCallback(() => {
-    setDialogOpen(false)
-    setDialogComparison(null)
-  }, [])
+  // TASK-009/TASK-010/TASK-011: one outcome-dispatching handler for both
+  // mutation buttons. Every identity/token check in REQ-021 runs after
+  // each awaited planner/apply/recovery call before the next request is
+  // issued or local UI state is committed.
+  const handleOutcomeClick = useCallback(
+    (direction: HarnessConfigSyncDirection) => {
+      if (!dialogReview || dialogStage !== 'idle' || !dialogReviewUsable) return
+
+      const token = dialogTokenRef.current
+      const backendId = activeBackend.id
+      const generation = backendGenerationRef.current
+      const scope = dialogReview.scope
+      const scopeKey = dialogReview.scopeKey
+      const displayedReviewKey = dialogReview.reviewKey
+      const agentName = dialogAgentName
+      const resourceLabel = dialogResourceLabel
+
+      const isStale = (): boolean =>
+        dialogTokenRef.current !== token ||
+        activeBackendIdRef.current !== backendId ||
+        backendGenerationRef.current !== generation
+
+      setDialogStage('planning')
+      setDialogActionError(null)
+      setDialogActionNotice(null)
+
+      void (async () => {
+        const planResult =
+          direction === 'sync-to-disk'
+            ? await backend.planHarnessConfigSyncToDisk({ scope })
+            : await backend.planHarnessConfigAdoptFromDisk({ scope })
+
+        if (isStale()) return
+
+        if (!planResult.ok) {
+          setDialogActionError(planResult.error.message)
+          setDialogStage('idle')
+          return
+        }
+
+        const freshPlan = planResult.value
+        const decision = decideFreshPlanOutcome(displayedReviewKey, freshPlan)
+
+        if (decision === 'already-synced') {
+          closeDialog()
+          showScopeNotice(scopeKey, 'Already in sync', backendId, generation)
+          return
+        }
+
+        if (decision === 'review-refreshed-plan') {
+          setDialogReview(toConfigSyncReview(freshPlan))
+          setDialogActionNotice('Files changed. Review the refreshed plan and choose an action again.')
+          setDialogStage('idle')
+          return
+        }
+
+        // apply-fresh-plan: a review-equivalent, drift-bearing plan from
+        // the direction-specific planner that matches this outcome.
+        setDialogStage('applying')
+        const applyResult =
+          direction === 'sync-to-disk'
+            ? await backend.syncHarnessConfigToDisk({
+                scope: freshPlan.scope,
+                planId: freshPlan.planId,
+                confirmed: true
+              })
+            : await backend.adoptHarnessConfigFromDisk({
+                scope: freshPlan.scope,
+                planId: freshPlan.planId,
+                confirmed: true
+              })
+
+        // REQ-021/RISK-004: an apply already dispatched remains a
+        // confirmed operation against the backend it was sent to, but a
+        // backend switch in the meantime means its response must never
+        // touch the (new) current backend's UI.
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+
+        if (applyResult.ok) {
+          closeDialog()
+          const notice =
+            direction === 'sync-to-disk'
+              ? `Synced ${agentName} ${resourceLabel} to disk`
+              : `Adopted current disk ${resourceLabel} into Tatsu config`
+          showScopeNotice(scopeKey, notice, backendId, generation)
+          return
+        }
+
+        // REQ-017/REQ-018: preserve the original safe apply error, then
+        // request one non-authorizing recovery comparison. The consumed
+        // plan is never retried or reused — only a brand-new explicit
+        // outcome click can produce another direction-bound plan.
+        const originalError = applyResult.error.message
+        setDialogActionError(originalError)
+
+        const recoveryResult = await backend.compareHarnessConfig({ scope })
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+
+        if (!recoveryResult.ok) {
+          setDialogReviewUsable(false)
+          setDialogActionError(`${originalError} Unable to refresh this comparison — cancel and start Sync again.`)
+          setDialogStage('idle')
+          return
+        }
+
+        if (recoveryResult.value.status === 'synced') {
+          closeDialog()
+          setScopeStatus(scopeKey, {
+            error: `${originalError} A fresh comparison now reports this scope is in sync.`
+          })
+          return
+        }
+
+        setDialogReview(toConfigSyncReview(recoveryResult.value))
+        setDialogReviewUsable(true)
+        setDialogActionError(originalError)
+        setDialogStage('idle')
+      })()
+    },
+    [
+      dialogReview,
+      dialogStage,
+      dialogReviewUsable,
+      activeBackend.id,
+      backend,
+      dialogAgentName,
+      dialogResourceLabel,
+      closeDialog,
+      showScopeNotice,
+      setScopeStatus
+    ]
+  )
 
   // ---- Close guard + Escape routing (TASK-013) ----
 
@@ -830,10 +1016,16 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       </div>
       <ConfigSyncDialog
         open={dialogOpen}
-        comparison={dialogComparison}
+        review={dialogReview}
         agentDisplayName={dialogAgentName}
         resourceLabel={dialogResourceLabel}
-        onClose={handleCloseDialog}
+        stage={dialogStage}
+        reviewUsable={dialogReviewUsable}
+        actionError={dialogActionError}
+        actionNotice={dialogActionNotice}
+        onSyncToDisk={() => handleOutcomeClick('sync-to-disk')}
+        onAdoptFromDisk={() => handleOutcomeClick('adopt-from-disk')}
+        onCancel={handleDialogCancel}
       />
     </div>
   )
