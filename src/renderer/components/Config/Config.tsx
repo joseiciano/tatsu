@@ -108,6 +108,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const [draft, setDraft] = useState('')
   const [savedContent, setSavedContent] = useState('')
   const [readBusy, setReadBusy] = useState(false)
+  const [readFailed, setReadFailed] = useState(false)
   const [mutationBusy, setMutationBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -152,7 +153,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     }))
   }, [])
 
+  const invalidateRead = useCallback(() => {
+    readTokenRef.current += 1
+    setReadBusy(false)
+    setReadFailed(false)
+  }, [])
+
   const resetPageLocalState = useCallback(() => {
+    invalidateRead()
     setSelected(null)
     setSelectedRef(null)
     setEditorMode('empty')
@@ -160,13 +168,12 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setCreateName('')
     setDraft('')
     setSavedContent('')
-    setReadBusy(false)
     setMutationBusy(false)
     setActionError(null)
     setScopeStatusState({})
     setDialogOpen(false)
     setDialogComparison(null)
-  }, [])
+  }, [invalidateRead])
 
   // REQ-009: an active-backend switch invalidates every page-local
   // chain immediately — bump the generation first so anything still in
@@ -329,17 +336,18 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         comparison.diskOnly.some((r) => r.id === selected.id) ||
         comparison.changed.some((c) => c.disk.id === selected.id))
     if (existsInComparison) return
+    invalidateRead()
     setSelected(null)
     setSelectedRef(null)
     setEditorMode('empty')
     setDraft('')
     setSavedContent('')
-    setReadBusy(false)
-  }, [harnessConfig.resources, harnessConfig.comparisons, selected])
+  }, [harnessConfig.resources, harnessConfig.comparisons, selected, invalidateRead])
 
   // ---- Tab / filter / search transitions (REQ-025) ----
 
   const clearSelectionAndEditor = useCallback(() => {
+    invalidateRead()
     setSelected(null)
     setSelectedRef(null)
     setEditorMode('empty')
@@ -348,7 +356,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDraft('')
     setSavedContent('')
     setActionError(null)
-  }, [])
+  }, [invalidateRead])
 
   const handleTabChange = useCallback(
     (tab: HarnessConfigResourceType) => {
@@ -400,8 +408,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       setSelected({ scope, id })
       setSelectedRef(ref)
       setEditorMode('edit')
+      setReadFailed(false)
 
       if (!ref.existsOnDisk) {
+        readTokenRef.current += 1
         setDraft('')
         setSavedContent('')
         setReadBusy(false)
@@ -427,6 +437,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         }
         if (!result.ok) {
           setReadBusy(false)
+          setReadFailed(true)
           setActionError(result.error.message)
           return
         }
@@ -444,6 +455,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const handleEnterCreate = useCallback(
     (scope: HarnessConfigScope) => {
       if (!confirmDiscard()) return
+      invalidateRead()
       setSelected(null)
       setSelectedRef(null)
       setCreateScope(scope)
@@ -453,7 +465,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       setEditorMode('create')
       setActionError(null)
     },
-    [confirmDiscard]
+    [confirmDiscard, invalidateRead]
   )
 
   const handleCancelCreate = useCallback(() => {
@@ -770,7 +782,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
-  const canEdit = editorView.kind === 'edit' && !readBusy && !mutationBusy
+  const canEdit = editorView.kind === 'edit' && !readBusy && !readFailed && !mutationBusy
   const canSave = canEdit && draft !== savedContent
   const canDelete = canEdit
 
