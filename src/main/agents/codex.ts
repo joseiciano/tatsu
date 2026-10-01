@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, appendFileSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { log } from '../debug'
@@ -77,9 +77,19 @@ function ensureCodexHooksEnabled(): void {
   try {
     const content = existsSync(configPath) ? readFileSync(configPath, 'utf-8') : ''
     if (content.includes('codex_hooks')) return
-    const section = content.includes('[features]') ? '' : '\n[features]\n'
-    const line = 'codex_hooks = true\n'
-    appendFileSync(configPath, section + line)
+    const line = 'codex_hooks = true'
+    // Appending to EOF would land the key in whichever table comes last,
+    // so insert it directly under an existing [features] header.
+    const header = /^[ \t]*\[features\][ \t]*(#.*)?$/m.exec(content)
+    let next: string
+    if (header) {
+      const at = header.index + header[0].length
+      next = content.slice(0, at) + '\n' + line + content.slice(at)
+    } else {
+      const sep = content && !content.endsWith('\n') ? '\n' : ''
+      next = content + sep + '\n[features]\n' + line + '\n'
+    }
+    writeFileSync(configPath, next)
     log('hooks', 'enabled codex_hooks in ~/.codex/config.toml')
   } catch (err) {
     log('hooks', 'failed to enable codex_hooks', err instanceof Error ? err.message : err)
