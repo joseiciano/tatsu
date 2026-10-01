@@ -901,10 +901,18 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       setDialogActionNotice(null)
 
       void (async () => {
-        const planResult =
-          direction === 'sync-to-disk'
-            ? await backend.planHarnessConfigSyncToDisk({ scope })
-            : await backend.planHarnessConfigAdoptFromDisk({ scope })
+        let planResult: Awaited<ReturnType<typeof backend.planHarnessConfigSyncToDisk>>
+        try {
+          planResult =
+            direction === 'sync-to-disk'
+              ? await backend.planHarnessConfigSyncToDisk({ scope })
+              : await backend.planHarnessConfigAdoptFromDisk({ scope })
+        } catch (err) {
+          if (isStale()) return
+          setDialogActionError(requestFailureMessage(err))
+          setDialogStage('idle')
+          return
+        }
 
         if (isStale()) return
 
@@ -933,18 +941,23 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         // apply-fresh-plan: a review-equivalent, drift-bearing plan from
         // the direction-specific planner that matches this outcome.
         setDialogStage('applying')
-        const applyResult =
-          direction === 'sync-to-disk'
-            ? await backend.syncHarnessConfigToDisk({
-                scope: freshPlan.scope,
-                planId: freshPlan.planId,
-                confirmed: true
-              })
-            : await backend.adoptHarnessConfigFromDisk({
-                scope: freshPlan.scope,
-                planId: freshPlan.planId,
-                confirmed: true
-              })
+        let applyResult: Awaited<ReturnType<typeof backend.syncHarnessConfigToDisk>>
+        try {
+          applyResult =
+            direction === 'sync-to-disk'
+              ? await backend.syncHarnessConfigToDisk({
+                  scope: freshPlan.scope,
+                  planId: freshPlan.planId,
+                  confirmed: true
+                })
+              : await backend.adoptHarnessConfigFromDisk({
+                  scope: freshPlan.scope,
+                  planId: freshPlan.planId,
+                  confirmed: true
+                })
+        } catch (err) {
+          applyResult = { ok: false, error: { code: 'internal-error', message: requestFailureMessage(err) } }
+        }
 
         // REQ-021/RISK-004: an apply already dispatched remains a
         // confirmed operation against the backend it was sent to, but a
@@ -969,10 +982,15 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         const originalError = applyResult.error.message
         setDialogActionError(originalError)
 
-        const recoveryResult = await backend.compareHarnessConfig({ scope })
+        let recoveryResult: Awaited<ReturnType<typeof backend.compareHarnessConfig>> | null
+        try {
+          recoveryResult = await backend.compareHarnessConfig({ scope })
+        } catch {
+          recoveryResult = null
+        }
         if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
 
-        if (!recoveryResult.ok) {
+        if (!recoveryResult || !recoveryResult.ok) {
           setDialogReviewUsable(false)
           setDialogActionError(`${originalError} Unable to refresh this comparison — cancel and start Sync again.`)
           setDialogStage('idle')
