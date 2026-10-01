@@ -14,6 +14,9 @@ vi.mock('fs', () => ({
   appendFileSync: (p: string, data: string) => {
     fsState.files.set(p, (fsState.files.get(p) ?? '') + data)
   },
+  unlinkSync: (p: string) => {
+    fsState.files.delete(p)
+  },
   mkdirSync: () => {},
   readdirSync: () => [],
   statSync: () => ({ mtimeMs: 0 })
@@ -24,15 +27,21 @@ vi.mock('../debug', () => ({
 }))
 
 vi.mock('../hooks', () => ({
-  makeHookCommand: (event: string) =>
-    `bash -c 'd=/tmp/harness-status; printf "${event}" >> "$d/$h.ndjson"'`
+  makeHookScript: () => '#!/bin/bash\nprintf "$1" >> /tmp/harness-status/x.ndjson\n'
 }))
 
 import { homedir } from 'os'
 import { join } from 'path'
-import { hooksInstalled, installHooks, hookEvents, uninstallHooks } from './codex'
+import {
+  hooksInstalled,
+  installHooks,
+  hookEvents,
+  uninstallHooks,
+  makeCodexHookCommand
+} from './codex'
 
 const HOOKS_PATH = join(homedir(), '.codex', 'hooks.json')
+const SCRIPT_PATH = join(homedir(), '.codex', 'harness-hook.sh')
 
 beforeEach(() => {
   fsState.files.clear()
@@ -81,7 +90,7 @@ describe('codex hook install / dedup', () => {
     for (const event of hookEvents) {
       const entries = data.hooks[event]
       expect(entries).toHaveLength(1)
-      expect(entries[0].hooks[0].command).toContain('/tmp/harness-status')
+      expect(entries[0].hooks[0].command).toBe(makeCodexHookCommand(event))
     }
   })
 
@@ -128,7 +137,7 @@ describe('codex hook install / dedup', () => {
     expect(after.hooks.PreToolUse).toContainEqual(userHook)
     for (const event of hookEvents) {
       const harnessEntries = (after.hooks[event] as Array<{ hooks: { command: string }[] }>).filter(
-        (e) => e.hooks.some((h) => h.command.includes('/tmp/harness-status'))
+        (e) => e.hooks.some((h) => h.command.includes('harness-hook.sh'))
       )
       expect(harnessEntries).toHaveLength(1)
     }
@@ -149,6 +158,57 @@ describe('codex hook install / dedup', () => {
       { hooks: [{ type: 'command', command: 'echo user hook' }] }
     ])
     expect(final.hooks?.PreToolUse).toBeUndefined()
+  })
+})
+
+describe('codex hook script', () => {
+  it('installHooks() writes the script and points every entry at it', () => {
+    installHooks()
+    expect(fsState.files.get(SCRIPT_PATH)).toContain('#!/bin/bash')
+    const data = JSON.parse(fsState.files.get(HOOKS_PATH) as string)
+    for (const event of hookEvents) {
+      expect(data.hooks[event][0].hooks[0].command).toBe(
+        `bash '${SCRIPT_PATH}' ${event}`
+      )
+    }
+  })
+
+  it('installHooks() replaces legacy inline bash -c entries', () => {
+    fsState.files.set(
+      HOOKS_PATH,
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: 'command',
+                  command: "bash -c 'd=/tmp/harness-status; printf Stop >> \"$d/$h.ndjson\"'"
+                }
+              ]
+            }
+          ]
+        }
+      })
+    )
+    installHooks()
+    const data = JSON.parse(fsState.files.get(HOOKS_PATH) as string)
+    expect(data.hooks.Stop).toHaveLength(1)
+    expect(data.hooks.Stop[0].hooks[0].command).toBe(makeCodexHookCommand('Stop'))
+  })
+
+  it('hook commands are stable across installs so Codex trust survives', () => {
+    installHooks()
+    const first = fsState.files.get(HOOKS_PATH)
+    installHooks()
+    expect(fsState.files.get(HOOKS_PATH)).toBe(first)
+  })
+
+  it('uninstallHooks() removes the script', () => {
+    installHooks()
+    uninstallHooks()
+    expect(fsState.files.has(SCRIPT_PATH)).toBe(false)
+    expect(hooksInstalled()).toBe(false)
   })
 })
 

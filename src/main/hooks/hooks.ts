@@ -49,6 +49,23 @@ export function makeHookCommand(event: string): string {
   return `bash -c '${inner}'`
 }
 
+// Same NDJSON writer as makeHookCommand, as a standalone script that takes
+// the event name as $1. Codex trusts hooks by the hash of their command
+// text, so its hooks.json entries point at this script with a fixed
+// command; logic changes ship by rewriting the script, not the command,
+// and don't send the user back to /hooks to re-approve.
+export function makeHookScript(): string {
+  return [
+    '#!/bin/bash',
+    '# Installed by Harness. Removed by Settings > Status hooks > Remove hooks.',
+    'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
+    `d=${STATUS_DIR}; mkdir -p "$d"`,
+    'p=$(cat); [ -z "$p" ] && p=null',
+    'printf \'{"event":"%s","ts":%s,"payload":%s}\\n\' "$1" "$(date +%s)" "$p" >> "$d/$h.ndjson"',
+    ''
+  ].join('\n')
+}
+
 interface HookEvent {
   event: string
   ts: number

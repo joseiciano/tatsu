@@ -1277,7 +1277,8 @@ const setQuestStep = useCallback((next: QuestStep) => {
           <span className="text-warning text-sm flex-1">
             Harness installs status hooks at <code className="text-xs">~/.claude/settings.json</code> to detect
             agent state (waiting, processing, needs approval). They only fire for agents you
-            launch inside Harness and can be removed at any time from Settings.
+            launch inside Harness and can be removed at any time from Settings. Codex users:
+            approve them once by running <code className="text-xs">/hooks</code> in a Codex tab.
           </span>
           <button
             onClick={handleAcceptHooks}
