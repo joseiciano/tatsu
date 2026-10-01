@@ -142,6 +142,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   // in-flight planner/apply continuation can tell it's been superseded
   // (REQ-021, TASK-012).
   const dialogTokenRef = useRef(0)
+  // Mirrors the scope key of whatever dialog is currently open (or null
+  // when none is), updated synchronously alongside dialogOpen/dialogReview.
+  // A `useCallback` closure only ever sees the `dialogReview` value from
+  // the render that created it, so a slower comparison response can't rely
+  // on that state to detect a *different* dialog opened by a faster
+  // request in the meantime; this ref always reflects the live value
+  // (REQ-021, TASK-007 "current dialog identity").
+  const openDialogScopeKeyRef = useRef<HarnessConfigScopeKey | null>(null)
 
   const clearSyncNoticeTimeouts = useCallback(() => {
     for (const timeoutId of syncNoticeTimeoutsRef.current.values()) {
@@ -180,6 +188,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setActionError(null)
     setScopeStatusState({})
     dialogTokenRef.current += 1
+    openDialogScopeKeyRef.current = null
     setDialogOpen(false)
     setDialogReview(null)
     setDialogStage('idle')
@@ -703,6 +712,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   // `dialogStage === 'applying'`.
   const closeDialog = useCallback(() => {
     dialogTokenRef.current += 1
+    openDialogScopeKeyRef.current = null
     setDialogOpen(false)
     setDialogReview(null)
     setDialogStage('idle')
@@ -735,7 +745,19 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
           showScopeNotice(key, 'Already in sync', backendId, generation)
           return
         }
+        // REQ-021: don't clobber a dialog the user may be actively
+        // reviewing (or already mid-outcome on) for a *different* scope —
+        // only this scope's own dialog may be opened/replaced here. Check
+        // the live ref, not `dialogReview` state, since this closure's
+        // `dialogReview` is frozen to whatever it was when this async call
+        // started and can't see a dialog a faster concurrent Sync opened
+        // since.
+        if (openDialogScopeKeyRef.current !== null && openDialogScopeKeyRef.current !== key) {
+          showScopeNotice(key, 'Close the current sync review to compare this scope', backendId, generation)
+          return
+        }
         dialogTokenRef.current += 1
+        openDialogScopeKeyRef.current = key
         setDialogAgentName(getAgentInfo(scope.agentKind).displayName)
         setDialogResourceLabel(TABS.find((t) => t.id === scope.resourceType)?.label ?? scope.resourceType)
         setDialogReview(toConfigSyncReview(result.value))
