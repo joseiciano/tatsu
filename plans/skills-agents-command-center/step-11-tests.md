@@ -39,13 +39,13 @@ Steps 2 through 10 each add their own focused tests when implemented. Step 11 is
 
 - GOAL-001: Confirm every contract Step 11 tests depends on exists, and determine which of the 15 critical cases are already covered.
 
-- [ ] **TASK-001**: Verify that the Steps 2 through 10 prerequisites are present before any test work begins.
+- [x] **TASK-001**: Verify that the Steps 2 through 10 prerequisites are present before any test work begins.
   - Confirm `src/main/harness-config/` exports a service factory accepting `HarnessConfigServiceDeps` (injected `homedir`, resolver-owned known-root resolution, clock, UUID generation, `loadDesiredResources()`, `replaceDesiredScope(scope, resources)`).
   - Confirm `src/shared/state/harness-config/` exports `initialHarnessConfig`, `harnessConfigScopeKey`, and the seven `harnessConfig/*` event variants.
   - Confirm `src/shared/agent-registry` exports `AGENT_REGISTRY` entries carrying `configCapabilities`, `HarnessConfigResourceType`, and `AgentConfigCapability`.
   - Confirm the fifteen renderer/backend harness-config methods exist for import-free compile safety (typecheck only; Step 11 does not test the transport adapter — [Step 6](./step-06-transport-request-handlers.md) owns `src/main/harness-config-transport/harness-config-transport.test.ts`).
   - If any prerequisite is absent, STOP this step without editing test files; the prerequisite step owns the missing contract.
-- [ ] **TASK-002**: Audit the four declared test files against the 15 critical cases and record the gap list before editing.
+- [x] **TASK-002**: Audit the four declared test files against the 15 critical cases and record the gap list before editing.
   - Run `npx vitest run src/shared/state/harness-config/harness-config.test.ts src/shared/state/wire-merge.test.ts src/shared/agent-registry/agent-registry.test.ts src/main/harness-config/harness-config.test.ts` and note any pre-existing failures; a pre-existing failure in a file owned by this step is in scope, one in another package is reported and left alone.
   - For each of the 15 cases (TEST-001 through TEST-015), search the corresponding test file for an existing test defending that behavior. Produce the final gap list as the working basis for Phases 2 and 3; do not write the audit to a scratch document.
 
@@ -53,25 +53,25 @@ Steps 2 through 10 each add their own focused tests when implemented. Step 11 is
 
 - GOAL-002: Guarantee reducer-event semantics, wire-snapshot skew safety, and exact capability metadata.
 
-- [ ] **TASK-003**: Complete `src/shared/state/harness-config/harness-config.test.ts` coverage for the reducer-event area.
+- [x] **TASK-003**: Complete `src/shared/state/harness-config/harness-config.test.ts` coverage for the reducer-event area.
   - If absent, add one test per event variant: `loadingChanged` toggles only `loading` (identical value returns the original state object), `errorChanged` sets/clears only `error`, `resourcesLoaded` replaces only the scoped harness rows inside the targeted logical array and updates `lastScannedAt` only, `comparisonLoaded` stores only the `HarnessConfigComparison` (scope, status, diskOnly, configOnly, changed, comparedAt — no planId, direction, fingerprint, or syncedAt) at `harnessConfigScopeKey(comparison.scope)` and never updates `lastSyncedAt`, `syncApplied` carries `{ scope, syncedAt }` and is the sole writer of `lastSyncedAt`, `resourceUpserted` inserts at its deterministic sorted position, and `resourceDeleted` removes only the entry matching `agentKind` + `resourceType` + `id` (TEST-008, reducer half).
   - Add the delete-isolation assertions: a `resourceDeleted` event for an absent ID returns the original state unchanged, and a same-ID Claude skill alias in the other logical view (Skills vs Commands) is NOT removed by a scoped Commands delete (part of TEST-008 and TEST-012).
   - Add the comparison-scope-key assertions: a Claude Skills comparison and a Claude Commands comparison occupy different `comparisons` keys under `harnessConfigScopeKey`, and the same resource type for two harnesses occupies different keys; storing one never touches the other (TEST-012, slice half).
   - Keep every assertion on observable state (returned slice object fields), never on reducer internals.
-- [ ] **TASK-004**: Complete `src/shared/state/wire-merge.test.ts` coverage for snapshot skew.
+- [x] **TASK-004**: Complete `src/shared/state/wire-merge.test.ts` coverage for snapshot skew.
   - If absent, add one test proving an older snapshot with no `harnessConfig` key receives the full `initialHarnessConfig` default, and one test proving a snapshot carrying `resources`/`loading` but omitting `lastSyncedAt` preserves the sent values while `lastSyncedAt` is filled from the initial default (TEST-016).
   - Assert against the returned merged snapshot object only; no reducer invocation in these tests.
-- [ ] **TASK-005**: Verify `src/shared/agent-registry/agent-registry.test.ts` defends the capability matrix and add gaps.
+- [x] **TASK-005**: Verify `src/shared/agent-registry/agent-registry.test.ts` defends the capability matrix and add gaps.
   - Required existing-or-added coverage (TEST-017): every `AgentKind` entry exposes exactly three capabilities in `agents`, `skills`, `commands` order with the exact `status`, `label`, and `notes` values from [Step 3](./step-03-harness-capability-metadata.md); Claude `skills` carries exactly `aliasResourceTypes: ['commands']` with its explanatory note; Claude `commands` is independently supported with no reciprocal alias declaration; no capability's `aliasResourceTypes` contains its own `resourceType`; all three Pi capabilities are status `unknown` with the exact note `Pi config management is deferred; its resource capabilities and layouts are not yet specified.`; `unsupported` rows remain visible and disabled with their capability note; `getAgentInfo` returns a registry entry for every `AgentKind`, with capability rows matching the Step 2 resolver matrix.
 
 ### Implementation Phase 3: Main-service coverage
 
 - GOAL-003: Guarantee path confinement, drift classification, backup ordering, confirmation gates, and conversion identity against real temporary roots.
 
-- [ ] **TASK-006**: Complete path-validation and traversal-rejection coverage in `src/main/harness-config/harness-config.test.ts`.
+- [x] **TASK-006**: Complete path-validation and traversal-rejection coverage in `src/main/harness-config/harness-config.test.ts`.
   - TEST-001 (unknown harness resource path cannot be written): a create whose logical name does not match the resolver's filename pattern for the selected harness/resource (for example a name with characters outside the allowed lowercase alphanumeric/hyphen segments, or a Codex agents name other than the fixed `AGENTS.md`), and an update/delete of an ID absent from a fresh recognized inventory, are both rejected with the structured invalid-name/unknown-resource error and perform zero writes (assert the temporary root snapshot is unchanged per REQ-004).
   - TEST-002 (`../` path traversal is rejected): a create/update target whose resolved path would escape the harness root — including a name or persisted path containing a `..` segment, an absolute path, a NUL byte, and a platform separator variant — is rejected before any filesystem call; additionally assert a sibling-prefix candidate (root `<tmp>/claude-root` vs `<tmp>/claude-root-evil`) does NOT satisfy lexical containment. Each rejection asserts zero files created and zero desired-state changes.
-- [ ] **TASK-007**: Complete disk/config sync-plan coverage in `src/main/harness-config/harness-config.test.ts`.
+- [x] **TASK-007**: Complete disk/config sync-plan coverage in `src/main/harness-config/harness-config.test.ts`.
   - TEST-003 (disk-only file appears in sync plan): seed a real file matching a resolver pattern with no corresponding desired resource; assert `planSyncToDisk`/`planAdoptFromDisk` (or the shared plan generator) returns the ref in `diskOnly` with `existsOnDisk: true`, correct `relativePath`, and a real SHA-256 hash, and that the status reflects the disk-only difference.
   - TEST-004 (config-only file appears in sync plan): seed a desired resource via the injected desired-state dependency with no file on disk; assert the plan returns the ref in `configOnly` with `existsOnDisk: false` and a resolver-derived safe absolute path.
   - TEST-005 (changed hash appears as conflict): seed the same physical resource on disk and in desired state with differing bytes; assert the plan classifies it in `changed` as an explicit `{ disk, config }` pair and that the plan status is `conflict` per the status precedence (any changed entry forces `conflict` even when other categories are empty).
@@ -92,14 +92,14 @@ Steps 2 through 10 each add their own focused tests when implemented. Step 11 is
 
 - GOAL-004: Run the focused and full verification gates and commit the consolidated coverage.
 
-- [ ] **TASK-010**: Run the four focused test files and resolve every failure.
+- [x] **TASK-010**: Run the four focused test files and resolve every failure.
   - Command: `npx vitest run src/shared/state/harness-config/harness-config.test.ts src/shared/state/wire-merge.test.ts src/shared/agent-registry/agent-registry.test.ts src/main/harness-config/harness-config.test.ts`.
   - A failure caused by a production defect is fixed in the owning package per REQ-007 and the focused run is repeated; a test is never adjusted to pass over an invariant violation.
-- [ ] **TASK-011**: Run the full verification gates.
+- [x] **TASK-011**: Run the full verification gates.
   - `npx vitest run` (entire suite) must exit successfully, proving the new tests are full-suite-safe and did not break sibling packages.
   - `pnpm typecheck` must exit successfully across all TypeScript project references (test files included in typechecking must compile without casts that hide contract mismatches).
   - `pnpm build` must exit successfully; a test-only change should not alter bundles, so any build failure indicates an accidental production edit that must be reviewed.
-- [ ] **TASK-012**: Review the final diff against scope, run identifier validation, and commit.
+- [x] **TASK-012**: Review the final diff against scope, run identifier validation, and commit.
   - Verify the diff touches only the four test files, permitted production fixes under REQ-007, and this plan file; verify no new dependency in `package.json` / `pnpm-lock.yaml`; verify no test asserts source text or implementation wiring.
   - Run the identifier declaration validation from the `plan-implementation-plan` skill against this plan file: duplicate TASK/GOAL table declarations and duplicate bullet-style declaration identifiers MUST both produce zero rows.
   - Commit with message `test: consolidate harness config regression coverage` and immediately run `git push origin <current-branch>`. Do not include unrelated working-tree changes.
