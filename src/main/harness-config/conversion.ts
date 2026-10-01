@@ -8,20 +8,22 @@
 //
 // This module is package-internal: external code imports the two
 // generators through the `src/main/harness-config` barrel (TASK-005);
-// `slugifyLogicalName` and `extractFrontMatterDescription` are
-// exported here only for direct, same-package unit testing (GUD-001)
-// and are intentionally left out of the barrel.
+// `slugifyLogicalName`, `extractFrontMatterDescription`, and
+// `conversionDestinationName` are exported here only for same-package
+// use and unit testing (GUD-001) and are intentionally left out of the
+// barrel.
 
 import type { HarnessConfigConversionDraft, HarnessConfigConversionSource } from './types'
 import { HarnessConfigError } from './types'
 
 const FRONTMATTER_DESCRIPTION_PATTERN = /^description:\s*(.*)$/
 const MAX_FRONTMATTER_SCAN_LINES = 50
-const MAX_SLUG_LENGTH = 80
+const MAX_SLUG_LENGTH = 64
 
 /** Lowercases, keeps ASCII `[a-z0-9]`, collapses every other character
  *  run into a single `-`, trims leading/trailing `-`, and truncates to
- *  80 characters with any resulting trailing `-` trimmed (REQ-003). An
+ *  64 characters (Claude's skill-name limit) with any resulting
+ *  trailing `-` trimmed (REQ-003). An
  *  empty result throws `HarnessConfigError` (`invalid-name`). */
 export function slugifyLogicalName(value: string): string {
   const lowered = (value ?? '').toLowerCase()
@@ -61,15 +63,16 @@ export function extractFrontMatterDescription(content: string): string | null {
   return description
 }
 
-/** Deterministic destination naming (REQ-003): slugify the display
- *  label, falling back to the source logical name only when the label
- *  itself slugifies to nothing. Throws `invalid-name` only when both
- *  are empty. */
-function destinationNameFor(source: HarnessConfigConversionSource): string {
+/** Deterministic destination naming (REQ-003): slugify the
+ *  path-qualified logical name (`frontend/review` -> `frontend-review`)
+ *  so nested sources with the same basename stay distinct, falling back
+ *  to the display label only when the name slugifies to nothing. Throws
+ *  `invalid-name` only when both are empty. */
+export function conversionDestinationName(source: Pick<HarnessConfigConversionSource, 'name' | 'label'>): string {
   try {
-    return slugifyLogicalName(source.label)
-  } catch {
     return slugifyLogicalName(source.name)
+  } catch {
+    return slugifyLogicalName(source.label)
   }
 }
 
@@ -85,7 +88,7 @@ export function createCommandFromSkill(skill: HarnessConfigConversionSource): Ha
   if (skill.resourceType !== 'skills') {
     throw new HarnessConfigError('unknown-resource', 'createCommandFromSkill requires a skills source')
   }
-  const destinationName = destinationNameFor(skill)
+  const destinationName = conversionDestinationName(skill)
   const extracted = extractFrontMatterDescription(skill.content)
   const description = extracted && extracted.length > 0 ? extracted : `Run the ${destinationName} skill`
   const content =
@@ -93,7 +96,7 @@ export function createCommandFromSkill(skill: HarnessConfigConversionSource): Ha
     `description: ${description}\n` +
     `---\n` +
     `\n` +
-    `Use the ${destinationName} skill.\n` +
+    `Use the ${skill.label} skill.\n` +
     `\n` +
     `${sourceMetadataComment(skill)}\n`
   return { destinationResourceType: 'commands', destinationName, content }
@@ -104,11 +107,11 @@ export function createSkillFromCommand(command: HarnessConfigConversionSource): 
   if (command.resourceType !== 'commands') {
     throw new HarnessConfigError('unknown-resource', 'createSkillFromCommand requires a commands source')
   }
-  const destinationName = destinationNameFor(command)
+  const destinationName = conversionDestinationName(command)
   const content =
     `# ${destinationName}\n` +
     `\n` +
-    `Use this skill when the user requests the \`${destinationName}\` command behavior.\n` +
+    `Use this skill when the user requests the \`${command.label}\` command behavior.\n` +
     `\n` +
     `${sourceMetadataComment(command)}\n`
   return { destinationResourceType: 'skills', destinationName, content }

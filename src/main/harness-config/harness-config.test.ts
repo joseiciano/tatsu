@@ -847,6 +847,47 @@ describe('confirmation, staleness, and path security', () => {
       'stale-plan'
     )
   })
+  // TEST-015: delete and sync-to-disk plans share the update plan's gate —
+  // `confirmed: false`, a missing `confirmed`, an unknown plan id, and a
+  // reused plan id all reject with zero disk or desired-state changes, while
+  // the confirmed control run proves the gate is the confirmation value.
+  it.each([
+    ['delete', (fixture: Fixture, scope: Scope) => fixture.service.prepareDelete(scope, fixture.service.scan(scope)[0].id)],
+    ['sync-to-disk', (fixture: Fixture, scope: Scope) => {
+      fixture.desired.resources = [
+        refToDesired(fixture.service.scan(scope)[0], 'desired'),
+        refToDesired({ id: physicalId('claude', 'agents', 'created.md'), agentKind: 'claude', relativePath: 'created.md', resourceType: 'agents' }, 'created')
+      ]
+      return fixture.service.planSyncToDisk(scope)
+    }]
+  ] as const)('rejects unconfirmed, unknown, and reused %s plans without writing', async (kind, prepare) => {
+    const { fixture, scope, target } = createFixture()
+    const plan = prepare(fixture, scope)
+    const before = snapshotTree(fixture.root)
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }), 'unconfirmed-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId }), 'unconfirmed-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: 'missing', confirmed: true }), 'unknown-plan')
+    expect(snapshotTree(fixture.root)).toEqual(before)
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    if (kind === 'delete') {
+      expect(existsSync(target)).toBe(false)
+      expect(fixture.desired.replaceDesiredScope).toHaveBeenCalledTimes(1)
+    } else {
+      expect(readFileSync(target, 'utf8')).toBe('desired')
+      expect(readFileSync(join(fixture.roots.agents, 'created.md'), 'utf8')).toBe('created')
+      expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+    }
+    const afterControl = snapshotTree(fixture.root)
+    const callsAfterControl = fixture.desired.replaceDesiredScope.mock.calls.length
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+    expect(snapshotTree(fixture.root)).toEqual(afterControl)
+    expect(fixture.desired.replaceDesiredScope).toHaveBeenCalledTimes(callsAfterControl)
+  })
+
   it.each([
     ['disk', (fixture: Fixture, scope: Scope) => put(fixture.roots.agents, 'new.md', 'drift')],
     ['desired config', (fixture: Fixture) => { fixture.desired.resources.push({ id: physicalId('claude', 'agents', 'x.md'), agentKind: 'claude', resourceType: 'agents', relativePath: 'x.md', content: 'x', hash: hashBytes('x'), updatedAt: NOW }) }],
@@ -1446,7 +1487,7 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft.name).toBe('my-skill')
     expect(draft.relativePath).toBe('my-skill.md')
     expect(draft.content).toBe(
-      '---\ndescription: Does a thing\n---\n\nUse the my-skill skill.\n\n<!-- Converted by Tatsu from opencode skills My Skill/SKILL.md -->\n'
+      '---\ndescription: Does a thing\n---\n\nUse the My Skill skill.\n\n<!-- Converted by Tatsu from opencode skills My Skill/SKILL.md -->\n'
     )
   })
 
@@ -1466,7 +1507,7 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft.name).toBe('deploy-now')
     expect(draft.relativePath).toBe('deploy-now/SKILL.md')
     expect(draft.content).toBe(
-      '# deploy-now\n\nUse this skill when the user requests the `deploy-now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
+      '# deploy-now\n\nUse this skill when the user requests the `Deploy Now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
     )
   })
 
@@ -1485,6 +1526,85 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(second.status).toBe('existing')
     expect(second.ref.relativePath).toBe('repeat.md')
   })
+
+  // TEST-010: command-to-skill conversion mirrors TEST-009 — a repeated run
+  // and an independent existing destination both return the existing ref
+  // without writing, overwriting, or duplicating the skill file.
+  it('repeated command-to-skill conversion and an existing destination return existing without writes', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'opencode-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'opencode-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['opencode-commands'], 'ops/deploy.md', 'deploy body')
+    put(fixture.roots['opencode-commands'], 'release.md', 'release body')
+    put(fixture.roots['opencode-skills'], 'release/SKILL.md', 'independent skill')
+    const sources = fixture.service.scan(scope)
+    const deploy = sources.find((ref: FileRef) => ref.relativePath === 'ops/deploy.md') as FileRef
+    const release = sources.find((ref: FileRef) => ref.relativePath === 'release.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, deploy.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.relativePath).toBe('ops-deploy/SKILL.md')
+    put(fixture.roots['opencode-skills'], 'ops-deploy/SKILL.md', first.content as string)
+    const before = snapshotTree(fixture.root)
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, deploy.id)
+    const again = fixture.service.prepareSkillFromCommand(scope, deploy.id)
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('ops-deploy/SKILL.md')
+    expect(again).toEqual(repeat)
+
+    const existing = fixture.service.prepareSkillFromCommand(scope, release.id)
+    expect(existing.status).toBe('existing')
+    expect(existing.ref.relativePath).toBe('release/SKILL.md')
+    expect(existing).not.toHaveProperty('planId')
+
+    expect(snapshotTree(fixture.root)).toEqual(before)
+    expect(readFileSync(join(fixture.roots['opencode-skills'], 'release/SKILL.md'), 'utf8')).toBe('independent skill')
+    expect(fixture.service.scan(destination).map((ref: FileRef) => ref.relativePath)).toEqual([
+      'ops-deploy/SKILL.md',
+      'release/SKILL.md'
+    ])
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+  })
+
+  it('keeps nested Claude commands with the same basename distinct via path-qualified names', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    const destination = { agentKind: 'claude', resourceType: 'skills' }
+    addResolver(fixture, scope, 'claude-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['claude-commands'], 'frontend/review.md', 'frontend review')
+    put(fixture.roots['claude-commands'], 'backend/review.md', 'backend review')
+    const sources = fixture.service.scan(scope)
+    const frontend = sources.find((ref: FileRef) => ref.relativePath === 'frontend/review.md') as FileRef
+    const backend = sources.find((ref: FileRef) => ref.relativePath === 'backend/review.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, frontend.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.name).toBe('frontend-review')
+    expect(first.relativePath).toBe('frontend-review/SKILL.md')
+    expect(first.content).toBe(
+      '# frontend-review\n\nUse this skill when the user requests the `review` command behavior.\n\n<!-- Converted by Tatsu from claude commands frontend/review.md -->\n'
+    )
+    put(fixture.roots['claude-skills'], 'frontend-review/SKILL.md', first.content as string)
+
+    const second = fixture.service.prepareSkillFromCommand(scope, backend.id) as AnyRecord
+    expect(second.status).toBe('draft')
+    expect(second.name).toBe('backend-review')
+    expect(second.relativePath).toBe('backend-review/SKILL.md')
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, frontend.id) as Conversion
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('frontend-review/SKILL.md')
+  })
 })
 
 describe('conversion content generators (TEST-001/TEST-002)', () => {
@@ -1493,8 +1613,9 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
     expect(slugifyLogicalName('  __Weird///Name__  ')).toBe('weird-name')
     expect(slugifyLogicalName('already-slug')).toBe('already-slug')
     const long = 'a'.repeat(90)
-    expect(slugifyLogicalName(long)).toBe('a'.repeat(80))
-    expect(slugifyLogicalName(`${'a'.repeat(79)}-!!!`)).toBe('a'.repeat(79))
+    expect(slugifyLogicalName(long)).toBe('a'.repeat(64))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}-!!!`)).toBe('a'.repeat(63))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}/review`)).toBe('a'.repeat(63))
   })
 
   it('throws invalid-name when a label has no derivable slug', () => {
@@ -1552,16 +1673,41 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
     ).toThrow()
   })
 
-  it('falls back to the source logical name when the label has no derivable slug', () => {
+  it('prefers the path-qualified logical name over the label', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: 'frontend/review',
+      label: 'review',
+      relativePath: 'frontend/review.md',
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe('frontend-review')
+  })
+
+  it('falls back to the label when name has no derivable slug', () => {
     const draft = createCommandFromSkill({
       agentKind: 'codex',
       resourceType: 'skills',
-      name: 'fallback-name',
-      label: '!!!',
-      relativePath: 'fallback-name/SKILL.md',
+      name: '!!!',
+      label: 'Fallback Label',
+      relativePath: '!!!/SKILL.md',
       content: 'body'
     })
-    expect(draft.destinationName).toBe('fallback-name')
+    expect(draft.destinationName).toBe('fallback-label')
+  })
+
+  it('caps destination names at 64 characters', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: `${'x'.repeat(40)}/${'y'.repeat(40)}`,
+      label: 'y'.repeat(40),
+      relativePath: `${'x'.repeat(40)}/${'y'.repeat(40)}.md`,
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe(`${'x'.repeat(40)}-${'y'.repeat(23)}`)
+    expect(draft.destinationName).toHaveLength(64)
   })
 })
 
