@@ -40,6 +40,15 @@ import type {
 } from '../../shared/transport/transport'
 import type { ElectronAPI } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
+import type {
+  HarnessConfigConversionRequest,
+  HarnessConfigPrepareCreateRequest,
+  HarnessConfigPrepareDeleteRequest,
+  HarnessConfigPrepareUpdateRequest,
+  HarnessConfigReadRequest,
+  HarnessConfigScope,
+  HarnessConfigScopeRequest
+} from '../types'
 
 export type { ElectronOnlyHelpers }
 
@@ -568,7 +577,40 @@ export function buildBackend(
     connectionsSetLastConnected: (id: string, when?: number) =>
       reqLocal('connections:setLastConnected', id, when),
     connectionsGetToken: (id: string) => reqLocal('connections:getToken', id),
-    connectionsHasToken: (id: string) => reqLocal('connections:hasToken', id)
+    connectionsHasToken: (id: string) => reqLocal('connections:hasToken', id),
+
+    // Harness configuration (skills/agents/commands command center,
+    // Step 6). Active-routed — a remote Config page manages that
+    // backend's own harness directories and mirrored state (ALT-008).
+    scanHarnessConfig: (request: HarnessConfigScopeRequest) => req('harnessConfig:scan', request),
+    readHarnessConfigFile: (request: HarnessConfigReadRequest) =>
+      req('harnessConfig:readFile', request),
+    compareHarnessConfig: (request: HarnessConfigScopeRequest) =>
+      req('harnessConfig:compare', request),
+    prepareHarnessConfigCreate: (request: HarnessConfigPrepareCreateRequest) =>
+      req('harnessConfig:prepareCreate', request),
+    prepareHarnessConfigUpdate: (request: HarnessConfigPrepareUpdateRequest) =>
+      req('harnessConfig:prepareUpdate', request),
+    prepareHarnessConfigDelete: (request: HarnessConfigPrepareDeleteRequest) =>
+      req('harnessConfig:prepareDelete', request),
+    planHarnessConfigSyncToDisk: (request: HarnessConfigScopeRequest) =>
+      req('harnessConfig:planSyncToDisk', request),
+    planHarnessConfigAdoptFromDisk: (request: HarnessConfigScopeRequest) =>
+      req('harnessConfig:planAdoptFromDisk', request),
+    createHarnessConfigFile: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+      req('harnessConfig:createFile', request),
+    updateHarnessConfigFile: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+      req('harnessConfig:updateFile', request),
+    deleteHarnessConfigFile: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+      req('harnessConfig:deleteFile', request),
+    syncHarnessConfigToDisk: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+      req('harnessConfig:syncToDisk', request),
+    adoptHarnessConfigFromDisk: (request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }) =>
+      req('harnessConfig:adoptFromDisk', request),
+    prepareHarnessConfigCommandFromSkill: (request: HarnessConfigConversionRequest) =>
+      req('harnessConfig:prepareCommandFromSkill', request),
+    prepareHarnessConfigSkillFromCommand: (request: HarnessConfigConversionRequest) =>
+      req('harnessConfig:prepareSkillFromCommand', request)
   }
 
   return api as ElectronAPI

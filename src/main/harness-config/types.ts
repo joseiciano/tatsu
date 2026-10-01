@@ -1,33 +1,33 @@
 import type { Dirent, Stats } from 'fs'
 import type { HarnessConfigResourceType } from '../../shared/agent-registry'
 import type {
+  HarnessConfigAppliedOperation,
+  HarnessConfigApplyRequest,
+  HarnessConfigApplyResult,
   HarnessConfigComparison,
+  HarnessConfigConversionResult,
+  HarnessConfigErrorCode,
   HarnessConfigFileRef,
+  HarnessConfigMutationDirection,
+  HarnessConfigMutationPlan,
+  HarnessConfigReadFileResult,
   HarnessConfigScope,
   HarnessConfigSyncPlan,
   ManagedHarnessKind
 } from '../../shared/state/harness-config'
 
-export type HarnessConfigErrorCode =
-  | 'unsupported-scope'
-  | 'invalid-name'
-  | 'unsafe-path'
-  | 'unknown-resource'
-  | 'unconfirmed-plan'
-  | 'unknown-plan'
-  | 'stale-plan'
-  | 'scope-mismatch'
-  | 'collision'
-  | 'backup-failed'
-  | 'read-failed'
-  | 'write-failed'
-  | 'delete-failed'
-  | 'desired-state-failed'
-
-export interface HarnessConfigAppliedOperation {
-  type: 'create' | 'overwrite' | 'delete' | 'adopt'
-  id?: string
-  relativePath?: string
+// Re-exported so main-side consumers keep importing these through the
+// `src/main/harness-config` barrel. The canonical declarations live in
+// `src/shared/state/harness-config/types.ts` (REQ-006) so main and the
+// transport layer compile against one union/shape instead of two.
+export type {
+  HarnessConfigAppliedOperation,
+  HarnessConfigApplyRequest,
+  HarnessConfigApplyResult,
+  HarnessConfigConversionResult,
+  HarnessConfigErrorCode,
+  HarnessConfigMutationDirection,
+  HarnessConfigMutationPlan
 }
 
 export class HarnessConfigError extends Error {
@@ -92,49 +92,9 @@ export interface HarnessConfigDesiredResource {
   updatedAt: number
 }
 
-export type HarnessConfigMutationDirection = 'create' | 'update' | 'delete'
-
-export interface HarnessConfigMutationPlan {
-  planId: string
-  scope: HarnessConfigScope
-  direction: HarnessConfigMutationDirection
-  resource: HarnessConfigFileRef
-  generatedAt: number
-  fingerprint: string
-}
-
-export interface HarnessConfigApplyRequest {
-  scope: HarnessConfigScope
-  planId: string
-  confirmed: boolean
-}
-
-export interface HarnessConfigApplyResult {
-  scope: HarnessConfigScope
-  planId: string
-  applied: HarnessConfigAppliedOperation[]
-  resultingRefs: HarnessConfigFileRef[]
-  requiresRescan: true
-}
-
-export type HarnessConfigConversionResult =
-  | { status: 'alias'; ref: HarnessConfigFileRef }
-  | { status: 'existing'; ref: HarnessConfigFileRef }
-  | {
-      status: 'draft'
-      agentKind: ManagedHarnessKind
-      resourceType: HarnessConfigResourceType
-      name: string
-      relativePath: string
-      label: string
-      content: string
-    }
-
-export interface HarnessConfigReadResult {
-  ref: HarnessConfigFileRef
-  content: string
-  hash: string
-}
+/** Local alias kept so existing main-side call sites don't need to
+ *  rename; the canonical shape is the shared `HarnessConfigReadFileResult`. */
+export type HarnessConfigReadResult = HarnessConfigReadFileResult
 
 export interface HarnessConfigFilesystem {
   readdirSync(path: string, options: { withFileTypes: true }): Dirent[]

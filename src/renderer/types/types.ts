@@ -16,6 +16,41 @@ export type { SessionCostSummary, ClaudeAuthInfo, SubscriptionTier }
 import type { AddRepoResult } from '../../shared/repo-pick'
 export type { AddRepoResult }
 
+import type {
+  HarnessConfigApplyResult,
+  HarnessConfigComparison,
+  HarnessConfigConversionRequest,
+  HarnessConfigConversionResult,
+  HarnessConfigMutationPlan,
+  HarnessConfigPrepareCreateRequest,
+  HarnessConfigPrepareDeleteRequest,
+  HarnessConfigPrepareUpdateRequest,
+  HarnessConfigReadFileResult,
+  HarnessConfigReadRequest,
+  HarnessConfigRequestResult,
+  HarnessConfigScanResult,
+  HarnessConfigScope,
+  HarnessConfigScopeRequest,
+  HarnessConfigSyncPlan
+} from '../../shared/state/harness-config'
+export type {
+  HarnessConfigApplyResult,
+  HarnessConfigComparison,
+  HarnessConfigConversionRequest,
+  HarnessConfigConversionResult,
+  HarnessConfigMutationPlan,
+  HarnessConfigPrepareCreateRequest,
+  HarnessConfigPrepareDeleteRequest,
+  HarnessConfigPrepareUpdateRequest,
+  HarnessConfigReadFileResult,
+  HarnessConfigReadRequest,
+  HarnessConfigRequestResult,
+  HarnessConfigScanResult,
+  HarnessConfigScope,
+  HarnessConfigScopeRequest,
+  HarnessConfigSyncPlan
+}
+
 /** Per-kind dirtiness flags for a worktree. `git` reflects
  *  uncommitted changes; `scratchpad` reflects a non-empty scratchpad
  *  note. The delete-worktree flow surfaces each kind separately so the
@@ -581,6 +616,59 @@ export interface ElectronAPI {
   connectionsSetLastConnected(id: string, when?: number): Promise<boolean>
   connectionsGetToken(id: string): Promise<string | null>
   connectionsHasToken(id: string): Promise<boolean>
+
+  // Harness configuration (skills/agents/commands command center, Step 6).
+  // Every method follows the ACTIVE backend — a remote Config page must
+  // read and mutate that backend's harness directories and mirrored
+  // state, not the local Electron host (ALT-008). No method accepts a
+  // renderer-constructed path, ref, hash, fingerprint, or plan; mutation
+  // methods accept only `{ scope, planId, confirmed }` from a
+  // previously returned plan.
+  scanHarnessConfig(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigScanResult>>
+  readHarnessConfigFile(
+    request: HarnessConfigReadRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigReadFileResult>>
+  compareHarnessConfig(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigComparison>>
+  prepareHarnessConfigCreate(
+    request: HarnessConfigPrepareCreateRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
+  prepareHarnessConfigUpdate(
+    request: HarnessConfigPrepareUpdateRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
+  prepareHarnessConfigDelete(
+    request: HarnessConfigPrepareDeleteRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
+  planHarnessConfigSyncToDisk(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
+  planHarnessConfigAdoptFromDisk(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
+  createHarnessConfigFile(
+    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  updateHarnessConfigFile(
+    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  deleteHarnessConfigFile(
+    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  syncHarnessConfigToDisk(
+    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  adoptHarnessConfigFromDisk(
+    request: { scope: HarnessConfigScope; planId: string; confirmed: boolean }
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  prepareHarnessConfigCommandFromSkill(
+    request: HarnessConfigConversionRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
+  prepareHarnessConfigSkillFromCommand(
+    request: HarnessConfigConversionRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the
