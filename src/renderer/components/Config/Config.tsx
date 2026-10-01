@@ -404,7 +404,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         selected &&
         selected.scope.agentKind === scope.agentKind &&
         selected.scope.resourceType === scope.resourceType &&
-        selected.id === id
+        selected.id === id &&
+        !readFailed
       ) {
         return
       }
@@ -467,7 +468,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setReadBusy(false)
       })()
     },
-    [selected, confirmDiscard, groupsNoSearch, backend, activeBackend.id]
+    [selected, readFailed, confirmDiscard, groupsNoSearch, backend, activeBackend.id]
   )
 
   // ---- Create ----
