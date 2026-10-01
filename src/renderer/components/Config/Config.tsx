@@ -80,6 +80,10 @@ function findBadge(
   return 'synced'
 }
 
+function requestFailureMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : 'The request failed'
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
@@ -224,6 +228,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
           return
         }
         setScopeStatus(key, { busy: false, error: null })
+      } catch (err) {
+        if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+        setScopeStatus(key, { busy: false, error: requestFailureMessage(err) })
       } finally {
         const scannedSet = scannedRef.current.get(backendId) ?? new Set<HarnessConfigScopeKey>()
         scannedSet.add(key)
@@ -262,9 +269,15 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       for (const resourceType of resourceTypes) {
         const scope: HarnessConfigScope = { agentKind, resourceType }
         const key = harnessConfigScopeKey(scope)
-        const result = await backend.compareHarnessConfig({ scope })
+        let error: string | null
+        try {
+          const result = await backend.compareHarnessConfig({ scope })
+          error = result.ok ? null : result.error.message
+        } catch (err) {
+          error = requestFailureMessage(err)
+        }
         if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
-        setScopeStatus(key, { error: result.ok ? null : result.error.message })
+        setScopeStatus(key, { error })
       }
     },
     [backend, setScopeStatus]
@@ -427,14 +440,21 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       const generation = backendGenerationRef.current
 
       void (async () => {
-        const result = await backend.readHarnessConfigFile({ scope, id })
-        if (
-          activeBackendIdRef.current !== backendId ||
-          backendGenerationRef.current !== generation ||
-          readTokenRef.current !== token
-        ) {
+        const isCurrent = (): boolean =>
+          activeBackendIdRef.current === backendId &&
+          backendGenerationRef.current === generation &&
+          readTokenRef.current === token
+        let result: Awaited<ReturnType<typeof backend.readHarnessConfigFile>>
+        try {
+          result = await backend.readHarnessConfigFile({ scope, id })
+        } catch (err) {
+          if (!isCurrent()) return
+          setReadBusy(false)
+          setReadFailed(true)
+          setActionError(requestFailureMessage(err))
           return
         }
+        if (!isCurrent()) return
         if (!result.ok) {
           setReadBusy(false)
           setReadFailed(true)
@@ -537,6 +557,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       }
 
       await refreshComparisons(scope.agentKind, affectedResourceTypes(scope, resultingRef), backendId, generation)
+    } catch (err) {
+      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      setActionError(requestFailureMessage(err))
     } finally {
       if (activeBackendIdRef.current === backendId && backendGenerationRef.current === generation) {
         setMutationBusy(false)
@@ -610,6 +633,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         backendId,
         generation
       )
+    } catch (err) {
+      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      setActionError(requestFailureMessage(err))
     } finally {
       if (activeBackendIdRef.current === backendId && backendGenerationRef.current === generation) {
         setMutationBusy(false)
@@ -671,6 +697,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         backendId,
         generation
       )
+    } catch (err) {
+      if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+      setActionError(requestFailureMessage(err))
     } finally {
       if (activeBackendIdRef.current === backendId && backendGenerationRef.current === generation) {
         setMutationBusy(false)
@@ -690,7 +719,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       const key = harnessConfigScopeKey(scope)
       setScopeStatus(key, { busy: true, error: null, notice: null })
       void (async () => {
-        const result = await backend.compareHarnessConfig({ scope })
+        let result: Awaited<ReturnType<typeof backend.compareHarnessConfig>>
+        try {
+          result = await backend.compareHarnessConfig({ scope })
+        } catch (err) {
+          if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+          setScopeStatus(key, { busy: false, error: requestFailureMessage(err) })
+          return
+        }
         if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
         if (!result.ok) {
           setScopeStatus(key, { busy: false, error: result.error.message })
