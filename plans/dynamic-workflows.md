@@ -40,7 +40,8 @@ Explicitly out of scope (for now):
 - Generic / arbitrary harness support (revisit later, likely via ACP)
 - Headless step execution (later, a second `StepDriver`)
 - Event triggers (PR opened, issue labeled)
-- Merging parallel writers back into one branch (fan-out items each produce their own branch/PR instead; see "Isolation")
+- Merging parallel writers back into one branch (fan-out items each produce their own branch/PR, stacked when dependent; see "Isolation")
+- Items with more than one stacking parent (diamond dependencies); ordering-only edges cover them in v1
 
 ## Existing primitives
 
@@ -121,14 +122,37 @@ Rules:
 
 - **One run = one worktree.** All steps of a run share it. Two runs never share a worktree concurrently; launching onto a busy worktree is refused.
 - **Parallel steps inside a run must be `permissions: read-only`**, enforced through each harness's read-only mode, not by convention. Parallel writers aren't allowed in v1.
-- **Batch fan-out**: each item gets its own new worktree and branch, and usually its own PR. Nothing merges back, so the merge-back problem disappears for the most common swarm case: N independent issues.
-- **`foreach` over step output** (phase 6): child runs branch from the parent run's current snapshot. A `join` step afterward sees `{{steps.<foreach>.children[*].summary}}`. Combining child branches is left to an explicit agent or shell step written by the user, not done by the runner.
+- **Batch fan-out**: each item gets its own new worktree and branch, and the runner **opens a PR automatically** when the item's run finishes `done`. Nothing merges back into a shared branch.
+- **Dependent items stack.** If item 5 depends on item 4, item 5's worktree branches from item 4's branch, and its PR targets item 4's branch, not the repo base. Independent items branch from the repo base as usual. See "Stacked items".
+- **`foreach` over step output** (phase 6): children follow the same rules. Each entry may declare `depends_on`, and child runs without a dependency branch from the parent run's current snapshot. A `join` step afterward sees `{{steps.<foreach>.children[*].summary}}`.
 
 Batch item sources in the launch sheet:
 - GitHub issues (label / search query) or PRs (picker / query)
-- Free-text list (one item per line)
+- Free-text list (one item per line; `4 -> 5` lines or a `depends:` column declare dependencies)
 - File glob in the repo
 - Later: event triggers
+
+### Stacked items
+
+Items form a dependency graph. Each item has at most **one parent** in v1, so the graph is a chain or a tree, which maps directly onto stacked branches and PRs.
+
+- **Dependency sources**:
+  - GitHub issues: "blocked by" / sub-issue relations
+  - Free-text: explicit markers
+  - `foreach`: the `depends_on` field in the step output
+  - The launch sheet shows the resolved graph and lets the user edit edges before starting.
+- **Validation at launch**: cycles are rejected. An item with several dependencies must pick one parent in the launch sheet; the others become ordering-only edges (wait for them, but don't stack on them).
+- **Scheduling**: a child stays `blocked` until its parent's run is `done` and its PR is open. It then branches from the parent's head (the branch tip after the runner's final commit). Siblings under one parent run concurrently, within the concurrency cap.
+- **Failure**: if a parent fails or is cancelled, its descendants stay `blocked` and show the reason in Needs you. Retrying the parent unblocks them; Skip on a parent offers "rebase children onto base" or "cancel children".
+- **PR creation** (runner feature, via `src/main/github/`):
+  1. Commit any leftover changes with the run summary as the message.
+  2. Push the branch.
+  3. Open the PR with its base set to the parent's branch (or the repo base). The title comes from the item, and the body holds the run summary, step results, and a "Stacked on #N" line.
+  4. Record the PR on the run so `PRPoller` tracks it.
+
+  A launch-sheet toggle (default off) opens them as drafts.
+- **Parent changes after review**: when a parent branch gets new commits (review fixes), its children become stale. Run detail shows "Restack": rebase each child onto the new parent tip and force-push the child branch. Every restack needs an explicit click, because it force-pushes.
+- **Parent merged**: GitHub retargets dependent PRs to the base branch when the parent's head branch is deleted on merge. If the repo doesn't auto-delete branches, the runner retargets the child PR to the repo base itself once `PRPoller` reports the parent as merged.
 
 ## UX
 
@@ -295,6 +319,8 @@ The same contract holds for a future headless driver, since the MCP tool works t
 | Harness support | Claude Code, Codex, opencode only; generic harnesses later (likely ACP via a second `StepDriver`) |
 | Visible vs headless | visible terminal tabs labelled `⚙ <step> · <agent>`, spawned main-side; autopilot only skips gates |
 | Worktrees | one per run; batch/foreach children each get their own; parallel steps within a run must be read-only (enforced) |
+| Batch output | runner opens a PR per item automatically; dependent items stack (branch + PR base = parent's branch); one stacking parent per item |
+| Concurrency | `maxConcurrentAgents` default 4 |
 | Permissions | per-step mode mapped to harness flags; `full` needs explicit confirmation; repo definitions need hash-based trust |
 | Failure | run pauses; Retry / Retry from clean / Skip / Swap harness or model |
 | Editor | YAML-first in Monaco + live graph; form editor later |
@@ -305,7 +331,8 @@ The same contract holds for a future headless driver, since the MCP tool works t
 - **`src/shared/state/workflows/`**: new slice
   - `definitions` (personal + per-repo, keyed by scope), `trust`
   - `runs: Record<runId, { defSnapshot, batchId?, worktreePath, status, steps: Record<stepId, { status, attempts: Attempt[] }> }>` (active + capped recent)
-  - `batches: Record<batchId, { defId, items, concurrency, childRunIds }>`
+  - `batches: Record<batchId, { defId, items: { id, title, parentId?, after?: string[] }[], concurrency, draftPrs, childRunIds }>`
+  - runs also carry `{ itemId?, parentRunId?, branch, baseBranch, prNumber? }`
   - events: `definitionsLoaded`, `definitionSaved`, `definitionDeleted`, `runStarted`, `stepQueued`, `stepStarted`, `stepStatusChanged`, `stepCompleted`, `gateResolved`, `runFinished`, `batchStarted`, `batchFinished`
   - `findIndex` + `slice` patches; add to `mergeWireSnapshot`; renderer gets `useWorkflowRun(id)` per-id selectors (anti-pattern #4)
 - **`src/main/workflow-runner/`**: FSM + scheduler (queue, concurrency, budgets). Owns the `terminalId → attempt` map. Reacts only to `terminals/*` events for mapped ids (anti-pattern #1) and dedups derived status (anti-pattern #2). Takes snapshots, renders prompts, persists run records, reconciles on boot.
@@ -329,8 +356,8 @@ The same contract holds for a future headless driver, since the MCP tool works t
 2. **Runner (linear)**: FSM, `agent` + `shell` drivers, `complete_step`, Stop-hook continuation, snapshots, Retry / Skip / swap, restart recovery, fake-agent e2e.
 3. **Workflows section + YAML editor**: Runs view, run detail, Library, Monaco editor with validation and graph preview, launch sheet + entry points.
 4. **Control flow**: `needs:` DAG, gates (Approve / Request changes), loops with `on_loop`, `when:`, read-only parallel steps, concurrency cap, budgets.
-5. **Batches**: item sources, child runs, batch board.
-6. **`foreach` over step output + join**.
+5. **Batches**: item sources, child runs, batch board, automatic PRs, dependency graph + stacked branches/PRs, blocked scheduling, Restack, retarget on parent merge.
+6. **`foreach` over step output + join**, with `depends_on` stacking.
 7. **Form editor**.
 8. **Orchestrator step type**: `run_step` / `await_step` (async start + await to avoid MCP timeouts).
 
@@ -339,4 +366,4 @@ The same contract holds for a future headless driver, since the MCP tool works t
 - Verify Codex `-c mcp_servers.*` per-run override (Codex isn't installed on the dev machine yet)
 - Confirm whether Codex hooks fire under `codex exec` (matters only for headless mode)
 - Confirm the opencode plugin loads today (gap 3); confirm the opencode permission config and SDK prompt call for continuation
-- Decide whether batch children open PRs automatically (proposed: an optional final `pr` shell step in the definition, not a runner feature)
+- Confirm GitHub REST exposes issue "blocked by" relations for dependency import (fallback: sub-issues + manual edges in the launch sheet)
