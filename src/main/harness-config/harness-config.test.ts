@@ -15,7 +15,7 @@ import {
 } from 'fs'
 import { createHash } from 'crypto'
 import { tmpdir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { basename, dirname, join, resolve } from 'path'
 
 import { createHarnessConfigService } from '.'
 import {
@@ -674,9 +674,34 @@ describe('scoped comparison and non-mutating actionable plans', () => {
     expect(claudePlan.diskOnly).not.toBe(codexPlan.diskOnly)
     expect(claudePlan.diskOnly.every((ref) => ref.agentKind === 'claude')).toBe(true)
     expect(codexPlan.diskOnly.every((ref) => ref.agentKind === 'codex')).toBe(true)
-    const claudeDiskOnlyLengthBefore = claudePlan.diskOnly.length
-    codexPlan.diskOnly.push({ ...codexPlan.diskOnly[0] })
-    expect(claudePlan.diskOnly).toHaveLength(claudeDiskOnlyLengthBefore)
+  })
+
+  it('reports drift only in the Claude Skills scope while other harness Skills scopes stay synced', () => {
+    const fixture = makeFixture()
+    const claudeSkills = { agentKind: 'claude', resourceType: 'skills' }
+    const codexSkills = { agentKind: 'codex', resourceType: 'skills' }
+    const opencodeSkills = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, claudeSkills, 'claude-skills', /SKILL\.md$/)
+    addResolver(fixture, codexSkills, 'codex-skills', /SKILL\.md$/)
+    addResolver(fixture, opencodeSkills, 'opencode-skills', /SKILL\.md$/)
+    put(fixture.roots['claude-skills'], 'drift/SKILL.md', 'claude drift')
+    put(fixture.roots['codex-skills'], 'shared/SKILL.md', 'codex bytes')
+    put(fixture.roots['opencode-skills'], 'shared/SKILL.md', 'opencode bytes')
+    fixture.desired.resources = [
+      refToDesired(fixture.service.scan(codexSkills)[0], 'codex bytes'),
+      refToDesired(fixture.service.scan(opencodeSkills)[0], 'opencode bytes')
+    ]
+
+    const claudePlan = fixture.service.planSyncToDisk(claudeSkills)
+    expect(claudePlan.status).toBe('disk-only')
+    expect(claudePlan.diskOnly.map((ref) => ref.relativePath)).toEqual(['drift/SKILL.md'])
+    for (const scope of [codexSkills, opencodeSkills]) {
+      const plan = fixture.service.planSyncToDisk(scope)
+      expect(plan.status).toBe('synced')
+      expect(plan.diskOnly).toEqual([])
+      expect(plan.configOnly).toEqual([])
+      expect(plan.changed).toEqual([])
+    }
   })
 
   it('generates sync and adopt plans without writes and keeps executable content private', () => {
@@ -744,9 +769,10 @@ describe('scoped comparison and non-mutating actionable plans', () => {
     const fixture = makeFixture()
     const scope = { agentKind: 'codex', resourceType: 'agents' }
     addResolver(fixture, scope, 'codex-agents', /^AGENTS(?:\.override)?\.md$/)
+    const beforeTree = snapshotTree(fixture.root)
 
     await rejectsCode(() => fixture.service.prepareCreate(scope, 'notes', 'content'), 'unsafe-path')
-    expect(readdirSync(fixture.roots['codex-agents'])).toEqual([])
+    expect(snapshotTree(fixture.root)).toEqual(beforeTree)
     expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
   })
 
@@ -756,12 +782,12 @@ describe('scoped comparison and non-mutating actionable plans', () => {
     const fixture = setupComparison()
     const scope = { agentKind: 'claude', resourceType: 'agents' }
     put(fixture.roots.agents, 'existing.md', 'keep')
+    const beforeTree = snapshotTree(fixture.root)
 
     await rejectsCode(() => fixture.service.prepareUpdate(scope, 'nonexistent-id', 'new'), 'unknown-resource')
     await rejectsCode(() => fixture.service.prepareDelete(scope, 'nonexistent-id'), 'unknown-resource')
 
-    expect(readdirSync(fixture.roots.agents)).toEqual(['existing.md'])
-    expect(readFileSync(join(fixture.roots.agents, 'existing.md'), 'utf8')).toBe('keep')
+    expect(snapshotTree(fixture.root)).toEqual(beforeTree)
     expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
   })
 })
@@ -1005,7 +1031,11 @@ describe('backups, atomic writes, rollback, and partial application', () => {
       updatedAt: NOW
     }
     const desired = makeDesired([seeded])
-    desired.replaceDesiredScope.mockImplementation(() => { throw new Error('config unavailable') })
+    const targetExistedAtPersist: boolean[] = []
+    desired.replaceDesiredScope.mockImplementation(() => {
+      targetExistedAtPersist.push(existsSync(target))
+      throw new Error('config unavailable')
+    })
     const fixture = makeFixture({
       deps: {
         loadDesiredResources: desired.loadDesiredResources,
@@ -1023,6 +1053,8 @@ describe('backups, atomic writes, rollback, and partial application', () => {
     expect(readFileSync(target, 'utf8')).toBe('before delete')
     expect(backupFiles(fixture.roots.agents)).toHaveLength(1)
     expect(desired.replaceDesiredScope).toHaveBeenCalledTimes(1)
+    expect(targetExistedAtPersist).toEqual([false])
+    expect(fixture.service.planSync(scope).status).toBe('synced')
 
     // Control run: with a working desired-state store, the same delete plan
     // flow removes the file from disk and updates desired state only after
@@ -1035,6 +1067,15 @@ describe('backups, atomic writes, rollback, and partial application', () => {
       relativePath: 'delete-me-control.md'
     }
     const controlDesired = makeDesired([controlSeeded])
+    const persistControl = controlDesired.replaceDesiredScope.getMockImplementation() as (
+      scope: Scope,
+      resources: DesiredResource[]
+    ) => void
+    const controlTargetExistedAtPersist: boolean[] = []
+    controlDesired.replaceDesiredScope.mockImplementation((controlScope: Scope, resources: DesiredResource[]) => {
+      controlTargetExistedAtPersist.push(existsSync(controlTarget))
+      persistControl(controlScope, resources)
+    })
     const controlService = makeFixture({
       root: fixture.root,
       roots: fixture.roots,
@@ -1050,6 +1091,8 @@ describe('backups, atomic writes, rollback, and partial application', () => {
     await controlService.applyPlan({ scope, planId: controlPlan.planId, confirmed: true })
     expect(existsSync(controlTarget)).toBe(false)
     expect(controlDesired.replaceDesiredScope).toHaveBeenCalledTimes(1)
+    expect(controlTargetExistedAtPersist).toEqual([false])
+    expect(controlDesired.resources.some((r) => r.relativePath === 'delete-me-control.md')).toBe(false)
   })
 
   it('reports one completed overwrite and requires rescan when second atomic rename fails', async () => {
@@ -1136,9 +1179,14 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(readFileSync(join(fixture.roots['claude-agents'], 'overwrite.md'), 'utf8')).toBe('new bytes')
     expect(existsSync(join(fixture.roots['claude-agents'], 'remove.md'))).toBe(false)
     expect(tempFiles(fixture.roots['claude-agents'])).toEqual([])
+    const backups = backupFiles(fixture.roots['claude-agents'])
+    expect(backups).toHaveLength(2)
+    expect(
+      backups.map((name) => readFileSync(join(fixture.roots['claude-agents'], name), 'utf8')).sort()
+    ).toEqual(['obsolete bytes', 'old bytes'])
 
     // Nothing was created in the parent temp directory or the sibling root.
-    expect(existsSync(join(fixture.root, 'created.md'))).toBe(false)
+    expect(readdirSync(fixture.root).sort()).toEqual(['claude-agents', 'codex-agents'])
     expect(readdirSync(fixture.roots['codex-agents'])).toEqual(['sibling.md'])
     expect(readFileSync(join(fixture.roots['codex-agents'], 'sibling.md'), 'utf8')).toBe('sibling bytes')
   })
@@ -1174,9 +1222,10 @@ describe('sync/adopt direction and conversion preparation', () => {
     // TEST-006: no harness-directory file changed — a byte-exact snapshot of
     // the entire temporary root (not just a filename listing) is unchanged.
     expect(snapshotTree(fixture.root)).toEqual(beforeTree)
-    // TEST-006: other desired scopes were preserved, not touched or dropped.
-    expect(fixture.desired.resources.filter((r) => r.agentKind === 'codex')).toHaveLength(1)
-    expect(fixture.desired.resources.find((r) => r.agentKind === 'codex')).toEqual(otherDesired)
+    // TEST-006: the service hands persistence only the selected scope's
+    // resources; preserving other scopes on write is defended by the
+    // replacePersistedHarnessConfigScope tests in persistence.test.ts.
+    expect(adopted.every((r: DesiredResource) => r.agentKind === 'claude')).toBe(true)
   })
   it('preserves canonical Claude skill aliases when creating native command', async () => {
     const existing = {
@@ -1280,6 +1329,30 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft).not.toHaveProperty('planId')
     expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
     expect(readdirSync(fixture.roots.skills)).toEqual(['source'])
+  })
+
+  it('reports an existing destination that differs only by case on a case-insensitive filesystem', () => {
+    const caseInsensitiveLstat = (path: string) => {
+      try {
+        return lstatSync(path)
+      } catch (error) {
+        const dir = dirname(path)
+        const match = readdirSync(dir).find((entry) => entry.toLowerCase() === basename(path).toLowerCase())
+        if (!match) throw error
+        return lstatSync(join(dir, match))
+      }
+    }
+    const fixture = makeFixture({ fs: { lstatSync: caseInsensitiveLstat } })
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'MySkill/SKILL.md', 'source')
+    put(fixture.roots.skills, 'MySkill.md', 'existing destination')
+    const source = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareCommandFromSkill(scope, source.id)
+    expect(conversion.status).toBe('existing')
+    expect(conversion.ref.relativePath).toBe('MySkill.md')
   })
 
   it('rejects conversion across harnesses and ignores plugin payload/settings files', async () => {
@@ -1445,6 +1518,12 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
     expect(extractFrontMatterDescription('---\ntags: [a]\n---\nbody')).toBeNull()
     const tooLong = ['---', ...Array.from({ length: 60 }, (_, i) => `line${i}: x`), 'description: late', '---'].join('\n')
     expect(extractFrontMatterDescription(tooLong)).toBeNull()
+  })
+
+  it('extracts descriptions from CRLF files and ignores block scalar indicators', () => {
+    expect(extractFrontMatterDescription('---\r\ndescription: Windows line\r\n---\r\nbody')).toBe('Windows line')
+    expect(extractFrontMatterDescription('---\ndescription: >-\n  folded\n---\n')).toBeNull()
+    expect(extractFrontMatterDescription('---\ndescription: |\n  literal\n---\n')).toBeNull()
   })
 
   it('createCommandFromSkill rejects a non-skills source', () => {
