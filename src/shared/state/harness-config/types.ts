@@ -142,6 +142,8 @@ export type HarnessConfigRequestErrorCode = HarnessConfigErrorCode | 'invalid-re
 export interface HarnessConfigRequestError {
   code: HarnessConfigRequestErrorCode
   message: string
+  applied?: HarnessConfigAppliedOperation[]
+  requiresRescan?: true
 }
 
 export type HarnessConfigRequestResult<T> =
