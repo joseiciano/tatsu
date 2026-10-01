@@ -1,14 +1,14 @@
 ---
 goal: Persist canonical Tatsu-managed harness configuration as durable Tatsu config
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-10-01
+status: 'Completed'
 tags: [feature, persistence, migration, harness-config, sync]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan adds a versioned, durable Tatsu config model for Tatsu-managed agent definitions, skills, and commands. It implements Step 5 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md) using the feature goals and source-of-truth rules in [implementation-details.md](./implementation-details.md). Disk inventory is an observation — the files currently discovered by a harness-specific resolver inside known configuration roots — and does not control managed state. Any scan cache is transient observation data derived from disk inventory. Tatsu config is the persisted desired managed state stored in Tatsu's app config; it is distinct from both disk inventory and scan cache and is NOT populated, refreshed, mirrored, or reconciled merely because discovery ran. This step persists the Tatsu config side of that model, including full UTF-8 content, so a confirmed sync to disk can recreate files that are missing or deleted from harness directories. Filesystem discovery, confirmed mutation plans, shared inventory state, transport handlers, and UI remain owned by Steps 2, 4, 6, and later.
 
@@ -50,15 +50,15 @@ This plan adds a versioned, durable Tatsu config model for Tatsu-managed agent d
 
 - **GOAL-001**: Establish one versioned, canonical, content-complete Tatsu config resource model without duplicating service or shared taxonomy types.
 
-- [ ] **TASK-001**: Update `src/main/persistence/types.ts` to import the canonical Tatsu config resource type from the `src/main/harness-config` package barrel and define the persisted aliases and container required by REQ-001 through REQ-007.
+- [x] **TASK-001**: Update `src/main/persistence/types.ts` to import the canonical Tatsu config resource type from the `src/main/harness-config` package barrel and define the persisted aliases and container required by REQ-001 through REQ-007.
   - Export `PersistedHarnessConfigResource` as the persistence name for Step 2's canonical Tatsu config resource contract rather than independently restating its fields.
   - Export `PersistedHarnessConfig` with literal `version: 1` and `resources: PersistedHarnessConfigResource[]`.
   - Add `harnessConfig?: PersistedHarnessConfig` to `Config` adjacent to other feature-owned persisted state.
   - If Step 2's implementation used a different Tatsu config resource symbol name, rename it at its defining package and migrate every type import; do not create compatibility aliases or two structural definitions.
-- [ ] **TASK-002**: In `src/main/persistence/persistence.ts`, add a small constructor that returns a fresh empty version-1 Tatsu config and use it in the default/fallback load paths.
+- [x] **TASK-002**: In `src/main/persistence/persistence.ts`, add a small constructor that returns a fresh empty version-1 Tatsu config and use it in the default/fallback load paths.
   - Preserve the existing `windowBounds`, `repoRoots`, schema stamping, and connection-default behavior.
   - Ensure a missing file, invalid top-level JSON, or absent `harnessConfig` yields a fresh `{ version: 1, resources: [] }` object without sharing its resources array with another call.
-- [ ] **TASK-003**: Add module-private validation and cloning helpers in `src/main/persistence/persistence.ts` for nested version, resource fields, canonical scope, exact content hash, duplicate IDs, alias invariants, and deterministic comparison order.
+- [x] **TASK-003**: Add module-private validation and cloning helpers in `src/main/persistence/persistence.ts` for nested version, resource fields, canonical scope, exact content hash, duplicate IDs, alias invariants, and deterministic comparison order.
   - Reject a present unsupported nested version rather than coercing it to version 1.
   - Reject Windows separators, absolute paths, NUL bytes, empty segments, `.` segments, and `..` segments in the persisted POSIX `relativePath`.
   - Keep validation errors content-free and deterministic so transport integration can safely map them later.
@@ -67,30 +67,30 @@ This plan adds a versioned, durable Tatsu config model for Tatsu-managed agent d
 
 - **GOAL-002**: Make legacy configs converge on the version-1 Tatsu config model and provide synchronous scoped reads and replacements for the harness-config service.
 
-- [ ] **TASK-004**: Append migration index 7 in `src/main/persistence-migrations/persistence-migrations.ts` as the v7 to v8 migration.
+- [x] **TASK-004**: Append migration index 7 in `src/main/persistence-migrations/persistence-migrations.ts` as the v7 to v8 migration.
   - When `c.harnessConfig === undefined`, set it to a new `{ version: 1, resources: [] }` object.
   - When the key is already present, leave it untouched; do not normalize, delete, or reinterpret unknown nested versions inside a global schema migration.
   - Rely on the existing `SCHEMA_VERSION = migrations.length` invariant so the global version becomes 8 automatically.
-- [ ] **TASK-005**: Add `getPersistedHarnessConfigResources(config)` to `src/main/persistence/persistence.ts` and export it through the existing package barrel.
+- [x] **TASK-005**: Add `getPersistedHarnessConfigResources(config)` to `src/main/persistence/persistence.ts` and export it through the existing package barrel.
   - Treat an absent field as an empty version-1 Tatsu config for legacy in-memory callers.
   - Validate a present field using TASK-003, then return copied resource objects and copied alias arrays in deterministic order.
   - Operation direction: this is the read side of sync to disk and compare — it returns the persisted Tatsu config snapshot and MUST NOT read or write disk inventory.
   - Return canonical records only; never synthesize logical Claude alias rows or disk-only metadata.
-- [ ] **TASK-006**: Add `replacePersistedHarnessConfigScope(config, scope, resources)` to `src/main/persistence/persistence.ts` and export it through the existing package barrel.
+- [x] **TASK-006**: Add `replacePersistedHarnessConfigScope(config, scope, resources)` to `src/main/persistence/persistence.ts` and export it through the existing package barrel.
   - Validate the currently retained records before editing so malformed state cannot be silently discarded.
   - Require every incoming record to match `scope.agentKind`, belong to the requested logical view through its canonical `resourceType` or `aliasResourceTypes`, and pass TASK-003 validation. Deduplicate by physical ID and retain each incoming record under its canonical type.
   - Operation direction: this is the persistence side of adopt from disk. Step 6 MUST invoke it only with the exact current canonical disk inventory snapshot from a confirmed plan for the same logical `${agentKind}:${resourceType}` scope, after Step 2/Step 6 revalidates the plan against both current disk inventory and current Tatsu config.
   - Treat confirmation and currentness as mandatory caller preconditions rather than persistence inputs: absent, stale, wrong-direction, and wrong-scope plans MUST be rejected before this helper is called, with no write and no in-memory Tatsu config change.
   - Keep discovery and refresh paths disconnected from this helper. They MAY update disk inventory or scan cache, but they MUST NOT persist Tatsu config or promote unmanaged disk files.
-- [ ] **TASK-007**: Add a synchronous throwing config writer in `src/main/persistence/persistence.ts` and make TASK-006 use it before assigning `config.harnessConfig`.
+- [x] **TASK-007**: Add a synchronous throwing config writer in `src/main/persistence/persistence.ts` and make TASK-006 use it before assigning `config.harnessConfig`.
   - Serialize and write the complete next config to the existing `config.json` path.
   - Log a content-free persistence failure and rethrow the original error or a stable persistence error with the original cause.
   - Assign the validated nested Tatsu config object back to the long-lived `config` object only after the write returns successfully.
   - Leave `saveConfig()` and the existing best-effort `saveConfigSync()` behavior unchanged for unrelated callers.
-- [ ] **TASK-008**: Verify the exports in `src/main/persistence/index.ts` expose the new types and helpers through its existing `export type *` and `export *` statements; edit the barrel only if the implementation introduces a file not already covered.
+- [x] **TASK-008**: Verify the exports in `src/main/persistence/index.ts` expose the new types and helpers through its existing `export type *` and `export *` statements; edit the barrel only if the implementation introduces a file not already covered.
   - Do not import persistence helpers into `src/main/harness-config`; Step 2 remains dependency-injected.
   - Step 6 will close over the loaded main-process `config` and pass TASK-005 and TASK-006 as `loadDesiredResources` and `replaceDesiredScope` dependencies when it constructs the service.
-- [ ] **TASK-009**: Confirm `src/main/build-initial-state/build-initial-state.ts` and its tests require no change.
+- [x] **TASK-009**: Confirm `src/main/build-initial-state/build-initial-state.ts` and its tests require no change.
   - Tatsu config content MUST NOT be copied into `AppState`, initial wire snapshots, or the Step 4 content-free slice.
   - Remove any attempted hydration of Tatsu config content discovered during implementation rather than retaining a second runtime source of truth.
 
@@ -98,31 +98,31 @@ This plan adds a versioned, durable Tatsu config model for Tatsu-managed agent d
 
 - **GOAL-003**: Verify legacy convergence, canonical alias storage, strict scope isolation, deterministic persistence, and failure propagation before the adapter is consumed by transport handlers.
 
-- [ ] **TASK-010**: Extend `src/main/persistence-migrations/persistence-migrations.test.ts` with focused v7 to v8 tests using the existing `runOne` helper.
+- [x] **TASK-010**: Extend `src/main/persistence-migrations/persistence-migrations.test.ts` with focused v7 to v8 tests using the existing `runOne` helper.
   - Prove an absent key becomes exactly `{ version: 1, resources: [] }`.
   - Prove an existing version-1 object, including resource content and alias metadata, is preserved.
   - Prove a present malformed object and unknown nested version are not overwritten by the global migration.
   - Extend the end-to-end migration coverage to assert the empty Tatsu config and global schema version 8.
-- [ ] **TASK-011**: Extend `src/main/persistence/persistence.test.ts` with accessor tests for missing, valid, malformed, and unsupported-version Tatsu config.
+- [x] **TASK-011**: Extend `src/main/persistence/persistence.test.ts` with accessor tests for missing, valid, malformed, and unsupported-version Tatsu config.
   - Prove returned arrays, resource objects, and alias arrays cannot mutate the source `Config` by reference.
   - Prove exact content survives retrieval and that hash verification is byte-sensitive.
   - Prove validation errors do not include the resource content.
-- [ ] **TASK-012**: Add scoped replacement tests to `src/main/persistence/persistence.test.ts`.
+- [x] **TASK-012**: Add scoped replacement tests to `src/main/persistence/persistence.test.ts`.
   - Prove replacing Claude Skills preserves Claude Agents, native Claude Commands, and every Codex/OpenCode record by value.
   - Prove adopting Claude Commands with a canonical Skill carrying `aliasResourceTypes: ['commands']` persists that skill once, replaces previous records participating in the Commands logical view, and preserves canonical Skills that do not advertise the Commands alias.
   - Prove incoming resources outside the requested logical view, Pi, duplicate IDs, invalid paths, self-aliases, duplicate aliases, invalid timestamps, malformed hashes, and content/hash mismatches are rejected without mutating the input.
   - Prove output order is `claude`, `codex`, `opencode`; then `agents`, `skills`, `commands`; then `relativePath`; then `id`.
-- [ ] **TASK-013**: Add durable-write tests to `src/main/persistence/persistence.test.ts` using an isolated or mocked config path.
+- [x] **TASK-013**: Add durable-write tests to `src/main/persistence/persistence.test.ts` using an isolated or mocked config path.
   - Prove a successful scoped replacement writes a complete JSON config containing unrelated settings plus the next Tatsu config resources, then updates the in-memory config reference.
   - Force serialization or filesystem write failure and prove the error reaches the caller, no success is reported, and the original in-memory `config.harnessConfig` object remains unchanged.
   - Prove the throwing path never logs resource content.
-- [ ] **TASK-014**: Run `npx vitest run src/main/persistence/persistence.test.ts src/main/persistence-migrations/persistence-migrations.test.ts`, then run `pnpm typecheck` and `pnpm build`; resolve every failure without weakening validation, canonical scope isolation, or synchronous failure propagation.
-- [ ] **TASK-015**: Review the final diff against Steps 1, 2, 4, and 6.
+- [x] **TASK-014**: Run `npx vitest run src/main/persistence/persistence.test.ts src/main/persistence-migrations/persistence-migrations.test.ts`, then run `pnpm typecheck` and `pnpm build`; resolve every failure without weakening validation, canonical scope isolation, or synchronous failure propagation.
+- [x] **TASK-015**: Review the final diff against Steps 1, 2, 4, and 6.
   - Verify there is one canonical Tatsu config resource contract, one canonical resource-type union, and no persisted duplicate for a Claude alias.
   - Verify no Tatsu config content entered shared state, snapshots, events, logs, transport contracts, or renderer code.
   - Verify the only runtime source change outside `src/main/persistence/` is the appended migration and its test.
   - Verify Tatsu config is distinct from disk inventory and scan cache; the read accessor returns the Tatsu config snapshot consumed by a confirmed sync to disk; and the scoped adopt from disk path persists only the confirmed current disk inventory snapshot for one `${agentKind}:${resourceType}`. Verify dependent Step 2/Step 6 coverage rejects absent, stale, wrong-direction, and wrong-scope plans without calling persistence, and proves discovery/refresh calls persistence zero times so unmanaged files remain unmanaged.
-- [ ] **TASK-016**: Commit the persistence contracts, migration, helpers, and tests as one focused change with message `feat: persist harness Tatsu config`, then run `git push origin <current-branch>` immediately after the commit succeeds.
+- [x] **TASK-016**: Commit the persistence contracts, migration, helpers, and tests as one focused change with message `feat: persist harness Tatsu config`, then run `git push origin <current-branch>` immediately after the commit succeeds.
   - Do not include unrelated working-tree changes.
 
 ## 3. Alternatives
