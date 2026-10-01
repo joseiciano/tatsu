@@ -131,6 +131,7 @@ export interface ConfigEditorProps {
   onNameDraftChange: (value: string) => void
   dirty: boolean
   busy: boolean
+  canEdit: boolean
   canSave: boolean
   canCreate: boolean
   canDelete: boolean

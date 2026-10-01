@@ -161,12 +161,16 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   // REQ-009: an active-backend switch invalidates every page-local
   // chain immediately — bump the generation first so anything still in
   // flight under the old generation is ignored when it resolves, then
-  // clear local state and let the scan effect below load the new
-  // backend's scopes from scratch.
+  // clear local state (including the per-session scanned-scope
+  // bookkeeping, so a backend revisited later in the same page session
+  // is scanned again rather than treated as already-scanned) and let
+  // the scan effect below load the new backend's scopes from scratch.
   useEffect(() => {
     if (activeBackendIdRef.current === activeBackend.id) return
     activeBackendIdRef.current = activeBackend.id
     backendGenerationRef.current += 1
+    scannedRef.current = new Map()
+    pendingScanRef.current = new Map()
     resetPageLocalState()
   }, [activeBackend.id, resetPageLocalState])
 
@@ -742,8 +746,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
-  const canSave = editorView.kind === 'edit' && draft !== savedContent && !readBusy && !mutationBusy
-  const canDelete = editorView.kind === 'edit' && !readBusy && !mutationBusy
+  const canEdit = editorView.kind === 'edit' && !readBusy && !mutationBusy
+  const canSave = canEdit && draft !== savedContent
+  const canDelete = canEdit
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-panel">
@@ -778,6 +783,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
             onNameDraftChange={setCreateName}
             dirty={isDirty}
             busy={mutationBusy || readBusy}
+            canEdit={canEdit}
             canSave={canSave}
             canCreate={canCreate}
             canDelete={canDelete}

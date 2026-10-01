@@ -24,6 +24,7 @@ export function ConfigEditor({
   onNameDraftChange,
   dirty,
   busy,
+  canEdit,
   canSave,
   canCreate,
   canDelete,
@@ -152,7 +153,7 @@ export function ConfigEditor({
         <MonacoEditor
           value={draft}
           filePath={view.ref.absolutePath}
-          readOnly={!canSave}
+          readOnly={!canEdit}
           onChange={onDraftChange}
           onSave={canSave ? onSave : undefined}
           fontFamily={fontFamily}
