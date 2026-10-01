@@ -13,4 +13,5 @@ export {
 } from '../../shared/state/harness-config'
 
 export { createHarnessConfigService, HarnessConfigServiceImpl } from './harness-config'
+export { createCommandFromSkill, createSkillFromCommand } from './conversion'
 export * from './types'

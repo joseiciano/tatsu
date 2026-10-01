@@ -16,9 +16,11 @@ import { ConfigResourceList, buildConfigResourceGroups } from './ConfigResourceL
 import { ConfigEditor } from './ConfigEditor'
 import { ConfigSyncDialog } from './ConfigSyncDialog'
 import { decideFreshPlanOutcome, toConfigSyncReview } from './config-sync-review'
+import { deriveConfigConversionOutcome } from './config-conversion'
 import type {
   ConfigAgentFilter,
   ConfigAgentFilterOption,
+  ConfigConversionSourceInfo,
   ConfigDriftBadge,
   ConfigEditorView,
   ConfigProps,
@@ -114,6 +116,16 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const [mutationBusy, setMutationBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
+  // Step 10: conversion create mode is the Step 7 create flow pre-filled
+  // from a `draft` conversion result — these two fields are renderer-
+  // local only (REQ-018) and reset alongside every other create-mode
+  // field. `conversionPending` is the per-row in-flight guard overlaid
+  // onto rows in `displayGroups` below (REQ-013/REQ-014).
+  const [conversionSubmitLabel, setConversionSubmitLabel] = useState<string | null>(null)
+  const [conversionSource, setConversionSource] = useState<ConfigConversionSourceInfo | null>(null)
+  const [conversionPending, setConversionPending] = useState<ReadonlySet<string>>(new Set())
+  const conversionPendingRef = useRef<Set<string>>(new Set())
+
   const [scopeStatus, setScopeStatusState] = useState<
     Partial<Record<HarnessConfigScopeKey, ScopeStatus>>
   >({})
@@ -186,6 +198,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setReadBusy(false)
     setMutationBusy(false)
     setActionError(null)
+    setConversionSubmitLabel(null)
+    setConversionSource(null)
+    conversionPendingRef.current = new Set()
+    setConversionPending(new Set())
     setScopeStatusState({})
     dialogTokenRef.current += 1
     openDialogScopeKeyRef.current = null
@@ -334,10 +350,27 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
           ...group,
           busy: !!status?.busy,
           requestError: status?.error ?? null,
-          notice: status?.notice ?? null
+          notice: status?.notice ?? null,
+          // Step 10: overlay the in-flight guard onto each row's pure
+          // conversion action — the pure derivation in
+          // `buildConfigResourceGroups` has no notion of a request
+          // already in progress.
+          rows: group.rows.map((row) => {
+            if (!row.conversionAction) return row
+            const pendingKey = `${row.ref.agentKind}:${row.ref.resourceType}:${row.ref.id}`
+            if (!conversionPending.has(pendingKey)) return row
+            return {
+              ...row,
+              conversionAction: {
+                ...row.conversionAction,
+                disabled: true,
+                disabledReason: 'A conversion request is already in progress.'
+              }
+            }
+          })
         }
       }),
-    [baseGroups, scopeStatus]
+    [baseGroups, scopeStatus, conversionPending]
   )
 
   // REQ-010/TASK-010: when the mirrored inventory no longer contains the
@@ -377,6 +410,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDraft('')
     setSavedContent('')
     setActionError(null)
+    setConversionSubmitLabel(null)
+    setConversionSource(null)
   }, [])
 
   const handleTabChange = useCallback(
@@ -481,6 +516,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       setSavedContent('')
       setEditorMode('create')
       setActionError(null)
+      setConversionSubmitLabel(null)
+      setConversionSource(null)
     },
     [confirmDiscard]
   )
@@ -491,6 +528,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDraft('')
     setEditorMode('empty')
     setActionError(null)
+    setConversionSubmitLabel(null)
+    setConversionSource(null)
   }, [])
 
   const handleSubmitCreate = useCallback(async () => {
@@ -535,6 +574,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
       setCreateScope(null)
       setCreateName('')
+      setConversionSubmitLabel(null)
+      setConversionSource(null)
 
       if (resultingRef) {
         setSelected({ scope, id: resultingRef.id })
@@ -556,6 +597,73 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       }
     }
   }, [createScope, createName, draft, mutationBusy, activeBackend.id, backend, refreshComparisons, setScopeStatus])
+
+  // ---- Conversion (Step 10) ----
+
+  // REQ-014: the *only* two callers of the conversion prepare channels.
+  // Nothing else — mount, tab/filter change, scan, Tatsu-config refresh,
+  // sync/adopt, conflict completion, plugin metadata — may invoke this.
+  // An `alias`/`existing` result is a pure notice with zero mutation
+  // (REQ-017); a `draft` result enters the existing create flow without
+  // ever applying itself (REQ-015/REQ-016).
+  const handleConvert = useCallback(
+    (target: 'commands' | 'skills', scope: HarnessConfigScope, id: string) => {
+      const pendingKey = `${scope.agentKind}:${scope.resourceType}:${id}`
+      if (conversionPendingRef.current.has(pendingKey)) return
+      conversionPendingRef.current.add(pendingKey)
+      setConversionPending(new Set(conversionPendingRef.current))
+
+      const backendId = activeBackend.id
+      const generation = backendGenerationRef.current
+      const scopeKey = harnessConfigScopeKey(scope)
+      const destinationNoun = target === 'commands' ? 'command' : 'skill'
+
+      void (async () => {
+        const result =
+          target === 'commands'
+            ? await backend.prepareHarnessConfigCommandFromSkill({ scope, id })
+            : await backend.prepareHarnessConfigSkillFromCommand({ scope, id })
+
+        conversionPendingRef.current.delete(pendingKey)
+        const stillCurrent = activeBackendIdRef.current === backendId && backendGenerationRef.current === generation
+        setConversionPending(new Set(conversionPendingRef.current))
+        if (!stillCurrent) return
+
+        if (!result.ok) {
+          setScopeStatus(scopeKey, { error: result.error.message })
+          return
+        }
+
+        const outcome = deriveConfigConversionOutcome(result.value, destinationNoun)
+        if (outcome.kind === 'already-available') {
+          setScopeStatus(scopeKey, { notice: outcome.message, error: null })
+          return
+        }
+
+        if (!confirmDiscard()) return
+        setSelected(null)
+        setSelectedRef(null)
+        setCreateScope(outcome.scope)
+        setCreateName(outcome.name)
+        setDraft(outcome.content)
+        setSavedContent('')
+        setEditorMode('create')
+        setActionError(null)
+        setConversionSubmitLabel(target === 'commands' ? 'Create command' : 'Create skill')
+        setConversionSource(outcome.source)
+      })()
+    },
+    [activeBackend.id, backend, confirmDiscard, setScopeStatus]
+  )
+
+  const handleCreateCommand = useCallback(
+    (scope: HarnessConfigScope, id: string) => handleConvert('commands', scope, id),
+    [handleConvert]
+  )
+  const handleCreateSkill = useCallback(
+    (scope: HarnessConfigScope, id: string) => handleConvert('skills', scope, id),
+    [handleConvert]
+  )
 
   // ---- Update (save) ----
 
@@ -937,7 +1045,13 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
           note: capability?.notes ?? 'This harness does not support this resource type.'
         }
       }
-      return { kind: 'create', scope: createScope, agentDisplayName: agentInfo.displayName }
+      return {
+        kind: 'create',
+        scope: createScope,
+        agentDisplayName: agentInfo.displayName,
+        submitLabel: conversionSubmitLabel ?? undefined,
+        conversionSource: conversionSource ?? undefined
+      }
     }
 
     if (editorMode === 'edit' && selected && selectedRef) {
@@ -974,7 +1088,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     }
 
     return { kind: 'empty' }
-  }, [editorMode, createScope, selected, selectedRef, readBusy, groupsNoSearch])
+  }, [editorMode, createScope, selected, selectedRef, readBusy, groupsNoSearch, conversionSubmitLabel, conversionSource])
 
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
@@ -1004,6 +1118,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
             onSelectResource={handleSelectResource}
             onCreate={handleEnterCreate}
             onSync={handleSync}
+            onCreateCommand={handleCreateCommand}
+            onCreateSkill={handleCreateSkill}
           />
         </div>
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">

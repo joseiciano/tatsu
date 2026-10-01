@@ -100,6 +100,13 @@ export function ConfigEditor({
             in {view.agentDisplayName} — Tatsu chooses the final path
           </span>
         </div>
+        {view.conversionSource && (
+          <div className="px-3 py-1.5 text-xs text-faint border-b border-border">
+            Generated from {view.conversionSource.agentKind} {view.conversionSource.sourceResourceType}
+            {view.conversionSource.relativePath ? ` ${view.conversionSource.relativePath}` : ''} — review and edit
+            before creating.
+          </div>
+        )}
         {error && <div className="px-3 py-1.5 text-xs text-danger border-b border-border">{error}</div>}
         <div className="flex-1 min-h-0 min-w-0">
           <MonacoEditor
@@ -125,7 +132,7 @@ export function ConfigEditor({
             onClick={onCreate}
             className="px-3 py-1.5 text-xs font-medium rounded bg-accent/20 hover:bg-accent/30 text-fg-bright border border-accent/40 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Create
+            {view.submitLabel ?? 'Create'}
           </button>
         </div>
       </div>

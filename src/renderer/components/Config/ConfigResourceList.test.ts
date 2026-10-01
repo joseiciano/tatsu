@@ -297,4 +297,66 @@ describe('buildConfigResourceGroups', () => {
     const codex = groups.find((g) => g.agentKind === 'codex')!
     expect(codex.rows.every((r) => r.disabled)).toBe(true)
   })
+
+  describe('conversion action derivation (TEST-008)', () => {
+    it('offers Create command on a Skills-tab row when the destination capability is supported', () => {
+      const resources = [ref({ id: 'one', agentKind: 'claude', resourceType: 'skills' })]
+      const groups = buildConfigResourceGroups(
+        baseInput({ resourceType: 'skills', agentFilter: 'claude', resources })
+      )
+      const row = groups.find((g) => g.agentKind === 'claude')!.rows[0]
+      expect(row.conversionAction).toEqual({
+        targetResourceType: 'commands',
+        label: 'Create command',
+        disabled: false,
+        disabledReason: null
+      })
+    })
+
+    it('offers Create skill on a Commands-tab row', () => {
+      const resources = [ref({ id: 'one', agentKind: 'opencode', resourceType: 'commands' })]
+      const groups = buildConfigResourceGroups(
+        baseInput({ resourceType: 'commands', agentFilter: 'opencode', resources })
+      )
+      const row = groups.find((g) => g.agentKind === 'opencode')!.rows[0]
+      expect(row.conversionAction?.targetResourceType).toBe('skills')
+      expect(row.conversionAction?.label).toBe('Create skill')
+      expect(row.conversionAction?.disabled).toBe(false)
+    })
+
+    it('disables the conversion action with an accessible reason when the destination capability is unsupported', () => {
+      const resources = [ref({ id: 'one', agentKind: 'codex', resourceType: 'skills' })]
+      const groups = buildConfigResourceGroups(
+        baseInput({ resourceType: 'skills', agentFilter: 'codex', resources })
+      )
+      const row = groups.find((g) => g.agentKind === 'codex')!.rows[0]
+      expect(row.conversionAction).toEqual({
+        targetResourceType: 'commands',
+        label: 'Create command',
+        disabled: true,
+        disabledReason: 'Codex has no verified command-file contract yet.'
+      })
+    })
+
+    it('disables the conversion action with an accessible reason for a config-only row', () => {
+      const resources = [ref({ id: 'one', agentKind: 'claude', resourceType: 'skills', existsOnDisk: false })]
+      const groups = buildConfigResourceGroups(
+        baseInput({ resourceType: 'skills', agentFilter: 'claude', resources })
+      )
+      const row = groups.find((g) => g.agentKind === 'claude')!.rows[0]
+      expect(row.conversionAction?.disabled).toBe(true)
+      expect(row.conversionAction?.disabledReason).toBe(
+        'This resource exists only in Tatsu config, not on disk.'
+      )
+    })
+
+    it('offers no conversion action on the Agents tab', () => {
+      const resources = [ref({ id: 'one', agentKind: 'claude', resourceType: 'agents' })]
+      const groups = buildConfigResourceGroups(
+        baseInput({ resourceType: 'agents', agentFilter: 'claude', resources })
+      )
+      const row = groups.find((g) => g.agentKind === 'claude')!.rows[0]
+      expect(row.conversionAction).toBeNull()
+    })
+  })
 })
