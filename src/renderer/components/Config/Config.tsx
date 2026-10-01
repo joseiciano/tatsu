@@ -126,6 +126,16 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const readTokenRef = useRef(0)
   const scannedRef = useRef<Map<string, Set<HarnessConfigScopeKey>>>(new Map())
   const pendingScanRef = useRef<Map<string, Set<HarnessConfigScopeKey>>>(new Map())
+  const syncNoticeTimeoutsRef = useRef<Map<HarnessConfigScopeKey, number>>(new Map())
+
+  const clearSyncNoticeTimeouts = useCallback(() => {
+    for (const timeoutId of syncNoticeTimeoutsRef.current.values()) {
+      window.clearTimeout(timeoutId)
+    }
+    syncNoticeTimeoutsRef.current.clear()
+  }, [])
+
+  useEffect(() => clearSyncNoticeTimeouts, [clearSyncNoticeTimeouts])
 
   const [dialogAgentName, setDialogAgentName] = useState('')
   const [dialogResourceLabel, setDialogResourceLabel] = useState('')
@@ -171,8 +181,9 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     backendGenerationRef.current += 1
     scannedRef.current = new Map()
     pendingScanRef.current = new Map()
+    clearSyncNoticeTimeouts()
     resetPageLocalState()
-  }, [activeBackend.id, resetPageLocalState])
+  }, [activeBackend.id, resetPageLocalState, clearSyncNoticeTimeouts])
 
   const isDirty =
     editorMode === 'edit'
@@ -562,6 +573,12 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setSelectedRef(readResult.value.ref)
         setDraft(readResult.value.content)
         setSavedContent(readResult.value.content)
+      } else {
+        // The write already succeeded — fall back to treating the content we
+        // just wrote as the new saved baseline so the editor doesn't stay
+        // stuck "dirty", and surface the re-read failure so it isn't silent.
+        setSavedContent(content)
+        setActionError(`Saved, but failed to refresh the file: ${readResult.error.message}`)
       }
 
       await refreshComparisons(
@@ -655,7 +672,14 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setScopeStatus(key, { busy: false, error: null })
         if (result.value.status === 'synced') {
           setScopeStatus(key, { notice: 'Synced' })
-          window.setTimeout(() => setScopeStatus(key, { notice: null }), 2500)
+          const existingTimeout = syncNoticeTimeoutsRef.current.get(key)
+          if (existingTimeout !== undefined) window.clearTimeout(existingTimeout)
+          const timeoutId = window.setTimeout(() => {
+            syncNoticeTimeoutsRef.current.delete(key)
+            if (activeBackendIdRef.current !== backendId || backendGenerationRef.current !== generation) return
+            setScopeStatus(key, { notice: null })
+          }, 2500)
+          syncNoticeTimeoutsRef.current.set(key, timeoutId)
           return
         }
         setDialogAgentName(getAgentInfo(scope.agentKind).displayName)
