@@ -151,3 +151,33 @@ describe('codex hook install / dedup', () => {
     expect(final.hooks?.PreToolUse).toBeUndefined()
   })
 })
+
+describe('codex_hooks feature flag', () => {
+  const CONFIG_PATH = join(homedir(), '.codex', 'config.toml')
+
+  it('inserts the flag under an existing [features] table, not at EOF', () => {
+    fsState.files.set(
+      CONFIG_PATH,
+      'model = "o3"\n\n[features]\nweb_search = true\n\n[mcp_servers.foo]\ncommand = "foo"\n'
+    )
+    installHooks()
+    expect(fsState.files.get(CONFIG_PATH)).toBe(
+      'model = "o3"\n\n[features]\ncodex_hooks = true\nweb_search = true\n\n[mcp_servers.foo]\ncommand = "foo"\n'
+    )
+  })
+
+  it('appends a [features] table when none exists', () => {
+    fsState.files.set(CONFIG_PATH, 'model = "o3"')
+    installHooks()
+    expect(fsState.files.get(CONFIG_PATH)).toBe(
+      'model = "o3"\n\n[features]\ncodex_hooks = true\n'
+    )
+  })
+
+  it('leaves the file alone when the flag is already set', () => {
+    const content = '[features]\ncodex_hooks = false\n'
+    fsState.files.set(CONFIG_PATH, content)
+    installHooks()
+    expect(fsState.files.get(CONFIG_PATH)).toBe(content)
+  })
+})
