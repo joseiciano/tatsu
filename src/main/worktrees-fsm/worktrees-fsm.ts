@@ -15,7 +15,7 @@ import type { WorktreeContainers, CreatedWorktreeContainer } from '../worktree-c
 import { log } from '../debug'
 import type { Store } from '../store'
 import type { Worktree, PendingWorktree } from '../../shared/state/worktrees'
-import { hydratePersistedWorktreeContainers } from '../build-initial-state'
+import { hydratePersistedWorktreeContainers, UNVERIFIED_CONTAINER_ERROR } from '../build-initial-state'
 import type { PersistedWorktreeContainer } from '../persistence'
 
 export function containerScriptEnv(workdir: string, branch: string, repoRoot: string): Record<string, string> {
@@ -123,7 +123,7 @@ export class WorktreesFSM {
   private async verifyRecoveredContainers(worktrees: Worktree[]): Promise<void> {
     if (!this.opts.containers) return
     const isContainerRunning = this.opts.containers.isContainerRunning
-    const starting = worktrees.filter((wt) => wt.container?.status === 'starting')
+    const starting = worktrees.filter((wt) => wt.container?.status === 'starting' && wt.container.error === UNVERIFIED_CONTAINER_ERROR)
     await Promise.all(starting.map(async (wt) => {
       const container = wt.container!
       try {

@@ -56,6 +56,8 @@ function flattenScratchpadNotes(
   return out
 }
 
+export const UNVERIFIED_CONTAINER_ERROR = 'Container status has not been checked yet.'
+
 export function hydratePersistedWorktreeContainers(
   worktrees: Worktree[],
   persisted: Record<string, PersistedWorktreeContainer> | undefined,
@@ -84,7 +86,7 @@ export function hydratePersistedWorktreeContainers(
         workdir: container.workdir,
         shell: container.shell,
         status: 'starting' as const,
-        error: 'Container status has not been checked yet.'
+        error: UNVERIFIED_CONTAINER_ERROR
       }
     }
   })

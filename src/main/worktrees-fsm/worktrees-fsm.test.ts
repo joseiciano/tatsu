@@ -17,7 +17,7 @@ vi.mock('../worktree', () => ({
 }))
 vi.mock('../repo-config', () => ({ loadRepoConfig: vi.fn(() => ({})) }))
 vi.mock('../github', () => ({ getPRMetadata: vi.fn() }))
-vi.mock('../build-initial-state', () => ({ hydratePersistedWorktreeContainers: vi.fn((wt: any[], persisted: any, existing: any[] = []) => wt.map((w) => {
+vi.mock('../build-initial-state', () => ({ UNVERIFIED_CONTAINER_ERROR: 'Container status has not been checked yet.', hydratePersistedWorktreeContainers: vi.fn((wt: any[], persisted: any, existing: any[] = []) => wt.map((w) => {
   const existingContainer = existing.find((e) => e.path === w.path)?.container
   if (existingContainer) return { ...w, container: existingContainer }
   const container = persisted?.[w.path]
@@ -261,6 +261,32 @@ describe('WorktreesFSM container integration', () => {
     expect(containers.isContainerRunning).toHaveBeenCalledTimes(2)
     resolvers.forEach((resolve) => resolve(true))
     await new Promise<void>((resolve) => setImmediate(resolve))
+  })
+
+  it('does not verify containers that are starting because of an in-flight operation', async () => {
+    const containers = {
+      checkDockerAvailable: vi.fn(async () => ({ ok: true })),
+      resolveContainerConfig: vi.fn(),
+      ensureImage: vi.fn(),
+      createForWorktree: vi.fn(),
+      execInContainer: vi.fn(),
+      isContainerRunning: vi.fn().mockResolvedValue(false),
+      stopContainer: vi.fn(),
+      restartContainer: vi.fn(),    }
+    const wt = { path: '/repo/wt/restarting', branch: 'restarting', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }
+    mockedListWorktrees.mockResolvedValue([wt])
+    const fsm = makeFSM(containers as any)
+    store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{ ...wt, container: { id: 'c-restart', name: 'tw', image: 'n', workdir: '/w', shell: '/bin/sh', status: 'starting' } }]
+    })
+
+    await fsm.refreshList()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(containers.isContainerRunning).not.toHaveBeenCalled()
+    const after = store.getSnapshot().state.worktrees.list.find((w) => w.path === '/repo/wt/restarting')
+    expect(after?.container?.status).toBe('starting')
   })
 
   it('dispatches containerUpdated with starting status after refreshList adds the worktree', async () => {
