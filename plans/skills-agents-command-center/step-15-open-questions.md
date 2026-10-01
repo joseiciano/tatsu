@@ -40,6 +40,7 @@ This step reconciles the plan set's open-questions ledger with the accepted prod
   - Recorded as REQ-002, REQ-003, and REQ-004 above; no answer is supplied for any of them.
 - [x] **TASK-003**: Exclude settled source-of-truth direction, mutation scope, managed resource scope, harness scope, and mutation safeguards from the open-question ledger.
   - Confirmed: REQ-006 (source-of-truth direction), REQ-011 referenced via REQ-001 (mutation scope), REQ-007 (managed resource union and harness scope), and REQ-005's listed safeguards are all recorded as settled, not as open questions, and REQ-008 constrains the ledger to exactly REQ-002 through REQ-004.
+  - Step 14 TASK-008's open gap (no renderer surface yet presents `pi` as deferred) is an acceptance-verification gap tracked in [step-14-acceptance-criteria.md](./step-14-acceptance-criteria.md), not an open question; the settled harness scope in REQ-007 is unchanged and the gap is not added to this ledger.
 - [x] **TASK-004**: Record the invariant protection statement from REQ-005 so resolver answers cannot weaken confirmation, backup, alias identity, scoped mutation, or no-cross-harness/plugin-copy rules.
   - Recorded as REQ-005 above.
 
@@ -74,3 +75,4 @@ This step reconciles the plan set's open-questions ledger with the accepted prod
 - [Step 1: Product boundary and source of truth](./step-01-product-boundary-source-of-truth.md)
 - [Step 2: Main-process harness config service](./step-02-main-process-harness-config-service.md)
 - [Step 3: Harness capability metadata](./step-03-harness-capability-metadata.md)
+- [Step 14: Acceptance criteria](./step-14-acceptance-criteria.md)
