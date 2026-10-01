@@ -172,7 +172,7 @@ A full-screen view alongside Activity / Cleanup / Command Center (`showWorkflows
 
 **Runs** (default)
 - **Needs you** (pinned at the top): runs paused on a gate, a failed step, `needs-approval`, `needs-input`, a budget cap or a loop cap. Fire an OS notification on entry.
-- **Active**: one card per run or batch. Run card: workflow name, repo/worktree, step strip (`plan ✓ → build ● → review ○`), current agent + status, elapsed time, cost. Batch card: progress (`7/20 done · 3 running · 1 needs you · 9 queued`) and expands to child runs.
+- **Active**: one card per run or batch. Run card: workflow name, repo/worktree, step strip (`plan ✓ → build ● → review ○`), current agent + status, elapsed time, cost. Batch card: progress (`7/20 done · 3 running · 1 needs you · 4 blocked · 5 queued`) and expands to its chains of child runs, each with its PR link.
 - **Recent**: finished / cancelled
 - Run detail: read-only graph, timeline of attempts, each step's result + diff (from snapshots), "Jump to tab", and actions: Approve / Request changes (gates), Retry, Retry from clean, Skip, Swap harness/model, Mark done (manual summary), Cancel
 
@@ -186,7 +186,7 @@ Worktrees with a running workflow get a small badge in the sidebar.
 
 A run = **definition + target + inputs**. Every entry point opens the same launch sheet:
 
-1. **Target**: repo, then **new worktree** (default), **existing worktree**, or **batch over items** (source picker + concurrency cap)
+1. **Target**: repo, then **new worktree** (default), **existing worktree**, or **batch over items** (source picker, resolved dependency chains with edge editing, concurrency cap, draft-PR toggle)
 2. **Inputs**: generated from the definition's typed inputs: `text` (textarea), `issue` / `pr` (GitHub picker), `file` (file picker). In a batch, the item fills one input.
 3. **Overrides** (collapsed): per-step agent/model swap, **autopilot** (auto-approves gates), and a budget cap
 
