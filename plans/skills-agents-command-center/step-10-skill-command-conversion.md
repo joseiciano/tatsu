@@ -20,7 +20,7 @@ Three upstream contracts are refined here and reconciled in Phase 2: the Step 6 
 
  - **REQ-001**: Create `src/main/harness-config/conversion.ts` with exactly two exported pure generators, `createCommandFromSkill(skill)` and `createSkillFromCommand(command)`, plus package-internal `slugifyLogicalName()` and `extractFrontMatterDescription()` helpers. The module MUST be deterministic: no filesystem access, clock, randomness, or UUID generation. It MUST be exported through the `src/main/harness-config` barrel.
 - **REQ-002**: The generator input type `HarnessConfigConversionSource` MUST contain `agentKind` (`claude | codex | opencode`), `resourceType` (`'skills' | 'commands'`), logical source `name`, display `label`, root-relative POSIX `relativePath`, and full UTF-8 `content`. `createCommandFromSkill` MUST require `resourceType: 'skills'`; `createSkillFromCommand` MUST require `resourceType: 'commands'`; any other input MUST throw `HarnessConfigError` with a safe message.
-- **REQ-003**: Destination naming MUST be deterministic: `destinationName = slugifyLogicalName(label)`, falling back to the source logical `name`. `slugifyLogicalName` MUST lowercase, keep ASCII `[a-z0-9]`, collapse every other character run into a single `-`, trim leading/trailing `-`, and truncate to 80 characters with trailing `-` trimmed. An empty result MUST throw `HarnessConfigError` with the `invalid-name` code defined by Step 2.
+- **REQ-003**: Destination naming MUST be deterministic and owned by a single helper in `src/main/harness-config/conversion.ts`: `destinationName = slugifyLogicalName(name)`, where `name` is the path-qualified source logical name (root-relative path without `.md` for commands, the skill directory path for skills; e.g. Claude `frontend/review.md` -> `frontend-review`), falling back to `slugifyLogicalName(label)` only when the name slugifies to nothing. Path qualification keeps nested sources that share a basename (`frontend/review.md`, `backend/review.md`) distinct. `slugifyLogicalName` MUST lowercase, keep ASCII `[a-z0-9]`, collapse every other character run into a single `-`, trim leading/trailing `-`, and truncate to 64 characters (Claude's skill-name limit) with trailing `-` trimmed. An empty result MUST throw `HarnessConfigError` with the `invalid-name` code defined by Step 2.
 - **REQ-004**: `createCommandFromSkill` MUST return `{ destinationResourceType: 'commands', destinationName, content }` where `content` is exactly:
 
   ```md
@@ -28,26 +28,29 @@ Three upstream contracts are refined here and reconciled in Phase 2: the Step 6 
   description: <description>
   ---
 
-  Use the <destinationName> skill.
+  Use the <label> skill.
 
   <!-- Converted by Tatsu from <agentKind> skills <relativePath> -->
   ```
 
-  `<description>` MUST be `extractFrontMatterDescription(source.content)` when that returns a non-empty value, otherwise `Run the <destinationName> skill`. `extractFrontMatterDescription` MUST scan only a leading `---` front-matter block (at most its first 50 lines), return the trimmed value of the first line matching `^description:\s*(.*)$`, and return `null` when no block, no closing delimiter, or no `description` line exists.
+  `<description>` MUST be `extractFrontMatterDescription(source.content)` when that returns a non-empty value, otherwise `Run the <destinationName> skill`. `<label>` is the source's display label (its real name), not the slugified destination name. `extractFrontMatterDescription` MUST scan only a leading `---` front-matter block (at most its first 50 lines), return the trimmed value of the first line matching `^description:\s*(.*)$`, and return `null` when no block, no closing delimiter, or no `description` line exists.
 - **REQ-005**: `createSkillFromCommand` MUST return `{ destinationResourceType: 'skills', destinationName, content }` where `content` is exactly:
 
   ```md
   # <destinationName>
 
-  Use this skill when the user requests the `<destinationName>` command behavior.
+  Use this skill when the user requests the `<label>` command behavior.
 
   <!-- Converted by Tatsu from <agentKind> commands <relativePath> -->
   ```
+
+  The heading uses the slugified `<destinationName>`; the body cites the source's display `<label>`.
 - **REQ-006**: Generated content MUST contain no timestamp, UUID, hash, or randomness so regeneration is byte-identical and re-deriving a draft never manufactures synthetic drift.
 - **REQ-007**: Source metadata MUST appear only in the trailing HTML comment naming `agentKind`, source resource type, and source root-relative path; the comment MUST be the last line followed by a terminating newline. Generated content MUST NOT embed the source file body.
  - **REQ-008**: The service conversion prepare methods `prepareCommandFromSkill(scope, id)` and `prepareSkillFromCommand(scope, id)` in `src/main/harness-config/harness-config.ts` MUST be non-mutating: resolve the source ref from a fresh disk inventory within the requested scope, require the source canonical resource type to match the direction, read fresh UTF-8 source content only after alias/existing resolution requires generation, and return one `HarnessConfigConversionResult`. They MUST NOT create a mutation plan and MUST NOT write disk or Tatsu config.
 - **REQ-009**: For a Claude skill-to-command request, `prepareCommandFromSkill` MUST resolve the command logical view as an alias and return `{ status: 'alias', ref }` carrying the skill's existing physical ref (canonical `skills`, alias `commands`). The returned ref MUST retain the same stable resource identity and underlying physical path that the Skills and Commands views resolve to, per Step 1 REQ-017. The create-command action MUST never invoke generation or create, copy, or modify a file for this alias.
 - **REQ-009a**: For a Claude command-to-skill request, `prepareSkillFromCommand` MUST resolve the skill logical view as an alias and return `{ status: 'alias', ref }` carrying the command's existing physical ref (canonical `commands`, alias `skills`). The alias invariant from Step 1 REQ-017 is bidirectional: create-skill and create-command each return the existing resource reference when the target logical alias already exists; neither direction may allocate a new identity/path or create a duplicate file.
+  - **Open note (spec/code mismatch)**: the current implementation returns `alias` for a Claude command-to-skill request only when the command ref carries a `skills` alias or canonical type. The shipped Claude `commands` resolver declares no `skills` alias, so a real Claude command file produces a `draft` skill (named per REQ-003) instead of an `alias` result. Behavior is intentionally unchanged pending a decision on whether this requirement or the code is authoritative.
 - **REQ-010**: After Claude alias resolution, when the derived destination path (`commands/<name>.md`, Codex `prompts/<name>.md`, `skills/<name>/SKILL.md`) already exists in the fresh disk inventory, the prepare method MUST return `{ status: 'existing', ref }` with that ref and MUST NOT overwrite it. This makes conversion idempotent: a second conversion returns the first result.
 - **REQ-011**: Otherwise the prepare method MUST return `{ status: 'draft', scope, name, content }`, where `scope` is `{ agentKind: source.agentKind, resourceType: <destinationResourceType> }` and `name`/`content` come from the matching pure generator. The destination `agentKind` MUST equal the source `agentKind` and the requested scope's `agentKind`; no code path may derive a destination harness from plugin provenance, Tatsu config, disk inventory entries in another harness, or any other field.
 - **REQ-012**: A conversion request MUST carry exactly `{ scope, id }` and MUST originate from the user's explicit `Create command` or `Create skill` action. Source-type mismatch, a source that resolves outside the requested `${agentKind}:${resourceType}` scope, `pi`, unsupported agent values, a config-only source (`existsOnDisk: false`), and any extra authority-bearing field (destination harness, path, name override, plan ID, content, plugin, or provenance) MUST be rejected with a safe structured error before alias resolution or generation. Disk-inventory refresh, Tatsu-config refresh, sync to disk, adopt from disk, conflict resolution, and plugin discovery MUST NOT invoke conversion. The only conversion channels are Step 6's `harnessConfig:prepareCommandFromSkill` and `harnessConfig:prepareSkillFromCommand`; both are single-phase prepare-only requests with no mutation-plan binding and no apply phase.
@@ -159,7 +162,7 @@ Three upstream contracts are refined here and reconciled in Phase 2: the Step 6 
 ## 6. Testing
 
 - **TEST-001**: Generator tests prove byte-exact command and skill templates, description extraction from a leading front-matter block, fallback description, and the trailing source-metadata comment.
-- **TEST-002**: Slug tests prove lowercasing, invalid-character collapsing, trimming, 80-character truncation, label-over-name precedence, and `invalid-name` rejection.
+- **TEST-002**: Slug tests prove lowercasing, invalid-character collapsing, trimming, 64-character truncation, name-over-label precedence (path-qualified for nested sources, e.g. `frontend/review` -> `frontend-review` and `backend/review` -> `backend-review` as distinct drafts), label fallback when the name has no derivable slug, and `invalid-name` rejection.
 - **TEST-003**: Bidirectional service alias tests prove Claude skill-to-command and command-to-skill actions both return the existing physical ref with the same stable identity/path, perform zero disk and Tatsu-config writes, and never create a duplicate physical resource.
 - **TEST-004**: Existing-destination tests prove the derived destination is never overwritten, the existing ref is returned, and repeated conversion is idempotent.
 - **TEST-005**: Draft tests prove correct destination layouts for supported non-alias conversions (including Codex `prompts/<name>.md` and OpenCode `commands/<name>.md`) with same-`agentKind` scopes; no Claude alias case may return a draft.
@@ -173,7 +176,7 @@ Three upstream contracts are refined here and reconciled in Phase 2: the Step 6 
 
 ## 7. Risks & Assumptions
 
-- **RISK-001**: Two different sources can slug to the same destination name; the second conversion returns the first source's existing ref. The notice names the exact relative path so the user sees which file exists, and naming stays deterministic; no automatic suffixing is performed.
+- **RISK-001**: Path-qualified naming keeps nested sources with the same basename distinct, but two different sources can still slug to the same destination name (e.g. `a-b.md` and `a/b.md`, names differing only in case or punctuation, or names truncated at the 64-character cap); the second conversion returns the first source's existing ref. The notice names the exact relative path so the user sees which file exists, and naming stays deterministic; no automatic suffixing is performed.
 - **RISK-002**: Harness vendors may change command or skill file conventions. Generated shapes stay minimal (front-matter `description` plus body plus comment) so a vendor change requires updating one template in one module.
 - **RISK-003**: If bidirectional alias resolution occurs after generation or only in one direction, a Claude create-command/create-skill action could create a separate physical file with a distinct ID, violating Step 1 REQ-017. REQ-009 and REQ-009a require alias resolution first and return the existing ref in both directions; both logical views may display the resource, but its stable identity/path remains singular.
 - **RISK-004**: Steps 2 through 9 are not implemented at plan time. Implementation MUST follow the prerequisite-first assumption below and stop rather than invent substitutes.
