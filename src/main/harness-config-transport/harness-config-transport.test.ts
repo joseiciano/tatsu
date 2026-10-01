@@ -354,6 +354,32 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect(store.eventsOfType('harnessConfig/syncApplied')).toHaveLength(0)
     })
 
+    it('bounds live plan bindings by evicting the oldest unapplied plan', async () => {
+      let counter = 0
+      const { transport, service } = setup({
+        prepareCreate: vi.fn((scope: HarnessConfigScope) => makeMutationPlan({ scope, planId: `plan-${counter++}` }))
+      })
+      for (let i = 0; i < 65; i++) {
+        await transport.call('harnessConfig:prepareCreate', { scope: SKILLS_SCOPE, name: 'foo', content: 'c' })
+      }
+
+      const evicted = (await transport.call('harnessConfig:createFile', {
+        scope: SKILLS_SCOPE,
+        planId: 'plan-0',
+        confirmed: true
+      })) as { ok: false; error: { code: string } }
+      expect(evicted.ok).toBe(false)
+      expect(evicted.error.code).toBe('unknown-plan')
+      expect(service.applyPlan).not.toHaveBeenCalled()
+
+      const newest = (await transport.call('harnessConfig:createFile', {
+        scope: SKILLS_SCOPE,
+        planId: 'plan-64',
+        confirmed: true
+      })) as { ok: boolean }
+      expect(newest.ok).toBe(true)
+    })
+
     it('rejects an unconfirmed plan and invalidates it against replay', async () => {
       const plan = makeMutationPlan()
       const { transport, service } = setup({ prepareCreate: vi.fn(() => plan) })
@@ -478,6 +504,41 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect((applied[0] as { payload: { scope: HarnessConfigScope } }).payload.scope).toEqual(SKILLS_SCOPE)
     })
 
+    it('a successful apply still dispatches syncApplied stamped at apply time when the post-apply comparison fails', async () => {
+      const plan = makeSyncPlan()
+      let applyResolvedAt = -1
+      const { transport, store, now } = setup({
+        planSyncToDisk: vi.fn(() => plan),
+        planSync: vi.fn(() => {
+          throw new HarnessConfigError('read-failed', 'compare failed')
+        }),
+        scan: vi.fn(() => [makeRef()]),
+        applyPlan: vi.fn(async () => {
+          applyResolvedAt = now()
+          return {
+            scope: SKILLS_SCOPE,
+            planId: plan.planId,
+            applied: [],
+            resultingRefs: [],
+            requiresRescan: true as const
+          }
+        })
+      })
+      await transport.call('harnessConfig:planSyncToDisk', { scope: SKILLS_SCOPE })
+
+      const result = (await transport.call('harnessConfig:syncToDisk', {
+        scope: SKILLS_SCOPE,
+        planId: plan.planId,
+        confirmed: true
+      })) as { ok: true }
+
+      expect(result.ok).toBe(true)
+      expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toHaveLength(0)
+      const applied = store.eventsOfType('harnessConfig/syncApplied')
+      expect(applied).toHaveLength(1)
+      expect((applied[0] as { payload: { syncedAt: number } }).payload.syncedAt).toBe(applyResolvedAt)
+    })
+
     it('a sync-to-disk plan cannot be applied through adoptFromDisk', async () => {
       const plan = makeSyncPlan()
       const { transport, service } = setup({ planSyncToDisk: vi.fn(() => plan) })
@@ -518,6 +579,10 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect(result.ok).toBe(false)
       expect(result.error.code).toBe('write-failed')
       expect(result.error.message).toBe('disk write failed partway')
+      expect(result.error).toMatchObject({
+        applied: [{ type: 'overwrite', id: 'ref-1', relativePath: 'foo/SKILL.md' }],
+        requiresRescan: true
+      })
       expect(service.scan).toHaveBeenCalled()
       expect(store.eventsOfType('harnessConfig/resourcesLoaded').length).toBeGreaterThan(0)
       expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toHaveLength(1)

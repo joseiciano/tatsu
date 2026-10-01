@@ -225,6 +225,12 @@ function DesktopApp(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | undefined>(undefined)
   const [showConfig, setShowConfig] = useState(false)
+  const showConfigRef = useRef(showConfig)
+  showConfigRef.current = showConfig
+  const setShowSettingsUnlessConfig = useCallback<Dispatch<SetStateAction<boolean>>>((value) => {
+    if (showConfigRef.current) return
+    setShowSettings(value)
+  }, [])
   const [showGuide, setShowGuide] = useState(false)
   const [showMyWeek, setShowMyWeek] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
@@ -347,7 +353,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
 
   // Open Settings from the menu (Cmd+,)
   useEffect(() => {
-    const cleanup = backend.onOpenSettings(() => setShowSettings(true))
+    const cleanup = backend.onOpenSettings(() => setShowSettingsUnlessConfig(true))
     return cleanup
   }, [])
 
@@ -713,7 +719,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     handleSelectTab,
     handleSplitPane,
     handleRefreshWorktrees,
-    setShowSettings
+    setShowSettings: setShowSettingsUnlessConfig
   })
 
   // File → Close Tab (Cmd+W). The accelerator lives on the menu item

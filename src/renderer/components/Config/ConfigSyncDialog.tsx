@@ -132,6 +132,12 @@ export function ConfigSyncDialog({
   // No Enter handling here: native Enter/Space activation only fires
   // when an action button itself already has focus.
   useEffect(() => {
+    if (!open || !dismissDisabled) return
+    const panel = panelRef.current
+    if (panel && !panel.contains(document.activeElement)) panel.focus()
+  }, [open, dismissDisabled])
+
+  useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
@@ -145,7 +151,11 @@ export function ConfigSyncDialog({
       const panel = panelRef.current
       if (!panel) return
       const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-      if (focusable.length === 0) return
+      if (focusable.length === 0) {
+        e.preventDefault()
+        panel.focus()
+        return
+      }
       const first = focusable[0]
       const last = focusable[focusable.length - 1]
       const active = document.activeElement
@@ -180,12 +190,13 @@ export function ConfigSyncDialog({
     >
       <div
         ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl max-h-[80vh] bg-surface rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col"
+        className="w-full max-w-2xl max-h-[80vh] outline-none bg-surface rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
           <h2 id={titleId} className="text-sm font-semibold text-fg-bright truncate">
