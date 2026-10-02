@@ -95,16 +95,11 @@ For each paired module:
 6. Keep behavior unchanged
 
 ### Phase 2 — selective internal split
-After move settles, split large packages further only where useful:
-- move shared types into `types.ts`
-- move reusable constants into `constants.ts`
-- leave small modules alone
-
-This phase is intentionally out of scope for first pass.
+Types and constants splits were performed during each batch's refactor pass where they improved clarity and reduced file size. Small, self-contained modules remain unsplit. Future splits are selective — only when a package grows large enough or shared types gain enough surface that extraction pays its own weight.
 
 ## Batching plan
 
-Remember, the phases are meant to be done on each bach in a separate phase (i.e. If I prompt to implement phase 1 on batch 1, you should only implement changes on the directory/files in batch 1. At most, update imports from other files not in batch 1 to use the new imports we made from changing batch 1's structure.)
+Remember, the phases are meant to be done on each batch in a separate phase (i.e. If I prompt to implement phase 1 on batch 1, you should only implement changes on the directory/files in batch 1. At most, update imports from other files not in batch 1 to use the new imports we made from changing batch 1's structure.)
 
 
 **Batch 1**: `src/main/`

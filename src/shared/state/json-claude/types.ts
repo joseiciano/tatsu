@@ -170,7 +170,7 @@ export interface JsonClaudeSession {
   /** Audit map of tool calls that were auto-approved by the LLM-based
    *  reviewer (instead of going through the user UI). Keyed by toolUseId
    *  so the per-tool card can render a small "auto-approved" badge.
-   *  Only populated when settings.autoApprovePermissions is on. */
+   *  Only populated when the auto-reviewer approves a request. */
   autoApprovedDecisions: Record<
     string,
     { model: string; reason: string; timestamp: number }
@@ -195,7 +195,7 @@ export interface JsonClaudeSession {
 }
 
 /** Status of the LLM-based auto-reviewer for a single pending approval.
- *  Set on the pending entry only when settings.autoApprovePermissions is
+ *  Set on the pending entry only while the auto-reviewer is evaluating it.
  *  on. The renderer reads this to draw a small "asking auto-approver"
  *  spinner while pending and a muted "auto-approver: <reason>" line
  *  once the reviewer has decided to ask. We never see a finished

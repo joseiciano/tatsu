@@ -118,6 +118,8 @@ export type {
   WorktreesState,
   WorktreesEvent,
   Worktree,
+  WorktreeContainerMetadata,
+  WorktreeContainerStatus,
   PendingWorktree,
   PendingStatus
 } from './worktrees'

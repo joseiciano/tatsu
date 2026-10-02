@@ -140,6 +140,8 @@ export function buildBackend(
       removeMeta?: { prNumber?: number; prState?: 'open' | 'draft' | 'merged' | 'closed' }
     ) => req('worktree:remove', repoRoot, path, force, removeMeta),
     dismissPendingDeletion: (path: string) => req('worktree:dismissPendingDeletion', path),
+    restartWorktreeContainer: (path: string) => req('worktrees:restartContainer', path),
+    recreateWorktreeContainer: (path: string) => req('worktrees:recreateContainer', path),
     getWorktreeDir: (repoRoot: string) => req('worktree:dir', repoRoot),
 
     listRepos: () => req('repo:list'),
@@ -242,6 +244,8 @@ export function buildBackend(
     setPiModel: (model: string | null) => req('config:setPiModel', model),
     setPiEnvVars: (vars: Record<string, string>) => req('config:setPiEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
+    setEnableWorktreeContainers: (enabled: boolean) =>
+      req('config:setEnableWorktreeContainers', enabled),
     setClaudeTuiFullscreen: (enabled: boolean) => req('config:setClaudeTuiFullscreen', enabled),
     setWsTransportEnabled: (enabled: boolean) => req('config:setWsTransportEnabled', enabled),
     setWsTransportPort: (port: number) => req('config:setWsTransportPort', port),

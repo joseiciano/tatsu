@@ -28,8 +28,13 @@
 // history buffer server-side.
 //
 // Auth: a random 32-byte hex token is generated at start() and required
-// via `?token=…` on the WS upgrade. No TLS, no rate limiting, no token
-// rotation yet — these are deferred; see PR description for the list.
+// via Authorization: Bearer <token> on the WS upgrade.  Browsers use
+// short-lived one-time session tokens via ?session=<session_token>,
+// obtained by exchanging the root token over same-origin HTTP
+// (POST /_harness/session on the web-client-server).  The root token
+// in ?token= is NOT accepted for WS — browsers must exchange it first.
+// No TLS, token rotation yet.  Per-client frames use a small
+// token-bucket rate limit.
 
 import { randomBytes, randomUUID } from 'crypto'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -45,8 +50,16 @@ import type { Store } from '../store'
 import type { PerfMonitor } from '../perf-monitor'
 import { log } from '../debug'
 import { perfLog } from '../perf-log'
+import { consumeToken, createTokenBucket, type TokenBucket } from '../rate-limit'
+import { safeEqualToken, consumeSessionToken } from '../ws-token'
 import type { ServerFrame, ClientFrame, WebSocketServerTransportOptions } from './types'
 import { SLOW_IPC_MS } from './constants'
+
+const WS_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024
+const WS_RATE_LIMIT_CAPACITY = 100
+const WS_RATE_LIMIT_REFILL_PER_SECOND = 100
+const WS_SIGNAL_RATE_LIMIT_CAPACITY = 1_000
+const WS_SIGNAL_RATE_LIMIT_REFILL_PER_SECOND = 1_000
 
 
 export class WebSocketServerTransport implements ServerTransport {
@@ -55,6 +68,8 @@ export class WebSocketServerTransport implements ServerTransport {
   private readonly sockets = new Set<WebSocket>()
   private readonly clientIdBySocket = new WeakMap<WebSocket, string>()
   private readonly requestHandlers = new Map<string, RequestHandler>()
+  private readonly rateLimitBuckets = new WeakMap<WebSocket, TokenBucket>()
+  private readonly signalRateLimitBuckets = new WeakMap<WebSocket, TokenBucket>()
   private readonly signalHandlers = new Map<string, SignalHandler>()
   private readonly disconnectCallbacks: Array<(id: string) => void> = []
   private readonly token: string
@@ -90,12 +105,14 @@ export class WebSocketServerTransport implements ServerTransport {
     if (this.opts.server) {
       this.wss = new WebSocketServer({
         server: this.opts.server,
+        maxPayload: WS_MAX_PAYLOAD_BYTES,
         verifyClient: (info, cb) => this.verify(info.req, cb)
       })
     } else {
       this.wss = new WebSocketServer({
         host,
         port: this.opts.port,
+        maxPayload: WS_MAX_PAYLOAD_BYTES,
         verifyClient: (info, cb) => this.verify(info.req, cb)
       })
     }
@@ -107,7 +124,7 @@ export class WebSocketServerTransport implements ServerTransport {
     this.wss.on('listening', () => {
       log(
         'ws-transport',
-        `listening on ws://${host}:${this.getPort()} (token=${this.token})`
+        `listening on ws://${host}:${this.getPort()} (token=<redacted>)`
       )
     })
 
@@ -162,32 +179,66 @@ export class WebSocketServerTransport implements ServerTransport {
     this.disconnectCallbacks.push(callback)
   }
 
+  private isOriginAllowed(origin: string, hostHeader: string | undefined): boolean {
+    if (this.opts.allowedOrigins?.includes(origin)) return true
+    try {
+      const parsed = new URL(origin)
+      if (parsed.protocol === 'file:') return true
+      if (hostHeader && parsed.host.toLowerCase() === hostHeader.toLowerCase()) return true
+      const host = parsed.hostname
+      if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1') {
+        return true
+      }
+      if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(host)) return true
+      return false
+    } catch {
+      return false
+    }
+  }
+
   private verify(
     req: IncomingMessage,
     cb: (ok: boolean, code?: number, message?: string) => void
   ): void {
-    // Token may arrive either as Authorization: Bearer <token> (preferred
-    // for programmatic clients) or as ?token=<token> (easier from a plain
-    // browser where headers on the upgrade request aren't user-settable).
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const queryToken = url.searchParams.get('token')
+
+    // 0. Origin validation (defense-in-depth against DNS rebinding).
+    // Non-browser clients (curl, CLI) don't send Origin and are allowed.
+    const origin = req.headers['origin']
+    if (origin && !this.isOriginAllowed(origin, req.headers['host'])) {
+      log('ws-transport', 'rejected ws handshake from disallowed origin', origin)
+      cb(false, 403, 'origin not allowed')
+      return
+    }
+
+    // 1. One-time browser session tokens via ?session=<session_token>.
+    const sessionParam = url.searchParams.get('session')
+    if (sessionParam && consumeSessionToken(sessionParam)) {
+      cb(true)
+      return
+    }
+
+    // 2. Root auth token via Authorization: Bearer <token>
+    // (programmatic clients — CLI, curl, etc.).
     const authHeader = req.headers['authorization']
     const headerToken =
       typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
         ? authHeader.slice(7)
         : null
-    const provided = headerToken ?? queryToken
-    if (provided !== this.token) {
-      log('ws-transport', 'rejected unauth ws handshake')
-      cb(false, 401, 'unauthorized')
+    if (safeEqualToken(headerToken, this.token)) {
+      cb(true)
       return
     }
-    cb(true)
+
+    log('ws-transport', 'rejected unauth ws handshake')
+    cb(false, 401, 'unauthorized')
   }
 
   private handleConnection(ws: WebSocket): void {
     const clientId = randomUUID()
     this.clientIdBySocket.set(ws, clientId)
+    this.rateLimitBuckets.set(ws, createTokenBucket(WS_RATE_LIMIT_CAPACITY))
+    this.signalRateLimitBuckets.set(ws, createTokenBucket(WS_SIGNAL_RATE_LIMIT_CAPACITY))
     this.sockets.add(ws)
     log('ws-transport', `client connected id=${clientId} (total=${this.sockets.size})`)
 
@@ -199,6 +250,7 @@ export class WebSocketServerTransport implements ServerTransport {
         log('ws-transport', 'dropped malformed frame')
         return
       }
+      if (!this.allowFrame(ws, frame)) return
       void this.handleClientFrame(ws, frame)
     })
 
@@ -211,6 +263,29 @@ export class WebSocketServerTransport implements ServerTransport {
     ws.on('error', (err) => {
       log('ws-transport', 'socket error', err.message)
     })
+  }
+
+  private allowFrame(ws: WebSocket, frame: ClientFrame): boolean {
+    const isSignal = frame.t === 'send'
+    const bucket = isSignal
+      ? this.signalRateLimitBuckets.get(ws)
+      : this.rateLimitBuckets.get(ws)
+    if (!bucket) return false
+    const capacity = isSignal ? WS_SIGNAL_RATE_LIMIT_CAPACITY : WS_RATE_LIMIT_CAPACITY
+    const refill = isSignal
+      ? WS_SIGNAL_RATE_LIMIT_REFILL_PER_SECOND
+      : WS_RATE_LIMIT_REFILL_PER_SECOND
+    if (consumeToken(bucket, capacity, refill)) {
+      return true
+    }
+    const frameName = frame.t === 'req' || frame.t === 'send' ? ` name=${frame.name}` : ''
+    log('ws-transport', `rate limited client frame type=${frame.t}${frameName}`)
+    if (frame.t === 'req') {
+      this.sendFrame(ws, { t: 'res', id: frame.id, ok: false, error: 'rate limit exceeded' })
+    } else if (frame.t === 'snapreq') {
+      this.sendFrame(ws, { t: 'snapres', id: frame.id, ok: false, error: 'rate limit exceeded' })
+    }
+    return false
   }
 
   private async handleClientFrame(ws: WebSocket, frame: ClientFrame): Promise<void> {

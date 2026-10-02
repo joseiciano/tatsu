@@ -34,7 +34,7 @@ backend determines which mirror feeds the existing `useWorktrees()` /
 ## A. Where does the switcher live in the chrome? 🟢 Decided — chip strip above the bottom icon row in the sidebar
 
 Lives at the bottom of the existing `Sidebar`
-(`src/renderer/components/Sidebar.tsx:421`), as a new strip directly
+(`src/renderer/components/Sidebar/Sidebar.tsx:421`), as a new strip directly
 above the existing icon row (refresh / cleanup / activity / settings).
 Same visual grouping — the user reads the bottom of the sidebar as
 "workspace-level chrome," and the backends list belongs there.
@@ -150,7 +150,7 @@ backend's `SettingsState`.
 
 **Where it lives:** add `connections` + `activeBackendId` as
 top-level fields in the existing `Config` interface in
-`src/main/persistence.ts`. Same file that holds `repoRoots`,
+`src/main/persistence/persistence.ts`. Same file that holds `repoRoots`,
 `hotkeys`, etc. — `userData/config.json`. (A separate
 `userData/connections.json` is also fine; it's a wash. Defaulting
 to "extend the existing file" because there's no migration cost.)
@@ -162,7 +162,7 @@ to a single server gets that one backend.
 
 **Tokens:** keep encrypted in `secrets.enc` (the same file that holds
 the GitHub PAT today via `setSecret/getSecret` in
-`src/main/secrets.ts`). Use `backend-token:<backendId>` as the secret
+`src/main/secrets/secrets.ts`). Use `backend-token:<backendId>` as the secret
 key so each backend's token is independently retrievable.
 
 **Schema (proposed):**
@@ -212,7 +212,7 @@ The hard question. Three shapes:
    visible UI hooks. Inactive backends keep accumulating state, so
    when you switch back the UI is instant and notifications work
    natively. Cost: N idle WS connections + state-event bandwidth (low
-   — the cascade detector in `src/main/store.ts` already keeps event
+   — the cascade detector in `src/main/store/store.ts` already keeps event
    rates bounded).
 
 2. **Disconnect on background, reconnect on switch** — saves a socket
@@ -290,7 +290,7 @@ migration cost, no collision).
 
 Cycle: `` Cmd+` `` for next backend, `` Cmd+Shift+` `` for previous
 (macOS-native window-cycling muscle memory). Subject to a final
-collision check against `src/renderer/hotkeys.ts` during
+collision check against `src/renderer/hotkeys/hotkeys.ts` during
 implementation, but the Shift-modifier slot is generally clear.
 
 Both registered as new `Action` entries in the `hotkeys` slice so
@@ -312,7 +312,7 @@ exists.
 The decision:
 
 - **`SettingsState` is unchanged.** Every field in
-  `src/shared/state/settings.ts` stays exactly where it is. Each
+  `src/shared/state/settings/settings.ts` stays exactly where it is. Each
   backend owns a full copy of the slice — same schema, same defaults,
   same reducer. From the backend's perspective, nothing about being
   multi-backend is visible: it's still a self-contained world.
@@ -604,7 +604,7 @@ original implementation sketch in two places — both for the better:
   round-trip on every call when the active backend was remote (the
   preload routed to a renderer-living WS transport — every call
   bridged out and back). Lag was ~2s on remote worktree switches.
-  Fix: build `window.api` (`src/renderer/build-backend.ts`) in
+  Fix: build `window.api` (`src/renderer/build-backend/build-backend.ts`) in
   renderer context, with each method calling
   `registry.getActiveTransport().request(...)` lazily. Local active
   → preload-bridged handle (1 crossing). Remote active → in-renderer
@@ -618,14 +618,14 @@ original implementation sketch in two places — both for the better:
 
 What landed as planned:
 
-- **Renderer:** `src/renderer/store.ts` holds the `BackendsRegistry`
+- **Renderer:** `src/renderer/store/store.ts` holds the `BackendsRegistry`
   with N `(transport, ClientStore, status)` entries. Per-backend
   hooks: `useConnections()`, `useActiveBackend()`,
   `useBackendStatus(id)`. Slice hooks (`useSettings()`,
   `useWorktrees()`, etc.) read from the active store via
   `subscribeActive` so switching backends triggers a re-render that
   picks up the new active store's slice values.
-- **Backend accessor:** `src/renderer/backend.ts` exports
+- **Backend accessor:** `src/renderer/backend/backend.ts` exports
   `getBackend()` (non-React) and `useBackend()` (React idiom). Both
   return the same singleton built by `initBackend()` during
   `initStore`. `window.api` is no longer set; all call sites use

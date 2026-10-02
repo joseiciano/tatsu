@@ -156,12 +156,12 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    rm -rf ~/Library/Preferences/org.mikelyons.harness.plist
    rm -rf ~/Library/Saved\ Application\ State/org.mikelyons.harness.savedState
    rm -rf ~/Library/Caches/org.mikelyons.harness
-   rm -rf ~/Library/Logs/Tatsu
+   rm -rf ~/Library/Logs/harness
    ```
 
 5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove hook entries whose `command` contains `/tmp/harness-status`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/harness-status.ts`.
 
-6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
+6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `<repo-name>-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
 
    ```sh
    cd <your-repo>
@@ -169,7 +169,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    git worktree remove <path>
    ```
 
-   Or delete the `claude-harness-worktrees/` directories from disk and run `git worktree prune` in each repo.
+   Or delete the `<repo-name>-worktrees/` directories from disk and run `git worktree prune` in each repo.
 
 ## Features
 
@@ -201,7 +201,7 @@ The main benefit of this is that your worktrees stay organized, and it's very ob
 
 This app assumes that you are going to want to use worktrees (otherwise what's the point)
 
-It will create a worktree directory at `../<your repo folder>-worktree` and start making worktrees there. This directory will probably be changable at some point
+It will create a worktree directory at `../<your repo folder>-worktrees` and start making worktrees there. This directory will probably be changeable at some point
 
 # Roadmap
 

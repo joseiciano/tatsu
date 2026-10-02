@@ -4,6 +4,8 @@ import { addWorktree, listWorktrees, defaultWorktreeDir, type WorktreeInfo } fro
 import type { AgentKind } from '../../shared/state/terminals'
 import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { log } from '../debug'
+import { consumeToken, createTokenBucket, type TokenBucket } from '../rate-limit'
+import { safeEqualToken } from '../ws-token'
 import {
   type BrowserQueries,
   type BrowserPerms,
@@ -12,6 +14,134 @@ import {
   type ShellQueries
 } from './types'
 import { FULL_CONTROL_BROWSER_PATHS } from './constants'
+
+const MAX_JSON_BODY_BYTES = 1024 * 1024
+const CONTROL_RATE_LIMIT_CAPACITY = 100
+const CONTROL_RATE_LIMIT_REFILL_PER_SECOND = 100
+const CONTROL_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60 * 1000
+const CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
+
+// Pre-auth rate limiter: keys only by remoteAddress to prevent brute-force
+// token guessing by varying X-Harness-Terminal-Id.
+const CONTROL_AUTH_RATE_LIMIT_CAPACITY = 20
+const CONTROL_AUTH_RATE_LIMIT_REFILL_PER_SECOND = 5
+const CONTROL_AUTH_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60 * 1000
+const CONTROL_AUTH_RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000
+
+export interface ControlRateLimiterOptions {
+  capacity?: number
+  refillPerSecond?: number
+  bucketTtlMs?: number
+  sweepIntervalMs?: number
+  keyFn?: (req: IncomingMessage) => string
+}
+
+export function createControlRateLimiter(opts: ControlRateLimiterOptions = {}) {
+  const capacity = opts.capacity ?? CONTROL_RATE_LIMIT_CAPACITY
+  const refillPerSecond = opts.refillPerSecond ?? CONTROL_RATE_LIMIT_REFILL_PER_SECOND
+  const bucketTtlMs = opts.bucketTtlMs ?? CONTROL_RATE_LIMIT_BUCKET_TTL_MS
+  const sweepIntervalMs = opts.sweepIntervalMs ?? CONTROL_RATE_LIMIT_SWEEP_INTERVAL_MS
+  const buckets = new Map<string, TokenBucket>()
+  let lastSweepAt = 0
+
+  const sweep = (now = Date.now()): number => {
+    for (const [key, bucket] of buckets) {
+      if (now - bucket.updatedAt > bucketTtlMs) buckets.delete(key)
+    }
+    lastSweepAt = now
+    return buckets.size
+  }
+
+  const keyFn = opts.keyFn ?? rateLimitKeyForRequest
+
+  return {
+    allow(req: IncomingMessage, now = Date.now()): boolean {
+      if (now - lastSweepAt >= sweepIntervalMs) sweep(now)
+      const key = keyFn(req)
+      let bucket = buckets.get(key)
+      if (!bucket) {
+        bucket = createTokenBucket(capacity, now)
+        buckets.set(key, bucket)
+      }
+      return consumeToken(bucket, capacity, refillPerSecond, now)
+    },
+    hasCapacity(req: IncomingMessage, now = Date.now()): boolean {
+      const bucket = buckets.get(keyFn(req))
+      if (!bucket) return true
+      const elapsedMs = Math.max(0, now - bucket.updatedAt)
+      return Math.min(capacity, bucket.tokens + (elapsedMs / 1000) * refillPerSecond) >= 1
+    },
+    sweep,
+    size: () => buckets.size
+  }
+}
+
+function rateLimitKeyForRequest(req: IncomingMessage): string {
+  const address = req.socket.remoteAddress || 'unknown'
+  const terminalId = String(req.headers['x-harness-terminal-id'] || '')
+  return terminalId ? `${address}:${terminalId}` : address
+}
+
+function ipOnlyKey(req: IncomingMessage): string {
+  return req.socket.remoteAddress || 'unknown'
+}
+
+const controlRateLimiter = createControlRateLimiter()
+
+/** IP-only pre-auth limiter — keyed solely by remoteAddress so that
+ *  brute-force token guessing by varying X-Harness-Terminal-Id is throttled. */
+const preAuthRateLimiter = createControlRateLimiter({
+  capacity: CONTROL_AUTH_RATE_LIMIT_CAPACITY,
+  refillPerSecond: CONTROL_AUTH_RATE_LIMIT_REFILL_PER_SECOND,
+  bucketTtlMs: CONTROL_AUTH_RATE_LIMIT_BUCKET_TTL_MS,
+  sweepIntervalMs: CONTROL_AUTH_RATE_LIMIT_SWEEP_INTERVAL_MS,
+  keyFn: ipOnlyKey
+})
+
+interface HttpStatusError extends Error {
+  statusCode: number
+}
+
+function isHttpStatusError(err: unknown): err is HttpStatusError {
+  return err instanceof Error && typeof (err as { statusCode?: unknown }).statusCode === 'number'
+}
+
+function httpStatusError(statusCode: number, message: string): HttpStatusError {
+  const err = new Error(message) as HttpStatusError
+  err.statusCode = statusCode
+  return err
+}
+
+function allowControlRequest(req: IncomingMessage): boolean {
+  return controlRateLimiter.allow(req)
+}
+
+function preAuthBudgetAvailable(req: IncomingMessage): boolean {
+  return preAuthRateLimiter.hasCapacity(req)
+}
+
+function recordFailedAuth(req: IncomingMessage): void {
+  preAuthRateLimiter.allow(req)
+}
+
+export function validateBrowserNavigationUrl(raw: string): { url: string } | { error: string } {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return { error: 'url must be absolute' }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { error: 'url must use http or https' }
+  }
+  return { url: parsed.toString() }
+}
+
+export function parseCreateBrowserTabUrl(body: Record<string, unknown>): { url: string } | { error: string } {
+  const nextUrl = typeof body.url === 'string' ? body.url.trim() : ''
+  if (!nextUrl) return { error: 'url required' }
+  return validateBrowserNavigationUrl(nextUrl)
+}
 
 export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
@@ -24,6 +154,26 @@ export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string
     ? `${agentNames.slice(0, -1).join(', ')}, or ${agentNames[agentNames.length - 1]}`
     : agentNames[0]
   return { error: `agentKind must be ${validAgents}` }
+}
+
+const GIT_REF_METACHARACTERS = /[~^:?*\[\]\\]/
+const MAX_BRANCH_NAME_LENGTH = 255
+
+/**
+ * Validate a branch name for use in POST /worktrees.
+ * Accepts typical git branch names (`feature/foo`, `release_2024.10-rc1`)
+ * and rejects dangerous or invalid inputs.
+ */
+export function validateControlBranchName(name: string): { valid: true } | { valid: false; error: string } {
+  const trimmed = name.trim()
+  if (!trimmed) return { valid: false, error: 'branchName must not be empty' }
+  if (trimmed.length > MAX_BRANCH_NAME_LENGTH) return { valid: false, error: `branchName must not exceed ${MAX_BRANCH_NAME_LENGTH} characters` }
+  if (trimmed.startsWith('-')) return { valid: false, error: 'branchName must not start with -' }
+  if (/[\x00-\x1f\x7f]/.test(trimmed)) return { valid: false, error: 'branchName must not contain control characters' }
+  if (trimmed.includes('..')) return { valid: false, error: 'branchName must not contain ..' }
+  if (trimmed.includes('@{')) return { valid: false, error: 'branchName must not contain @{' }
+  if (GIT_REF_METACHARACTERS.test(trimmed)) return { valid: false, error: 'branchName contains invalid git ref characters' }
+  return { valid: true }
 }
 
 
@@ -41,6 +191,10 @@ export function startControlServer(deps: ControlServerDeps): Promise<void> {
       handleRequest(req, res, token, deps).catch((err) => {
         log('control', 'handler threw', err instanceof Error ? err.message : String(err))
         if (!res.headersSent) {
+          if (isHttpStatusError(err)) {
+            sendJson(res, err.statusCode, { error: err.message })
+            return
+          }
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
         }
@@ -78,11 +232,26 @@ async function handleRequest(
   token: string,
   deps: ControlServerDeps
 ): Promise<void> {
+  // Pre-auth IP-only rate limit gate — keyed solely by remoteAddress so that
+  // brute-force token guessing by varying X-Harness-Terminal-Id is throttled.
+  // Only failed auth attempts drain the budget, so authenticated traffic
+  // from local agents isn't capped by it.
+  if (!preAuthBudgetAvailable(req)) {
+    return sendJson(res, 429, { error: 'rate limit exceeded' })
+  }
+
   const auth = req.headers.authorization
-  if (auth !== 'Bearer ' + token) {
+  if (!safeEqualToken(auth, 'Bearer ' + token)) {
+    recordFailedAuth(req)
     res.writeHead(401)
     res.end('unauthorized')
     return
+  }
+
+  // Post-auth rate limit gate: keys by remoteAddress + terminalId for
+  // authenticated request throughput control.
+  if (!allowControlRequest(req)) {
+    return sendJson(res, 429, { error: 'rate limit exceeded' })
   }
 
   const url = new URL(req.url || '/', 'http://127.0.0.1')
@@ -164,7 +333,7 @@ async function handleRequest(
 
     if (prNumber !== undefined) {
       if (branchName) {
-        log('control', `prNumber=${prNumber} provided — ignoring branchName=${branchName}`)
+        log('control', `prNumber=${prNumber} provided — ignoring branchName`)
       }
       // No explicit prompt → fall back to the configured review-prompt default.
       // Empty-string prompts ('') are honored as "no prompt" so callers can
@@ -187,6 +356,10 @@ async function handleRequest(
 
     if (!branchName) {
       return sendJson(res, 400, { error: 'branchName or prNumber required' })
+    }
+    const branchValidation = validateControlBranchName(branchName)
+    if (!branchValidation.valid) {
+      return sendJson(res, 400, { error: branchValidation.error })
     }
     const wtDir = defaultWorktreeDir(repoRoot)
     const mode = deps.getWorktreeBase()
@@ -256,8 +429,9 @@ async function handleRequest(
     }
     if (req.method === 'POST' && path === '/browser/tabs') {
       const body = await readJson(req)
-      const url = typeof body.url === 'string' ? body.url : ''
-      const created = deps.browser.createTab(callerWorktree, url)
+      const validated = parseCreateBrowserTabUrl(body)
+      if ('error' in validated) return sendJson(res, 400, { error: validated.error })
+      const created = deps.browser.createTab(callerWorktree, validated.url)
       return sendJson(res, 200, created)
     }
 
@@ -311,7 +485,9 @@ async function handleRequest(
     if (req.method === 'POST' && path === '/browser/navigate') {
       const nextUrl = String(body.url || '').trim()
       if (!nextUrl) return sendJson(res, 400, { error: 'url required' })
-      deps.browser.navigateTab(tabId, nextUrl)
+      const validated = validateBrowserNavigationUrl(nextUrl)
+      if ('error' in validated) return sendJson(res, 400, { error: validated.error })
+      deps.browser.navigateTab(tabId, validated.url)
       return sendJson(res, 200, { ok: true })
     }
     if (req.method === 'POST' && path === '/browser/back') {
@@ -472,18 +648,39 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
-function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+export function readJson(
+  req: IncomingMessage,
+  maxBodyBytes = MAX_JSON_BODY_BYTES
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
+    let done = false
+    let totalBytes = 0
     const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => chunks.push(c))
+    req.on('data', (c: Buffer) => {
+      if (done) return
+      const chunk = Buffer.isBuffer(c) ? c : Buffer.from(c)
+      totalBytes += chunk.byteLength
+      if (totalBytes > maxBodyBytes) {
+        done = true
+        reject(httpStatusError(413, `request body too large; max ${maxBodyBytes} bytes`))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on('end', () => {
+      if (done) return
       if (chunks.length === 0) return resolve({})
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8')))
       } catch (e) {
-        reject(e)
+        reject(httpStatusError(400, `malformed JSON: ${(e as Error).message}`))
       }
     })
-    req.on('error', reject)
+    req.on('error', (err) => {
+      if (done) return
+      done = true
+      reject(err)
+    })
   })
 }

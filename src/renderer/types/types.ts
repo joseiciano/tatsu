@@ -257,6 +257,8 @@ export interface ElectronAPI {
     removeMeta?: { prNumber?: number; prState?: PRStatus['state'] }
   ): Promise<{ queued: true }>
   dismissPendingDeletion(path: string): Promise<boolean>
+  restartWorktreeContainer(path: string): Promise<boolean>
+  recreateWorktreeContainer(path: string): Promise<boolean>
   getWorktreeDir(repoRoot: string): Promise<string>
   listRepos(): Promise<string[]>
   addRepo(): Promise<AddRepoResult>
@@ -336,6 +338,7 @@ export interface ElectronAPI {
   setClaudeCommand(command: string): Promise<boolean>
   getDefaultClaudeCommand(): Promise<string>
   setHarnessMcpEnabled(enabled: boolean): Promise<boolean>
+  setEnableWorktreeContainers(enabled: boolean): Promise<boolean>
   setClaudeTuiFullscreen(enabled: boolean): Promise<boolean>
   setWsTransportEnabled(enabled: boolean): Promise<boolean>
   setWsTransportPort(port: number): Promise<number>

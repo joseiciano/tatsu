@@ -10,7 +10,7 @@
 // transient chat attachments. Filename embeds a uuid so concurrent
 // pastes don't collide.
 
-import { writeFileSync, mkdirSync, existsSync, readFileSync, statSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, readFileSync, statSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
@@ -36,6 +36,13 @@ const MAX_IMAGE_READ_BYTES = 10 * 1024 * 1024
 export function readAttachmentImage(path: string): string | null {
   try {
     if (!existsSync(path)) return null
+    // Resolve symlinks first: a symlink inside ATTACHMENT_DIR pointing outside
+    // must be rejected. We use realpathSync on both the dir and the file so the
+    // containment comparison is always between fully-resolved canonical paths.
+    // (macOS /var → /private/var means resolve() and realpathSync() can differ.)
+    const realDir = realpathSync(ATTACHMENT_DIR)
+    const realPath = realpathSync(path)
+    if (!realPath.startsWith(realDir + '/') && realPath !== realDir) return null
     const stat = statSync(path)
     if (stat.size > MAX_IMAGE_READ_BYTES) return null
     return readFileSync(path).toString('base64')

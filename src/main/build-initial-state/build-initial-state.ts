@@ -1,4 +1,5 @@
 import type { AppState } from '../../shared/state'
+import type { Worktree } from '../../shared/state/worktrees'
 import { initialPRs } from '../../shared/state/prs'
 import { initialOnboarding } from '../../shared/state/onboarding'
 import { initialHooks } from '../../shared/state/hooks'
@@ -28,9 +29,15 @@ import {
   DEFAULT_WORKTREE_DETAIL,
   DEFAULT_HARNESS_SYSTEM_PROMPT,
   DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
-  type Config
+  type Config,
+  type PersistedWorktreeContainer
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
+
+export interface PersistedWorktreeContainerOrphan {
+  path: string
+  container: PersistedWorktreeContainer
+}
 
 /** Flatten the nested `repoRoot → worktreePath → text` shape on disk
  *  into the flat `worktreePath → text` map the slice carries in memory.
@@ -48,6 +55,54 @@ function flattenScratchpadNotes(
     }
   }
   return out
+}
+
+export const UNVERIFIED_CONTAINER_ERROR = 'Container status has not been checked yet.'
+
+export function hydratePersistedWorktreeContainers(
+  worktrees: Worktree[],
+  persisted: Record<string, PersistedWorktreeContainer> | undefined,
+  existing?: Worktree[]
+): Worktree[] {
+  const hasPersisted = Boolean(persisted && Object.keys(persisted).length > 0)
+  if (!hasPersisted && !existing?.some((w) => w.container)) return worktrees
+  const existingByPath = new Map(existing?.map((w) => [w.path, w]))
+  let changed = false
+  const next = worktrees.map((worktree) => {
+    const existingContainer = existingByPath.get(worktree.path)?.container
+    if (existingContainer) {
+      changed = true
+      return { ...worktree, container: existingContainer }
+    }
+    const container = persisted?.[worktree.path]
+    if (!container) return worktree
+    if (!container.id) return worktree
+    changed = true
+    return {
+      ...worktree,
+      container: {
+        id: container.id,
+        name: container.name,
+        image: container.image,
+        workdir: container.workdir,
+        shell: container.shell,
+        status: 'starting' as const,
+        error: UNVERIFIED_CONTAINER_ERROR
+      }
+    }
+  })
+  return changed ? next : worktrees
+}
+
+export function findPersistedWorktreeContainerOrphans(
+  worktrees: Worktree[],
+  persisted: Record<string, PersistedWorktreeContainer> | undefined
+): PersistedWorktreeContainerOrphan[] {
+  if (!persisted) return []
+  const live = new Set(worktrees.map((w) => w.path))
+  return Object.entries(persisted)
+    .filter(([path]) => !live.has(path))
+    .map(([path, container]) => ({ path, container }))
 }
 
 export function buildInitialAppState(
@@ -100,6 +155,7 @@ export function buildInitialAppState(
       worktreeBase: config.worktreeBase || DEFAULT_WORKTREE_BASE,
       mergeStrategy: config.mergeStrategy || DEFAULT_MERGE_STRATEGY,
       worktreeDetail: config.worktreeDetail || DEFAULT_WORKTREE_DETAIL,
+      enableWorktreeContainers: config.enableWorktreeContainers === true,
       claudeModel: config.claudeModel || null,
       codexModel: config.codexModel || null,
       opencodeModel: config.opencodeModel || null,

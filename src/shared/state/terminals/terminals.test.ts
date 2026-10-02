@@ -1002,5 +1002,6 @@ describe('terminalsReducer', () => {
     const leaves = getLeaves(next.panes['/wt/a'])
     const agentTab = leaves[0].tabs[0]
     expect(agentTab.sessionId).toBe('sess-abc')
+    expect(leaves[1]).toBe(getLeaves(tree)[1])
   })
 })

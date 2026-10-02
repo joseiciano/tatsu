@@ -17,6 +17,7 @@ interface StubFrameHandler {
   onReq?: (id: string, name: string, args: unknown[], ws: WSType) => void
   onSend?: (name: string, args: unknown[]) => void
   onConnection?: (ws: WSType) => void
+  onVerify?: (queryToken: string | null, authHeader: string | undefined, sessionParam: string | null) => void
 }
 
 function startStubServer(
@@ -29,7 +30,16 @@ function startStubServer(
       port: 0,
       verifyClient: (info, cb) => {
         const url = new URL(info.req.url ?? '/', 'http://localhost')
-        if (url.searchParams.get('token') !== token) {
+        const queryToken = url.searchParams.get('token')
+        const sessionParam = url.searchParams.get('session')
+        const authHeader = info.req.headers.authorization
+        handlers.onVerify?.(queryToken, authHeader, sessionParam)
+        const headerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+          ? authHeader.slice(7)
+          : null
+        // Accept ?token=, ?session=, or Authorization: Bearer — mirrors
+        // the real server's verify() in transport-websocket.ts.
+        if ((headerToken ?? queryToken ?? sessionParam) !== token) {
           cb(false, 401, 'unauthorized')
           return
         }
@@ -151,12 +161,36 @@ describe('WebSocketClientTransport', () => {
     }
   })
 
-  // Regression test for issue #73: WS reconnects mint a fresh server-side
-  // clientId, but the renderer cached the first-connect id forever. After
-  // any drop the renderer's controller-comparison turned stale and the
-  // server's pty:write gate silently dropped every keystroke. The fix
-  // re-fetches clientId on every (re)connect and fires onReconnect with
-  // it; XTerminal listens to that and re-fires terminal:join.
+  it('can send auth token in Authorization header instead of query string', async () => {
+    const token = 'test-token'
+    const seen: Array<{ queryToken: string | null; authHeader: string | undefined }> = []
+    const { port, server } = await startStubServer(token, {
+      onVerify: (queryToken, authHeader) => {
+        seen.push({ queryToken, authHeader })
+      }
+    })
+    const client = new WebSocketClientTransport({
+      url: `ws://127.0.0.1:${port}`,
+      token,
+      tokenTransport: 'authorizationHeader',
+      WebSocketCtor: WSClient as unknown as typeof WebSocket
+    })
+
+    try {
+      await client.connect()
+      expect(seen[0]).toEqual({ queryToken: null, authHeader: `Bearer ${token}` })
+    } finally {
+      client.close()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
+  })
+
+// Regression test for issue #73: WS reconnects mint a fresh server-side
+// clientId, but the renderer cached the first-connect id forever. After
+// any drop the renderer's controller-comparison turned stale and the
+// server's pty:write gate silently dropped every keystroke. The fix
+// re-fetches clientId on every (re)connect and fires onReconnect with
+// it; XTerminal listens to that and re-fires terminal:join.
   it('fires onReconnect with a fresh clientId after reconnect', async () => {
     const token = 'test-token'
     let nextId = 1
@@ -208,6 +242,69 @@ describe('WebSocketClientTransport', () => {
       expect(seenIds.length).toBeGreaterThanOrEqual(2)
       expect(seenIds[1]).toBe('client-2')
       expect(seenIds[1]).not.toBe(seenIds[0])
+    } finally {
+      client.close()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
+  })
+
+  it('can send auth token via session query parameter (sessionQuery)', async () => {
+    const token = 'test-token'
+    const seen: Array<{ queryToken: string | null; sessionParam: string | null }> = []
+    const { port, server } = await startStubServer(token, {
+      onVerify: (queryToken, _authHeader, sessionParam) => {
+        seen.push({ queryToken, sessionParam })
+      }
+    })
+    const client = new WebSocketClientTransport({
+      url: `ws://127.0.0.1:${port}`,
+      token,
+      tokenTransport: 'sessionQuery',
+      WebSocketCtor: WSClient as unknown as typeof WebSocket
+    })
+
+    try {
+      await client.connect()
+      expect(seen[0]).toEqual({ queryToken: null, sessionParam: token })
+    } finally {
+      client.close()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
+  })
+
+  it('mints a fresh session token on every sessionQuery reconnect', async () => {
+    const token = 'session-token'
+    const seenSessions: Array<string | null> = []
+    let serverSocket: WSType | null = null
+    const { port, server } = await startStubServer(token, {
+      onVerify: (_queryToken, _authHeader, sessionParam) => {
+        seenSessions.push(sessionParam)
+      },
+      onConnection: (ws) => {
+        serverSocket = ws
+      }
+    })
+    const refreshSessionToken = vi.fn(async () => token)
+    const client = new WebSocketClientTransport({
+      url: `ws://127.0.0.1:${port}`,
+      token,
+      tokenTransport: 'sessionQuery',
+      refreshSessionToken,
+      initialBackoffMs: 25,
+      WebSocketCtor: WSClient as unknown as typeof WebSocket
+    })
+
+    try {
+      await client.connect()
+      expect(refreshSessionToken).not.toHaveBeenCalled()
+
+      serverSocket!.close()
+      serverSocket = null
+      await new Promise((r) => setTimeout(r, 200))
+
+      expect(refreshSessionToken).toHaveBeenCalledTimes(1)
+      expect(seenSessions).toEqual([token, token])
+      expect(serverSocket).not.toBeNull()
     } finally {
       client.close()
       await new Promise<void>((r) => server.close(() => r()))

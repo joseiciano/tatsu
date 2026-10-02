@@ -1,7 +1,7 @@
-import { existsSync, lstatSync, readFileSync } from 'fs'
+import { existsSync, lstatSync, readFileSync, writeFileSync } from 'fs'
 import { createRequire } from 'module'
 import { randomUUID } from 'crypto'
-import { join } from 'path'
+import { isAbsolute, join, relative } from 'path'
 import { PtyManager } from './pty-manager'
 import { ChatRuntimeRegistry } from './chat-runtimes'
 import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
@@ -18,7 +18,7 @@ import { getOrCreateWsToken, rotateWsToken } from './ws-token'
 import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
-import { detectRuntime } from './paths'
+import { detectRuntime, userDataDir } from './paths'
 import { fixPathFromLoginShell } from './path-fix'
 import { parseCliFlags, USAGE, type CliFlags } from './cli-args'
 import { PlaywrightBrowserManager } from './browser-manager-playwright'
@@ -27,7 +27,9 @@ import { PerfMonitor } from './perf-monitor'
 import { setGitHubApiRecorder, setGitHubApiLoggingEnabled } from './github-recorder'
 import { PRPoller } from './pr-poller'
 import { WorktreesFSM } from './worktrees-fsm'
+import { createWorktreeContainers } from './worktree-containers'
 import { WorktreeDeletionFSM } from './worktree-deletion-fsm'
+import { restartWorktreeContainer, recreateWorktreeContainer } from './worktree-container-actions'
 import { PanesFSM, stripTransientTabFields } from './panes-fsm'
 import { ActivityDeriver } from './activity-deriver'
 import { AutoSleepMonitor } from './auto-sleep-monitor'
@@ -65,7 +67,7 @@ import {
 } from './persistence'
 import { createHarnessConfigService } from './harness-config'
 import { registerHarnessConfigRequestHandlers } from './harness-config-transport'
-import { loadRepoConfig, saveRepoConfig, type RepoConfig } from './repo-config'
+import { loadRepoConfig, updateRepoConfig, type RepoConfig } from './repo-config'
 import { createNewProject, type GitignorePreset } from './repo-create'
 import { resolveRepoPath } from './repo-resolve'
 import { registerRepoRoot } from './repo-roots'
@@ -94,7 +96,7 @@ import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorkt
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { perfLog } from './perf-log'
-import { buildInitialAppState } from './build-initial-state'
+import { buildInitialAppState, findPersistedWorktreeContainerOrphans } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
 import { toAgentKind } from './agent-kind'
 
@@ -129,15 +131,15 @@ if (runtime === 'electron') {
 // Covers both Electron-from-Dock and headless-via-ssh/systemd, both of
 // which can start with a stripped PATH. No-op outside of macOS today;
 // see path-fix.ts.
-void fixPathFromLoginShell().then(bootLocal)
+void fixPathFromLoginShell().then(() => bootLocal())
 
 // Wrap the entire local-mode boot in a function so the remote-mode
 // branch above can early-exit cleanly. Function declarations are
 // hoisted, so the call site above sees this definition. Everything
 // inside used to live at module top-level; the only change is the
-// extra `function bootLocal(): void {` wrapper + matching brace at
+// extra `function bootLocal(): Promise<void> {` wrapper + matching brace at
 // EOF — the body is otherwise identical.
-function bootLocal(): void {
+async function bootLocal(): Promise<void> {
 
 // Resolves the caller's MCP scope from their terminal id. Used by both
 // the control HTTP server (on every tool call, authoritative) and
@@ -343,7 +345,7 @@ const wsHost =
 // users pin the web-client URL to a phone homescreen or bookmark it
 // and have it keep working across main-process restarts. Rotation
 // happens explicitly via Settings, not on every boot.
-const wsToken = wsEnabled ? getOrCreateWsToken() : null
+const wsToken = wsEnabled ? await getOrCreateWsToken() : null
 
 // Electron-packaged builds resolve the web-client bundle inside the asar;
 // every other path (Electron-dev, headless) reads it from a sibling of
@@ -396,13 +398,22 @@ if (webHttpServer && wsTransport) {
     // Log to stdout so the user can paste the URL into another browser
     // without digging through the debug log. TODO(production): expose
     // through a Settings UI screen with a copy button + regenerate action.
+    // WS URL no longer accepts ?token= — browsers exchange the root token
+    // for a one-time session token first, so we don't print the root
+    // token in the WS URL anymore.
     // eslint-disable-next-line no-console
     console.log(
-      `[ws-transport] enabled on ws://${displayHost}:${boundPort}?token=${wsTransport.getToken()} (bind=${wsHost})`
+      `[ws-transport] enabled on ws://${displayHost}:${boundPort} (bind=${wsHost})`
     )
+    // Write the full URL (with token) to a mode-0600 file under
+    // userDataDir so automation can read it without the token leaking
+    // to stdout / CI logs.
+    const tokenUrl = `http://${displayHost}:${boundPort}/?token=${wsTransport.getToken()}`
+    const tokenUrlPath = join(userDataDir(), 'web-client-url.txt')
+    writeFileSync(tokenUrlPath, tokenUrl + '\n', { mode: 0o600 })
     // eslint-disable-next-line no-console
     console.log(
-      `[web-client] open http://${displayHost}:${boundPort}/?token=${wsTransport.getToken()}`
+      `[web-client] open http://${displayHost}:${boundPort}/ (token URL written to ${tokenUrlPath})`
     )
   })
 }
@@ -571,6 +582,26 @@ ptyManager.setStore(store)
 ptyManager.setSendSignal((channel, ...args) => transport.sendSignal(channel, ...args))
 ptyManager.setPerfMonitor(perfMonitor)
 perfMonitor.start(store, () => ptyManager.getActivePtyCount())
+
+ptyManager.setContainerResolver((_id, cwd) => {
+  const worktrees = store.getSnapshot().state.worktrees.list
+  let best: typeof worktrees[number] | null = null
+  for (const wt of worktrees) {
+    if (!wt.container) continue
+    const rel = relative(wt.path, cwd)
+    if (rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || isAbsolute(rel)) continue
+    if (!best || wt.path.length > best.path.length) best = wt
+  }
+  if (!best || !best.container) return undefined
+  return {
+    worktreePath: best.path,
+    name: best.container.name,
+    shell: best.container.shell,
+    workdir: best.container.workdir,
+    status: best.container.status,
+    error: best.container.error
+  }
+})
 
 // Watches each subscribed worktree's .git/ for index/HEAD/MERGE_HEAD changes
 // so the renderer's Changed Files panel can refresh on real events instead
@@ -801,10 +832,14 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
   })
 }
 
+const worktreeContainers = createWorktreeContainers()
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
+  getPersistedWorktreeContainers: () => config.worktreeContainers,
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
+  getEnableWorktreeContainers: () => store.getSnapshot().state.settings.enableWorktreeContainers,
+  containers: worktreeContainers,
   onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentKind, model }) => {
     void prPoller.refreshAll()
     panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentKind, model })
@@ -816,7 +851,8 @@ const worktreesFSM = new WorktreesFSM(store, {
 
 const worktreeDeletionFSM = new WorktreeDeletionFSM(store, {
   getGlobalTeardownCmd: () => config.worktreeTeardownCommand || '',
-  worktreesFSM
+  worktreesFSM,
+  containers: worktreeContainers
 })
 
 const activityDeriver = new ActivityDeriver(store)
@@ -997,6 +1033,58 @@ store.subscribe((event) => {
   }
 })
 
+// Prune config.worktreeContainers entries whose path is not in the
+// current worktrees list so orphan container metadata doesn't linger.
+store.subscribe((event) => {
+  if (event.type !== 'worktrees/listChanged') return
+  if (!config.worktreeContainers) return
+  const liveWorktrees = store.getSnapshot().state.worktrees.list
+  const orphanContainers = findPersistedWorktreeContainerOrphans(liveWorktrees, config.worktreeContainers)
+  let pruned = false
+  for (const { path, container } of orphanContainers) {
+    if (existsSync(path)) continue
+    log('worktree-containers', `orphan container metadata for missing worktree ${path}; container ${container.name}${container.id ? ` (${container.id})` : ''} may need manual cleanup`)
+    delete config.worktreeContainers[path]
+    pruned = true
+  }
+  if (pruned) {
+    if (Object.keys(config.worktreeContainers).length === 0) {
+      delete config.worktreeContainers
+    }
+    saveConfig(config)
+  }
+})
+
+store.subscribe((event) => {
+  if (event.type !== 'worktrees/containerUpdated') return
+  const { path, container } = event.payload
+  if (!config.worktreeContainers) config.worktreeContainers = {}
+  if (container) {
+    const existing = config.worktreeContainers[path]
+    const next = {
+      id: container.id,
+      name: container.name,
+      image: container.image,
+      workdir: container.workdir,
+      shell: container.shell
+    }
+    if (existing &&
+        existing.id === next.id &&
+        existing.name === next.name &&
+        existing.image === next.image &&
+        existing.workdir === next.workdir &&
+        existing.shell === next.shell) return
+    config.worktreeContainers[path] = next
+  } else {
+    if (!config.worktreeContainers[path]) return
+    delete config.worktreeContainers[path]
+  }
+  if (Object.keys(config.worktreeContainers).length === 0) {
+    delete config.worktreeContainers
+  }
+  saveConfig(config)
+})
+
 const snoozeTimer = new SnoozeTimer(store)
 snoozeTimer.start()
 
@@ -1120,6 +1208,30 @@ function registerIpcHandlers(): void {
   transport.onRequest('worktree:dismissPendingDeletion', (_ctx, path: string) => {
     worktreeDeletionFSM.dismiss(path)
     return true
+  })
+
+  transport.onRequest('worktrees:restartContainer', async (_ctx, path: string) => {
+    const ok = await restartWorktreeContainer({
+      getWorktrees: () => store.getSnapshot().state.worktrees.list,
+      updateContainer: (wtPath, next) => {
+        store.dispatch({ type: 'worktrees/containerUpdated', payload: { path: wtPath, container: next } })
+      },
+      loadRepoConfig,
+      containers: worktreeContainers
+    }, path)
+    return ok
+  })
+
+  transport.onRequest('worktrees:recreateContainer', async (_ctx, path: string) => {
+    const ok = await recreateWorktreeContainer({
+      getWorktrees: () => store.getSnapshot().state.worktrees.list,
+      updateContainer: (wtPath, next) => {
+        store.dispatch({ type: 'worktrees/containerUpdated', payload: { path: wtPath, container: next } })
+      },
+      loadRepoConfig,
+      containers: worktreeContainers
+    }, path)
+    return ok
   })
 
   transport.onRequest('worktree:dir', async (_ctx, repoRoot: string) => {
@@ -1608,16 +1720,7 @@ function registerIpcHandlers(): void {
 
   transport.onRequest('repoConfig:set', (_ctx, repoRoot: string, next: Record<string, unknown>) => {
     if (!repoRoot) return null
-    const current = loadRepoConfig(repoRoot)
-    const merged: RepoConfig = { ...current }
-    for (const [k, v] of Object.entries(next || {})) {
-      if (v === null || v === undefined) {
-        delete (merged as Record<string, unknown>)[k]
-      } else {
-        ;(merged as Record<string, unknown>)[k] = v
-      }
-    }
-    const saved = saveRepoConfig(repoRoot, merged)
+    const saved = updateRepoConfig(repoRoot, next || {})
     store.dispatch({
       type: 'repoConfigs/changed',
       payload: { repoRoot, config: saved }
@@ -1785,6 +1888,18 @@ function registerIpcHandlers(): void {
     return true
   })
 
+  transport.onRequest('config:setEnableWorktreeContainers', (_ctx, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') return false
+    if (enabled) {
+      config.enableWorktreeContainers = true
+    } else {
+      delete config.enableWorktreeContainers
+    }
+    saveConfig(config)
+    store.dispatch({ type: 'settings/enableWorktreeContainersChanged', payload: enabled })
+    return true
+  })
+
   transport.onRequest('mcp:prepareForTerminal', (_ctx, terminalId: string): string | null => {
     if (config.harnessMcpEnabled === false) return null
     if (!terminalId) return null
@@ -1844,12 +1959,12 @@ function registerIpcHandlers(): void {
     }
   })
 
-  transport.onRequest('config:rotateWsToken', (_ctx) => {
+  transport.onRequest('config:rotateWsToken', async (_ctx) => {
     // Writes a fresh token to the encrypted secrets store. The running
     // HTTP + WS servers captured the old token in closures at boot, so
     // they keep accepting it until the app restarts; the UI surfaces a
     // "relaunch required" hint after a rotation.
-    const next = rotateWsToken()
+    const next = await rotateWsToken()
     log('ws-transport', 'auth token rotated — takes effect on next launch')
     return next
   })
@@ -2331,7 +2446,7 @@ function registerIpcHandlers(): void {
   transport.onRequest('settings:setGithubToken', async (_ctx, token: string) => {
     const trimmed = token.trim()
     if (!trimmed) {
-      deleteSecret('githubToken')
+      await deleteSecret('githubToken')
       store.dispatch({ type: 'settings/hasGithubTokenChanged', payload: false })
       invalidateTokenCache()
       await resolveGitHubToken()
@@ -2342,7 +2457,7 @@ function registerIpcHandlers(): void {
     // Validate the token first by hitting /user
     const test = await testToken(trimmed)
     if (!test.ok) return { ok: false, error: test.error }
-    setSecret('githubToken', trimmed)
+    await setSecret('githubToken', trimmed)
     store.dispatch({ type: 'settings/hasGithubTokenChanged', payload: true })
     invalidateTokenCache()
     await resolveGitHubToken()
@@ -2353,7 +2468,7 @@ function registerIpcHandlers(): void {
   })
 
   transport.onRequest('settings:clearGithubToken', async (_ctx) => {
-    deleteSecret('githubToken')
+    await deleteSecret('githubToken')
     store.dispatch({ type: 'settings/hasGithubTokenChanged', payload: false })
     invalidateTokenCache()
     await resolveGitHubToken()
@@ -2546,7 +2661,8 @@ function registerIpcHandlers(): void {
         : agentKind === 'pi' ? config.piEnvVars
         : undefined
       const existed = ptyManager.hasTerminal(id)
-      ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
+      const created = ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
+      if (!created) return
       if (!existed) {
         // Creator becomes controller immediately so their first keystroke
         // — which is a fire-and-forget signal right behind pty:create —
@@ -2948,7 +3064,7 @@ function registerIpcHandlers(): void {
 
   transport.onRequest(
     'connections:add',
-    (
+    async (
       _ctx,
       input: { label: string; url: string; kind: 'remote'; color?: string; initials?: string },
       token: string
@@ -2967,23 +3083,23 @@ function registerIpcHandlers(): void {
         ...(input.color ? { color: input.color } : {}),
         ...(input.initials ? { initials: input.initials } : {})
       }
+      await setSecret(`backend-token:${id}`, token)
       const list = (config.connections ?? []).slice()
       list.push(conn)
       config.connections = list
-      setSecret(`backend-token:${id}`, token)
       saveConfig(config)
       return conn
     }
   )
 
-  transport.onRequest('connections:remove', (_ctx, id: string) => {
+  transport.onRequest('connections:remove', async (_ctx, id: string) => {
     if (id === LOCAL_BACKEND_ID) throw new Error('cannot remove the local backend')
     const list = config.connections ?? []
     const next = list.filter((c) => c.id !== id)
     if (next.length === list.length) return false
     config.connections = next
     if (config.activeBackendId === id) config.activeBackendId = LOCAL_BACKEND_ID
-    deleteSecret(`backend-token:${id}`)
+    await deleteSecret(`backend-token:${id}`)
     saveConfig(config)
     return true
   })

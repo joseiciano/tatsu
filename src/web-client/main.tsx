@@ -17,7 +17,10 @@
 
 import '../renderer/styles.css'
 import type { ProfilerOnRenderCallback } from 'react'
-import { WebSocketClientTransport } from '../shared/transport/transport-websocket'
+import {
+  WebSocketClientTransport,
+  exchangeForSessionToken
+} from '../shared/transport/transport-websocket'
 
 declare global {
   interface Window {
@@ -35,13 +38,30 @@ declare global {
 
 function readToken(): string | null {
   const url = new URL(window.location.href)
-  return url.searchParams.get('token')
+  const token = url.searchParams.get('token')
+  if (token) {
+    // Persist token in sessionStorage before stripping from URL, so
+    // refresh/reload can recover it when the URL no longer carries it.
+    try {
+      sessionStorage.setItem('__harness_token', token)
+    } catch { /* sessionStorage unavailable (e.g. private browsing edge cases) */ }
+    // Strip token from URL bar/history so it's not leaked via referrer,
+    // browser history, or screen recordings.
+    url.searchParams.delete('token')
+    try {
+      window.history.replaceState(window.history.state, '', url.toString())
+    } catch { /* replaceState can fail in sandboxed iframes */ }
+    return token
+  }
+  // Fallback: recover from sessionStorage when URL was already stripped
+  try {
+    return sessionStorage.getItem('__harness_token')
+  } catch { return null }
 }
 
-
 async function boot(): Promise<void> {
-  const token = readToken()
-  if (!token) {
+  const rootToken = readToken()
+  if (!rootToken) {
     document.body.innerHTML =
       '<pre style="padding:24px;color:#fff;background:#222;font-family:monospace;">' +
       'No Tatsu auth token. Open this page from the URL printed by the main process,\n' +
@@ -52,7 +72,25 @@ async function boot(): Promise<void> {
   const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${wsProto}//${window.location.host}/`
 
-  const transport = new WebSocketClientTransport({ url: wsUrl, token })
+  // Exchange the root token for a short-lived one-time session token
+  // via POST /_harness/session. Keeps the root token off the wire
+  // for the WS upgrade handshake.
+  let sessionToken: string
+  try {
+    sessionToken = await exchangeForSessionToken(wsUrl, rootToken)
+  } catch (err) {
+    document.body.innerHTML =
+      '<pre style="padding:24px;color:#fff;background:#400;font-family:monospace;">' +
+      `Session exchange failed: ${String((err as Error)?.message ?? err)}</pre>`
+    return
+  }
+
+  const transport = new WebSocketClientTransport({
+    url: wsUrl,
+    token: sessionToken,
+    tokenTransport: 'sessionQuery',
+    refreshSessionToken: () => exchangeForSessionToken(wsUrl, rootToken)
+  })
   // Connect up front so the first getStateSnapshot() call inside the
   // dynamically imported renderer modules doesn't race the open
   // handshake.

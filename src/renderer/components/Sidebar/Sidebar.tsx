@@ -56,6 +56,7 @@ interface SidebarProps {
   onToggleRepo: (repoRoot: string) => void
   unifiedRepos: boolean
   onToggleUnifiedRepos: () => void
+  onOpenContainerShell?: (path: string) => void
   onCollapseSidebar: () => void
 }
 
@@ -99,6 +100,7 @@ export function Sidebar({
   onToggleRepo,
   unifiedRepos,
   onToggleUnifiedRepos,
+  onOpenContainerShell,
   onCollapseSidebar
 }: SidebarProps): JSX.Element {
   const backend = useBackend()
@@ -182,6 +184,14 @@ export function Sidebar({
 
   const onUnsnoozeRow = useCallback((path: string) => {
     void backend.unsnooze(path)
+  }, [backend])
+
+  const onRestartContainerRow = useCallback((path: string) => {
+    void backend.restartWorktreeContainer(path)
+  }, [backend])
+
+  const onRecreateContainerRow = useCallback((path: string) => {
+    void backend.recreateWorktreeContainer(path)
   }, [backend])
 
   const handleCalendarPick = useCallback(
@@ -433,6 +443,9 @@ export function Sidebar({
                   onContinue={wt.isMain || deletingPaths.has(wt.path) ? undefined : () => beginContinue(wt.path, wt.branch)}
                   onSnooze={wt.isMain || deletingPaths.has(wt.path) ? undefined : (e) => onSnoozeRow(wt.path, e)}
                   onUnsnooze={wt.isMain || deletingPaths.has(wt.path) ? undefined : () => onUnsnoozeRow(wt.path)}
+                  onRestartContainer={wt.container ? () => onRestartContainerRow(wt.path) : undefined}
+                  onRecreateContainer={wt.container ? () => onRecreateContainerRow(wt.path) : undefined}
+                  onOpenContainerShell={onOpenContainerShell ? () => onOpenContainerShell(wt.path) : undefined}
                 />
                 {continueTarget?.path === wt.path && (
                   <div className="border-y-2 border-accent bg-panel-raised p-2.5 shadow-inner">

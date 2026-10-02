@@ -1419,6 +1419,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
               closeFullscreenViews()
               setShowNewProject(true)
             }}
+            onOpenContainerShell={(path) => {
+              handleAddTerminalTab(path)
+              setActiveWorktreeId(path)
+            }}
             width={sidebarWidth}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}

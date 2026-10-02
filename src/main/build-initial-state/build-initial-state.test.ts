@@ -8,12 +8,12 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { buildInitialAppState } from '.'
+import { buildInitialAppState, findPersistedWorktreeContainerOrphans, hydratePersistedWorktreeContainers } from '.'
 import type { Config } from '../persistence'
 import { initialPRs } from '../../shared/state/prs'
 import { initialOnboarding } from '../../shared/state/onboarding'
 import { initialHooks } from '../../shared/state/hooks'
-import { initialWorktrees } from '../../shared/state/worktrees'
+import { initialWorktrees, type Worktree } from '../../shared/state/worktrees'
 import { initialTerminals } from '../../shared/state/terminals'
 import { initialUpdater } from '../../shared/state/updater'
 import { initialRepoConfigs } from '../../shared/state/repo-configs'
@@ -75,6 +75,185 @@ describe('buildInitialAppState', () => {
     expect(result.settings.themeLight).toBe('solarized-light')
     expect(result.settings.hasGithubToken).toBe(true)
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
+  })
+
+
+  it('hydrates enableWorktreeContainers with strict true semantics', () => {
+    expect(
+      buildInitialAppState({ ...emptyConfig, enableWorktreeContainers: true }, { hasGithubToken: false })
+        .settings.enableWorktreeContainers
+    ).toBe(true)
+    expect(
+      buildInitialAppState({ ...emptyConfig, enableWorktreeContainers: false }, { hasGithubToken: false })
+        .settings.enableWorktreeContainers
+    ).toBe(false)
+    expect(
+      buildInitialAppState(emptyConfig, { hasGithubToken: false }).settings.enableWorktreeContainers
+    ).toBe(false)
+  })
+
+  it('hydrates persisted container metadata before Docker status is known', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], {
+      '/tmp/wt/a': {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+        workdir: '/workspace',
+        shell: '/bin/bash'
+      }
+    })
+
+    expect(result[0]).not.toBe(worktree)
+    expect(result[0].container).toEqual({
+      id: 'abc123',
+      name: 'harness-repo-feature-a',
+      image: 'mcr.microsoft.com/devcontainers/base:ubuntu',
+      workdir: '/workspace',
+      shell: '/bin/bash',
+      status: 'starting',
+      error: 'Container status has not been checked yet.'
+    })
+  })
+
+  it('omits persisted container metadata when the container ID is missing', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], {
+      '/tmp/wt/a': {
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      }
+    })
+
+    expect(result).toBeDefined()
+    expect(result[0]).toBe(worktree)
+    expect(result[0].container).toBeUndefined()
+  })
+
+  it('does not overwrite existing container metadata during refresh hydration', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+    const existing: Worktree = {
+      ...worktree,
+      container: {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh',
+        status: 'running'
+      }
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], {
+      '/tmp/wt/a': {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      }
+    }, [existing])
+
+    expect(result[0]).not.toBe(worktree)
+    expect(result[0].container).toEqual(existing.container)
+  })
+
+  it('preserves existing container metadata even without persisted metadata', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+    const existing: Worktree = {
+      ...worktree,
+      container: {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh',
+        status: 'running'
+      }
+    }
+
+    const result = hydratePersistedWorktreeContainers([worktree], undefined, [existing])
+
+    expect(result[0]).not.toBe(worktree)
+    expect(result[0].container).toEqual(existing.container)
+  })
+
+  it('finds persisted container metadata without matching host worktrees', () => {
+    const worktree: Worktree = {
+      path: '/tmp/wt/a',
+      branch: 'feature/a',
+      head: 'deadbeef',
+      isBare: false,
+      isMain: false,
+      createdAt: 0,
+      repoRoot: '/tmp/repo'
+    }
+
+    const result = findPersistedWorktreeContainerOrphans([worktree], {
+      '/tmp/wt/a': {
+        id: 'abc123',
+        name: 'harness-repo-feature-a',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      },
+      '/tmp/wt/orphan': {
+        id: 'def456',
+        name: 'tatsu-wt-orphan-def456',
+        image: 'node:20-alpine',
+        workdir: '/workspace',
+        shell: '/bin/sh'
+      }
+    })
+
+    expect(result).toEqual([
+      {
+        path: '/tmp/wt/orphan',
+        container: {
+          id: 'def456',
+          name: 'tatsu-wt-orphan-def456',
+          image: 'node:20-alpine',
+          workdir: '/workspace',
+          shell: '/bin/sh'
+        }
+      }
+    ])
   })
 
 })
