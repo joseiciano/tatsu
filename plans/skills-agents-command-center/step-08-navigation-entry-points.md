@@ -2,13 +2,13 @@
 goal: Add desktop navigation entry points for the harness Config workbench
 date_created: 2026-09-25
 last_updated: 2026-09-25
-status: 'Planned'
+status: 'Completed'
 tags: [feature, renderer, react, navigation, harness-config]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan implements Step 8 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It makes the Config workbench from [Step 7](./step-07-config-page-shell.md) reachable from the desktop application through a renderer-local full-screen overlay, a persistent expanded-sidebar footer button, and a button on the no-repository onboarding/home surface. The work follows the feature goals and Config terminology in [implementation-details.md](./implementation-details.md).
 
@@ -46,13 +46,13 @@ This step is navigation-only. It does not implement Config resource behavior, sy
 
 - **GOAL-001**: Mount the Step 7 Config workbench as a renderer-local Settings-style desktop overlay without changing shared state or workspace lifecycle.
 
-- [ ] **TASK-001**: Add the Config imports and local visibility state in `src/renderer/App/App.tsx`.
+- [x] **TASK-001**: Add the Config imports and local visibility state in `src/renderer/App/App.tsx`.
   - Dependency: CON-001.
   - Import `Config` from `../components/Config`.
   - Add `SlidersHorizontal` to the existing `lucide-react` import for the onboarding action.
   - Declare `showConfig` and `setShowConfig` immediately beside `showSettings` so overlay ownership remains discoverable.
   - Do not add an effect, persistence call, store hook, or backend request for this boolean.
-- [ ] **TASK-002**: Define and mount `configOverlay` in `DesktopApp`.
+- [x] **TASK-002**: Define and mount `configOverlay` in `DesktopApp`.
   - Dependency: TASK-001.
   - Define the conditional overlay beside `settingsOverlay` using the exact outer wrapper class `fixed inset-0 z-50`.
   - Render `Config` from its package barrel and pass an `onClose` callback that sets `showConfig` to false.
@@ -63,19 +63,19 @@ This step is navigation-only. It does not implement Config resource behavior, sy
 
 - **GOAL-002**: Provide the required persistent Config launcher at the bottom of the expanded desktop Sidebar.
 
-- [ ] **TASK-003**: Extend the Sidebar callback contract in `src/renderer/components/Sidebar/Sidebar.tsx`.
+- [x] **TASK-003**: Extend the Sidebar callback contract in `src/renderer/components/Sidebar/Sidebar.tsx`.
   - Dependency: TASK-002.
   - Add `onOpenConfig: () => void` to `SidebarProps` next to the other overlay launchers and destructure it in `Sidebar`.
   - Add `SlidersHorizontal` to the existing `lucide-react` import.
   - Do not import `Config`, read App state, or call the backend from Sidebar.
-- [ ] **TASK-004**: Render the bottom Config icon button in `Sidebar`.
+- [x] **TASK-004**: Render the bottom Config icon button in `Sidebar`.
   - Dependency: TASK-003.
   - Insert a shrink-safe footer container after `<BackendChipStrip onAddBackend={onOpenAddBackend} />` and before the conditional `SnoozeCalendar` rendering.
   - Give the footer a top border and the same compact centering/padding language as existing Sidebar action rows.
   - Wrap the button in `<Tooltip label="Config" side="top">`.
   - Set `onClick={onOpenConfig}`, `aria-label="Open Config"`, the existing launcher interaction classes, and `<SlidersHorizontal className="icon-sm" />`.
   - Preserve BackendChipStrip auto-hide behavior and the scrollable worktree list's `flex-1` ownership so the new footer remains pinned to the bottom.
-- [ ] **TASK-005**: Wire the expanded Sidebar callback from `DesktopApp`.
+- [x] **TASK-005**: Wire the expanded Sidebar callback from `DesktopApp`.
   - Dependency: TASK-004.
   - At the existing `<Sidebar>` call in `src/renderer/App/App.tsx`, pass `onOpenConfig={() => { setShowCommandCenter(false); setShowConfig(true) }}` beside `onOpenSettings`.
   - Keep the callback local and explicit; do not add it to transport or shared types.
@@ -85,7 +85,7 @@ This step is navigation-only. It does not implement Config resource behavior, sy
 
 - **GOAL-003**: Let a user configure agent definitions, skills, and commands before selecting the first repository.
 
-- [ ] **TASK-006**: Add the no-repository Config action in `src/renderer/App/App.tsx`.
+- [x] **TASK-006**: Add the no-repository Config action in `src/renderer/App/App.tsx`.
   - Dependency: TASK-002.
   - In the `repoRoots.length === 0 || previewOnboarding` branch, add a secondary action block after the four onboarding cards and before the existing `New to multi-agent workflows?` guide link.
   - Render a real `<button type="button">` with `onClick={() => setShowConfig(true)}`, a `SlidersHorizontal` icon using `icon-base` or `icon-sm`, visible `Open Config` text, and concise supporting copy identifying agents, skills, and commands.
@@ -96,7 +96,7 @@ This step is navigation-only. It does not implement Config resource behavior, sy
 
 - **GOAL-004**: Prove both entry points open and close the real Config surface without regressing desktop navigation, renderer builds, or UI scaling.
 
-- [ ] **TASK-007**: Run static and bundle validation after all TSX edits.
+- [x] **TASK-007**: Run static and bundle validation after all TSX edits.
   - Dependency: TASK-005 and TASK-006.
   - Run `pnpm typecheck` and resolve every error in the Config barrel import, Sidebar prop contract, App callback wiring, and Lucide imports.
   - Run `pnpm build` and verify the desktop renderer and web-client bundles both resolve the Config package and new icon imports.
@@ -108,7 +108,7 @@ This step is navigation-only. It does not implement Config resource behavior, sy
   - Use `Help → Debug → Preview Onboarding` to exercise the no-repository branch without deleting persisted repositories. Confirm `Open Config` opens the same overlay and closing it returns to the onboarding surface without changing theme/agent/hook selections or starting the repository picker.
   - Repeat the two entry-point checks at the default UI scale and one larger configured UI scale; confirm both `SlidersHorizontal` icons scale and the onboarding action remains readable.
   - Recheck Settings, Open Repository, New Project, worktree selection, and sidebar collapse/expand once to confirm their existing handlers remain intact.
-- [ ] **TASK-009**: Review scope and commit the completed Step 8 change.
+- [x] **TASK-009**: Review scope and commit the completed Step 8 change.
   - Dependency: TASK-008.
   - Confirm no shared-state, main-process, preload, transport, Config business-logic, mobile, collapsed-sidebar, menu, hotkey, or CommandPalette files changed.
   - Confirm both desktop return branches include `configOverlay` and all new text/icon sizing follows repository rules.
