@@ -23,6 +23,29 @@ export type ConfigAgentFilter = 'all' | ManagedHarnessKind
 
 export type ConfigEditorMode = 'empty' | 'create' | 'edit'
 
+/** REQ-015: the generation source line shown above a conversion draft
+ *  ("Generated from <agent> <resourceType> <relativePath>"). Renderer-
+ *  local only — never entered into `AppState` (REQ-018). */
+export interface ConfigConversionSourceInfo {
+  agentKind: ManagedHarnessKind
+  sourceResourceType: HarnessConfigResourceType
+  relativePath: string
+}
+
+/** Pure, render-ready projection of a `HarnessConfigConversionResult`
+ *  (TASK-011). `already-available` carries the exact notice text and
+ *  relative path (REQ-014); `draft` carries everything conversion
+ *  create mode needs to pre-fill (REQ-015). */
+export type ConfigConversionOutcome =
+  | { kind: 'already-available'; message: string; relativePath: string }
+  | {
+      kind: 'draft'
+      scope: HarnessConfigScope
+      name: string
+      content: string
+      source: ConfigConversionSourceInfo
+    }
+
 export type ConfigDriftBadge = 'synced' | 'disk-only' | 'config-only' | 'conflict'
 
 /** Exact identity of the resource the page is reading/editing. Both
@@ -31,6 +54,20 @@ export type ConfigDriftBadge = 'synced' | 'disk-only' | 'config-only' | 'conflic
 export interface ConfigSelection {
   scope: HarnessConfigScope
   id: string
+}
+
+/** REQ-013: one row's conversion action — `Create command` on a
+ *  Skills-tab row, `Create skill` on a Commands-tab row. `disabled`
+ *  covers an unsupported destination capability, a config-only row
+ *  (`existsOnDisk: false`), and (overlaid by `Config.tsx`) a
+ *  conversion request already in flight for this row; `disabledReason`
+ *  is always non-null alongside `disabled` so the control stays
+ *  accessible. */
+export interface ConfigRowConversionAction {
+  targetResourceType: Extract<HarnessConfigResourceType, 'skills' | 'commands'>
+  label: 'Create command' | 'Create skill'
+  disabled: boolean
+  disabledReason: string | null
 }
 
 /** One render-ready row in the resource rail. Wraps the shared ref
@@ -43,6 +80,9 @@ export interface ConfigResourceRow {
   badge: ConfigDriftBadge
   selected: boolean
   disabled: boolean
+  /** `null` on the Agents tab — conversion exists only between Skills
+   *  and Commands (REQ-013). */
+  conversionAction: ConfigRowConversionAction | null
 }
 
 /** One harness's section of the resource rail for the active tab. */
@@ -99,6 +139,12 @@ export interface ConfigResourceListProps {
   onSelectResource: (scope: HarnessConfigScope, id: string) => void
   onCreate: (scope: HarnessConfigScope) => void
   onSync: (scope: HarnessConfigScope) => void
+  /** REQ-014: the only caller of `prepareHarnessConfigCommandFromSkill` —
+   *  invoked exclusively by a row's own `Create command` click. */
+  onCreateCommand: (scope: HarnessConfigScope, id: string) => void
+  /** REQ-014: the only caller of `prepareHarnessConfigSkillFromCommand` —
+   *  invoked exclusively by a row's own `Create skill` click. */
+  onCreateSkill: (scope: HarnessConfigScope, id: string) => void
 }
 
 /** Discriminated editor view. Each variant carries exactly the data
@@ -115,7 +161,17 @@ export type ConfigEditorView =
       ref: HarnessConfigFileRef
       badge: ConfigDriftBadge
     }
-  | { kind: 'create'; scope: HarnessConfigScope; agentDisplayName: string }
+  | {
+      kind: 'create'
+      scope: HarnessConfigScope
+      agentDisplayName: string
+      /** REQ-015: overrides the generic "Create" submit label when this
+       *  create mode was entered from a conversion draft. */
+      submitLabel?: string
+      /** REQ-015: the destination-scope label plus generation source
+       *  line shown above the editor for a conversion draft. */
+      conversionSource?: ConfigConversionSourceInfo
+    }
   | {
       kind: 'edit'
       scope: HarnessConfigScope

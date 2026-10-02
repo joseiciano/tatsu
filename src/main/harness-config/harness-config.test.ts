@@ -15,9 +15,15 @@ import {
 } from 'fs'
 import { createHash } from 'crypto'
 import { tmpdir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { basename, dirname, join, resolve } from 'path'
 
 import { createHarnessConfigService } from '.'
+import {
+  createCommandFromSkill,
+  createSkillFromCommand,
+  extractFrontMatterDescription,
+  slugifyLogicalName
+} from './conversion'
 
 
 type AnyRecord = Record<string, unknown>
@@ -1041,6 +1047,30 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(readdirSync(fixture.roots.skills)).toEqual(['source'])
   })
 
+  it('reports an existing destination that differs only by case on a case-insensitive filesystem', () => {
+    const caseInsensitiveLstat = (path: string) => {
+      try {
+        return lstatSync(path)
+      } catch (error) {
+        const dir = dirname(path)
+        const match = readdirSync(dir).find((entry) => entry.toLowerCase() === basename(path).toLowerCase())
+        if (!match) throw error
+        return lstatSync(join(dir, match))
+      }
+    }
+    const fixture = makeFixture({ fs: { lstatSync: caseInsensitiveLstat } })
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'MySkill/SKILL.md', 'source')
+    put(fixture.roots.skills, 'MySkill.md', 'existing destination')
+    const source = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareCommandFromSkill(scope, source.id)
+    expect(conversion.status).toBe('existing')
+    expect(conversion.ref.relativePath).toBe('MySkill.md')
+  })
+
   it('rejects conversion across harnesses and ignores plugin payload/settings files', async () => {
     const fixture = makeFixture()
     const claude = { agentKind: 'claude', resourceType: 'skills' }
@@ -1053,6 +1083,210 @@ describe('sync/adopt direction and conversion preparation', () => {
     await rejectsCode(() => fixture.service.prepareCommandFromSkill(codex, ref.id), 'unknown-resource')
     expect(fixture.service.scan(claude).map((r: FileRef) => r.relativePath)).toEqual(['plugin/SKILL.md'])
     expect(readFileSync(join(fixture.roots['claude-skills'], 'settings.json'), 'utf8')).toBe('settings')
+  })
+
+  it('resolves the reverse Claude alias direction as an identity-preserving no-op', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    addResolver(fixture, scope, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills', aliasResourceTypes: ['commands'], aliasSourceResourceTypes: ['skills']
+    })
+    put(fixture.roots['claude-skills'], 'alias/SKILL.md', 'alias')
+    const ref = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareSkillFromCommand(scope, ref.id)
+    expect(conversion).toEqual({ status: 'alias', ref })
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+  })
+
+  it('generates a byte-exact command draft from a skill via the pure generator', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'My Skill/SKILL.md', '---\ndescription: Does a thing\n---\n\nBody text.\n')
+    const source = fixture.service.scan(scope)[0]
+    const draft = fixture.service.prepareCommandFromSkill(scope, source.id) as AnyRecord
+    expect(draft.status).toBe('draft')
+    expect(draft.name).toBe('my-skill')
+    expect(draft.relativePath).toBe('my-skill.md')
+    expect(draft.content).toBe(
+      '---\ndescription: Does a thing\n---\n\nUse the My Skill skill.\n\n<!-- Converted by Tatsu from opencode skills My Skill/SKILL.md -->\n'
+    )
+  })
+
+  it('generates a byte-exact skill draft from a command with a fallback description', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'commands', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots.commands, 'Deploy Now.md', 'no front matter here')
+    const source = fixture.service.scan(scope)[0]
+    const draft = fixture.service.prepareSkillFromCommand(scope, source.id) as AnyRecord
+    expect(draft.status).toBe('draft')
+    expect(draft.name).toBe('deploy-now')
+    expect(draft.relativePath).toBe('deploy-now/SKILL.md')
+    expect(draft.content).toBe(
+      '# deploy-now\n\nUse this skill when the user requests the `Deploy Now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
+    )
+  })
+
+  it('repeated conversion is idempotent once the drafted destination exists', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'codex', resourceType: 'skills' }
+    const destination = { agentKind: 'codex', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'repeat/SKILL.md', 'body')
+    const source = fixture.service.scan(scope)[0]
+    const first = fixture.service.prepareCommandFromSkill(scope, source.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    put(fixture.roots.skills, 'repeat.md', first.content as string)
+    const second = fixture.service.prepareCommandFromSkill(scope, source.id) as Conversion
+    expect(second.status).toBe('existing')
+    expect(second.ref.relativePath).toBe('repeat.md')
+  })
+
+  it('keeps nested Claude commands with the same basename distinct via path-qualified names', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    const destination = { agentKind: 'claude', resourceType: 'skills' }
+    addResolver(fixture, scope, 'claude-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['claude-commands'], 'frontend/review.md', 'frontend review')
+    put(fixture.roots['claude-commands'], 'backend/review.md', 'backend review')
+    const sources = fixture.service.scan(scope)
+    const frontend = sources.find((ref: FileRef) => ref.relativePath === 'frontend/review.md') as FileRef
+    const backend = sources.find((ref: FileRef) => ref.relativePath === 'backend/review.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, frontend.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.name).toBe('frontend-review')
+    expect(first.relativePath).toBe('frontend-review/SKILL.md')
+    expect(first.content).toBe(
+      '# frontend-review\n\nUse this skill when the user requests the `review` command behavior.\n\n<!-- Converted by Tatsu from claude commands frontend/review.md -->\n'
+    )
+    put(fixture.roots['claude-skills'], 'frontend-review/SKILL.md', first.content as string)
+
+    const second = fixture.service.prepareSkillFromCommand(scope, backend.id) as AnyRecord
+    expect(second.status).toBe('draft')
+    expect(second.name).toBe('backend-review')
+    expect(second.relativePath).toBe('backend-review/SKILL.md')
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, frontend.id) as Conversion
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('frontend-review/SKILL.md')
+  })
+})
+
+describe('conversion content generators (TEST-001/TEST-002)', () => {
+  it('slugifies labels deterministically', () => {
+    expect(slugifyLogicalName('My Cool Skill!')).toBe('my-cool-skill')
+    expect(slugifyLogicalName('  __Weird///Name__  ')).toBe('weird-name')
+    expect(slugifyLogicalName('already-slug')).toBe('already-slug')
+    const long = 'a'.repeat(90)
+    expect(slugifyLogicalName(long)).toBe('a'.repeat(64))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}-!!!`)).toBe('a'.repeat(63))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}/review`)).toBe('a'.repeat(63))
+  })
+
+  it('throws invalid-name when a label has no derivable slug', () => {
+    expect(() => slugifyLogicalName('!!!')).toThrow(/invalid-name|Unable to derive/)
+    try {
+      slugifyLogicalName('***')
+      expect.unreachable()
+    } catch (error) {
+      expect((error as { code?: string }).code).toBe('invalid-name')
+    }
+  })
+
+  it('extracts a leading front-matter description', () => {
+    expect(extractFrontMatterDescription('---\ndescription: Hello world\n---\nbody')).toBe('Hello world')
+    expect(extractFrontMatterDescription('---\ntags: [a]\ndescription:   padded value  \n---\n')).toBe('padded value')
+  })
+
+  it('returns null when there is no block, no closing delimiter, or no description line', () => {
+    expect(extractFrontMatterDescription('no front matter at all')).toBeNull()
+    expect(extractFrontMatterDescription('---\ndescription: unterminated')).toBeNull()
+    expect(extractFrontMatterDescription('---\ntags: [a]\n---\nbody')).toBeNull()
+    const tooLong = ['---', ...Array.from({ length: 60 }, (_, i) => `line${i}: x`), 'description: late', '---'].join('\n')
+    expect(extractFrontMatterDescription(tooLong)).toBeNull()
+  })
+
+  it('extracts descriptions from CRLF files and ignores block scalar indicators', () => {
+    expect(extractFrontMatterDescription('---\r\ndescription: Windows line\r\n---\r\nbody')).toBe('Windows line')
+    expect(extractFrontMatterDescription('---\ndescription: >-\n  folded\n---\n')).toBeNull()
+    expect(extractFrontMatterDescription('---\ndescription: |\n  literal\n---\n')).toBeNull()
+  })
+
+  it('createCommandFromSkill rejects a non-skills source', () => {
+    expect(() =>
+      createCommandFromSkill({
+        agentKind: 'claude',
+        resourceType: 'commands' as unknown as 'skills',
+        name: 'x',
+        label: 'x',
+        relativePath: 'x.md',
+        content: ''
+      })
+    ).toThrow()
+  })
+
+  it('createSkillFromCommand rejects a non-commands source', () => {
+    expect(() =>
+      createSkillFromCommand({
+        agentKind: 'claude',
+        resourceType: 'skills' as unknown as 'commands',
+        name: 'x',
+        label: 'x',
+        relativePath: 'x/SKILL.md',
+        content: ''
+      })
+    ).toThrow()
+  })
+
+  it('prefers the path-qualified logical name over the label', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: 'frontend/review',
+      label: 'review',
+      relativePath: 'frontend/review.md',
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe('frontend-review')
+  })
+
+  it('falls back to the label when name has no derivable slug', () => {
+    const draft = createCommandFromSkill({
+      agentKind: 'codex',
+      resourceType: 'skills',
+      name: '!!!',
+      label: 'Fallback Label',
+      relativePath: '!!!/SKILL.md',
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe('fallback-label')
+  })
+
+  it('caps destination names at 64 characters', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: `${'x'.repeat(40)}/${'y'.repeat(40)}`,
+      label: 'y'.repeat(40),
+      relativePath: `${'x'.repeat(40)}/${'y'.repeat(40)}.md`,
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe(`${'x'.repeat(40)}-${'y'.repeat(23)}`)
+    expect(draft.destinationName).toHaveLength(64)
   })
 })
 

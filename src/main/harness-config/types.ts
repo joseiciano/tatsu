@@ -79,6 +79,27 @@ export interface HarnessResolver {
   resources: Partial<Record<HarnessConfigResourceType, HarnessConfigResourceResolver>>
 }
 
+/** Input to the pure skill/command content generators in `./conversion`
+ *  (REQ-002). `resourceType` is the SOURCE resource type — `skills` for
+ *  `createCommandFromSkill`, `commands` for `createSkillFromCommand` —
+ *  not the destination the generator produces. */
+export interface HarnessConfigConversionSource {
+  agentKind: ManagedHarnessKind
+  resourceType: Extract<HarnessConfigResourceType, 'skills' | 'commands'>
+  name: string
+  label: string
+  relativePath: string
+  content: string
+}
+
+/** Pure generator output (REQ-004/REQ-005). Request-scoped only — never
+ *  entered into `AppState`, a plan, or persisted config (REQ-018). */
+export interface HarnessConfigConversionDraft {
+  destinationResourceType: Extract<HarnessConfigResourceType, 'skills' | 'commands'>
+  destinationName: string
+  content: string
+}
+
 export interface HarnessConfigDesiredResource {
   id: string
   agentKind: ManagedHarnessKind

@@ -26,11 +26,13 @@ import {
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
+import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
 import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigConversionResult,
+  HarnessConfigConversionSource,
   HarnessConfigDesiredResource,
   HarnessConfigFilesystem,
   HarnessConfigErrorCode,
@@ -1199,11 +1201,14 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     }
     const destinationScope: HarnessConfigScope = { agentKind: scope.agentKind, resourceType: destinationType }
     const descriptor = this.getDescriptor(destinationScope)
-    const name = this.conversionName(source.ref)
     if (!descriptor.nameToRelativePath) {
       throw new HarnessConfigError('invalid-name', 'The destination resolver cannot derive a resource path')
     }
-    const target = this.resolveCandidate(descriptor, descriptor.nameToRelativePath(name), false)
+    const destinationName = conversionDestinationName({
+      name: this.conversionName(source.ref),
+      label: source.ref.label
+    })
+    const target = this.resolveCandidate(descriptor, descriptor.nameToRelativePath(destinationName), false)
     let existingTarget
     try {
       existingTarget = this.fs.lstatSync(target.absolutePath)
@@ -1215,19 +1220,35 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (existingTarget?.isSymbolicLink()) {
       throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the conversion destination unsafe')
     }
-    const existing = existingTarget
-      ? this.scanDisk(destinationScope, this.loadDesired()).find(({ ref }) => ref.relativePath === target.relativePath)
-      : undefined
+    const destinationEntries = existingTarget ? this.scanDisk(destinationScope, this.loadDesired()) : []
+    const foldedTarget = target.relativePath.toLowerCase()
+    const existing =
+      destinationEntries.find(({ ref }) => ref.relativePath === target.relativePath) ??
+      destinationEntries.find(({ ref }) => ref.relativePath.toLowerCase() === foldedTarget)
     if (existing) return { status: 'existing', ref: cloneRef(existing.ref) }
+    // Fresh content is read only now that alias/existing resolution has
+    // determined generation is actually required (REQ-008).
     const content = this.readInventoryBytes(source.ref.absolutePath).toString('utf8')
+    const generatorSource: HarnessConfigConversionSource = {
+      agentKind: scope.agentKind,
+      resourceType: sourceType as HarnessConfigConversionSource['resourceType'],
+      name: this.conversionName(source.ref),
+      label: source.ref.label,
+      relativePath: source.ref.relativePath,
+      content
+    }
+    const draft =
+      sourceType === 'skills'
+        ? createCommandFromSkill(generatorSource)
+        : createSkillFromCommand(generatorSource)
     return {
       status: 'draft',
       agentKind: scope.agentKind,
       resourceType: destinationType,
-      name,
+      name: draft.destinationName,
       relativePath: target.relativePath,
       label: this.labelFor(target.relativePath, descriptor.canonicalResourceType ?? destinationType),
-      content
+      content: draft.content
     }
   }
 

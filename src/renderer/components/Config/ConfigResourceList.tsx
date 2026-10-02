@@ -3,6 +3,7 @@ import { AgentIcon } from '../AgentIcon'
 import {
   harnessConfigScopeKey,
   type HarnessConfigFileRef,
+  type HarnessConfigResourceType,
   type HarnessConfigScope
 } from '../../../shared/state/harness-config'
 import { isHarnessConfigCapabilityEnabled } from '../../../shared/agent-registry'
@@ -11,8 +12,16 @@ import type {
   ConfigDriftBadge,
   ConfigResourceGroup,
   ConfigResourceListProps,
-  ConfigResourceRow
+  ConfigResourceRow,
+  ConfigRowConversionAction
 } from './types'
+
+/** Skills <-> Commands is the only first-version conversion direction
+ *  (REQ-013); the Agents tab offers no row conversion action. */
+const CONVERSION_TARGET: Partial<Record<HarnessConfigResourceType, 'skills' | 'commands'>> = {
+  skills: 'commands',
+  commands: 'skills'
+}
 
 function compareRows(a: ConfigResourceRow, b: ConfigResourceRow): number {
   if (a.ref.relativePath < b.ref.relativePath) return -1
@@ -26,6 +35,34 @@ function matchesQuery(ref: HarnessConfigFileRef, normalizedQuery: string): boole
   if (!normalizedQuery) return true
   const haystack = `${ref.label}\u0000${ref.relativePath}\u0000${ref.absolutePath}`.toLowerCase()
   return haystack.includes(normalizedQuery)
+}
+
+/** Derives REQ-013's per-row conversion action: disabled, with an
+ *  accessible reason, when the destination capability is unsupported
+ *  for this harness or the row is config-only (`existsOnDisk: false`).
+ *  In-flight disabling is overlaid later by `Config.tsx`, which is the
+ *  only place that knows about a request in progress. */
+function buildConversionAction(
+  agent: BuildConfigResourceGroupsInput['registry'][number],
+  resourceType: HarnessConfigResourceType,
+  ref: HarnessConfigFileRef
+): ConfigRowConversionAction | null {
+  const target = CONVERSION_TARGET[resourceType]
+  if (!target) return null
+  const destinationCapability = agent.configCapabilities.find((c) => c.resourceType === target)
+  const destinationSupported = !!destinationCapability && isHarnessConfigCapabilityEnabled(destinationCapability)
+  const configOnly = !ref.existsOnDisk
+  const disabledReason = !destinationSupported
+    ? (destinationCapability?.notes ?? `${agent.displayName} does not support this yet.`)
+    : configOnly
+      ? 'This resource exists only in Tatsu config, not on disk.'
+      : null
+  return {
+    targetResourceType: target,
+    label: target === 'commands' ? 'Create command' : 'Create skill',
+    disabled: !destinationSupported || configOnly,
+    disabledReason
+  }
 }
 
 /** Deterministic, pure derivation of the resource rail's groups and
@@ -102,7 +139,8 @@ export function buildConfigResourceGroups(
           selected.scope.agentKind === agentKind &&
           selected.scope.resourceType === resourceType &&
           selected.id === ref.id,
-        disabled: !supported
+        disabled: !supported,
+        conversionAction: buildConversionAction(agent, resourceType, ref)
       })
     }
     rows.sort(compareRows)
@@ -147,28 +185,54 @@ function DriftBadge({ badge }: { badge: ConfigDriftBadge }): JSX.Element {
 
 function ResourceRow({
   row,
-  onSelect
+  onSelect,
+  onCreateCommand,
+  onCreateSkill
 }: {
   row: ConfigResourceRow
   onSelect: (scope: HarnessConfigScope, id: string) => void
+  onCreateCommand: (scope: HarnessConfigScope, id: string) => void
+  onCreateSkill: (scope: HarnessConfigScope, id: string) => void
 }): JSX.Element {
   const scope: HarnessConfigScope = { agentKind: row.ref.agentKind, resourceType: row.ref.resourceType }
+  const conversion = row.conversionAction
   return (
-    <button
-      type="button"
-      disabled={row.disabled}
-      aria-current={row.selected ? 'true' : undefined}
-      onClick={() => onSelect(scope, row.ref.id)}
-      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-left cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+    <div
+      className={`w-full flex items-center gap-1 px-2.5 py-1.5 rounded transition-colors ${
         row.selected ? 'bg-surface text-fg-bright' : 'hover:bg-surface-hover text-fg'
       }`}
     >
-      <span className="flex-1 min-w-0">
-        <span className="block text-xs truncate">{row.ref.label}</span>
-        <span className="block text-xs text-faint truncate">{row.ref.relativePath}</span>
-      </span>
-      <DriftBadge badge={row.badge} />
-    </button>
+      <button
+        type="button"
+        disabled={row.disabled}
+        aria-current={row.selected ? 'true' : undefined}
+        onClick={() => onSelect(scope, row.ref.id)}
+        className="flex-1 min-w-0 flex items-center gap-2 text-left cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span className="flex-1 min-w-0">
+          <span className="block text-xs truncate">{row.ref.label}</span>
+          <span className="block text-xs text-faint truncate">{row.ref.relativePath}</span>
+        </span>
+        <DriftBadge badge={row.badge} />
+      </button>
+      {conversion && (
+        <button
+          type="button"
+          disabled={conversion.disabled}
+          title={conversion.disabledReason ?? conversion.label}
+          aria-label={`${conversion.label} from ${row.ref.label}`}
+          aria-disabled={conversion.disabled}
+          onClick={() =>
+            conversion.targetResourceType === 'commands'
+              ? onCreateCommand(scope, row.ref.id)
+              : onCreateSkill(scope, row.ref.id)
+          }
+          className="shrink-0 px-1.5 py-0.5 rounded text-xs text-dim hover:text-fg-bright hover:bg-surface-hover cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+        >
+          {conversion.label}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -221,7 +285,9 @@ export function ConfigResourceList({
   sharedError,
   onSelectResource,
   onCreate,
-  onSync
+  onSync,
+  onCreateCommand,
+  onCreateSkill
 }: ConfigResourceListProps): JSX.Element {
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -242,7 +308,13 @@ export function ConfigResourceList({
           )}
           <div className="flex flex-col gap-0.5 px-1 pb-1.5">
             {group.rows.map((row) => (
-              <ResourceRow key={row.key} row={row} onSelect={onSelectResource} />
+              <ResourceRow
+                key={row.key}
+                row={row}
+                onSelect={onSelectResource}
+                onCreateCommand={onCreateCommand}
+                onCreateSkill={onCreateSkill}
+              />
             ))}
             {group.supported && group.totalResourceCount === 0 && !searchActive && (
               <div className="px-1.5 py-2 flex flex-col gap-1.5">

@@ -626,6 +626,44 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect(result.ok).toBe(true)
       expect(service.prepareCommandFromSkill).toHaveBeenCalledWith(SKILLS_SCOPE, 'ref-1')
     })
+
+    it('passes an alias result through the envelope unchanged', async () => {
+      const aliasRef = makeRef({ resourceType: 'skills', canonicalResourceType: 'skills', aliasResourceTypes: ['commands'] })
+      const { transport } = setup({
+        prepareCommandFromSkill: vi.fn((): HarnessConfigConversionResult => ({ status: 'alias', ref: aliasRef }))
+      })
+      const result = (await transport.call('harnessConfig:prepareCommandFromSkill', {
+        scope: SKILLS_SCOPE,
+        id: 'ref-1'
+      })) as { ok: true; value: HarnessConfigConversionResult }
+      expect(result.ok).toBe(true)
+      expect(result.value).toEqual({ status: 'alias', ref: aliasRef })
+    })
+
+    it('passes an existing result through the envelope unchanged', async () => {
+      const existingRef = makeRef({ resourceType: 'commands', relativePath: 'existing.md' })
+      const { transport } = setup({
+        prepareSkillFromCommand: vi.fn((): HarnessConfigConversionResult => ({ status: 'existing', ref: existingRef }))
+      })
+      const result = (await transport.call('harnessConfig:prepareSkillFromCommand', {
+        scope: { agentKind: 'claude', resourceType: 'commands' },
+        id: 'ref-1'
+      })) as { ok: true; value: HarnessConfigConversionResult }
+      expect(result.ok).toBe(true)
+      expect(result.value).toEqual({ status: 'existing', ref: existingRef })
+    })
+
+    it('rejects a conversion request with an extra plugin/provenance field without invoking the service', async () => {
+      const { transport, service } = setup()
+      const result = (await transport.call('harnessConfig:prepareSkillFromCommand', {
+        scope: { agentKind: 'claude', resourceType: 'commands' },
+        id: 'ref-1',
+        plugin: 'some-plugin'
+      })) as { ok: false; error: { code: string } }
+      expect(result.ok).toBe(false)
+      expect(result.error.code).toBe('invalid-request')
+      expect(service.prepareSkillFromCommand).not.toHaveBeenCalled()
+    })
   })
 
   describe('error coverage (TEST-009)', () => {
