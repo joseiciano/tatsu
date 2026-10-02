@@ -62,11 +62,12 @@ Explicitly out of scope (for now):
 1. **Agent spawn is renderer-driven (blocker).** `XTerminal.tsx:456-501` calls `agent:buildSpawnArgs` and then `pty:create`, and **defers the spawn until the tab has layout** (≥20px). A step tab created in a background worktree doesn't start until someone opens it, and on headless with no client attached it never starts. The runner needs a main-side spawn path (see "Main-side spawn" under Architecture).
 2. **MCP only reaches Claude.** Claude gets `--mcp-config <per-terminal file>`. Codex's `buildSpawnArgs` comment claims a global `~/.codex/config.toml` registration, but nothing in `src/main` writes it. opencode has no MCP wiring at all.
 3. **opencode plugin is broken (confirmed).** `makePluginContent()` in `src/main/agents/opencode.ts` emits a CommonJS `module.exports = { onEvent }` that reads `ev.payload.session.id`. Run under opencode 1.18.30 with `HARNESS_TERMINAL_ID` set, it writes nothing, so opencode status detection is broken today, independently of workflows. The documented format loads and works: `export const X = async ({ client }) => ({ event, 'tool.execute.before', ... })`, events shaped `{ type, properties }` with `properties.sessionID`. Tool calls arrive through the `tool.execute.before` / `tool.execute.after` hooks, not as bus events.
-4. **Codex hooks flag name drift.** `ensureCodexHooksEnabled` writes `codex_hooks = true`, but the current docs name the flag `[features] hooks` (default on). This is harmless while the default holds; align it during MCP parity work.
+4. **Codex hooks flag name drift.** `ensureCodexHooksEnabled` writes `codex_hooks = true`, but the current docs name the flag `[features] hooks` (default on). This is harmless while the default holds; align it during MCP parity work. It also appended the key to the end of `config.toml`, landing it in whichever table came last; fixed in `156d4a1` (inserted under `[features]`).
 5. **No unattended permission story.** `auto-approver` only serves chat-tab approval cards. A PTY step stalls on its first permission prompt (`needs-approval`). Verified on Claude 2.1.286: `--permission-mode plan` writes its plan to Claude's own plans folder and stops at "Would you like to proceed", and `acceptEdits` still prompts for every Bash command. See "Permissions & trust" for the fix.
 6. **Bridge agentKind mismatch.** `create_worktree.agentKind` advertises `['claude', 'codex']` (`mcp-bridge.js:110`) and the bridge rejects anything else in code (`mcp-bridge.js:468-473`), while the server accepts `opencode`.
 7. **Hook line atomicity.** The hook comment relies on writes < `PIPE_BUF` (4096 B) being atomic. Payloads that carry `last_assistant_message` will regularly exceed that. Only one agent writes per terminal file, so it's fine in practice, but the comment and the residual-line handling should acknowledge it.
 8. **Claude folder trust blocks unattended spawns.** In a folder Claude hasn't seen, it opens a trust dialog before running any prompt. Trust carries down from a trusted parent folder. A step spawned in an untrusted worktree path stalls on that dialog.
+9. **Codex skips untrusted hooks.** Since rust-v0.129.0, Codex ignores user hooks (including `~/.codex/hooks.json`) until the user approves them in `/hooks`. Without that approval, Codex status detection and the workflow Stop hook never fire. Partly addressed in `7edfc85`: entries now run a fixed command (`bash '<home>/.codex/harness-hook.sh' <Event>`) so logic changes don't reset trust, and Settings and the consent banner tell users to approve once. Remaining work: `installHooks` must keep entry positions, and Tatsu should show trust status. See "Codex hook trust" under Harness research.
 
 ## Concepts
 
@@ -249,6 +250,27 @@ Rows marked **verified** were checked against Claude Code 2.1.286 and opencode 1
 
 Unverified: Codex `-c mcp_servers.*` per-run override; whether Codex hooks fire under `codex exec`; the opencode permission-prompt event name on 1.18 (the SDK types list `permission.updated`, the current plugin listens for `permission.asked`).
 
+### Codex hook trust (2026-10-02)
+
+Read from the Codex source at `openai/codex@c5d242f`; not yet checked against a running binary. Hook trust landed in PR #20321 and shipped in **rust-v0.129.0**; the `/hooks` review UI followed in #21755.
+
+- **Trust key and hash.** Each hook handler is tracked under a key and a content hash.
+  - The key is `"<abs path of hooks.json>:<event_snake>:<group_index>:<handler_index>"`, e.g. `/Users/u/.codex/hooks.json:session_start:0:0` (`codex-rs/hooks/src/lib.rs:113-123`, `hooks/src/engine/discovery.rs:174`).
+  - The hash is sha256 of the normalized identity `{event_name, matcher?, hooks:[{type, command, timeout, async, statusMessage?}]}`, serialized as JSON with recursively sorted keys and no whitespace, prefixed `sha256:` (`discovery.rs:770-794`, `config/src/fingerprint.rs:54`). `matcher` is dropped for `UserPromptSubmit` and `Stop`. The command is the raw string, before `${VAR}` substitution.
+  - Status is `trusted` when the stored hash matches, `modified` when a different hash is stored, and `untrusted` when none is (`discovery.rs:796-817`).
+- **Consequences for Tatsu.**
+  - The contents of a referenced script are never hashed, so rewriting `harness-hook.sh` keeps trust. The flip side: anything that can write that file changes trusted behaviour without review.
+  - The command string and `timeout` must never change; either change forces re-review. That includes the absolute path, so a different home directory means a different hash.
+  - The key depends on **position**. `installHooks` currently strips Tatsu's entries and re-appends them on every boot. If the user adds a hook after Tatsu's entry for the same event, Tatsu's entry moves to a new index and becomes `untrusted`, and the user's hook shifts into Tatsu's old slot and shows as `modified`.
+  - Moving from the old inline `bash -c` command to the script command forces one re-approval on upgrade.
+- **Where trust is stored.** In `~/.codex/config.toml` as `[hooks.state."<key>"] trusted_hash = "sha256:…"` (the same table can hold `enabled = false`). `/hooks` writes it through `config/batchWrite` (`tui/src/hooks_rpc.rs:58-91`). Only the user and session-flag config layers are read (`hooks/src/config_rules.rs:15-65`). No `codex` subcommand reports trust; the only official query is the app-server JSON-RPC method `hooks/list`, which returns `key`, `currentHash` and `trustStatus` (`app-server-protocol/src/protocol/common.rs:890`).
+- **Ways to pre-trust**, none suitable as a default:
+  - Writing `trusted_hash` into `config.toml`. It works, but it self-approves Tatsu's hooks and skips the review Codex intends, so it is only acceptable as an explicit opt-in.
+  - A per-launch `-c 'hooks.state={"<key>"={trusted_hash="sha256:…"}}'` inline-table override. Session-flag config is honored for hook state, but `-c` splits keys on `.`, so it has to be an inline table. It only covers Codex processes Tatsu launches. Untested.
+  - Managed hooks from the System layer (`/etc/codex/config.toml`, `/etc/codex/hooks.json`, or `managed_hooks` in `/etc/codex/requirements.toml`) skip trust (`discovery.rs:827-830`). This needs root or MDM and applies to the whole machine.
+  - `--dangerously-bypass-hook-trust` is CLI-only (`bypass_hook_trust` is not a config key) and bypasses trust for every hook, including the user's own.
+- **Decision:** guided one-time approval in `/hooks` with a byte-stable command. Never write `trusted_hash` without an explicit opt-in.
+
 Sources:
 - https://code.claude.com/docs/en/headless
 - https://code.claude.com/docs/en/cli-reference
@@ -346,6 +368,7 @@ The same contract holds for a future headless driver, since the MCP tool works t
   - Codex's sandbox handles `allow:` on its own; the list is ignored there.
 - `full` needs an explicit per-run confirmation in the launch sheet and is never implied by autopilot.
 - **Autopilot** only auto-approves gates. It doesn't change permission modes.
+- **Codex hook trust**: the launch sheet's readiness checks include "Codex hooks trusted" for any definition with a Codex step. It is computed read-only from `~/.codex/config.toml` (see "Codex hook trust" under Harness research). When the hooks aren't trusted, the check shows "Open a Codex tab and run /hooks" instead of launching, since an untrusted Stop hook means the step can never complete through the Stop path.
 - **Claude folder trust**: before spawning a Claude step, the runner checks whether the worktree path or one of its parents is trusted. If not, the run pauses with `pausedReason: trust` and a "Trust folder" action that jumps to the tab. Tatsu never edits `~/.claude.json` itself. Codex gets the same check against its `trust_level`.
 - **Repo-scoped definitions are untrusted code.** On first run, and whenever the file's hash changes, show the definition and its permission levels and ask for trust. Store trust per `(repoRoot, path, hash)` in config. This mirrors the hooks-consent rule: never act on repo-supplied files without permission.
 - **Untrusted inputs**: GitHub issue/PR bodies interpolated into prompts are prompt-injection vectors. If a run has an `issue`/`pr` input from a non-collaborator, cap `permissions` at `edit` and disable autopilot by default.
@@ -409,6 +432,9 @@ The same contract holds for a future headless driver, since the MCP tool works t
    5. Permission levels per the mapping table, including the `harness-step` opencode agent.
    6. Claude/Codex folder-trust check helper.
    7. Bridge `agentKind` fix (enum and the check at `mcp-bridge.js:468-473`).
+   8. Codex hook trust:
+      - `installHooks` keeps each Tatsu entry at its existing index when an identical entry (same command and timeout) is already present. It only replaces legacy or mismatched entries, and skips writing `hooks.json` when nothing changed.
+      - A read-only trust-status helper computes each entry's key and hash and compares them against `~/.codex/config.toml`. It drives Settings ("Codex hooks need review: run /hooks") and the launch-sheet readiness check, with a unit test pinned to a known hash.
 1. **Definitions**: `workflow-def` package (full schema, unsupported-feature errors), loader for personal + repo scopes (primary checkout, watched), repo trust, `workflows` slice.
 2. **Runner (linear)**: FSM, `agent` + `shell` drivers, `complete_step`, fail-open Stop-hook continuation, snapshots, Retry / Skip / swap, restart recovery, fake-agent e2e.
 3. **Workflows section + YAML editor**: Runs view, run detail, Library, Monaco editor with validation and graph preview, launch sheet (with the hooks-consent requirement) + entry points.
@@ -424,5 +450,7 @@ The same contract holds for a future headless driver, since the MCP tool works t
 
 - Verify Codex `-c mcp_servers.*` per-run override (Codex isn't installed on the dev machine yet)
 - Confirm whether Codex hooks fire under `codex exec` (matters only for headless mode)
+- Verify the computed Codex hook hash against a real binary (≥ 0.129.0), e.g. via `codex app-server` `hooks/list`; the algorithm is read from source only
+- Decide whether to offer an opt-in "Trust automatically" button that writes `trusted_hash`, and test the `-c hooks.state={…}` per-launch override
 - Confirm the opencode permission-prompt event name on 1.18 (`permission.updated` vs `permission.asked`)
 - Decide before phase 6 whether `foreach` children may run in parallel when the entries are independent, or stay one chain like batches
