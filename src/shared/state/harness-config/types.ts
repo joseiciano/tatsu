@@ -57,6 +57,137 @@ export interface HarnessConfigSyncPlan {
   fingerprint: string
 }
 
+// --- Main-process service contracts, shared so main and renderer (via
+// the transport layer) compile against one declaration instead of
+// structurally duplicated copies. See Step 6's REQ-004/REQ-006. ---
+
+/** Stable, safe error codes the main-process `HarnessConfigService` can
+ *  throw. Never includes Node error text, stacks, or file content. */
+export type HarnessConfigErrorCode =
+  | 'unsupported-scope'
+  | 'invalid-name'
+  | 'unsafe-path'
+  | 'unknown-resource'
+  | 'unconfirmed-plan'
+  | 'unknown-plan'
+  | 'stale-plan'
+  | 'scope-mismatch'
+  | 'collision'
+  | 'backup-failed'
+  | 'read-failed'
+  | 'write-failed'
+  | 'delete-failed'
+  | 'desired-state-failed'
+
+export interface HarnessConfigAppliedOperation {
+  type: 'create' | 'overwrite' | 'delete' | 'adopt'
+  id?: string
+  relativePath?: string
+}
+
+export type HarnessConfigMutationDirection = 'create' | 'update' | 'delete'
+
+export interface HarnessConfigMutationPlan {
+  planId: string
+  scope: HarnessConfigScope
+  direction: HarnessConfigMutationDirection
+  resource: HarnessConfigFileRef
+  generatedAt: number
+  fingerprint: string
+}
+
+export interface HarnessConfigApplyRequest {
+  scope: HarnessConfigScope
+  planId: string
+  confirmed: boolean
+}
+
+export interface HarnessConfigApplyResult {
+  scope: HarnessConfigScope
+  planId: string
+  applied: HarnessConfigAppliedOperation[]
+  resultingRefs: HarnessConfigFileRef[]
+  requiresRescan: true
+}
+
+export type HarnessConfigConversionResult =
+  | { status: 'alias'; ref: HarnessConfigFileRef }
+  | { status: 'existing'; ref: HarnessConfigFileRef }
+  | {
+      status: 'draft'
+      agentKind: ManagedHarnessKind
+      resourceType: HarnessConfigResourceType
+      name: string
+      relativePath: string
+      label: string
+      content: string
+    }
+
+/** Content-bearing read result. Returned ONLY through the `readFile`
+ *  request's response — never entered into `AppState`, a state event,
+ *  a plan, or a log (REQ-014). */
+export interface HarnessConfigReadFileResult {
+  ref: HarnessConfigFileRef
+  content: string
+  hash: string
+}
+
+// --- Transport request/response envelope (Step 6) ---
+
+/** Transport-owned error codes layered on top of the service's stable
+ *  codes: `invalid-request` for boundary validation failures,
+ *  `internal-error` for anything unexpected. */
+export type HarnessConfigRequestErrorCode = HarnessConfigErrorCode | 'invalid-request' | 'internal-error'
+
+export interface HarnessConfigRequestError {
+  code: HarnessConfigRequestErrorCode
+  message: string
+  applied?: HarnessConfigAppliedOperation[]
+  requiresRescan?: true
+}
+
+export type HarnessConfigRequestResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: HarnessConfigRequestError }
+
+/** Shared by `scan`, `compare`, and the two directional plan-generation
+ *  channels — each accepts exactly `{ scope }` and nothing else. */
+export interface HarnessConfigScopeRequest {
+  scope: HarnessConfigScope
+}
+
+export interface HarnessConfigReadRequest {
+  scope: HarnessConfigScope
+  id: string
+}
+
+export interface HarnessConfigPrepareCreateRequest {
+  scope: HarnessConfigScope
+  name: string
+  content: string
+}
+
+export interface HarnessConfigPrepareUpdateRequest {
+  scope: HarnessConfigScope
+  id: string
+  content: string
+}
+
+export interface HarnessConfigPrepareDeleteRequest {
+  scope: HarnessConfigScope
+  id: string
+}
+
+export interface HarnessConfigConversionRequest {
+  scope: HarnessConfigScope
+  id: string
+}
+
+export interface HarnessConfigScanResult {
+  resources: HarnessConfigFileRef[]
+  scannedAt: number
+}
+
 export interface HarnessConfigState {
   resources: Record<HarnessConfigResourceType, HarnessConfigFileRef[]>
   comparisons: Partial<Record<HarnessConfigScopeKey, HarnessConfigComparison>>

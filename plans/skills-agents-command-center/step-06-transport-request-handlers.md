@@ -1,14 +1,14 @@
 ---
 goal: Add safe harness configuration transport request handlers
 date_created: 2026-09-25
-last_updated: 2026-09-25
-status: 'Planned'
+last_updated: 2026-10-01
+status: 'Completed'
 tags: [feature, transport, harness-config, ipc, websocket]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan implements Step 6 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It connects the main-process harness configuration service and persisted Tatsu config to Electron and WebSocket clients through the existing compound transport, publishes successful disk inventory and comparison changes through the shared store, and exposes a typed renderer API without allowing renderer-supplied paths or unconfirmed mutations. The request surface separates read-only scan/read/compare requests, non-mutating plan-generation requests, and mutating apply requests. Mutation authority follows the [source-of-truth operation matrix](./implementation-details.md): sync to disk and adopt from disk accept only a previously generated, still-current confirmed plan, while direct create/update/delete additionally require their explicit Create/Save/Delete action on the matching action-specific channel. Missing, stale, mismatched, reused, or unconfirmed plans are rejected rather than applied. The Config page, conflict modal, and conversion controls remain follow-up work in Steps 7 through 10.
 
@@ -58,15 +58,15 @@ This plan implements Step 6 of the larger [Skills-Agents-Commands-Sync plan](./s
 
 - **GOAL-001**: Establish one browser-safe, exact request/result protocol that keeps read-only observation, non-mutating plan generation, confirmed mutation, conversion preparation, and structured failure contracts distinct.
 
-- [ ] **TASK-001**: Update `src/shared/state/harness-config/types.ts` with the transport error and result contracts from REQ-004 through REQ-006.
+- [x] **TASK-001**: Update `src/shared/state/harness-config/types.ts` with the transport error and result contracts from REQ-004 through REQ-006.
   - Export `HarnessConfigRequestErrorCode`, `HarnessConfigRequestError`, and generic `HarnessConfigRequestResult<T>`.
   - Reuse or relocate the Step 2 stable error-code union so main and renderer compile against one declaration.
   - Keep Node `Error`, stack, cause, content, and executable-operation fields out of every shared type.
-- [ ] **TASK-002**: Add exact shared input types for the fifteen channels.
+- [x] **TASK-002**: Add exact shared input types for the fifteen channels.
   - Define separate scan, read, compare, direct-prepare, directional-plan, bound-apply, and conversion request types described by REQ-007 and REQ-008. Do not model create/update/delete as a `phase` union and do not reuse a mutation request type for plan generation.
   - Use `boolean` for runtime `confirmed` input so an untrusted false value can be rejected deterministically; successful mutation still requires the literal value `true` plus a matching main-only binding.
   - Define response value types for scan, read, comparison, prepared mutation, directional plan, conversion, and applied mutation without exposing service-private operations.
-- [ ] **TASK-003**: Reconcile Step 2's public comparison and plan contracts with the shared DTOs and main-owned state.
+- [x] **TASK-003**: Reconcile Step 2's public comparison and plan contracts with the shared DTOs and main-owned state.
   - Define `HarnessConfigComparison` exactly as `{ scope, status, diskOnly, configOnly, changed, comparedAt }`; exclude `planId`, `direction`, `fingerprint`, operations, and apply authority.
   - Keep `HarnessConfigSyncPlan` exactly `{ planId, scope, direction, status, diskOnly, configOnly, changed, generatedAt, fingerprint }`. Ensure direct mutation plans expose `planId`, exact scope, operation kind, generated timestamp, affected public refs or logical resource types, and no content/operations.
   - Add the shared `harnessConfig/comparisonLoaded` and `harnessConfig/syncApplied` events and the exact `${agentKind}:${resourceType}` comparison storage contract required by REQ-011 and REQ-016. `comparisonLoaded` stores only `HarnessConfigComparison`; `syncApplied` carries only `{ scope, syncedAt }`. Do not put `HarnessConfigSyncPlan` into mirrored state; update package barrels/main re-exports and remove structural duplicates rather than adding compatibility aliases.
@@ -75,43 +75,43 @@ This plan implements Step 6 of the larger [Skills-Agents-Commands-Sync plan](./s
 
 - **GOAL-002**: Compose the service, persistence, store, and compound transport behind a testable adapter that cannot bypass scope or confirmation rules.
 
-- [ ] **TASK-004**: Create `src/main/harness-config-transport/index.ts` and `src/main/harness-config-transport/harness-config-transport.ts`.
+- [x] **TASK-004**: Create `src/main/harness-config-transport/index.ts` and `src/main/harness-config-transport/harness-config-transport.ts`.
   - Export `registerHarnessConfigRequestHandlers({ transport, store, service, now })` from the package barrel.
   - Type dependencies by the narrow methods used by the adapter so tests can provide deterministic fakes without importing Electron or starting a server.
   - Keep the plan-binding map and in-flight counter private to one registration instance.
-- [ ] **TASK-005**: Implement boundary parsers and structured error mapping in `harness-config-transport.ts`.
+- [x] **TASK-005**: Implement boundary parsers and structured error mapping in `harness-config-transport.ts`.
   - Parse plain objects, exact managed scopes, resource types, strings, and confirmation only where the channel contract allows them; reject arrays, null, missing or extra fields, wrong primitives, unsupported Pi, unknown agent/resource values, and obsolete phase/direction fields on direction-specific channels.
   - Call `toAgentKind()` as required, but require exact round-trip equality and the managed allowlist before accepting its result.
   - Map known `HarnessConfigError` values to their stable safe code/message and unknown exceptions to `internal-error`; never return thrown transport rejections for expected validation or service failures.
-- [ ] **TASK-006**: Implement one lifecycle wrapper for all handlers.
+- [x] **TASK-006**: Implement one lifecycle wrapper for all handlers.
   - Increment/decrement the in-flight counter in `try/finally`, emit loading only on boundary transitions, and clear error at request start.
   - On failure, dispatch the safe error message before returning `{ ok: false, error }`.
   - Prevent an earlier successful request from clearing an error produced by a later concurrent request; error clearing occurs only at explicit request start.
-- [ ] **TASK-007**: Register the read-only `harnessConfig:scan`, `harnessConfig:readFile`, and `harnessConfig:compare` handlers.
+- [x] **TASK-007**: Register the read-only `harnessConfig:scan`, `harnessConfig:readFile`, and `harnessConfig:compare` handlers.
   - Scan validates scope, calls `service.scan`, captures `now()` once, dispatches `resourcesLoaded`, and returns `{ resources, scannedAt }`.
   - Read validates scope and ID, calls the fresh service read, verifies agent and logical/canonical/alias membership, and returns content only through the response.
   - Compare validates scope, calls only `service.planSync(scope)`, dispatches `harnessConfig/comparisonLoaded` with no `syncedAt`, returns the same `HarnessConfigComparison`, and records no apply binding. All three handlers perform zero disk and Tatsu config writes.
-- [ ] **TASK-008**: Register the five non-mutating direct-prepare and conversion handlers.
+- [x] **TASK-008**: Register the five non-mutating direct-prepare and conversion handlers.
   - Route `harnessConfig:prepareCreate`, `harnessConfig:prepareUpdate`, and `harnessConfig:prepareDelete` to the exact matching Step 2 wrapper. Record each returned `planId` with its one allowed create/update/delete mutation channel, exact scope, and affected canonical/alias logical views.
   - Route the two Step 10 channels only to `prepareCommandFromSkill`/`prepareSkillFromCommand`. Return `HarnessConfigConversionResult` through the standard envelope with no plan binding and no apply phase.
   - Return the public mutation plan or conversion result without dispatching inventory or comparison success events.
-- [ ] **TASK-009**: Register the distinct `harnessConfig:planSyncToDisk` and `harnessConfig:planAdoptFromDisk` handlers.
+- [x] **TASK-009**: Register the distinct `harnessConfig:planSyncToDisk` and `harnessConfig:planAdoptFromDisk` handlers.
   - Route each validated `{ scope }` payload only to its identically directed Step 2 wrapper; do not accept a renderer-provided direction discriminator.
   - Record a binding containing the originating plan channel, one allowed mutation channel, exact scope, fixed direction, and every canonical/alias resource type named by the plan's differences.
   - Return the public plan without applying it, changing disk/Tatsu config, or setting `syncedAt`.
-- [ ] **TASK-010**: Implement the shared bound-plan apply path and register the three direct mutation channels.
+- [x] **TASK-010**: Implement the shared bound-plan apply path and register the three direct mutation channels.
   - Reject missing, cross-channel, cross-direction, or cross-scope binding metadata before service apply. A matching request with `confirmed !== true` MUST be rejected and its adapter binding invalidated so later replay cannot mutate.
   - For `createFile`, `updateFile`, and `deleteFile`, treat the action-specific request following the explicit Create/Save/Delete UI gate as the direct confirmed action, but still require the matching prepared `planId`; never accept draft fields or paths on these mutation channels.
   - Remove the matching binding immediately before calling `service.applyPlan({ scope: binding.scope, planId, confirmed: true })`, so success, stale-plan rejection, partial failure, and any other attempted apply remain single-use. Rely on the service for exact scope revalidation, stale fingerprint detection, plan consumption, backup, atomicity, rollback, and same-harness enforcement. After every reached apply attempt, refresh the bound scopes as required by REQ-015 and preserve the original failure after refresh.
-- [ ] **TASK-011**: Register `harnessConfig:syncToDisk` and `harnessConfig:adoptFromDisk` on the shared apply path.
+- [x] **TASK-011**: Register `harnessConfig:syncToDisk` and `harnessConfig:adoptFromDisk` on the shared apply path.
   - Require the matching direction-specific plan-channel binding, exact scope, and literal confirmation.
   - On success, rescan affected disk inventory, run a fresh read-only comparison, dispatch `harnessConfig/comparisonLoaded` with that comparison and `harnessConfig/syncApplied` with `{ scope, syncedAt }`, and return the apply result without generating or mirroring another actionable plan.
   - On partial failure, rescan and optionally dispatch a fresh `comparisonLoaded` event without `syncedAt` or `syncApplied`, then return the original apply error.
-- [ ] **TASK-012**: Add deterministic refresh helpers.
+- [x] **TASK-012**: Add deterministic refresh helpers.
   - Start with the binding's selected, canonical, and alias logical resource types; after each successful scan, add newly returned aliases and scan each scope at most once.
   - Reuse one `scannedAt` value for the refresh batch and dispatch one `resourcesLoaded` event per successfully refreshed scope.
   - Never broaden refresh to another `agentKind` and never hide an apply error behind a refresh error.
-- [ ] **TASK-013**: Compose the adapter in `src/main/index.ts`.
+- [x] **TASK-013**: Compose the adapter in `src/main/index.ts`.
   - Import `HarnessConfigService`, persistence accessors, and `registerHarnessConfigRequestHandlers` through package barrels.
   - Construct one service after the long-lived `config` is loaded, binding the Step 5 read/replace functions to that same object.
   - Invoke registration from the existing request-registration flow before desktop/headless clients connect; do not duplicate handlers per transport and do not call `saveConfig()` from these handlers.
@@ -120,11 +120,11 @@ This plan implements Step 6 of the larger [Skills-Agents-Commands-Sync plan](./s
 
 - **GOAL-003**: Make every harness configuration operation available through the selected backend with shared argument and result types.
 
-- [ ] **TASK-014**: Update `src/renderer/types/types.ts`.
+- [x] **TASK-014**: Update `src/renderer/types/types.ts`.
   - Import and re-export the shared harness-config scope, file-ref, comparison, plan, request, apply-result, and request-result types through the shared package barrel.
   - Add exact one-object methods for all fifteen channels: `scanHarnessConfig`, `readHarnessConfigFile`, `compareHarnessConfig`, `prepareHarnessConfigCreate`, `prepareHarnessConfigUpdate`, `prepareHarnessConfigDelete`, `planHarnessConfigSyncToDisk`, `planHarnessConfigAdoptFromDisk`, `createHarnessConfigFile`, `updateHarnessConfigFile`, `deleteHarnessConfigFile`, `syncHarnessConfigToDisk`, `adoptHarnessConfigFromDisk`, `prepareHarnessConfigCommandFromSkill`, and `prepareHarnessConfigSkillFromCommand`.
   - Give every method its exact `Promise<HarnessConfigRequestResult<...>>` return type; no mutation method accepts the plan-generation payload shape.
-- [ ] **TASK-015**: Update `src/renderer/build-backend/build-backend.ts` with fifteen active-routed method mappings.
+- [x] **TASK-015**: Update `src/renderer/build-backend/build-backend.ts` with fifteen active-routed method mappings.
   - Map each `ElectronAPI` method one-to-one to the channel in REQ-001 through `req`, preserving the single object argument and the observation/plan/mutation split.
   - Do not use `reqLocal`; remote Config pages must manage the active remote backend's harness files, state, and plans.
   - Do not add preload wiring because the generic `LocalTransportHandle.request()` already carries named requests.
@@ -133,34 +133,34 @@ This plan implements Step 6 of the larger [Skills-Agents-Commands-Sync plan](./s
 
 - **GOAL-004**: Verify validation, confirmation, scoping, event ordering, partial-apply refresh, and renderer/main contract completeness before delivery.
 
-- [ ] **TASK-016**: Add `src/main/harness-config-transport/harness-config-transport.test.ts` using a captured-handler fake transport, recording fake store, deterministic clock, and fake service.
+- [x] **TASK-016**: Add `src/main/harness-config-transport/harness-config-transport.test.ts` using a captured-handler fake transport, recording fake store, deterministic clock, and fake service.
   - Test observable request results and dispatched events, not private helper calls or source text.
   - Cover successful scan/read/compare, content exclusion from events, non-authorizing comparison, and exact scoped comparison/plan payloads.
   - Prove all plan-generation handlers perform zero mutation; only the five mutation handlers can reach `applyPlan`, each after its own matching explicit user gate.
-- [ ] **TASK-017**: Add security, rejection, confirmation, and no-op regression cases.
+- [x] **TASK-017**: Add security, rejection, confirmation, and no-op regression cases.
   - Prove unknown/empty agent values, Pi, invalid resource types, malformed or extra authority-bearing fields, false confirmation, missing/stale/reused plans, mismatched scope/channel/direction bindings, and cross-harness destination attempts never invoke `applyPlan` or another mutating service method.
   - Prove `toAgentKind()` fallback cannot turn invalid input into Claude authorization and renderer-provided absolute/relative paths, refs, hashes, fingerprints, Tatsu config resources, and plans are rejected.
   - Prove conversion requests cannot select a destination harness, enforce Skills-to-Commands or Commands-to-Skills source types, and never create a plan binding.
   - Prove cancellation/dismissal/abandonment sends no mutation request, emits no success event, and leaves disk inventory and Tatsu config unchanged.
-- [ ] **TASK-018**: Add event-order and refresh regression cases.
+- [x] **TASK-018**: Add event-order and refresh regression cases.
   - Prove scan/read/compare, all plan-generation requests, and conversion preparation do not dispatch resource mutation events, `syncApplied`, or any `lastSyncedAt` change; compare alone dispatches `comparisonLoaded`, and no actionable plan is mirrored into shared state.
   - Prove successful scan dispatches after the service returns; successful confirmed mutation refreshes selected/canonical/alias scopes; confirmed sync/adopt alone dispatches `syncApplied` and updates `lastSyncedAt`.
   - Simulate partial apply failure and prove successful rescans update inventory while the request still returns the original apply error, dispatches no `syncApplied`, and leaves `lastSyncedAt` unchanged.
   - Overlap two deferred requests and prove loading stays true until both settle.
-- [ ] **TASK-019**: Add structured-error and side-effect-order cases.
+- [x] **TASK-019**: Add structured-error and side-effect-order cases.
   - Prove known service errors preserve safe code/message, unknown errors become `internal-error`, and neither response/store events nor logs contain supplied content.
   - Prove failed scan produces no `resourcesLoaded`, failed compare produces no `comparisonLoaded`, failed plan generation creates no binding, and failed mutation dispatches no `syncApplied`.
   - Prove a refresh failure cannot replace the primary apply failure.
-- [ ] **TASK-020**: Run `npx vitest run src/main/harness-config-transport/harness-config-transport.test.ts src/main/harness-config/harness-config.test.ts src/shared/state/harness-config/harness-config.test.ts`, then run `pnpm typecheck` and `pnpm build`.
+- [x] **TASK-020**: Run `npx vitest run src/main/harness-config-transport/harness-config-transport.test.ts src/main/harness-config/harness-config.test.ts src/shared/state/harness-config/harness-config.test.ts`, then run `pnpm typecheck` and `pnpm build`.
   - Resolve every failure without weakening strict scope validation, confirmation, plan binding, structured errors, or state-content boundaries.
   - Exercise the built backend with a throwaway fake `LocalTransportHandle` that calls all fifteen renderer methods and records the fifteen request names and single-object arguments; remove the throwaway script after it passes.
-- [ ] **TASK-021**: Review the final change against the complete request table and downstream UI needs.
+- [x] **TASK-021**: Review the final change against the complete request table and downstream UI needs.
   - Verify all fifteen channels exist exactly once on main and renderer, all mappings use the active backend, and no request accepts paths or cross-harness destinations.
   - Verify observation and plan-generation channels cannot reach `applyPlan`, every mutation requires a matching current bound plan and literal confirmation, and direct create/update/delete channels correspond to their explicit Create/Save/Delete user gates.
   - Verify the adapter contains no backup/write implementation, the service contains no store/transport integration, Tatsu config content remains main-only, comparison state remains main-owned, actionable plans remain request-scoped/unmirrored, and the shared slice remains content-free.
   - Verify rejection and cancel/dismiss paths produce no disk/Tatsu config mutation or success event, and no request is authorized by arbitrary user-supplied paths.
   - Verify affected documentation still names `implementation-details.md` as the feature source and no later-step UI work was pulled into this change.
-- [ ] **TASK-022**: Commit the shared contracts, adapter, renderer mappings, and tests as one focused change with message `feat: add harness config transport handlers`, then run `git push origin <current-branch>` immediately after the commit succeeds.
+- [x] **TASK-022**: Commit the shared contracts, adapter, renderer mappings, and tests as one focused change with message `feat: add harness config transport handlers`, then run `git push origin <current-branch>` immediately after the commit succeeds.
   - Do not include unrelated working-tree changes.
 
 ## 3. Alternatives
