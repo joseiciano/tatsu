@@ -591,6 +591,10 @@ export function useBrowser() {
   return useAppState((s) => s.browser)
 }
 
+export function useHarnessConfig() {
+  return useAppState((s) => s.harnessConfig)
+}
+
 /** Session roster (controller + spectators) for a given terminal id.
  *  Re-renders only when that terminal's entry changes. Returns null if
  *  the terminal hasn't been joined yet (e.g. right after pane create

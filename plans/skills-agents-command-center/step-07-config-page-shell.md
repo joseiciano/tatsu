@@ -2,13 +2,13 @@
 goal: Build the renderer Config page shell for harness agents, skills, and commands
 date_created: 2026-09-25
 last_updated: 2026-09-25
-status: 'Planned'
+status: 'Completed'
 tags: [feature, renderer, react, harness-config, smart-dumb]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan implements Step 7 of the larger [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It adds the renderer-side Config page shell that lists Claude, Codex, and OpenCode agent definitions, skills, and commands; exposes safe create, edit, and delete flows through the typed active-backend API; and previews scoped disk-versus-Tatsu-config drift. It consumes the feature goals and source-of-truth rules in [implementation-details.md](./implementation-details.md), the shared state from Step 4, and the transport contract from Step 6. Steps 2 through 6 are planned prerequisites and are not present in the repository at plan time, so implementation of this step MUST begin only after their declared shared types, state integration, service, persistence, and renderer API outputs exist; this step MUST NOT backfill them or add compatibility aliases. Navigation entry points, confirmed sync/adopt resolution, and skill-command conversion remain follow-up work in Steps 8 through 10, so completing this plan does not complete the overarching feature.
 
