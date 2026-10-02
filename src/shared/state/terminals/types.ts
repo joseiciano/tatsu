@@ -17,7 +17,7 @@ export interface TerminalProgress {
   value: number
 }
 
-export type AgentKind = 'claude' | 'codex' | 'opencode'
+export type AgentKind = 'claude' | 'codex' | 'opencode' | 'pi'
 
 export interface TerminalTab {
   id: string

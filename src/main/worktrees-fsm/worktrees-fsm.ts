@@ -28,6 +28,7 @@ export function containerScriptEnv(workdir: string, branch: string, repoRoot: st
 
 const MAX_SETUP_LOG_CHARS = 100_000
 const SETUP_LOG_THROTTLE_MS = 100
+import type { AgentKind } from '../../shared/state/terminals'
 
 /** Sanitize a PR's head branch into a name that's safe as both a git
  *  branch (we're not strict here since git accepts most things) and a
@@ -80,7 +81,7 @@ interface WorktreesFSMOptions {
     createdPath: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }) => void
 }
@@ -165,7 +166,7 @@ export class WorktreesFSM {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }): Promise<PendingOutcome> {
     const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model } = params
@@ -222,7 +223,7 @@ export class WorktreesFSM {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }): Promise<PendingOutcome> {
     const { id, repoRoot, prNumber, initialPrompt, agentKind, model } = params
@@ -303,7 +304,7 @@ export class WorktreesFSM {
     container?: CreatedWorktreeContainer
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }): Promise<PendingOutcome> {
     try {
@@ -349,7 +350,7 @@ export class WorktreesFSM {
     container?: CreatedWorktreeContainer
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }): Promise<PendingOutcome> {
     const { id, repoRoot, created, container, initialPrompt, teleportSessionId, agentKind, model } = args

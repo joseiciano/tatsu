@@ -13,6 +13,7 @@ import { initialJsonClaude } from '../../shared/state/json-claude'
 import { initialSnooze } from '../../shared/state/snooze'
 import { initialAnnouncements } from '../../shared/state/announcements'
 import { initialScratchpad } from '../../shared/state/scratchpad'
+import { initialHarnessConfig } from '../../shared/state/harness-config'
 import {
   initialSettings,
   DEFAULT_LIGHT_THEME,
@@ -125,6 +126,7 @@ export function buildInitialAppState(
     snooze: config.snooze ? { byPath: { ...config.snooze } } : initialSnooze,
     announcements: initialAnnouncements,
     scratchpad: { byWorktreePath: flattenScratchpadNotes(config.scratchpadNotes) },
+    harnessConfig: initialHarnessConfig,
     settings: {
       ...initialSettings,
       themeMode:
@@ -157,6 +159,9 @@ export function buildInitialAppState(
       claudeModel: config.claudeModel || null,
       codexModel: config.codexModel || null,
       opencodeModel: config.opencodeModel || null,
+      piCommand: config.piCommand || 'pi',
+      piEnvVars: config.piEnvVars || {},
+      piModel: config.piModel || null,
       hasGithubToken: opts.hasGithubToken,
       autoUpdateEnabled: config.autoUpdateEnabled !== false,
       shareClaudeSettings: config.shareClaudeSettings !== false,

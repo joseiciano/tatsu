@@ -16,6 +16,43 @@ export type { SessionCostSummary, ClaudeAuthInfo, SubscriptionTier }
 import type { AddRepoResult } from '../../shared/repo-pick'
 export type { AddRepoResult }
 
+import type {
+  HarnessConfigApplyRequest,
+  HarnessConfigApplyResult,
+  HarnessConfigComparison,
+  HarnessConfigConversionRequest,
+  HarnessConfigConversionResult,
+  HarnessConfigMutationPlan,
+  HarnessConfigPrepareCreateRequest,
+  HarnessConfigPrepareDeleteRequest,
+  HarnessConfigPrepareUpdateRequest,
+  HarnessConfigReadFileResult,
+  HarnessConfigReadRequest,
+  HarnessConfigRequestResult,
+  HarnessConfigScanResult,
+  HarnessConfigScope,
+  HarnessConfigScopeRequest,
+  HarnessConfigSyncPlan
+} from '../../shared/state/harness-config'
+export type {
+  HarnessConfigApplyRequest,
+  HarnessConfigApplyResult,
+  HarnessConfigComparison,
+  HarnessConfigConversionRequest,
+  HarnessConfigConversionResult,
+  HarnessConfigMutationPlan,
+  HarnessConfigPrepareCreateRequest,
+  HarnessConfigPrepareDeleteRequest,
+  HarnessConfigPrepareUpdateRequest,
+  HarnessConfigReadFileResult,
+  HarnessConfigReadRequest,
+  HarnessConfigRequestResult,
+  HarnessConfigScanResult,
+  HarnessConfigScope,
+  HarnessConfigScopeRequest,
+  HarnessConfigSyncPlan
+}
+
 /** Per-kind dirtiness flags for a worktree. `git` reflects
  *  uncommitted changes; `scratchpad` reflects a non-empty scratchpad
  *  note. The delete-worktree flow surfaces each kind separately so the
@@ -180,7 +217,7 @@ export interface ElectronAPI {
     branchName: string
     initialPrompt?: string
     teleportSessionId?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }
@@ -192,7 +229,7 @@ export interface ElectronAPI {
     repoRoot: string
     prNumber: number
     initialPrompt?: string
-    agentKind?: 'claude' | 'codex' | 'opencode'
+    agentKind?: AgentKind
     model?: string
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }
@@ -340,6 +377,9 @@ export interface ElectronAPI {
   setOpencodeCommand(command: string): Promise<boolean>
   setOpencodeModel(model: string | null): Promise<boolean>
   setOpencodeEnvVars(vars: Record<string, string>): Promise<boolean>
+  setPiCommand(command: string): Promise<boolean>
+  setPiModel(model: string | null): Promise<boolean>
+  setPiEnvVars(vars: Record<string, string>): Promise<boolean>
   setNameClaudeSessions(enabled: boolean): Promise<boolean>
   setThemeMode(mode: 'light' | 'dark' | 'system'): Promise<boolean>
   setThemeLight(theme: string): Promise<boolean>
@@ -581,6 +621,52 @@ export interface ElectronAPI {
   connectionsSetLastConnected(id: string, when?: number): Promise<boolean>
   connectionsGetToken(id: string): Promise<string | null>
   connectionsHasToken(id: string): Promise<boolean>
+
+  scanHarnessConfig(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigScanResult>>
+  readHarnessConfigFile(
+    request: HarnessConfigReadRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigReadFileResult>>
+  compareHarnessConfig(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigComparison>>
+  prepareHarnessConfigCreate(
+    request: HarnessConfigPrepareCreateRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
+  prepareHarnessConfigUpdate(
+    request: HarnessConfigPrepareUpdateRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
+  prepareHarnessConfigDelete(
+    request: HarnessConfigPrepareDeleteRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
+  planHarnessConfigSyncToDisk(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
+  planHarnessConfigAdoptFromDisk(
+    request: HarnessConfigScopeRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
+  createHarnessConfigFile(
+    request: HarnessConfigApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  updateHarnessConfigFile(
+    request: HarnessConfigApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  deleteHarnessConfigFile(
+    request: HarnessConfigApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  syncHarnessConfigToDisk(
+    request: HarnessConfigApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  adoptHarnessConfigFromDisk(
+    request: HarnessConfigApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
+  prepareHarnessConfigCommandFromSkill(
+    request: HarnessConfigConversionRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
+  prepareHarnessConfigSkillFromCommand(
+    request: HarnessConfigConversionRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the

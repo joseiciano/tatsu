@@ -5,6 +5,7 @@ import { PRStatusPanel, MergeLocallyPanel } from '../PRStatusPanel'
 import { BranchCommitsPanel } from '../BranchCommitsPanel'
 import { CostPanel } from '../CostPanel'
 import type { Worktree, PRStatus } from '../../types'
+import { ENABLE_COST } from '../../../shared/constants'
 
 interface MobileRightPanelProps {
   activeWorktree: Worktree | null
@@ -69,7 +70,7 @@ export function MobileRightPanel({
             onRemoveWorktree={handleRemoveWorktree}
           />
           <BranchCommitsPanel worktreePath={activeWorktree.path} />
-          <CostPanel worktreePath={activeWorktree.path} />
+          {ENABLE_COST && <CostPanel worktreePath={activeWorktree.path} />}
           <div className="px-4 py-3 text-xs text-dim">
             File diffs and commit review open only on desktop for now.
           </div>

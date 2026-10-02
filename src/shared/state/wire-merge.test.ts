@@ -47,6 +47,57 @@ describe('mergeWireSnapshot', () => {
     expect(merged.repoConfigs).toEqual(initialState.repoConfigs)
     expect(merged.jsonClaude).toEqual(initialState.jsonClaude)
     expect(merged.settings).toEqual(initialState.settings)
+    expect(merged.harnessConfig).toEqual(initialState.harnessConfig)
+  })
+
+  it('preserves partial harness config snapshots while filling omitted fields', () => {
+    const serverResources = {
+      agents: [],
+      skills: [
+        {
+          id: 'wire:skill',
+          agentKind: 'claude' as const,
+          resourceType: 'skills' as const,
+          canonicalResourceType: 'skills' as const,
+          aliasResourceTypes: [],
+          label: 'Wire skill',
+          relativePath: 'skills/wire.md',
+          absolutePath: '/workspace/.claude/skills/wire.md',
+          hash: 'sha256:wire',
+          existsOnDisk: true,
+          managed: true,
+          updatedAt: 700
+        }
+      ],
+      commands: []
+    }
+    const serverComparison = {
+      scope: { agentKind: 'claude' as const, resourceType: 'skills' as const },
+      status: 'synced' as const,
+      diskOnly: [],
+      configOnly: [],
+      changed: [],
+      comparedAt: 701
+    }
+    const wire: WireSnapshotState = {
+      harnessConfig: {
+        resources: serverResources,
+        comparisons: { 'claude:skills': serverComparison },
+        loading: true,
+        error: 'wire error',
+        lastScannedAt: 702
+        // Older server omits lastSyncedAt.
+      }
+    }
+
+    const merged = mergeWireSnapshot(wire)
+
+    expect(merged.harnessConfig.resources).toBe(serverResources)
+    expect(merged.harnessConfig.comparisons).toBe(wire.harnessConfig?.comparisons)
+    expect(merged.harnessConfig.loading).toBe(true)
+    expect(merged.harnessConfig.error).toBe('wire error')
+    expect(merged.harnessConfig.lastScannedAt).toBe(702)
+    expect(merged.harnessConfig.lastSyncedAt).toBe(initialState.harnessConfig.lastSyncedAt)
   })
 
   it('preserves server-sent values when the snapshot is complete', () => {

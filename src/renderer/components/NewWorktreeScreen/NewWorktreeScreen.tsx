@@ -7,6 +7,7 @@ import { useBackend } from '../../backend'
 import { useSettings } from '../../store'
 import { CLAUDE_MODELS, CODEX_MODELS } from '../../../shared/agent-registry'
 import type { PRSummary } from '../../types'
+import type { AgentKind } from '../../../shared/state/terminals'
 
 interface NewWorktreeScreenProps {
   onSubmit: (
@@ -14,14 +15,14 @@ interface NewWorktreeScreenProps {
     branchName: string,
     initialPrompt: string,
     teleportSessionId?: string,
-    agentKind?: 'claude' | 'codex' | 'opencode',
+    agentKind?: AgentKind,
     model?: string
   ) => Promise<void>
   onPRSubmit: (
     repoRoot: string,
     prNumber: number,
     initialPrompt: string,
-    agentKind?: 'claude' | 'codex' | 'opencode',
+    agentKind?: AgentKind,
     model?: string
   ) => Promise<void>
   onCancel: () => void
@@ -98,8 +99,8 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
   // settings; model defaults to empty (= use settings.claudeModel/codexModel
   // at spawn time). Teleport mode pins to Claude — codex has no equivalent
   // "resume by id" flow today.
-  const [agentKindOverride, setAgentKindOverride] = useState<'claude' | 'codex' | 'opencode'>(
-    settings.defaultAgent === 'codex' ? 'codex' : settings.defaultAgent === 'opencode' ? 'opencode' : 'claude'
+  const [agentKindOverride, setAgentKindOverride] = useState<AgentKind>(
+    settings.defaultAgent === 'codex' ? 'codex' : settings.defaultAgent === 'opencode' ? 'opencode' : settings.defaultAgent === 'pi' ? 'pi' : 'claude'
   )
   const [modelOverride, setModelOverride] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -194,7 +195,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
     try {
       // Teleport mode always Claude — codex has no resume-by-session-id
       // analog today.
-      const effectiveAgent: 'claude' | 'codex' | 'opencode' =
+      const effectiveAgent: AgentKind =
         mode === 'teleport' ? 'claude' : agentKindOverride
       await onSubmit(
         selectedRepo,
@@ -470,6 +471,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
                   defaultClaudeModel={settings.claudeModel}
                   defaultCodexModel={settings.codexModel}
                   defaultOpencodeModel={settings.opencodeModel}
+                  defaultPiModel={settings.piModel}
                   disabled={prClickPending !== null}
                 />
                 <PRPickerList
@@ -493,6 +495,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
                 defaultClaudeModel={settings.claudeModel}
                 defaultCodexModel={settings.codexModel}
                 defaultOpencodeModel={settings.opencodeModel}
+                defaultPiModel={settings.piModel}
                 disabled={submitting}
               />
             )}
@@ -667,13 +670,14 @@ function PRPickerList({ prs, loading, error, disabled, pendingNumber, onPick }: 
 
 interface AgentModelRowProps {
   mode: 'fresh' | 'teleport' | 'pr'
-  agentKind: 'claude' | 'codex' | 'opencode'
-  setAgentKind: (k: 'claude' | 'codex' | 'opencode') => void
+  agentKind: AgentKind
+  setAgentKind: (k: AgentKind) => void
   model: string
   setModel: (m: string) => void
   defaultClaudeModel: string | null
   defaultCodexModel: string | null
   defaultOpencodeModel: string | null
+  defaultPiModel: string | null
   disabled: boolean
 }
 
@@ -686,6 +690,7 @@ function AgentModelRow({
   defaultClaudeModel,
   defaultCodexModel,
   defaultOpencodeModel,
+  defaultPiModel,
   disabled
 }: AgentModelRowProps): JSX.Element {
   // Teleport mode pins to Claude — codex/opencode have no equivalent
@@ -695,7 +700,7 @@ function AgentModelRow({
   const effectiveAgent = locked ? 'claude' : agentKind
   const modelOptions = effectiveAgent === 'codex' ? CODEX_MODELS : effectiveAgent === 'claude' ? CLAUDE_MODELS : null
   const fallbackModel =
-    effectiveAgent === 'codex' ? defaultCodexModel : effectiveAgent === 'opencode' ? defaultOpencodeModel : defaultClaudeModel
+    effectiveAgent === 'codex' ? defaultCodexModel : effectiveAgent === 'opencode' ? defaultOpencodeModel : effectiveAgent === 'pi' ? defaultPiModel : defaultClaudeModel
   const fallbackDisplay = modelOptions
     ? (modelOptions.find((m) => m.id === fallbackModel)?.displayName || fallbackModel)
     : fallbackModel
@@ -711,7 +716,7 @@ function AgentModelRow({
   const hasNonDefault = (!locked && agentKind !== 'claude') || model.trim().length > 0
   const open = openOverride || hasNonDefault
 
-  const handleAgentChange = (next: 'claude' | 'codex' | 'opencode'): void => {
+  const handleAgentChange = (next: AgentKind): void => {
     // Reset the model when switching agents — otherwise a stale model id
     // would be sent as the wrong agent's --model flag.
     if (next !== agentKind) setModel('')
@@ -731,7 +736,7 @@ function AgentModelRow({
         Advanced
         {!open && hasNonDefault && (
           <span className="ml-1 normal-case font-normal tracking-normal text-faint">
-            ({effectiveAgent === 'codex' ? 'Codex' : effectiveAgent === 'opencode' ? 'Opencode' : 'Claude'}
+            ({effectiveAgent === 'codex' ? 'Codex' : effectiveAgent === 'opencode' ? 'Opencode' : effectiveAgent === 'pi' ? 'Pi' : 'Claude'}
             {model.trim() ? ` · ${modelDisplay}` : ''})
           </span>
         )}
@@ -744,7 +749,7 @@ function AgentModelRow({
             </span>
             <select
               value={effectiveAgent}
-              onChange={(e) => handleAgentChange(e.target.value as 'claude' | 'codex' | 'opencode')}
+              onChange={(e) => handleAgentChange(e.target.value as AgentKind)}
               disabled={disabled || locked}
               title={locked ? 'Teleport sessions require Claude' : undefined}
               className="bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
@@ -752,13 +757,14 @@ function AgentModelRow({
               <option value="claude">Claude</option>
               <option value="codex">Codex</option>
               <option value="opencode">Opencode</option>
+              <option value="pi">Pi</option>
             </select>
           </div>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-dim shrink-0">
               Model
             </span>
-            {effectiveAgent === 'opencode' ? (
+            {effectiveAgent === 'opencode' || effectiveAgent === 'pi' ? (
               <input
                 type="text"
                 value={model}

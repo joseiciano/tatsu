@@ -96,6 +96,13 @@ import {
   type ScratchpadEvent,
   type ScratchpadState
 } from './scratchpad'
+import {
+  initialHarnessConfig,
+  harnessConfigReducer,
+  type HarnessConfigEvent,
+  type HarnessConfigState
+} from './harness-config'
+
 
 export type { SettingsState, SettingsEvent }
 export type { UpdaterState, UpdaterEvent, UpdaterStatus } from './updater'
@@ -171,6 +178,22 @@ export type {
   Announcement
 } from './announcements'
 export type { ScratchpadState, ScratchpadEvent } from './scratchpad'
+export type {
+  ManagedHarnessKind,
+  HarnessConfigResourceType,
+  HarnessConfigScope,
+  HarnessConfigScopeKey,
+  HarnessConfigFileRef,
+  HarnessConfigSyncDirection,
+  HarnessConfigSyncStatus,
+  HarnessConfigChangedRef,
+  HarnessConfigComparison,
+  HarnessConfigSyncPlan,
+  HarnessConfigState,
+  HarnessConfigEvent
+} from './harness-config'
+export { harnessConfigScopeKey } from './harness-config'
+
 
 export interface AppState {
   settings: SettingsState
@@ -187,6 +210,7 @@ export interface AppState {
   snooze: SnoozeState
   announcements: AnnouncementsState
   scratchpad: ScratchpadState
+  harnessConfig: HarnessConfigState
 }
 
 export type StateEvent =
@@ -204,6 +228,7 @@ export type StateEvent =
   | SnoozeEvent
   | AnnouncementsEvent
   | ScratchpadEvent
+  | HarnessConfigEvent
 
 export const initialState: AppState = {
   settings: initialSettings,
@@ -219,7 +244,8 @@ export const initialState: AppState = {
   jsonClaude: initialJsonClaude,
   snooze: initialSnooze,
   announcements: initialAnnouncements,
-  scratchpad: initialScratchpad
+  scratchpad: initialScratchpad,
+  harnessConfig: initialHarnessConfig
 }
 
 export function rootReducer(state: AppState, event: StateEvent): AppState {
@@ -292,6 +318,14 @@ export function rootReducer(state: AppState, event: StateEvent): AppState {
       scratchpad: scratchpadReducer(state.scratchpad, event as ScratchpadEvent)
     }
   }
+  if (event.type.startsWith('harnessConfig/')) {
+    const harnessConfig = harnessConfigReducer(
+      state.harnessConfig,
+      event as HarnessConfigEvent
+    )
+    if (harnessConfig === state.harnessConfig) return state
+    return { ...state, harnessConfig }
+  }
   return state
 }
 
@@ -336,7 +370,8 @@ export function mergeWireSnapshot(state: WireSnapshotState): AppState {
     jsonClaude: { ...initialState.jsonClaude, ...state.jsonClaude },
     snooze: { ...initialState.snooze, ...state.snooze },
     announcements: { ...initialState.announcements, ...state.announcements },
-    scratchpad: { ...initialState.scratchpad, ...state.scratchpad }
+    scratchpad: { ...initialState.scratchpad, ...state.scratchpad },
+    harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }
   }
 }
 

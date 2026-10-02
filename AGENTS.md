@@ -16,6 +16,7 @@ Tatsu is an Electron App that manages multiple Agentic CLI instances across git 
 - Claude Code
 - Opencode
 - Codex
+- Pi
 
 ## Stack
 
@@ -188,7 +189,7 @@ src/
 │   ├── activity-deriver/          # Subscribes to store, derives + records activity transitions
 │   ├── json-claude-status-deriver/ # Derives chat status from PTY/tool state
 │   ├── pty-manager/               # node-pty lifecycle, dispatches statuses to store
-│   ├── hooks/                     # Installs Claude Code hooks, dispatches statuses to store
+│   ├── hooks/                     # Status-dir watcher + makeHookCommand; per-agent install lives in agents/
 │   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
 │   │   ├── index.ts               # Public exports
 │   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
@@ -209,7 +210,7 @@ src/
 │   ├── perf-log/                  # File-based perf trace logger
 │   ├── path-fix/                  # macOS login-shell PATH capture
 │   ├── debug/                     # File-based debug logger
-│   ├── agents/                    # Agent-specific hook installation (Claude, Opencode, Codex)
+│   ├── agents/                    # Agent-specific hook installation (Claude, Opencode, Codex, Pi)
 │   ├── editor/                    # External editor integration
 │   ├── git-ops-state/             # Pending git operations per worktree
 │   ├── github-recorder/           # GitHub API response recording for offline access
@@ -283,7 +284,6 @@ src/
         ├── useViewport/           # Viewport size subscription
         ├── useWatchedQuery/       # Polled async query helper
         ├── useJsonClaudeApprovals/# Json Claude approval helpers
-        ├── useTailLineBuffer/     # Rolling tail-line cache for CommandCenter
         ├── useTabHandlers/        # All pane/tab mutation handlers (addTab, splitPane, …)
         ├── useWorktreeHandlers/   # All worktree+repo+pending-creation handlers
         └── useHotkeyHandlers/     # Sidebar-aware hotkey action map + keystroke binding
@@ -464,9 +464,10 @@ event type if you're trying to find where something happens.
 
 ## How status detection works
 
-**agent-specific hooks** (per agent in `src/main/agents/`) installed globally per agent:
-Claude hooks go into `~/.claude/settings.json`, Opencode plugins into
-`~/.config/opencode/plugins/`. The hooks write status events as NDJSON to
+**agent-specific hooks** (per agent in `src/main/agents/`) that we install into user-scope
+configuration (`~/.claude/settings.json` for Claude, `~/.config/opencode/plugins/` for
+Opencode, `~/.pi/agent/extensions/harness-status.ts` for Pi, `~/.codex/hooks.json` for
+Codex). The hooks write status events as NDJSON to
 `/tmp/harness-status/<terminal-id>.ndjson` and the main process watches that
 directory via `fs.watch`. The hook scripts use `$HARNESS_TERMINAL_ID` env var
 (set by the PtyManager) with `$CLAUDE_HARNESS_ID` as a legacy fallback.
@@ -794,3 +795,13 @@ matching the `actions/setup-node` step in the workflow.
 | `pnpm dist:mac` | Full signed + notarized macOS build |
 | `pnpm rebuild:dev` | Rebuild node-pty for dev Electron |
 | `pnpm release <ver>` | Full end-to-end release |
+
+## Feature Flags 
+
+The following feature flags gate specific features:
+
+| Flag | Default | Feature |
+|---|---:|---|
+| `ENABLE_COST` | `false` | Command Center Costs tab |
+| `ENABLE_TIMELINE` | `false` | Command Center Timeline tab |
+| `ENABLE_MY_WEEK` | `false` | Command Center My week tab |

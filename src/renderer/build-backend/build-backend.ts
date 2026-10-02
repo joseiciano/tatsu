@@ -39,6 +39,16 @@ import type {
   StateEventListener
 } from '../../shared/transport/transport'
 import type { ElectronAPI } from '../types'
+import type { AgentKind } from '../../shared/state/terminals'
+import type {
+  HarnessConfigApplyRequest,
+  HarnessConfigConversionRequest,
+  HarnessConfigPrepareCreateRequest,
+  HarnessConfigPrepareDeleteRequest,
+  HarnessConfigPrepareUpdateRequest,
+  HarnessConfigReadRequest,
+  HarnessConfigScopeRequest
+} from '../types'
 
 export type { ElectronOnlyHelpers }
 
@@ -101,7 +111,7 @@ export function buildBackend(
       branchName: string
       initialPrompt?: string
       teleportSessionId?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: AgentKind
       model?: string
     }) => req('worktrees:runPending', params),
     runPendingPRWorktree: (params: {
@@ -109,7 +119,7 @@ export function buildBackend(
       repoRoot: string
       prNumber: number
       initialPrompt?: string
-      agentKind?: 'claude' | 'codex' | 'opencode'
+      agentKind?: AgentKind
       model?: string
     }) => req('worktrees:runPendingPR', params),
     retryPendingWorktree: (id: string) => req('worktrees:retryPending', id),
@@ -230,6 +240,9 @@ export function buildBackend(
     setOpencodeCommand: (command: string) => req('config:setOpencodeCommand', command),
     setOpencodeModel: (model: string | null) => req('config:setOpencodeModel', model),
     setOpencodeEnvVars: (vars: Record<string, string>) => req('config:setOpencodeEnvVars', vars),
+    setPiCommand: (command: string) => req('config:setPiCommand', command),
+    setPiModel: (model: string | null) => req('config:setPiModel', model),
+    setPiEnvVars: (vars: Record<string, string>) => req('config:setPiEnvVars', vars),
     setHarnessMcpEnabled: (enabled: boolean) => req('config:setHarnessMcpEnabled', enabled),
     setEnableWorktreeContainers: (enabled: boolean) =>
       req('config:setEnableWorktreeContainers', enabled),
@@ -568,7 +581,37 @@ export function buildBackend(
     connectionsSetLastConnected: (id: string, when?: number) =>
       reqLocal('connections:setLastConnected', id, when),
     connectionsGetToken: (id: string) => reqLocal('connections:getToken', id),
-    connectionsHasToken: (id: string) => reqLocal('connections:hasToken', id)
+    connectionsHasToken: (id: string) => reqLocal('connections:hasToken', id),
+
+    scanHarnessConfig: (request: HarnessConfigScopeRequest) => req('harnessConfig:scan', request),
+    readHarnessConfigFile: (request: HarnessConfigReadRequest) =>
+      req('harnessConfig:readFile', request),
+    compareHarnessConfig: (request: HarnessConfigScopeRequest) =>
+      req('harnessConfig:compare', request),
+    prepareHarnessConfigCreate: (request: HarnessConfigPrepareCreateRequest) =>
+      req('harnessConfig:prepareCreate', request),
+    prepareHarnessConfigUpdate: (request: HarnessConfigPrepareUpdateRequest) =>
+      req('harnessConfig:prepareUpdate', request),
+    prepareHarnessConfigDelete: (request: HarnessConfigPrepareDeleteRequest) =>
+      req('harnessConfig:prepareDelete', request),
+    planHarnessConfigSyncToDisk: (request: HarnessConfigScopeRequest) =>
+      req('harnessConfig:planSyncToDisk', request),
+    planHarnessConfigAdoptFromDisk: (request: HarnessConfigScopeRequest) =>
+      req('harnessConfig:planAdoptFromDisk', request),
+    createHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
+      req('harnessConfig:createFile', request),
+    updateHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
+      req('harnessConfig:updateFile', request),
+    deleteHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
+      req('harnessConfig:deleteFile', request),
+    syncHarnessConfigToDisk: (request: HarnessConfigApplyRequest) =>
+      req('harnessConfig:syncToDisk', request),
+    adoptHarnessConfigFromDisk: (request: HarnessConfigApplyRequest) =>
+      req('harnessConfig:adoptFromDisk', request),
+    prepareHarnessConfigCommandFromSkill: (request: HarnessConfigConversionRequest) =>
+      req('harnessConfig:prepareCommandFromSkill', request),
+    prepareHarnessConfigSkillFromCommand: (request: HarnessConfigConversionRequest) =>
+      req('harnessConfig:prepareSkillFromCommand', request)
   }
 
   return api as ElectronAPI

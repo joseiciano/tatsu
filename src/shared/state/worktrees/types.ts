@@ -1,3 +1,5 @@
+import type { AgentKind } from '../terminals'
+
 /** Lifecycle status of a companion Docker container for a worktree.
  *  - `starting`: container created but status not yet verified (e.g. on boot recovery).
  *  - `running`: container is up and accepting `docker exec`.
@@ -59,7 +61,7 @@ export interface PendingWorktree {
   initialPrompt?: string
   /** One-shot teleport session id for the new Claude tab. In-memory only. */
   teleportSessionId?: string
-  agentKind?: 'claude' | 'codex' | 'opencode'
+  agentKind?: AgentKind
   model?: string
 }
 

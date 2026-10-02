@@ -22,4 +22,8 @@ describe('toAgentKind', () => {
   it('returns opencode for opencode', () => {
     expect(toAgentKind('opencode')).toBe('opencode')
   })
+
+  it('returns pi for pi', () => {
+    expect(toAgentKind('pi')).toBe('pi')
+  })
 })

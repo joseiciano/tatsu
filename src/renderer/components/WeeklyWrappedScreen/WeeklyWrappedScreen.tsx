@@ -30,7 +30,7 @@ function hoursUnit(mins: number): string {
   return 'hours'
 }
 
-export function WeeklyWrappedScreen({ onClose }: WeeklyWrappedScreenProps): JSX.Element {
+export function WeeklyWrappedContent(): JSX.Element {
   const backend = useBackend()
   const [stats, setStats] = useState<WeeklyStats | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +52,26 @@ export function WeeklyWrappedScreen({ onClose }: WeeklyWrappedScreenProps): JSX.
     }
   }, [])
 
+  return (
+    <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-8">
+      {stats === null && error === null && (
+        <div className="flex items-center text-dim">
+          <Loader2 className="icon-lg animate-spin mr-2" />
+          Crunching your week…
+        </div>
+      )}
+      {error !== null && (
+        <div className="text-center">
+          <p className="text-fg-bright text-base">Couldn&rsquo;t load your week.</p>
+          <p className="text-dim text-sm mt-2">{error}</p>
+        </div>
+      )}
+      {stats !== null && <WrappedPoster stats={stats} />}
+    </div>
+  )
+}
+
+export function WeeklyWrappedScreen({ onClose }: WeeklyWrappedScreenProps): JSX.Element {
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') onClose()
@@ -77,21 +97,7 @@ export function WeeklyWrappedScreen({ onClose }: WeeklyWrappedScreenProps): JSX.
         </span>
       </div>
 
-      <div className="flex-1 min-h-0 flex items-center justify-center px-4 pb-4">
-        {stats === null && error === null && (
-          <div className="flex items-center text-dim">
-            <Loader2 className="icon-lg animate-spin mr-2" />
-            Crunching your week…
-          </div>
-        )}
-        {error !== null && (
-          <div className="text-center">
-            <p className="text-fg-bright text-base">Couldn&rsquo;t load your week.</p>
-            <p className="text-dim text-sm mt-2">{error}</p>
-          </div>
-        )}
-        {stats !== null && <WrappedPoster stats={stats} />}
-      </div>
+      <WeeklyWrappedContent />
     </div>
   )
 }

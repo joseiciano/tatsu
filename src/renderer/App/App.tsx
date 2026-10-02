@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type Dispatch, type SetStateAction } from 'react'
 import { useSettings, usePrs, useOnboarding, useHooks, useWorktrees, useTerminals, usePanes, useLastActive, useUpdater, useRepoConfigs, useSnooze, useAnnouncements } from '../store'
 import { useBackend } from '../backend'
-import { useTailLineBuffer } from '../hooks/useTailLineBuffer'
 import { useTabHandlers } from '../hooks/useTabHandlers'
 import { useHotkeyHandlers } from '../hooks/useHotkeyHandlers'
 import { useWorktreeHandlers } from '../hooks/useWorktreeHandlers'
 import type { Worktree, TerminalTab, PtyStatus, PendingTool, QuestStep, PendingWorktree, UpdaterStatus, RepoConfig, PaneNode } from '../types'
 import { getLeaves, findLeaf } from '../../shared/state/terminals'
-import { CheckCircle2, FolderOpen } from 'lucide-react'
+import { CheckCircle2, FolderOpen, SlidersHorizontal } from 'lucide-react'
 import { BUILT_IN_THEMES_BY_MODE } from '../themes'
 import { SCALES, scaleSpec } from '../../shared/state/settings'
 import { useActiveTheme } from '../hooks/useActiveTheme'
@@ -25,14 +24,14 @@ import { RightColumn } from '../components/RightColumn'
 import { CollapsedSidebar } from '../components/CollapsedSidebar'
 import { CollapsedRightPanel } from '../components/CollapsedRightPanel'
 import { Settings } from '../components/Settings'
+import { Config } from '../components/Config'
 import { WeeklyWrappedScreen } from '../components/WeeklyWrappedScreen'
 import { Guide } from '../components/Guide'
 import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { AgentIcon } from '../components/AgentIcon'
 import { InterfaceToggle } from '../components/InterfaceToggle'
-import { Activity } from '../components/Activity'
+import { Activity, type ActivityTab } from '../components/Activity'
 import { Cleanup } from '../components/Cleanup'
-import { CommandCenter } from '../components/CommandCenter'
 import { ReviewScreen } from '../components/ReviewScreen'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
@@ -225,11 +224,18 @@ function DesktopApp(): JSX.Element {
   // right away instead of waiting on the modal.
   const [showSettings, setShowSettings] = useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | undefined>(undefined)
+  const [showConfig, setShowConfig] = useState(false)
+  const showConfigRef = useRef(showConfig)
+  showConfigRef.current = showConfig
+  const setShowSettingsUnlessConfig = useCallback<Dispatch<SetStateAction<boolean>>>((value) => {
+    if (showConfigRef.current) return
+    setShowSettings(value)
+  }, [])
   const [showGuide, setShowGuide] = useState(false)
   const [showMyWeek, setShowMyWeek] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
+  const [activityTab, setActivityTab] = useState<ActivityTab>('command')
   const [showCleanup, setShowCleanup] = useState(false)
-  const [showCommandCenter, setShowCommandCenter] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
@@ -250,10 +256,21 @@ function DesktopApp(): JSX.Element {
   // explicit confirmation separately for the onboarding step checkmarks.
   const [themeChosen, setThemeChosen] = useState(false)
   const [agentChosen, setAgentChosen] = useState(false)
-  // Only subscribe to the PTY stream when CommandCenter is open. Without
-  // this gate, a chatty PTY pegs the renderer with re-renders for output
-  // nobody is currently looking at.
-  const tailLines = useTailLineBuffer(showCommandCenter)
+  const showCommandCenter = showActivity && activityTab === 'command'
+  const setShowCommandCenter = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
+    const nextVisible = typeof next === 'function' ? next(showCommandCenter) : next
+    if (nextVisible) {
+      setShowNewWorktree(false)
+      setShowCleanup(false)
+      setShowReview(false)
+      setReportIssueState(null)
+      setShowNewProject(false)
+      setActivityTab('command')
+      setShowActivity(true)
+    } else if (showCommandCenter) {
+      setShowActivity(false)
+    }
+  }, [showCommandCenter])
   const settings = useSettings()
   const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultAgent } = settings
   // Apply the persisted UI scale to the root html element so every
@@ -336,7 +353,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
 
   // Open Settings from the menu (Cmd+,)
   useEffect(() => {
-    const cleanup = backend.onOpenSettings(() => setShowSettings(true))
+    const cleanup = backend.onOpenSettings(() => setShowSettingsUnlessConfig(true))
     return cleanup
   }, [])
 
@@ -396,11 +413,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
   // Report Issue — triggered from the Help menu, the sidebar, the
   // Settings Support section, and the openReportIssueFor() helper (used
   // by the error boundary). Closes any open overlay (Settings, hotkey
-  // cheatsheet) so the full-screen report takes over the center area.
+  // cheatsheet, or Activity/Command Center) so the report takes over.
   useEffect(() => {
     const openReport = (detail: OpenReportIssueDetail): void => {
       setShowSettings(false)
       setShowHotkeyCheatsheet(false)
+      setShowActivity(false)
       setReportIssueState(detail)
     }
     const cleanupMenu = backend.onOpenReportIssue(() => openReport({}))
@@ -584,6 +602,25 @@ const setQuestStep = useCallback((next: QuestStep) => {
     void backend.quitAndInstall()
   }, [])
 
+  const closeFullscreenViews = useCallback(() => {
+    setShowNewWorktree(false)
+    setShowActivity(false)
+    setShowCleanup(false)
+    setShowReview(false)
+    setReportIssueState(null)
+    setShowNewProject(false)
+  }, [])
+
+  const toggleCommandCenter = useCallback(() => {
+    if (showCommandCenter) {
+      setShowActivity(false)
+    } else {
+      closeFullscreenViews()
+      setActivityTab('command')
+      setShowActivity(true)
+    }
+  }, [showCommandCenter, closeFullscreenViews])
+
   // All worktree + repo + pending-creation handlers. Also subscribes to
   // external-create events from the harness-control MCP and routes focus
   // to the new path.
@@ -682,7 +719,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     handleSelectTab,
     handleSplitPane,
     handleRefreshWorktrees,
-    setShowSettings
+    setShowSettings: setShowSettingsUnlessConfig
   })
 
   // File → Close Tab (Cmd+W). The accelerator lives on the menu item
@@ -780,6 +817,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
         }}
         initialSection={settingsInitialSection}
       />
+    </div>
+  ) : null
+
+  const configOverlay = showConfig ? (
+    <div className="fixed inset-0 z-50">
+      <Config onClose={() => setShowConfig(false)} />
     </div>
   ) : null
 
@@ -1135,6 +1178,23 @@ const setQuestStep = useCallback((next: QuestStep) => {
               </div>
             </div>
 
+            <div className="mt-6 pt-4 border-t border-border/60">
+              <button
+                type="button"
+                onClick={() => setShowConfig(true)}
+                aria-label="Open Config: manage agent definitions, skills, and commands"
+                className="w-full flex items-center gap-3 rounded-xl border border-border bg-panel p-4 text-left transition-colors hover:border-border-strong cursor-pointer"
+              >
+                <SlidersHorizontal className="icon-base text-dim shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-fg-bright text-sm font-medium">Open Config</div>
+                  <div className="text-xs text-dim mt-0.5">
+                    Manage agent definitions, skills, and commands before opening your first repository.
+                  </div>
+                </div>
+              </button>
+            </div>
+
             <div className="mt-6 pt-5 border-t border-border/60 text-center">
               <button
                 onClick={() => setShowGuide(true)}
@@ -1147,6 +1207,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
         </div>
       </div>
       {settingsOverlay}
+      {configOverlay}
       {myWeekOverlay}
       {repoPickerOverlay}
       {repoAddPromptOverlay}
@@ -1328,21 +1389,36 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onDeleteWorktree={handleDeleteWorktree}
             onRefresh={handleRefreshWorktrees}
             repoRoots={repoRoots}
-            onAddRepo={handleAddRepo}
-            onRemoveRepo={handleRemoveRepo}
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenAddBackend={() => setShowAddBackend(true)}
-            onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
-            onOpenActivity={() => setShowActivity(true)}
-            onOpenCleanup={() => setShowCleanup(true)}
-            onOpenCommandCenter={() => {
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setShowCommandCenter(true)
+            onAddRepo={() => {
+              setShowCommandCenter(false)
+              handleAddRepo()
             }}
-            onOpenNewProject={() => setShowNewProject(true)}
-            onOpenMyWeek={() => setShowMyWeek(true)}
+            onRemoveRepo={handleRemoveRepo}
+            onOpenSettings={() => {
+              setShowCommandCenter(false)
+              setShowSettings(true)
+            }}
+            onOpenConfig={() => {
+              setShowCommandCenter(false)
+              setShowConfig(true)
+            }}
+            onOpenAddBackend={() => {
+              setShowCommandCenter(false)
+              setShowAddBackend(true)
+            }}
+            onOpenHotkeyCheatsheet={() => {
+              setShowCommandCenter(false)
+              setShowHotkeyCheatsheet(true)
+            }}
+            onOpenCleanup={() => {
+              closeFullscreenViews()
+              setShowCleanup(true)
+            }}
+            onOpenCommandCenter={toggleCommandCenter}
+            onOpenNewProject={() => {
+              closeFullscreenViews()
+              setShowNewProject(true)
+            }}
             onOpenContainerShell={(path) => {
               handleAddTerminalTab(path)
               setActiveWorktreeId(path)
@@ -1361,23 +1437,31 @@ const setQuestStep = useCallback((next: QuestStep) => {
         {!singleScreenMode && !sidebarVisible && (
           <div className="mt-10 shrink-0 flex"><CollapsedSidebar
             onExpand={() => setSidebarVisible(true)}
-            onAddRepo={handleAddRepo}
+            onAddRepo={() => {
+              setShowCommandCenter(false)
+              handleAddRepo()
+            }}
             onNewWorktree={() => {
               setNewWorktreeRepo(undefined)
               setShowNewWorktree(true)
             }}
-            onOpenCleanup={() => setShowCleanup(true)}
-            onOpenCommandCenter={() => {
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setShowCommandCenter(true)
+            onOpenCleanup={() => {
+              closeFullscreenViews()
+              setShowCleanup(true)
             }}
-            onOpenNewProject={() => setShowNewProject(true)}
-            onOpenActivity={() => setShowActivity(true)}
-            onOpenMyWeek={() => setShowMyWeek(true)}
-            onOpenHotkeyCheatsheet={() => setShowHotkeyCheatsheet(true)}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenCommandCenter={toggleCommandCenter}
+            onOpenNewProject={() => {
+              closeFullscreenViews()
+              setShowNewProject(true)
+            }}
+            onOpenHotkeyCheatsheet={() => {
+              setShowCommandCenter(false)
+              setShowHotkeyCheatsheet(true)
+            }}
+            onOpenSettings={() => {
+              setShowCommandCenter(false)
+              setShowSettings(true)
+            }}
           /></div>
         )}
         {!singleScreenMode && sidebarVisible && (
@@ -1461,13 +1545,20 @@ const setQuestStep = useCallback((next: QuestStep) => {
           <div className="flex-1 min-w-0 flex">
             <Activity
               onClose={() => setShowActivity(false)}
-              onOpenMyWeek={() => {
-                setShowActivity(false)
-                setShowMyWeek(true)
-              }}
               worktrees={worktrees}
+              worktreeStatuses={worktreeStatuses}
+              worktreePendingTools={worktreePendingTools}
               prStatuses={prStatuses}
               mergedPaths={mergedPaths}
+              lastActive={lastActive}
+              tab={activityTab}
+              onTabChange={setActivityTab}
+              onSelectWorktree={(path) => {
+                setShowNewWorktree(false)
+                setShowActivity(false)
+                setShowCleanup(false)
+                setActiveWorktreeId(path)
+              }}
             />
           </div>
         )}
@@ -1482,26 +1573,6 @@ const setQuestStep = useCallback((next: QuestStep) => {
               onBulkDelete={handleBulkDeleteWorktrees}
             />
           </div>
-        )}
-        {showCommandCenter && (
-          <CommandCenter
-            worktrees={worktrees}
-            worktreeStatuses={worktreeStatuses}
-            worktreePendingTools={worktreePendingTools}
-            prStatuses={prStatuses}
-            mergedPaths={mergedPaths}
-            lastActive={lastActive}
-            tailLines={tailLines}
-            terminalTabs={terminalTabs}
-            onClose={() => setShowCommandCenter(false)}
-            onSelect={(path) => {
-              setShowCommandCenter(false)
-              setShowNewWorktree(false)
-              setShowActivity(false)
-              setShowCleanup(false)
-              setActiveWorktreeId(path)
-            }}
-          />
         )}
         {showReview && activeWorktreeId && (() => {
           const reviewWt = worktrees.find((w) => w.path === activeWorktreeId)
@@ -1608,6 +1679,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
       </div>
     </div>
     {settingsOverlay}
+    {configOverlay}
     {myWeekOverlay}
     {repoPickerOverlay}
     {repoAddPromptOverlay}

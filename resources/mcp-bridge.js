@@ -9,6 +9,12 @@ const readline = require('readline')
 const PORT = process.env.HARNESS_PORT
 const TOKEN = process.env.HARNESS_TOKEN
 const TERMINAL_ID = process.env.HARNESS_TERMINAL_ID || ''
+const AGENT_KIND_LABELS = {
+  claude: 'Claude',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  pi: 'Pi'
+}
 
 // Scope set at spawn by src/main/mcp-config.ts. The server re-resolves
 // scope from TERMINAL_ID on every call (authoritative), so these are a
@@ -107,7 +113,7 @@ const TOOLS = [
         },
         agentKind: {
           type: 'string',
-          enum: ['claude', 'codex'],
+          enum: Object.keys(AGENT_KIND_LABELS),
           description:
             "Which CLI agent to spawn in the new worktree's first tab. Defaults to the user's configured default agent (Settings → Agent)."
         },
@@ -467,10 +473,9 @@ async function handleToolCall(name, args) {
     if (
       args.agentKind !== undefined &&
       args.agentKind !== null &&
-      args.agentKind !== 'claude' &&
-      args.agentKind !== 'codex'
+      !Object.prototype.hasOwnProperty.call(AGENT_KIND_LABELS, args.agentKind)
     ) {
-      throw new Error('agentKind must be "claude" or "codex"')
+      throw new Error('agentKind must be "claude", "codex", "opencode", or "pi"')
     }
     const r = await callControl('POST', '/worktrees', {
       terminalId: TERMINAL_ID,
@@ -482,7 +487,10 @@ async function handleToolCall(name, args) {
       agentKind: args.agentKind,
       model: args.model
     })
-    const agentLabel = args.agentKind === 'codex' ? 'Codex' : 'Claude'
+    const agentLabel =
+      args.agentKind === undefined || args.agentKind === null
+        ? 'agent'
+        : AGENT_KIND_LABELS[args.agentKind]
     const modelSuffix = args.model ? ` (model: ${args.model})` : ''
     return prNumber
       ? `Created worktree ${r.path} on branch ${r.branch} for PR #${prNumber}. Harness will open a new ${agentLabel} chat tab in it${modelSuffix}.`

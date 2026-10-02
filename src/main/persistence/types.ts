@@ -5,10 +5,21 @@ import type {
 } from '../persistence-migrations'
 import type { CostsState } from '../../shared/state/costs'
 import type { SnoozeEntry } from '../../shared/state/snooze'
+import type { HarnessConfigDesiredResource } from '../harness-config'
 
+import type { AgentKind } from '../../shared/state/terminals'
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
 
 export type QuestStep = 'hidden' | 'spawn-second' | 'switch-between' | 'finale' | 'done'
+
+/** Canonical Tatsu config resource contract, reused verbatim from the
+ *  harness-config service (never independently restated here). */
+export type PersistedHarnessConfigResource = HarnessConfigDesiredResource
+
+export interface PersistedHarnessConfig {
+  version: 1
+  resources: PersistedHarnessConfigResource[]
+}
 
 export interface BackendConnection {
   id: string
@@ -34,7 +45,7 @@ export interface Config {
   windowBounds: { x: number; y: number; width: number; height: number } | null
   repoRoots: string[]
   hotkeys?: Record<string, string>
-  defaultAgent?: 'claude' | 'codex' | 'opencode'
+  defaultAgent?: AgentKind
   claudeCommand?: string
   codexCommand?: string
   opencodeCommand?: string
@@ -44,6 +55,9 @@ export interface Config {
   opencodeModel?: string
   codexEnvVars?: Record<string, string>
   opencodeEnvVars?: Record<string, string>
+  piCommand?: string
+  piEnvVars?: Record<string, string>
+  piModel?: string
   harnessMcpEnabled?: boolean
   panes?: Record<string, Record<string, PersistedPaneNode>>
   legacyPanes?: Record<string, PersistedPane[]>
@@ -99,4 +113,5 @@ export interface Config {
   dismissedAnnouncementIds?: string[]
   announcementsMuted?: boolean
   scratchpadNotes?: Record<string, Record<string, string>>
+  harnessConfig?: PersistedHarnessConfig
 }
