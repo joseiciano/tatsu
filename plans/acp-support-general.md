@@ -152,16 +152,30 @@ while `codexPlatform` already contains the `@openai/` scope, producing
 "codex: exited 1". This runs in `release.yml` and `headless-release.yml`,
 so every release would fail at that step. Fixed on this branch.
 
-### App size decision (open)
+### Decisions (2026-10-23)
 
-Shipping all three agents costs ~650 MB per arch on top of the existing
-~430 MB app, and every OTA update re-downloads it. Options:
-
-- Keep the non-goal (no install-on-demand) and accept ~1.1 GB per arch.
-- Ship Claude bundled (status quo) and download OpenCode/Codex on first
-  chat use into `userData`, pinned to the same versions and verified by
-  sha256. This contradicts the current "no install-on-demand" non-goal
-  and needs a decision before Phase 6.
+- **App size**: the desktop app bundles Claude only. OpenCode and Codex
+  are downloaded on first chat use into
+  `userData/runtimes/<package>/<version>/` from the npm registry tarball,
+  pinned to the versions in `package.json` and verified against the
+  lockfile integrity hash. The user never runs a package manager or edits
+  PATH, which is what "no manual install" means from here on. The
+  headless tarball keeps bundling all three.
+- **Packaging fix**: stage the per-arch closure from
+  `runtime-closure.mjs` into `Contents/Resources/runtimes` (desktop) via
+  an `afterPack` hook, and resolve from `process.resourcesPath` first.
+  This bypasses the electron-builder collector, prunes the other arch,
+  and copies the hard-linked launcher once. Until the downloader lands,
+  the desktop closure stages all three runtimes so chat keeps working in
+  packaged builds; it drops to Claude-only when the downloader ships.
+- **Claude native gap**: confirmed as a real failure, not a latent one.
+  The SDK resolves `@anthropic-ai/claude-agent-sdk-<platform>-<arch>/claude`
+  itself and throws "Claude Code native binary not found" when the
+  package is absent, so Claude chat tabs cannot start in the current
+  desktop package.
+- **Release gate**: one boolean setting, default off, that hides
+  OpenCode/Codex chat entry points. Flip the default on after a signed
+  build passes the packaged smoke; delete the flag one release later.
 
 ## Architecture
 
@@ -314,8 +328,9 @@ runtime). Required behavior for OpenCode and Codex:
 
 ## Non-goals
 
-- Do not require a global CLI install or offer install-on-demand prompts
-  (pending the app-size decision above).
+- Do not require a global CLI install, a package manager, or PATH edits.
+  A first-use download of a pinned, hash-verified runtime is not an
+  install prompt.
 - Do not port Claude off the SDK onto the shared ACP stdio client.
 - Do not rename the `jsonClaude` slice/transport surface.
 - **Pi**: no chat tab in this effort. Pi has no ACP mode; its chat path is
