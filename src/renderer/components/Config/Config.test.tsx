@@ -111,7 +111,8 @@ function setStore(
     error: null,
     lastScannedAt: null,
     lastSyncedAt: null,
-    templates: { templates: [], fragments: [], errors: [], loadedAt: null }
+    templates: { templates: [], fragments: [], errors: [], loadedAt: null },
+    templateSyncNotice: null
   }
   storeState.activeBackend = { id: 'local', label: 'Local', url: '', kind: 'local', addedAt: 0 }
   storeState.settings = {}
