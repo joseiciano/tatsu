@@ -377,6 +377,15 @@ export interface ConfigTemplatesProps {
   initialTemplateRef: string | null
   searchQuery: string
   onDirtyChange: (dirty: boolean) => void
+  onImport: () => void
+  fontFamily?: string
+  fontSize?: number
+}
+
+export interface ConfigImportWizardProps {
+  onClose: () => void
+  onReviewScope: (scope: HarnessConfigScope) => void
+  onDirtyChange: (dirty: boolean) => void
   fontFamily?: string
   fontSize?: number
 }
@@ -391,6 +400,7 @@ export interface ConfigTemplateListProps {
   onSelectFragment: (name: string) => void
   onCreateTemplate: (kind: HarnessTemplateKind) => void
   onCreateFragment: () => void
+  onImport: () => void
 }
 
 export interface ConfigTemplateEditorProps {
