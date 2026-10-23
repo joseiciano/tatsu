@@ -18,6 +18,7 @@ type ExpectedCapability = {
   label: string
   notes?: string
   aliasResourceTypes?: readonly HarnessConfigResourceType[]
+  layout?: 'per-resource' | 'single-file'
 }
 const unsupportedCapabilityWithAlias = {
   resourceType: 'commands',
@@ -65,7 +66,13 @@ const expectedAgentCapabilities: readonly {
   {
     kind: 'codex',
     capabilities: [
-      { resourceType: 'agents', status: 'supported', label: 'Agents' },
+      {
+        resourceType: 'agents',
+        status: 'supported',
+        label: 'Agents',
+        notes: 'Codex agents are one top-level AGENTS.md file, not a folder of agents.',
+        layout: 'single-file'
+      },
       { resourceType: 'skills', status: 'supported', label: 'Skills' },
       {
         resourceType: 'commands',
