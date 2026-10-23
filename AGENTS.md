@@ -190,10 +190,13 @@ src/
 │   ├── json-claude-status-deriver/# Derives chat status from PTY/tool state
 │   ├── pty-manager/               # node-pty lifecycle, dispatches statuses to store
 │   ├── hooks/                     # Status-dir watcher + makeHookCommand; per-agent install lives in agents/
-│   ├── chat-runtimes/             # Chat runtime registry and ACP implementation
-│   │   ├── index.ts               # Public exports
+│   ├── chat-runtimes/             # Chat runtime registry + per-agent runtimes
+│   │   ├── index.ts               # ChatRuntimeRegistry, routes by session agent kind
 │   │   ├── types.ts               # ChatRuntime interface shared by runtime implementations
-│   │   └── claude-acp.ts          # ACP chat runtime built on @anthropic-ai/claude-agent-sdk
+│   │   ├── claude-acp.ts          # Claude runtime on @anthropic-ai/claude-agent-sdk query()
+│   │   ├── acp-stdio.ts           # OpenCode + Codex runtime over ACP JSON-RPC on stdio
+│   │   ├── acp-stdio-client.ts    # NDJSON JSON-RPC client for the spawned agent
+│   │   └── runtime-path-resolver.ts # Finds bundled agent executables per layout
 │   ├── worktree/                  # git worktree CRUD primitives
 │   ├── github/                    # GitHub REST API calls
 │   ├── github-auth/               # GitHub token resolution
@@ -580,9 +583,28 @@ hard dependency on `gh`.
   xterm-hosted) spawn `/bin/zsh -ilc (cli)` so the user's PATH is what runs.
     - This allows multiple CLI agents (`claude`, `opencode`, etc.) to be integrated.
   **Chat tabs** still use the `jsonClaude:*` transport surface,
-  but main routes those calls through `ChatRuntimeRegistry` into
-  `ClaudeAcpRuntime`, which uses `@anthropic-ai/claude-agent-sdk`'s
-  `query()` API. 
+  but main routes those calls through `ChatRuntimeRegistry` by the
+  session's agent kind: `claude` → `ClaudeAcpRuntime` (Agent SDK
+  `query()`), `opencode` / `codex` → `AcpStdioRuntime` (spawned agent
+  speaking ACP over stdio). Pi has no chat runtime; `isChatRuntimeId`
+  from `shared/state/json-claude` gates every chat entry point.
+- **Bundled agent runtimes and packaging** — the agents' native binaries
+  (`@anthropic-ai/claude-agent-sdk-<os>-<arch>`, `opencode-<os>-<arch>`,
+  `@openai/codex-<os>-<arch>`) are optional deps that pnpm keeps under
+  `node_modules/.pnpm`, and electron-builder's pnpm collector only finds a
+  package's optional deps when they are hoisted to the root
+  `node_modules`. So the desktop app does **not** get them from the asar.
+  `scripts/electron-after-pack.mjs` stages the per-arch closure from
+  `scripts/runtime-closure.mjs` into `Contents/Resources/runtimes`
+  (Linux: `resources/runtimes`) and adds the Mach-O files to
+  `mac.binaries` for signing; the headless tarball stages the same
+  closure into `lib/node_modules`. `runtime-path-resolver.ts` checks
+  `process.resourcesPath/runtimes` first, then falls back to require
+  resolution (dev + headless). Do not add runtime packages to
+  `asarUnpack`; add them to the closure. `scripts/smoke-packed-desktop.mjs`
+  (run by `pnpm run pack` and the mac/linux workflows) and
+  `scripts/smoke-packed-runtimes.mjs` (headless) fail the build when a
+  bundled binary is missing.
 - **External Name vs Internal Name**: Externally, the app is to be shown as "Tatsu" (External Readme, App components). 
   Internally, there are parts that mention the old name "Harness". These parts are more critical and changing it can break things. 
   For now, refer to these parts as Harness if you see it, but keep any customer facing parts showing the new name. 

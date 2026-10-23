@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   BundledRuntimeResolver,
   codexPlatformPackageId,
-  codexTargetTriple
+  codexTargetTriple,
+  defaultRuntimesRoot,
+  stagedClaudeExecutablePath
 } from './runtime-path-resolver'
 
 const APP_ASAR = '/Applications/Harness.app/Contents/Resources/app.asar'
@@ -24,6 +26,7 @@ function makeResolver(platform: string, arch: string) {
   return new BundledRuntimeResolver({
     platform: platform as NodeJS.Platform,
     arch,
+    runtimesRoot: null,
     processExecPath: '/Applications/Harness.app/Contents/MacOS/Harness',
     resolvePackage: (id: string) => {
       const hit = map[id]
@@ -128,5 +131,105 @@ describe('BundledRuntimeResolver', () => {
           arch: 'ia32'
         })
     ).toThrow(/unsupported on darwin-ia32/)
+  })
+})
+
+describe('BundledRuntimeResolver with a staged runtimes root', () => {
+  const ROOT = '/Applications/Harness.app/Contents/Resources/runtimes'
+  const NM = `${ROOT}/node_modules`
+
+  // Node-style lookup over the flat staged node_modules: a require anchored
+  // anywhere under ROOT finds packages in ROOT/node_modules, nothing else.
+  function stagedRequireFromDir(dir: string) {
+    return {
+      resolve: (id: string) => {
+        if (dir !== ROOT && !dir.startsWith(`${NM}/`)) {
+          throw new Error(`not found: ${id} from ${dir}`)
+        }
+        const files: Record<string, string> = {
+          '@agentclientprotocol/codex-acp/dist/index.js': `${NM}/@agentclientprotocol/codex-acp/dist/index.js`,
+          '@openai/codex/package.json': `${NM}/@openai/codex/package.json`,
+          '@openai/codex-linux-x64/package.json': `${NM}/@openai/codex-linux-x64/package.json`
+        }
+        const hit = files[id]
+        if (!hit) throw new Error(`not found: ${id} from ${dir}`)
+        return hit
+      }
+    }
+  }
+
+  function makeStagedResolver() {
+    return new BundledRuntimeResolver({
+      platform: 'linux',
+      arch: 'x64',
+      runtimesRoot: ROOT,
+      processExecPath: '/opt/Harness/harness',
+      requireFromDir: stagedRequireFromDir
+    })
+  }
+
+  it('spawns the opencode platform package binary', () => {
+    expect(makeStagedResolver().resolveOpenCodeExecutable()).toBe(
+      `${NM}/opencode-linux-x64/bin/opencode`
+    )
+  })
+
+  it('resolves the codex-acp script and native binary through the runtimes root', () => {
+    const cfg = makeStagedResolver().buildCodexConfig()
+    expect(cfg.command).toEqual([
+      '/opt/Harness/harness',
+      `${NM}/@agentclientprotocol/codex-acp/dist/index.js`
+    ])
+    expect(cfg.env?.CODEX_PATH).toBe(
+      `${NM}/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex`
+    )
+  })
+
+  it('ignores the staged layout when runtimesRoot is null', () => {
+    const r = new BundledRuntimeResolver({
+      platform: 'linux',
+      arch: 'x64',
+      runtimesRoot: null,
+      resolvePackage: (id: string) => {
+        if (id === 'opencode-ai/package.json') return '/dev/node_modules/opencode-ai/package.json'
+        throw new Error(`not found: ${id}`)
+      },
+      requireFromDir: stagedRequireFromDir
+    })
+    expect(r.resolveOpenCodeExecutable()).toBe('/dev/node_modules/opencode-ai/bin/opencode.exe')
+  })
+})
+
+describe('defaultRuntimesRoot', () => {
+  const RP = '/Applications/Harness.app/Contents/Resources'
+
+  it('returns undefined outside a packaged app', () => {
+    expect(defaultRuntimesRoot(undefined, () => true)).toBeUndefined()
+  })
+
+  it('returns undefined when no runtime closure was staged', () => {
+    expect(defaultRuntimesRoot(RP, (p) => p === `${RP}/runtimes`)).toBeUndefined()
+  })
+
+  it('returns <resourcesPath>/runtimes when its node_modules exists', () => {
+    expect(defaultRuntimesRoot(RP, (p) => p === `${RP}/runtimes/node_modules`)).toBe(
+      `${RP}/runtimes`
+    )
+  })
+})
+
+describe('stagedClaudeExecutablePath', () => {
+  const claude = '/R/node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/claude'
+
+  it('returns the staged claude binary when it exists', () => {
+    expect(stagedClaudeExecutablePath('/R', 'darwin', 'x64', (p) => p === claude)).toBe(claude)
+  })
+
+  it('returns undefined when the staged binary is absent', () => {
+    expect(stagedClaudeExecutablePath('/R', 'darwin', 'x64', () => false)).toBeUndefined()
+  })
+
+  it('returns undefined without a runtimes root', () => {
+    expect(stagedClaudeExecutablePath(undefined, 'darwin', 'x64', () => true)).toBeUndefined()
   })
 })

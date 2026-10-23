@@ -3,13 +3,15 @@ import {
   PLATFORM_PACKAGES,
   runtimeClosureForPlatform,
   resolvePackageDir,
+  runtimeExecutables,
   validateStagedRuntimeClosure
 } from './runtime-closure.mjs'
 
 describe('PLATFORM_PACKAGES', () => {
-  it('covers all three shipped platforms', () => {
+  it('covers all four shipped platforms', () => {
     expect(Object.keys(PLATFORM_PACKAGES)).toEqual([
       'darwin-arm64',
+      'darwin-x64',
       'linux-x64',
       'linux-arm64'
     ])
@@ -72,6 +74,77 @@ describe('runtimeClosureForPlatform', () => {
       /Unsupported platform/
     )
   })
+
+  it('resolves the Intel mac packages for darwin-x64', () => {
+    const closure = runtimeClosureForPlatform('darwin-x64', { target: 'desktop' })
+    expect(closure.codexTriple).toBe('x86_64-apple-darwin')
+    expect(closure.packages).toContain('opencode-darwin-x64')
+    expect(closure.packages).toContain('@openai/codex-darwin-x64')
+    expect(closure.packages).toContain('@anthropic-ai/claude-agent-sdk-darwin-x64')
+    expect(closure.packages).not.toContain('opencode-darwin-arm64')
+  })
+
+  it('omits app.asar-provided packages and the opencode-ai launcher for desktop', () => {
+    const desktop = runtimeClosureForPlatform('darwin-arm64', { target: 'desktop' }).packages
+    for (const pkg of ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk', 'opencode-ai']) {
+      expect(desktop).not.toContain(pkg)
+    }
+    for (const pkg of [
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64',
+      'opencode-darwin-arm64',
+      '@agentclientprotocol/codex-acp',
+      '@openai/codex',
+      '@openai/codex-darwin-arm64',
+      '@agentclientprotocol/sdk',
+      'diff',
+      'open',
+      'vscode-jsonrpc',
+      'zod'
+    ]) {
+      expect(desktop).toContain(pkg)
+    }
+  })
+
+  it('keeps the headless closure a superset of the desktop closure', () => {
+    const desktop = runtimeClosureForPlatform('linux-x64', { target: 'desktop' }).packages
+    const headless = runtimeClosureForPlatform('linux-x64', { target: 'headless' }).packages
+    expect(headless.filter((p) => !desktop.includes(p)).sort()).toEqual(
+      ['@anthropic-ai/claude-agent-sdk', 'node-pty', 'opencode-ai', 'ws'].sort()
+    )
+    expect(desktop.every((p) => headless.includes(p))).toBe(true)
+  })
+
+  it('throws for an unknown closure target', () => {
+    expect(() => runtimeClosureForPlatform('linux-x64', { target: 'mobile' })).toThrow(
+      /Unsupported closure target/
+    )
+  })
+})
+
+describe('runtimeExecutables', () => {
+  it('spawns the opencode platform binary directly for desktop', () => {
+    expect(runtimeExecutables('/R', 'darwin-arm64', { target: 'desktop' }).opencode).toBe(
+      '/R/node_modules/opencode-darwin-arm64/bin/opencode'
+    )
+  })
+
+  it('spawns the opencode-ai launcher for headless', () => {
+    expect(runtimeExecutables('/R', 'darwin-arm64', { target: 'headless' }).opencode).toBe(
+      '/R/node_modules/opencode-ai/bin/opencode.exe'
+    )
+  })
+
+  it('places darwin-x64 native binaries under the Intel package and triple', () => {
+    const exe = runtimeExecutables('/R', 'darwin-x64', { target: 'desktop' })
+    expect(exe).toEqual({
+      claude: '/R/node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/claude',
+      opencode: '/R/node_modules/opencode-darwin-x64/bin/opencode',
+      codexAcpScript: '/R/node_modules/@agentclientprotocol/codex-acp/dist/index.js',
+      codex: '/R/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex',
+      codexCodeModeHost:
+        '/R/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex-code-mode-host'
+    })
+  })
 })
 
 describe('resolvePackageDir', () => {
@@ -129,7 +202,7 @@ describe('validateStagedRuntimeClosure', () => {
       statSync: mockStat
     })
     expect(errors).toEqual([])
-    expect(mockExists).toHaveBeenCalledTimes(14)
+    expect(mockExists).toHaveBeenCalledTimes(15)
   })
 
   it('reports missing files', () => {
@@ -140,7 +213,7 @@ describe('validateStagedRuntimeClosure', () => {
       existsSync: mockExists,
       statSync: vi.fn()
     })
-    expect(errors.length).toBe(14)
+    expect(errors.length).toBe(15)
     expect(errors[0]).toContain('missing')
   })
 
@@ -153,7 +226,7 @@ describe('validateStagedRuntimeClosure', () => {
       existsSync: mockExists,
       statSync: mockStat
     })
-    expect(errors.length).toBe(3)
+    expect(errors.length).toBe(4)
     expect(errors[0]).toContain('not executable')
   })
 
@@ -166,5 +239,63 @@ describe('validateStagedRuntimeClosure', () => {
         statSync: vi.fn()
       })
     ).toThrow(/Unsupported platform/)
+  })
+})
+
+describe('validateStagedRuntimeClosure desktop target', () => {
+  const headlessOnly = [
+    '/stage/lib/node_modules/node-pty/package.json',
+    '/stage/lib/node_modules/ws/package.json',
+    '/stage/lib/node_modules/@anthropic-ai/claude-agent-sdk/package.json'
+  ]
+  const executable = () => ({ mode: 0o755 })
+
+  it('does not require node-pty, ws, or the Claude SDK JS', () => {
+    const exists = (p) => !headlessOnly.includes(p)
+    const args = { libDir: '/stage/lib', platform: 'darwin-arm64', existsSync: exists, statSync: executable }
+    expect(validateStagedRuntimeClosure({ ...args, target: 'desktop' })).toEqual([])
+    expect(validateStagedRuntimeClosure({ ...args, target: 'headless' })).toEqual(
+      headlessOnly.map((p) => expect.stringContaining(p))
+    )
+  })
+
+  it('checks the opencode platform binary rather than the opencode-ai launcher', () => {
+    const launcher = '/stage/lib/node_modules/opencode-ai/bin/opencode.exe'
+    const platformBin = '/stage/lib/node_modules/opencode-darwin-arm64/bin/opencode'
+    const base = { libDir: '/stage/lib', platform: 'darwin-arm64', target: 'desktop', statSync: executable }
+    expect(
+      validateStagedRuntimeClosure({ ...base, existsSync: (p) => p !== launcher })
+    ).toEqual([])
+    expect(
+      validateStagedRuntimeClosure({ ...base, existsSync: (p) => p !== platformBin })
+    ).toEqual([`missing opencode binary: ${platformBin}`])
+  })
+
+  it('reports a missing claude binary and a non-executable codex binary', () => {
+    const claude = '/stage/lib/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude'
+    const codex =
+      '/stage/lib/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex'
+    const errors = validateStagedRuntimeClosure({
+      libDir: '/stage/lib',
+      platform: 'darwin-arm64',
+      target: 'desktop',
+      existsSync: (p) => p !== claude,
+      statSync: (p) => ({ mode: p === codex ? 0o644 : 0o755 })
+    })
+    expect(errors.sort()).toEqual(
+      [`missing claude binary: ${claude}`, `not executable codex native binary: ${codex}`].sort()
+    )
+  })
+
+  it('throws for an unknown target', () => {
+    expect(() =>
+      validateStagedRuntimeClosure({
+        libDir: '/stage/lib',
+        platform: 'darwin-arm64',
+        target: 'mobile',
+        existsSync: () => true,
+        statSync: executable
+      })
+    ).toThrow(/Unsupported closure target/)
   })
 })

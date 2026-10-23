@@ -1,15 +1,20 @@
 // Resolves the bundled native executables and JS entrypoints for the OpenCode
-// and Codex ACP runtimes in both dev (pnpm node_modules) and packaged
-// (app.asar.unpacked) layouts.
+// and Codex ACP runtimes in three layouts:
+//   - packaged desktop: `<resourcesPath>/runtimes/node_modules` staged by
+//     scripts/electron-after-pack.mjs (checked first);
+//   - headless tarball: `lib/node_modules` staged by scripts/pack-headless.mjs,
+//     reached through ordinary require resolution from the main bundle;
+//   - dev: pnpm node_modules, also through require resolution.
 //
-// Mirrors resolveClaudeAgentSdkExecutablePath (./claude-acp.ts): every resolved
-// path is rewritten from app.asar → app.asar.unpacked so native executables
-// land outside the asar archive with their executable bits intact. All paths
-// returned are direct resolved executables — never a PATH/global CLI lookup.
+// Every require-resolved path is rewritten from app.asar → app.asar.unpacked so
+// native executables land outside the asar archive with their executable bits
+// intact. All paths returned are direct resolved executables — never a
+// PATH/global CLI lookup.
 //
 // Bundled layout (pinned in package.json):
-//   - opencode-ai            → bin/opencode.exe           (native launcher)
-//   - @agentclientprotocol/codex-acp → dist/index.js      (ACP stdio JS entry)
+//   - opencode-<plat>-<arch> → bin/opencode                (native binary; desktop)
+//   - opencode-ai            → bin/opencode.exe            (hard link to it; dev + headless)
+//   - @agentclientprotocol/codex-acp → dist/index.js       (ACP stdio JS entry)
 //   - @openai/codex-<plat>-<arch>    → vendor/<triple>/bin/codex (native binary)
 //
 // The Codex ACP JS entrypoint is not itself a native binary; it is launched via
@@ -17,8 +22,42 @@
 // bundled @openai/codex native binary so codex-acp's internal `codex app-server`
 // spawn resolves to the packaged executable instead of a global install.
 
+import { existsSync } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join, sep } from 'path'
+
+/** `<resourcesPath>/runtimes` when the packaged desktop app staged a runtime
+ *  closure there, otherwise undefined (dev, headless, tests). */
+export function defaultRuntimesRoot(
+  resourcesPath: string | undefined = process.resourcesPath,
+  exists: (p: string) => boolean = existsSync
+): string | undefined {
+  if (!resourcesPath) return undefined
+  const root = join(resourcesPath, 'runtimes')
+  return exists(join(root, 'node_modules')) ? root : undefined
+}
+
+/** Darwin/Linux → opencode platform package id (optional dep of opencode-ai). */
+export function opencodePlatformPackageId(platform: NodeJS.Platform, arch: string): string {
+  return `opencode-${platform}-${arch}`
+}
+
+/** Darwin/Linux → Claude native package id (optional dep of the Claude SDK). */
+export function claudePlatformPackageId(platform: NodeJS.Platform, arch: string): string {
+  return `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`
+}
+
+/** The staged Claude native executable under a runtimes root, if present. */
+export function stagedClaudeExecutablePath(
+  runtimesRoot: string | undefined,
+  platform: NodeJS.Platform,
+  arch: string,
+  exists: (p: string) => boolean = existsSync
+): string | undefined {
+  if (!runtimesRoot) return undefined
+  const p = join(runtimesRoot, 'node_modules', claudePlatformPackageId(platform, arch), 'claude')
+  return exists(p) ? p : undefined
+}
 /** Full argv + env for an ACP stdio subprocess. */
 export interface RuntimeLaunchConfig {
   /** Complete argv for the ACP stdio subprocess. */
@@ -48,6 +87,9 @@ export interface BundledRuntimeResolverOptions {
    *  lives in @openai/codex's own node_modules (not hoisted to the root).
    *  Defaults to createRequire. Injectable for tests. */
   requireFromDir?: (dir: string) => PackageRequire
+  /** Staged runtime closure root (`<resourcesPath>/runtimes`). Defaults to
+   *  defaultRuntimesRoot(); pass null to force require-based resolution. */
+  runtimesRoot?: string | null
 }
 
 /** Darwin/Linux → @openai/codex platform package id (its optional dep name). */
@@ -82,6 +124,7 @@ export class BundledRuntimeResolver {
   private processExecPath: string
   private resolvePackage: (id: string) => string
   private requireFromDir: (dir: string) => PackageRequire
+  private runtimesRoot: string | undefined
 
   constructor(opts: BundledRuntimeResolverOptions = {}) {
     const platform = opts.platform ?? process.platform
@@ -102,10 +145,17 @@ export class BundledRuntimeResolver {
     this.platform = platform
     this.arch = arch
     this.processExecPath = opts.processExecPath ?? process.execPath
-    this.resolvePackage =
-      opts.resolvePackage ?? ((id) => createRequire(__filename).resolve(id))
+    this.runtimesRoot =
+      opts.runtimesRoot === null ? undefined : (opts.runtimesRoot ?? defaultRuntimesRoot())
     this.requireFromDir =
       opts.requireFromDir ?? ((dir) => createRequire(join(dir, 'noop.js')))
+    // A staged closure is a flat node_modules, so a require rooted at it
+    // reaches every runtime package directly.
+    this.resolvePackage =
+      opts.resolvePackage ??
+      (this.runtimesRoot
+        ? (id) => this.requireFromDir(this.runtimesRoot!).resolve(id)
+        : (id) => createRequire(__filename).resolve(id))
   }
 
   /** Rewrite an app.asar path to its unpacked counterpart so native binaries
@@ -114,8 +164,19 @@ export class BundledRuntimeResolver {
     return p.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
   }
 
-  /** Native OpenCode launcher: opencode-ai/bin/opencode.exe. */
+  /** Native OpenCode binary: the platform package's bin/opencode in a staged
+   *  desktop closure, otherwise the opencode-ai launcher bin/opencode.exe
+   *  (a hard link to the same binary). */
   resolveOpenCodeExecutable(): string {
+    if (this.runtimesRoot) {
+      return join(
+        this.runtimesRoot,
+        'node_modules',
+        opencodePlatformPackageId(this.platform, this.arch),
+        'bin',
+        'opencode'
+      )
+    }
     const pkgJson = this.resolvePackage('opencode-ai/package.json')
     return this._unpack(join(dirname(pkgJson), 'bin', 'opencode.exe'))
   }

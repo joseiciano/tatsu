@@ -44,6 +44,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm exec electron-builder --mac --publish=never
 
+      - name: Smoke packaged desktop runtimes
+        run: node scripts/smoke-packed-desktop.mjs
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:

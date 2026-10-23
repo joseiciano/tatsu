@@ -4,8 +4,8 @@ import { existsSync, statSync as _statSync } from 'node:fs'
 import { cp, mkdir, chmod } from 'node:fs/promises'
 
 /** Platform-scoped runtime packages that must be staged into the headless
- *  tarball so the bundled ACP runtimes resolve without touching the host
- *  package lock or global CLI. */
+ *  tarball or the desktop app's `Resources/runtimes` so the bundled ACP
+ *  runtimes resolve without touching the host package lock or global CLI. */
 export const PLATFORM_PACKAGES = {
   'darwin-arm64': {
     claudePlatform: '@anthropic-ai/claude-agent-sdk-darwin-arm64',
@@ -13,6 +13,14 @@ export const PLATFORM_PACKAGES = {
     codexTriple: 'aarch64-apple-darwin',
     codexBin: 'codex',
     opencodePlatform: 'opencode-darwin-arm64',
+    opencodeBin: 'opencode.exe'
+  },
+  'darwin-x64': {
+    claudePlatform: '@anthropic-ai/claude-agent-sdk-darwin-x64',
+    codexPlatform: '@openai/codex-darwin-x64',
+    codexTriple: 'x86_64-apple-darwin',
+    codexBin: 'codex',
+    opencodePlatform: 'opencode-darwin-x64',
     opencodeBin: 'opencode.exe'
   },
   'linux-x64': {
@@ -44,26 +52,35 @@ export const CODEX_ACP_DEPS = [
   'zod'
 ]
 
+/** Staging targets. `headless` is the self-contained server tarball: it
+ *  carries everything main needs at run time. `desktop` is the Electron
+ *  app's `Resources/runtimes` dir: main's own deps (node-pty, ws, the Claude
+ *  SDK JS) already live in app.asar, so only the native runtimes and the
+ *  Codex ACP script with its deps are staged. The `opencode-ai` launcher is
+ *  skipped for desktop because its `bin/opencode.exe` is a hard link to the
+ *  platform package's binary, and copying it would ship the 130 MB binary
+ *  twice; the desktop resolver spawns the platform package binary directly. */
+export const CLOSURE_TARGETS = ['headless', 'desktop']
+
 /** Return the full list of runtime packages that must be staged for a
  *  given target platform. */
-export function runtimeClosureForPlatform(platform) {
+export function runtimeClosureForPlatform(platform, { target = 'headless' } = {}) {
   const pkgs = PLATFORM_PACKAGES[platform]
   if (!pkgs) throw new Error(`Unsupported platform: ${platform}`)
-  return {
-    ...pkgs,
-    packages: [
-      'node-pty',
-      'ws',
-      '@anthropic-ai/claude-agent-sdk',
-      pkgs.claudePlatform,
-      'opencode-ai',
-      pkgs.opencodePlatform,
-      '@agentclientprotocol/codex-acp',
-      '@openai/codex',
-      pkgs.codexPlatform,
-      ...CODEX_ACP_DEPS
-    ]
-  }
+  if (!CLOSURE_TARGETS.includes(target)) throw new Error(`Unsupported closure target: ${target}`)
+  const runtimes = [
+    pkgs.claudePlatform,
+    pkgs.opencodePlatform,
+    '@agentclientprotocol/codex-acp',
+    '@openai/codex',
+    pkgs.codexPlatform,
+    ...CODEX_ACP_DEPS
+  ]
+  const packages =
+    target === 'desktop'
+      ? runtimes
+      : ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk', 'opencode-ai', ...runtimes]
+  return { ...pkgs, packages }
 }
 
 /** Resolve the real on-disk directory for an npm package using
@@ -103,8 +120,8 @@ export function resolvePackageDir(
  *  Uses `dereference: true` so pnpm symlinks are resolved to real files
  *  and the tarball is self-contained (no dangling symlinks into the
  *  host `.pnpm` store). */
-export async function stageRuntimeClosure({ repoRoot, libDir, platform }) {
-  const { packages } = runtimeClosureForPlatform(platform)
+export async function stageRuntimeClosure({ repoRoot, libDir, platform, target = 'headless' }) {
+  const { packages } = runtimeClosureForPlatform(platform, { target })
   const pkgs = PLATFORM_PACKAGES[platform]
   const destRoot = join(libDir, 'node_modules')
   await mkdir(destRoot, { recursive: true })
@@ -191,24 +208,31 @@ export async function stageRuntimeClosure({ repoRoot, libDir, platform }) {
   // Ensure native executables have the executable bit — cp preserves
   // mode in most cases, but explicit chmod is a safety net for
   // filesystems that strip bits during copy.
-  const nm = join(destRoot)
-  const executables = [
-    join(nm, 'opencode-ai', 'bin', pkgs.opencodeBin),
-    join(nm, pkgs.claudePlatform, 'claude'),
-    join(
-      nm,
-      '@openai',
-      pkgs.codexPlatform,
-      'vendor',
-      pkgs.codexTriple,
-      'bin',
-      pkgs.codexBin
-    )
-  ]
-  for (const exe of executables) {
+  for (const exe of Object.values(runtimeExecutables(libDir, platform, { target }))) {
     if (existsSync(exe)) {
       await chmod(exe, 0o755)
     }
+  }
+}
+
+/** Absolute paths of the native executables and the Codex ACP script inside
+ *  a staged closure. Shared by the pack validation, the packaged smokes, and
+ *  the mac signing list so there is one spelling of each path. */
+export function runtimeExecutables(libDir, platform, { target = 'headless' } = {}) {
+  const pkgs = PLATFORM_PACKAGES[platform]
+  if (!pkgs) throw new Error(`Unsupported platform: ${platform}`)
+  if (!CLOSURE_TARGETS.includes(target)) throw new Error(`Unsupported closure target: ${target}`)
+  const nm = join(libDir, 'node_modules')
+  const codexBinDir = join(nm, pkgs.codexPlatform, 'vendor', pkgs.codexTriple, 'bin')
+  return {
+    claude: join(nm, pkgs.claudePlatform, 'claude'),
+    opencode:
+      target === 'desktop'
+        ? join(nm, pkgs.opencodePlatform, 'bin', 'opencode')
+        : join(nm, 'opencode-ai', 'bin', pkgs.opencodeBin),
+    codexAcpScript: join(nm, '@agentclientprotocol', 'codex-acp', 'dist', 'index.js'),
+    codex: join(codexBinDir, pkgs.codexBin),
+    codexCodeModeHost: join(codexBinDir, 'codex-code-mode-host')
   }
 }
 
@@ -218,63 +242,44 @@ export async function stageRuntimeClosure({ repoRoot, libDir, platform }) {
 export function validateStagedRuntimeClosure({
   libDir,
   platform,
+  target = 'headless',
   existsSync: _existsSync = existsSync,
   statSync: __statSync = _statSync
 }) {
   const pkgs = PLATFORM_PACKAGES[platform]
   if (!pkgs) throw new Error(`Unsupported platform: ${platform}`)
+  if (!CLOSURE_TARGETS.includes(target)) throw new Error(`Unsupported closure target: ${target}`)
 
   const nm = join(libDir, 'node_modules')
+  const exe = runtimeExecutables(libDir, platform, { target })
   const checks = [
-    {
-      path: join(nm, 'opencode-ai', 'bin', pkgs.opencodeBin),
-      exec: true,
-      label: 'opencode binary'
-    },
+    { path: exe.opencode, exec: true, label: 'opencode binary' },
     {
       path: join(nm, pkgs.opencodePlatform, 'package.json'),
       exec: false,
       label: 'opencode platform package'
     },
-    {
-      path: join(nm, '@agentclientprotocol', 'codex-acp', 'dist', 'index.js'),
-      exec: false,
-      label: 'codex-acp script'
-    },
+    { path: exe.codexAcpScript, exec: false, label: 'codex-acp script' },
     {
       path: join(nm, '@openai', 'codex', 'package.json'),
       exec: false,
       label: '@openai/codex base'
     },
-    {
-      path: join(
-        nm,
-        pkgs.codexPlatform,
-        'vendor',
-        pkgs.codexTriple,
-        'bin',
-        pkgs.codexBin
-      ),
-      exec: true,
-      label: 'codex native binary'
-    },
-    {
-      path: join(nm, 'node-pty', 'package.json'),
-      exec: false,
-      label: 'node-pty'
-    },
-    { path: join(nm, 'ws', 'package.json'), exec: false, label: 'ws' },
-    {
-      path: join(nm, '@anthropic-ai', 'claude-agent-sdk', 'package.json'),
-      exec: false,
-      label: 'claude-agent-sdk'
-    },
-    {
-      path: join(nm, pkgs.claudePlatform, 'claude'),
-      exec: true,
-      label: 'claude binary'
-    }
+    { path: exe.codex, exec: true, label: 'codex native binary' },
+    { path: exe.codexCodeModeHost, exec: true, label: 'codex code-mode host binary' },
+    { path: exe.claude, exec: true, label: 'claude binary' }
   ]
+  if (target === 'headless') {
+    checks.push(
+      { path: join(nm, 'node-pty', 'package.json'), exec: false, label: 'node-pty' },
+      { path: join(nm, 'ws', 'package.json'), exec: false, label: 'ws' },
+      {
+        path: join(nm, '@anthropic-ai', 'claude-agent-sdk', 'package.json'),
+        exec: false,
+        label: 'claude-agent-sdk'
+      }
+    )
+  }
 
   // codex-acp resolves its runtime deps from the flat staged node_modules;
   // verify each is present so a missing transitive dep fails the pack before

@@ -3,6 +3,7 @@ import type { Store } from '../store'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { createRequire } from 'module'
 import { dirname, join, sep } from 'path'
+import { defaultRuntimesRoot, stagedClaudeExecutablePath } from './runtime-path-resolver'
 
 import type {
   Query,
@@ -74,9 +75,17 @@ export function resolveClaudeAgentSdkExecutablePath(opts: {
   platform?: NodeJS.Platform
   arch?: string
   resolveFromSdk?: (id: string) => string
+  /** Staged desktop closure root; defaults to defaultRuntimesRoot(). Pass
+   *  null to force SDK-relative resolution. */
+  runtimesRoot?: string | null
+  exists?: (p: string) => boolean
 } = {}): string | undefined {
   try {
     const { platform = process.platform, arch = process.arch, resolveFromSdk } = opts
+    const runtimesRoot =
+      opts.runtimesRoot === null ? undefined : (opts.runtimesRoot ?? defaultRuntimesRoot())
+    const staged = stagedClaudeExecutablePath(runtimesRoot, platform, arch, opts.exists)
+    if (staged) return staged
     const dynamicRequire = createRequire(__filename)
     const sdkEntry = dynamicRequire.resolve('@anthropic-ai/claude-agent-sdk')
     const sdkRequire = createRequire(sdkEntry)

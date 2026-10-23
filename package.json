@@ -33,7 +33,7 @@
     "test:watch": "vitest",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:dev": "electron-rebuild -f -w node-pty",
-    "pack": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --arm64 --config.mac.identity=null",
+    "pack": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --arm64 --config.mac.identity=null && node scripts/smoke-packed-desktop.mjs",
     "postpack": "pnpm run rebuild:dev",
     "dist": "pnpm run build && dotenv -e .env -- electron-builder",
     "postdist": "pnpm run rebuild:dev",
@@ -61,17 +61,16 @@
       "!node_modules/**/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!node_modules/**/{test,__tests__,tests,powered-test,example,examples}",
       "!node_modules/**/*.d.ts",
-      "!node_modules/**/.bin"
+      "!node_modules/**/.bin",
+      "!node_modules/opencode-ai/**",
+      "!node_modules/opencode-*/**",
+      "!node_modules/@openai/**",
+      "!node_modules/@agentclientprotocol/**",
+      "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
     ],
     "asarUnpack": [
       "**/node_modules/node-pty/**/*",
-      "**/node_modules/@anthropic-ai/claude-agent-sdk/**/*",
-      "**/node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
-      "**/node_modules/opencode-ai/**/*",
-      "**/node_modules/opencode-*/**/*",
-      "**/node_modules/@agentclientprotocol/codex-acp/**/*",
-      "**/node_modules/@openai/codex/**/*",
-      "**/node_modules/@openai/codex-*/**/*"
+      "**/node_modules/@anthropic-ai/claude-agent-sdk/**/*"
     ],
     "extraResources": [
       {
@@ -107,14 +106,7 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "binaries": [
-        "app.asar.unpacked/node_modules/opencode-ai/bin/opencode.exe",
-        "app.asar.unpacked/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
-        "app.asar.unpacked/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex-code-mode-host",
-        "app.asar.unpacked/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex",
-        "app.asar.unpacked/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex-code-mode-host"
-      ]
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "dmg": {
       "artifactName": "Harness-${version}-${arch}.${ext}",
@@ -155,7 +147,8 @@
       "provider": "github",
       "owner": "frenchie4111",
       "repo": "harness"
-    }
+    },
+    "afterPack": "scripts/electron-after-pack.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/codex-acp": "1.1.10",

@@ -25,7 +25,7 @@ import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as tar from 'tar'
 import {
-  PLATFORM_PACKAGES,
+  runtimeExecutables,
   validateStagedRuntimeClosure
 } from './runtime-closure.mjs'
 import { spawnBounded } from './smoke-bundled-runtimes.mjs'
@@ -81,33 +81,16 @@ async function main() {
       process.exit(1)
     }
 
-    const nm = join(libDir, 'node_modules')
-    const pkgs = PLATFORM_PACKAGES[platform]
+    const exe = runtimeExecutables(libDir, platform)
 
-    // Spawn opencode from staged layout
-    const openCodePath = join(nm, 'opencode-ai', 'bin', pkgs.opencodeBin)
     console.log(`[validate-packed] spawning opencode from staged layout`)
-    const openCodeResult = await spawnBounded([openCodePath, 'acp'])
+    const openCodeResult = await spawnBounded([exe.opencode, 'acp'])
     console.log(
       `[validate-packed] opencode: ${openCodeResult.ok ? 'booted' : openCodeResult.code}`
     )
 
-    // Spawn codex from staged layout
-    const codexScript = join(
-      nm,
-      '@agentclientprotocol',
-      'codex-acp',
-      'dist',
-      'index.js'
-    )
-    const codexNative = join(
-      nm,
-      pkgs.codexPlatform,
-      'vendor',
-      pkgs.codexTriple,
-      'bin',
-      pkgs.codexBin
-    )
+    const codexScript = exe.codexAcpScript
+    const codexNative = exe.codex
     const nodeBin = existsSync(join(libDir, 'node'))
       ? join(libDir, 'node')
       : process.execPath
