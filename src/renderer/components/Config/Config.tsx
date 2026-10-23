@@ -1256,7 +1256,8 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
 
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
-  const canEdit = editorView.kind === 'edit' && !readBusy && !readFailed && !mutationBusy
+  const canEdit =
+    editorView.kind === 'edit' && !editorView.ref.linkedFrom && !readBusy && !readFailed && !mutationBusy
   const canSave = canEdit && draft !== savedContent
   const canDelete = canEdit
 
