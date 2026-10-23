@@ -180,6 +180,22 @@ export function buildBackend(
       staged: boolean,
       mode?: 'working' | 'branch'
     ) => req('worktree:fileDiffSides', worktreePath, filePath, staged, mode),
+    getCodeDiffFiles: (worktreePath: string, baseRef: string) =>
+      req('worktree:codeDiffFiles', worktreePath, baseRef),
+    getCodeDiffFileSides: (
+      worktreePath: string,
+      baseRef: string,
+      filePath: string,
+      previousPath?: string
+    ) => req('worktree:codeDiffFileSides', worktreePath, baseRef, filePath, previousPath),
+    validateRef: (worktreePath: string, ref: string) =>
+      req('worktree:validateRef', worktreePath, ref),
+    listBranchesForCompare: (worktreePath: string) =>
+      req('worktree:branchesForCompare', worktreePath),
+    getDefaultCompareRef: (worktreePath: string) =>
+      req('worktree:defaultCompareRef', worktreePath),
+    fetchCompareRef: (worktreePath: string, ref: string) =>
+      req('worktree:fetchCompareRef', worktreePath, ref),
     getBranchCommits: (worktreePath: string) => req('worktree:branchCommits', worktreePath),
     getCommitDiff: (worktreePath: string, hash: string) =>
       req('worktree:commitDiff', worktreePath, hash),

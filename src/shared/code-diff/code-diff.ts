@@ -20,7 +20,7 @@ export interface CodeDiffFileList {
   mergeBase: string
   headRef: string
   isWorktreeDirty: boolean
-  error?: 'invalid-ref' | 'no-merge-base'
+  error?: 'invalid-ref' | 'no-merge-base' | 'unknown-worktree'
 }
 
 export interface BranchForCompare {

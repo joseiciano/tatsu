@@ -36,7 +36,7 @@ import { SnoozeTimer } from './snooze-timer'
 import { getWeeklyStats } from './weekly-stats'
 import type { TerminalTab, PaneNode, PaneLeaf } from '../shared/state/terminals'
 import { getLeaves, mapLeaves } from '../shared/state/terminals'
-import { listWorktrees, listBranches, continueWorktree, isWorktreeDirty, defaultWorktreeDir, getChangedFiles, getFileDiff, getBranchCommits, getCommitDiff, getCommitChangedFiles, getCommitFileDiffSides, getMainWorktreeStatus, prepareMainForMerge, mergeWorktreeLocally, getBranchSha, previewMergeConflicts, getBranchDiffStats, listAllFiles, readWorktreeFile, readWorktreeFileBinary, writeWorktreeFile, getFileDiffSides, getCurrentBranch, symlinkClaudeSettings, type MergeStrategy } from './worktree'
+import { listWorktrees, listBranches, continueWorktree, isWorktreeDirty, defaultWorktreeDir, getChangedFiles, getFileDiff, getBranchCommits, getCommitDiff, getCommitChangedFiles, getCommitFileDiffSides, getMainWorktreeStatus, prepareMainForMerge, mergeWorktreeLocally, getBranchSha, previewMergeConflicts, getBranchDiffStats, listAllFiles, readWorktreeFile, readWorktreeFileBinary, writeWorktreeFile, getFileDiffSides, getCurrentBranch, symlinkClaudeSettings, getCodeDiffFiles, getCodeDiffFileSides, validateRef, listBranchesForCompare, resolveDefaultCompareRef, fetchCompareRef, type MergeStrategy } from './worktree'
 import { listOpenPRs, testToken, starRepo, unstarRepo, isRepoStarred, mergePR, getRepoInfo, type GitHubMergeMethod, type MergePRResult } from './github'
 import { AVAILABLE_EDITORS, DEFAULT_EDITOR_ID, openInEditor } from './editor'
 import { setSecret, getSecret, hasSecret, deleteSecret } from './secrets'
@@ -1250,6 +1250,70 @@ function registerIpcHandlers(): void {
       return getFileDiffSides(worktreePath, filePath, staged, mode ?? 'working')
     }
   )
+
+  const isKnownWorktree = (worktreePath: string): boolean =>
+    store.getSnapshot().state.worktrees.list.some((w) => w.path === worktreePath)
+  const UNKNOWN_WORKTREE = 'Unknown worktree'
+
+  transport.onRequest('worktree:codeDiffFiles', async (_ctx, worktreePath: string, baseRef: string) => {
+    if (!isKnownWorktree(worktreePath)) {
+      return {
+        files: [],
+        totalFiles: 0,
+        totalAdditions: 0,
+        totalDeletions: 0,
+        baseRef,
+        mergeBase: '',
+        headRef: '',
+        isWorktreeDirty: false,
+        error: 'unknown-worktree'
+      }
+    }
+    return getCodeDiffFiles(worktreePath, baseRef)
+  })
+
+  transport.onRequest(
+    'worktree:codeDiffFileSides',
+    async (_ctx, worktreePath: string, baseRef: string, filePath: string, previousPath?: string) => {
+      if (!isKnownWorktree(worktreePath)) {
+        return {
+          original: '',
+          modified: '',
+          originalExists: false,
+          modifiedExists: false,
+          originalBinary: false,
+          modifiedBinary: false,
+          originalTruncated: false,
+          modifiedTruncated: false,
+          originalSize: 0,
+          modifiedSize: 0,
+          modifiedSymlink: false,
+          error: UNKNOWN_WORKTREE
+        }
+      }
+      return getCodeDiffFileSides(worktreePath, baseRef, filePath, previousPath)
+    }
+  )
+
+  transport.onRequest('worktree:validateRef', async (_ctx, worktreePath: string, ref: string) => {
+    if (!isKnownWorktree(worktreePath)) return { ok: false, error: UNKNOWN_WORKTREE }
+    return validateRef(worktreePath, ref)
+  })
+
+  transport.onRequest('worktree:branchesForCompare', async (_ctx, worktreePath: string) => {
+    if (!isKnownWorktree(worktreePath)) return []
+    return listBranchesForCompare(worktreePath)
+  })
+
+  transport.onRequest('worktree:defaultCompareRef', async (_ctx, worktreePath: string) => {
+    if (!isKnownWorktree(worktreePath)) return { ref: 'HEAD', fetchable: false }
+    return resolveDefaultCompareRef(worktreePath)
+  })
+
+  transport.onRequest('worktree:fetchCompareRef', async (_ctx, worktreePath: string, ref: string) => {
+    if (!isKnownWorktree(worktreePath)) return { ok: false, error: UNKNOWN_WORKTREE }
+    return fetchCompareRef(worktreePath, ref)
+  })
 
   transport.onRequest('worktree:branchCommits', async (_ctx, worktreePath: string) => {
     return getBranchCommits(worktreePath)
