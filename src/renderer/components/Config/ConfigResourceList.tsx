@@ -17,6 +17,43 @@ import type {
   ConfigRowConversionAction
 } from './types'
 
+const ROOT_FOLDER_ERRORS = [
+  'The resolver known root is unavailable',
+  'The resolver has multiple active configuration roots'
+]
+
+export function isRootFolderError(message: string | null | undefined): boolean {
+  return !!message && ROOT_FOLDER_ERRORS.some((text) => message.includes(text))
+}
+
+function ErrorMessage({
+  message,
+  className,
+  onOpenConfigFolders
+}: {
+  message: string
+  className: string
+  onOpenConfigFolders?: () => void
+}): JSX.Element {
+  return (
+    <div className={className}>
+      {message}
+      {onOpenConfigFolders && isRootFolderError(message) && (
+        <>
+          {' '}
+          <button
+            type="button"
+            onClick={onOpenConfigFolders}
+            className="underline hover:text-fg-bright cursor-pointer"
+          >
+            Set config folders in Settings
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 /** Skills <-> Commands is the only first-version conversion direction
  *  (REQ-013); the Agents tab offers no row conversion action. */
 const CONVERSION_TARGET: Partial<Record<HarnessConfigResourceType, 'skills' | 'commands'>> = {
@@ -308,12 +345,17 @@ export function ConfigResourceList({
   onCreate,
   onSync,
   onCreateCommand,
-  onCreateSkill
+  onCreateSkill,
+  onOpenConfigFolders
 }: ConfigResourceListProps): JSX.Element {
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {sharedError && (
-        <div className="px-2.5 py-2 text-xs text-danger border-b border-border">{sharedError}</div>
+        <ErrorMessage
+          message={sharedError}
+          className="px-2.5 py-2 text-xs text-danger border-b border-border"
+          onOpenConfigFolders={onOpenConfigFolders}
+        />
       )}
       {groups.map((group) => (
         <div key={group.agentKind} className="border-b border-border/60">
@@ -322,7 +364,11 @@ export function ConfigResourceList({
             <div className="px-2.5 pb-1.5 text-xs text-success">{group.notice}</div>
           )}
           {group.requestError && (
-            <div className="px-2.5 pb-1.5 text-xs text-danger">{group.requestError}</div>
+            <ErrorMessage
+              message={group.requestError}
+              className="px-2.5 pb-1.5 text-xs text-danger"
+              onOpenConfigFolders={onOpenConfigFolders}
+            />
           )}
           {!group.supported && group.note && (
             <div className="px-2.5 pb-1.5 text-xs text-faint">{group.note}</div>

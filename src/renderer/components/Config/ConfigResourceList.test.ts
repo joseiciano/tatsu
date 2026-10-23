@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildConfigResourceGroups } from './ConfigResourceList'
+import { buildConfigResourceGroups, isRootFolderError } from './ConfigResourceList'
 import type { AgentConfigCapability, AgentInfo } from '../../../shared/agent-registry'
 import type {
   HarnessConfigChangedRef,
@@ -358,5 +358,14 @@ describe('buildConfigResourceGroups', () => {
       const row = groups.find((g) => g.agentKind === 'claude')!.rows[0]
       expect(row.conversionAction).toBeNull()
     })
+  })
+})
+
+describe('isRootFolderError', () => {
+  it('matches the unavailable and ambiguous root messages only', () => {
+    expect(isRootFolderError('The resolver known root is unavailable')).toBe(true)
+    expect(isRootFolderError('The resolver has multiple active configuration roots')).toBe(true)
+    expect(isRootFolderError('The harness resource path is unsafe')).toBe(false)
+    expect(isRootFolderError(null)).toBe(false)
   })
 })

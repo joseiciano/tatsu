@@ -15,6 +15,7 @@ import type { AgentKind } from '../../../shared/state/terminals'
  *  component as a per-client overlay and owns navigation/visibility. */
 export interface ConfigProps {
   onClose: () => void
+  onOpenConfigFolders?: () => void
 }
 
 /** Agent-filter scope. `all` shows every managed harness group;
@@ -156,6 +157,7 @@ export interface ConfigResourceListProps {
   /** REQ-014: the only caller of `prepareHarnessConfigSkillFromCommand` —
    *  invoked exclusively by a row's own `Create skill` click. */
   onCreateSkill: (scope: HarnessConfigScope, id: string) => void
+  onOpenConfigFolders?: () => void
 }
 
 /** Discriminated editor view. Each variant carries exactly the data
