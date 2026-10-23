@@ -1,5 +1,6 @@
 import type { PtyStatus } from '../../types'
 import type { Action } from '../../hotkeys'
+import { ENABLE_CODE_DIFF } from '../../../shared/constants'
 
 export const FILE_CACHE_TTL_MS = 10_000
 export const MAX_FILE_RESULTS = 100
@@ -42,4 +43,5 @@ export const EXCLUDED_ACTIONS: Set<Action> = new Set([
   'worktree6', 'worktree7', 'worktree8', 'worktree9',
   'commandPalette',
   'fileQuickOpen',
+  ...(ENABLE_CODE_DIFF ? [] : (['toggleCodeDiff'] as const)),
 ])

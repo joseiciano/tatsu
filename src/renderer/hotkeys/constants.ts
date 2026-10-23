@@ -1,4 +1,5 @@
 import type { Action, HotkeyBinding, HotkeyCategory } from './types'
+import { ENABLE_CODE_DIFF } from '../../shared/constants'
 
 export const DEFAULT_HOTKEYS: Record<Action, HotkeyBinding> = {
   nextWorktree: { key: 'ArrowDown', modifiers: { cmd: true } },
@@ -47,6 +48,7 @@ export const DEFAULT_HOTKEYS: Record<Action, HotkeyBinding> = {
   togglePerfMonitor: { key: 'p', modifiers: { cmd: true, alt: true } },
   hotkeyCheatsheet: { key: '/', modifiers: { cmd: true, shift: true } },
   openReview: { key: 'r', modifiers: { cmd: true, alt: true } },
+  toggleCodeDiff: { key: 'c', modifiers: { cmd: true, shift: true } },
   openSettings: { key: ',', modifiers: { cmd: true } },
   uiScaleUp: { key: '+', modifiers: { cmd: true, shift: true } },
   uiScaleDown: { key: '-', modifiers: { cmd: true } },
@@ -96,6 +98,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   togglePerfMonitor: 'Performance monitor',
   hotkeyCheatsheet: 'Keyboard shortcuts',
   openReview: 'Review changes',
+  toggleCodeDiff: 'Code diff',
   openSettings: 'Open settings',
   uiScaleUp: 'Increase UI size',
   uiScaleDown: 'Decrease UI size',
@@ -147,7 +150,7 @@ export const ACTION_CATEGORIES: HotkeyCategory[] = [
   {
     id: 'overlays',
     label: 'App overlays',
-    actions: ['openSettings', 'openReview', 'togglePerfMonitor']
+    actions: ['openSettings', 'openReview', ...(ENABLE_CODE_DIFF ? (['toggleCodeDiff'] as const) : []), 'togglePerfMonitor']
   },
   {
     id: 'external',

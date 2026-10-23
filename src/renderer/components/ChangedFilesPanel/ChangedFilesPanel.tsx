@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { RefreshCw, Code2, AtSign, ClipboardCheck } from 'lucide-react'
+import { RefreshCw, Code2, AtSign, ClipboardCheck, GitCompareArrows } from 'lucide-react'
 import type { ChangedFile } from '../../types'
 import { Tooltip } from '../Tooltip'
 import { RightPanel } from '../RightPanel'
@@ -13,6 +13,7 @@ interface ChangedFilesPanelProps {
   onOpenDiff: (filePath: string, staged: boolean, mode: Mode) => void
   onSendToAgent?: (text: string) => void
   onOpenReview?: () => void
+  onOpenCodeDiff?: () => void
 }
 
 const STATUS_LABEL: Record<ChangedFile['status'], string> = {
@@ -36,7 +37,7 @@ interface ChangedFilesData {
   branch: ChangedFile[]
 }
 
-export function ChangedFilesPanel({ worktreePath, onOpenDiff, onSendToAgent, onOpenReview }: ChangedFilesPanelProps): JSX.Element {
+export function ChangedFilesPanel({ worktreePath, onOpenDiff, onSendToAgent, onOpenReview, onOpenCodeDiff }: ChangedFilesPanelProps): JSX.Element {
   const backend = useBackend()
   const fetcher = useCallback(async (path: string): Promise<ChangedFilesData> => {
     const [working, branch] = await Promise.all([
@@ -73,6 +74,20 @@ export function ChangedFilesPanel({ worktreePath, onOpenDiff, onSendToAgent, onO
           >
             <ClipboardCheck className="icon-2xs" />
             Review
+          </button>
+        </Tooltip>
+      )}
+      {onOpenCodeDiff && totalCount > 0 && (
+        <Tooltip label="Code diff" action="toggleCodeDiff">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenCodeDiff()
+            }}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border text-faint text-xs font-medium hover:text-fg transition-colors cursor-pointer"
+          >
+            <GitCompareArrows className="icon-2xs" />
+            Diff
           </button>
         </Tooltip>
       )}

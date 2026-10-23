@@ -10,6 +10,7 @@ import { useBackend } from '../../backend'
 import { SCALES } from '../../../shared/state/settings'
 import { cycleWorktreeDetail } from '../../worktree-detail-override'
 import type { PaletteMode } from '../../components/CommandPalette'
+import { ENABLE_CODE_DIFF } from '../../../shared/constants'
 
 interface UseHotkeyHandlersArgs {
   worktrees: Worktree[]
@@ -38,6 +39,7 @@ interface UseHotkeyHandlersArgs {
   setShowPerfMonitor: React.Dispatch<React.SetStateAction<boolean>>
   setShowHotkeyCheatsheet: React.Dispatch<React.SetStateAction<boolean>>
   setShowReview: React.Dispatch<React.SetStateAction<boolean>>
+  setShowCodeDiff: React.Dispatch<React.SetStateAction<boolean>>
   // Imperative hooks into other handlers — passed in to avoid this hook
   // depending on useTabHandlers + useWorktreeHandlers directly.
   handleAddTerminalTab: (worktreePath: string, paneId?: string) => void
@@ -83,6 +85,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
     setShowPerfMonitor,
     setShowHotkeyCheatsheet,
     setShowReview,
+    setShowCodeDiff,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
@@ -319,6 +322,9 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
       togglePerfMonitor: () => setShowPerfMonitor((v) => !v),
       hotkeyCheatsheet: () => setShowHotkeyCheatsheet((v) => !v),
       openReview: () => setShowReview(true),
+      toggleCodeDiff: () => {
+        if (ENABLE_CODE_DIFF) setShowCodeDiff((v) => !v)
+      },
       uiScaleUp: () => {
         const i = SCALES.findIndex((s) => s.id === uiScale)
         const next = SCALES[Math.min(i < 0 ? 0 : i + 1, SCALES.length - 1)]
@@ -359,6 +365,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
       setShowPerfMonitor,
       setShowHotkeyCheatsheet,
       setShowReview,
+    setShowCodeDiff,
       setShowSettings,
       backend,
       uiScale,
