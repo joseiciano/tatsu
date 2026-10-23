@@ -2,13 +2,13 @@
 goal: Build harness resource files from templates and fragments with a pure, versioned renderer
 date_created: 2026-10-22
 last_updated: 2026-10-22
-status: 'Planned'
+status: 'Completed'
 tags: [feature, shared, harness-config, templates]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 19 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It adds the renderer: a pure function that turns the templates and fragments from [Step 18](./step-18-template-source-model.md) into the exact files each harness reads. [Step 20](./step-20-template-sync.md) compares this output with disk, and [Step 21](./step-21-template-editor.md) uses it for a live preview. Terminology follows [implementation-details.md](./implementation-details.md).
 
@@ -31,9 +31,9 @@ This plan is Step 19 of the [Skills-Agents-Commands-Sync plan](./skills-agents-c
 
 - **GOAL-001**: One renderer for sync and preview.
 
-- [ ] **TASK-001**: Add `src/shared/harness-template-render/` with `renderTemplates`, `RenderedResource`, render-error types, and `RENDERER_VERSION`.
-- [ ] **TASK-002**: Move the resolvers' `pathForName` functions to a shared module the renderer can import without Node APIs, or expose them through capability metadata.
-- [ ] **TASK-003**: Add the provenance-marker form to capability metadata and teach the scanner to read it into `HarnessConfigFileRef.templateRef?: string`.
+- [x] **TASK-001**: Add `src/shared/harness-template-render/` with `renderTemplates`, `RenderedResource`, render-error types, and `RENDERER_VERSION`.
+- [x] **TASK-002**: Move the resolvers' `pathForName` functions to a shared module the renderer can import without Node APIs, or expose them through capability metadata.
+- [x] **TASK-003**: Add the provenance-marker form to capability metadata and teach the scanner to read it into `HarnessConfigFileRef.templateRef?: string`.
 
 ## 3. Alternatives
 
