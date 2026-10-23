@@ -202,6 +202,17 @@ describe('resolveDefaultCompareRef', () => {
 
     expect(result).toEqual({ ref: 'refs/heads/main', fetchable: false })
   })
+
+  it('returns a ref that getCodeDiffFiles echoes back as baseRef when there is no remote and no main or master', async () => {
+    git(repo, ['branch', '-m', 'main', 'trunk'])
+
+    const resolved = await resolveDefaultCompareRef(repo)
+    const list = await getCodeDiffFiles(repo, resolved.ref)
+
+    expect(list.error).toBeUndefined()
+    expect(list.baseRef).toBe(resolved.ref)
+    expect(resolved).toEqual({ ref: sha(repo, 'HEAD'), fetchable: false })
+  })
 })
 
 describe('getCodeDiffFiles', () => {

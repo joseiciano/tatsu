@@ -1539,9 +1539,8 @@ export async function listBranchesForCompare(worktreePath: string): Promise<Bran
 export async function resolveDefaultCompareRef(worktreePath: string): Promise<DefaultCompareRef> {
   let resolved = await validateRef(worktreePath, 'origin/main')
   if (!resolved.ok) {
-    const fallback = await getDefaultBaseRef(worktreePath)
-    if (fallback === 'HEAD') return { ref: 'HEAD', fetchable: false }
-    resolved = await validateRef(worktreePath, fallback)
+    resolved = await validateRef(worktreePath, await getDefaultBaseRef(worktreePath))
+    if (!resolved.ok) resolved = await validateRef(worktreePath, 'HEAD')
     if (!resolved.ok) return { ref: 'HEAD', fetchable: false }
   }
   return { ref: resolved.ref, fetchable: resolved.ref.startsWith('refs/remotes/origin/') }
