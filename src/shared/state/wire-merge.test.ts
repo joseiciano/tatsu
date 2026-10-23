@@ -29,6 +29,16 @@ describe('mergeWireSnapshot', () => {
     expect(merged.settings.themeDark).toBe('dark')
   })
 
+  it('defaults the config folder settings when an older server omits them', () => {
+    const wire: WireSnapshotState = {
+      settings: { themeMode: 'dark' }
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.harnessConfigRoots).toEqual({})
+    expect(merged.settings.harnessConfigSourceDir).toBeNull()
+    expect(merged.settings.themeMode).toBe('dark')
+  })
+
   it('fills in an entirely-missing slice from initialState', () => {
     const wire: WireSnapshotState = {}
     const merged = mergeWireSnapshot(wire)

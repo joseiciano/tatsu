@@ -15,6 +15,7 @@ import { SEMANTIC_KEYS } from '../../theme-apply'
 import type { CustomTheme, UiScale } from '../../../shared/state/settings'
 import { SCALES, scaleSpec } from '../../../shared/state/settings'
 import { QRCodeSVG } from 'qrcode.react'
+import { ConfigFoldersSettings } from '../ConfigFoldersSettings'
 
 interface SettingsProps {
   onClose: () => void
@@ -23,7 +24,7 @@ interface SettingsProps {
   initialSection?: SectionId
 }
 
-type SectionId = 'appearance' | 'agent' | 'worktrees' | 'editor' | 'github' | 'hotkeys' | 'updates' | 'support' | 'experimental'
+type SectionId = 'appearance' | 'agent' | 'worktrees' | 'editor' | 'config-folders' | 'github' | 'hotkeys' | 'updates' | 'support' | 'experimental'
 type SubSectionId =
   | 'appearance-theme'
   | 'appearance-custom-themes'
@@ -77,6 +78,7 @@ const SECTIONS: Section[] = [
   },
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
   { id: 'editor', label: 'Editor', icon: Code2 },
+  { id: 'config-folders', label: 'Config folders', icon: FolderOpen },
   { id: 'github', label: 'GitHub', icon: GitPullRequest },
   {
     id: 'hotkeys', label: 'Hotkeys', icon: Keyboard, children: [
@@ -167,6 +169,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     agent: null,
     worktrees: null,
     editor: null,
+    'config-folders': null,
     github: null,
     hotkeys: null,
     updates: null,
@@ -2779,6 +2782,18 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 installed via <em>Shell Command: Install 'code' command in PATH</em> from
                 the command palette).
               </p>
+            </section>
+
+            <section ref={(el) => { sectionRefs.current['config-folders'] = el }} id="config-folders">
+              <h2 className="text-lg font-semibold text-fg-bright mb-1">Config folders</h2>
+              <p className="text-sm text-dim mb-4">
+                Where each harness keeps its agents, skills, and commands, and
+                where Tatsu keeps its template source. Leave a field empty to use
+                the default shown in grey. Folders must be absolute paths; a
+                folder that doesn't exist yet shows as unavailable on the Config
+                page until you create it.
+              </p>
+              <ConfigFoldersSettings />
             </section>
 
             {/* GitHub section */}

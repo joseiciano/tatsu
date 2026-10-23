@@ -14,4 +14,5 @@ export {
 
 export { createHarnessConfigService, HarnessConfigServiceImpl } from './harness-config'
 export { createCommandFromSkill, createSkillFromCommand } from './conversion'
+export { normalizeConfigFolder, sanitizeHarnessConfigRoots } from './root-settings'
 export * from './types'

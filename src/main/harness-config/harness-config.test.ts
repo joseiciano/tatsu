@@ -17,7 +17,7 @@ import { createHash } from 'crypto'
 import { tmpdir } from 'os'
 import { basename, dirname, join, resolve } from 'path'
 
-import { createHarnessConfigService } from '.'
+import { createHarnessConfigService, type HarnessConfigService } from '.'
 import {
   createCommandFromSkill,
   createSkillFromCommand,
@@ -227,7 +227,7 @@ function makeFixture(options: FixtureOptions = {}): Fixture {
   const uuid = options.uuid ?? (() => `plan-${++nextId}`)
   const resolverMap: Record<string, AnyRecord> = { ...resolvers }
   const deps: AnyRecord = {
-    knownRoots: roots,
+    knownRoots: () => roots,
     resolvers: resolverMap,
     clock,
     uuid,
@@ -1714,3 +1714,87 @@ describe('conversion content generators (TEST-001/TEST-002)', () => {
 function fixtureRootPlaceholder(): string {
   return join(tmpdir(), `harness-config-missing-${Date.now()}-${Math.random()}`)
 }
+
+describe('harness-config live known roots', () => {
+  it('reads the knownRoots getter on every scan and stales plans generated under the old root', async () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-live-roots-'))
+    const home = join(fixtureRoot, 'home')
+    const first = join(fixtureRoot, 'first-skills')
+    const second = join(fixtureRoot, 'second-skills')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { claudeSkills: first },
+      deps: { homeDir: home, env: { HOME: home } }
+    })
+    put(first, 'alpha/SKILL.md', 'alpha')
+    put(second, 'beta/SKILL.md', 'beta')
+    const scope = { agentKind: 'claude', resourceType: 'skills' }
+
+    const before = fixture.service.scan(scope)
+    expect(before.map((ref: FileRef) => ref.absolutePath)).toEqual([join(first, 'alpha', 'SKILL.md')])
+    const plan = fixture.service.planSyncToDisk(scope)
+
+    fixture.roots.claudeSkills = second
+    const after = fixture.service.scan(scope)
+    expect(after.map((ref: FileRef) => ref.absolutePath)).toEqual([join(second, 'beta', 'SKILL.md')])
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+    expect(existsSync(join(first, 'alpha', 'SKILL.md'))).toBe(true)
+  })
+
+  it('falls back to the default root once an override is removed', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-root-reset-'))
+    const home = join(fixtureRoot, 'home')
+    const override = join(fixtureRoot, 'override-agents')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { claudeAgents: override },
+      deps: { homeDir: home, env: { HOME: home } }
+    })
+    put(override, 'custom.md', 'custom')
+    put(join(home, '.claude', 'agents'), 'default.md', 'default')
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toEqual(['custom.md'])
+    delete fixture.roots.claudeAgents
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toEqual(['default.md'])
+  })
+
+  it('honors an explicit OpenCode override while OPENCODE_CONFIG_DIR is set', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-opencode-explicit-'))
+    const home = join(fixtureRoot, 'home')
+    const explicitSkills = join(fixtureRoot, 'explicit-opencode-skills')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { opencodeSkills: explicitSkills },
+      deps: {
+        homeDir: home,
+        env: { HOME: home, OPENCODE_CONFIG_DIR: join(fixtureRoot, 'opencode-config') }
+      }
+    })
+    put(explicitSkills, 'explicit/SKILL.md', 'explicit skill')
+    const refs = fixture.service.scan({ agentKind: 'opencode', resourceType: 'skills' })
+    expect(refs).toHaveLength(1)
+    expect(refs[0].absolutePath.startsWith(explicitSkills)).toBe(true)
+    expect(() => fixture.service.scan({ agentKind: 'opencode', resourceType: 'agents' })).toThrow()
+  })
+
+  it('reports default roots and maps root keys to the scopes that read them', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-defaults-'))
+    const home = join(fixtureRoot, 'home')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      deps: { homeDir: home, env: { HOME: home, CODEX_HOME: join(fixtureRoot, 'codex') } }
+    })
+    const service = fixture.service as unknown as HarnessConfigService
+    const defaults = service.defaultRoots()
+    expect(defaults.claudeSkills).toBe(join(home, '.claude', 'skills'))
+    expect(defaults.codexHome).toBe(join(fixtureRoot, 'codex'))
+    expect(defaults.opencodeCommands).toBe(join(home, '.config', 'opencode', 'commands'))
+    expect(service.scopesForRootKeys(['claudeSkills', 'codexHome'])).toEqual([
+      { agentKind: 'claude', resourceType: 'skills' },
+      { agentKind: 'codex', resourceType: 'agents' }
+    ])
+    expect(service.scopesForRootKeys([])).toEqual([])
+  })
+})

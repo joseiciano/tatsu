@@ -31,6 +31,7 @@ import {
   type Config
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
+import { normalizeConfigFolder, sanitizeHarnessConfigRoots } from '../harness-config'
 
 /** Flatten the nested `repoRoot → worktreePath → text` shape on disk
  *  into the flat `worktreePath → text` map the slice carries in memory.
@@ -146,7 +147,9 @@ export function buildInitialAppState(
       dismissedAnnouncementIds: Array.isArray(config.dismissedAnnouncementIds)
         ? config.dismissedAnnouncementIds.filter((x): x is string => typeof x === 'string')
         : [],
-      announcementsMuted: config.announcementsMuted === true
+      announcementsMuted: config.announcementsMuted === true,
+      harnessConfigRoots: sanitizeHarnessConfigRoots(config.harnessConfigRoots),
+      harnessConfigSourceDir: normalizeConfigFolder(config.harnessConfigSourceDir)
     }
   }
 }

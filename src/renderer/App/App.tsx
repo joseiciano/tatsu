@@ -223,7 +223,7 @@ function DesktopApp(): JSX.Element {
   // show in the sidebar immediately on submit so the user sees the new entry
   // right away instead of waiting on the modal.
   const [showSettings, setShowSettings] = useState(false)
-  const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | undefined>(undefined)
+  const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | 'config-folders' | undefined>(undefined)
   const [showConfig, setShowConfig] = useState(false)
   const showConfigRef = useRef(showConfig)
   showConfigRef.current = showConfig
@@ -822,7 +822,14 @@ const setQuestStep = useCallback((next: QuestStep) => {
 
   const configOverlay = showConfig ? (
     <div className="fixed inset-0 z-50">
-      <Config onClose={() => setShowConfig(false)} />
+      <Config
+        onClose={() => setShowConfig(false)}
+        onOpenConfigFolders={() => {
+          setShowConfig(false)
+          setSettingsInitialSection('config-folders')
+          setShowSettings(true)
+        }}
+      />
     </div>
   ) : null
 

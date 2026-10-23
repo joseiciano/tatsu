@@ -47,7 +47,8 @@ import type {
   HarnessConfigPrepareDeleteRequest,
   HarnessConfigPrepareUpdateRequest,
   HarnessConfigReadRequest,
-  HarnessConfigScopeRequest
+  HarnessConfigScopeRequest,
+  HarnessConfigSetRootRequest
 } from '../types'
 
 export type { ElectronOnlyHelpers }
@@ -373,6 +374,11 @@ export function buildBackend(
     setGithubToken: (token: string) => req('settings:setGithubToken', token),
     clearGithubToken: () => req('settings:clearGithubToken'),
     setHarnessStarred: (starred: boolean) => req('settings:setHarnessStarred', starred),
+    setHarnessConfigRoot: (request: HarnessConfigSetRootRequest) =>
+      req('settings:setHarnessConfigRoot', request),
+    setHarnessConfigSourceDir: (path: string | null) =>
+      req('settings:setHarnessConfigSourceDir', path),
+    getHarnessConfigFolderDefaults: () => req('settings:getHarnessConfigFolderDefaults'),
 
     getVersion: () => req('updater:getVersion'),
     readRecentLog: (maxLines?: number) => req('debug:readRecentLog', maxLines),

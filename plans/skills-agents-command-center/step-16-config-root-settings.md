@@ -2,13 +2,13 @@
 goal: Let users choose the harness configuration folders and the template source folder in Settings
 date_created: 2026-10-22
 last_updated: 2026-10-22
-status: 'Planned'
+status: 'Completed'
 tags: [feature, settings, main-process, harness-config, templates]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 16 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md) and the first step of the template track (Steps 16 to 22). It wires the existing but unused `knownRoots` dependency of the harness config service to a persisted setting, so users can say where each harness keeps its agents, skills, and commands. It also adds the setting for the template source folder that [Step 18](./step-18-template-source-model.md) reads and writes. Terminology follows [implementation-details.md](./implementation-details.md).
 
@@ -36,26 +36,26 @@ Today `src/main/index.ts` constructs the service without `knownRoots`, so every 
 
 - **GOAL-001**: Make both folder settings part of `AppState` and persisted config.
 
-- [ ] **TASK-001**: Add the root-key union and list to `src/shared/state/harness-config/types.ts` and export them from the barrel.
-- [ ] **TASK-002**: Add `harnessConfigRoots` and `harnessConfigSourceDir` to the settings `State`, initial state, events (`settings/harnessConfigRootsChanged`, `settings/harnessConfigSourceDirChanged`), and reducer.
-- [ ] **TASK-003**: Persist both fields in `src/main/persistence/types.ts` and seed them in `src/main/build-initial-state/build-initial-state.ts`. Drop unknown keys and non-absolute values when loading.
-- [ ] **TASK-004**: Add both fields to `mergeWireSnapshot` in `src/shared/state/index.ts`.
+- [x] **TASK-001**: Add the root-key union and list to `src/shared/state/harness-config/types.ts` and export them from the barrel.
+- [x] **TASK-002**: Add `harnessConfigRoots` and `harnessConfigSourceDir` to the settings `State`, initial state, events (`settings/harnessConfigRootsChanged`, `settings/harnessConfigSourceDirChanged`), and reducer.
+- [x] **TASK-003**: Persist both fields in `src/main/persistence/types.ts` and seed them in `src/main/build-initial-state/build-initial-state.ts`. Drop unknown keys and non-absolute values when loading.
+- [x] **TASK-004**: Add both fields to `mergeWireSnapshot` in `src/shared/state/index.ts`.
 
 ### Implementation Phase 2: Service and transport
 
 - **GOAL-002**: Make the service resolve user-chosen roots live.
 
-- [ ] **TASK-005**: Change `HarnessConfigServiceDeps.knownRoots` to a getter and update `resolveRoot()` to call it. Update service tests that pass a static record.
-- [ ] **TASK-006**: In `src/main/index.ts`, pass `knownRoots: () => store.getState().settings.harnessConfigRoots`.
-- [ ] **TASK-007**: Add `settings:setHarnessConfigRoot` (`{ key, path | null }`) and `settings:setHarnessConfigSourceDir` (`path | null`) handlers. Validate, persist, dispatch, then rescan the affected scopes.
-- [ ] **TASK-008**: Add both methods to `ElectronAPI` in `src/renderer/types/types.ts`.
+- [x] **TASK-005**: Change `HarnessConfigServiceDeps.knownRoots` to a getter and update `resolveRoot()` to call it. Update service tests that pass a static record.
+- [x] **TASK-006**: In `src/main/index.ts`, pass `knownRoots: () => store.getState().settings.harnessConfigRoots`.
+- [x] **TASK-007**: Add `settings:setHarnessConfigRoot` (`{ key, path | null }`) and `settings:setHarnessConfigSourceDir` (`path | null`) handlers. Validate, persist, dispatch, then rescan the affected scopes.
+- [x] **TASK-008**: Add both methods to `ElectronAPI` in `src/renderer/types/types.ts`.
 
 ### Implementation Phase 3: UI
 
 - **GOAL-003**: Let users see and change the folders.
 
-- [ ] **TASK-009**: Add a "Config folders" section to Settings with one path input per root key, grouped by harness, plus the template source folder. Show the default as placeholder, a reset button per row, and a "Choose…" button that uses the existing folder picker.
-- [ ] **TASK-010**: On the Config page, make the "known root is unavailable" message link to that Settings section.
+- [x] **TASK-009**: Add a "Config folders" section to Settings with one path input per root key, grouped by harness, plus the template source folder. Show the default as placeholder, a reset button per row, and a "Choose…" button that uses the existing folder picker.
+- [x] **TASK-010**: On the Config page, make the "known root is unavailable" message link to that Settings section.
 
 ## 3. Alternatives
 

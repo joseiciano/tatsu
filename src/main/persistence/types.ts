@@ -6,6 +6,7 @@ import type {
 import type { CostsState } from '../../shared/state/costs'
 import type { SnoozeEntry } from '../../shared/state/snooze'
 import type { HarnessConfigDesiredResource } from '../harness-config'
+import type { HarnessConfigRoots } from '../../shared/state/harness-config'
 
 import type { AgentKind } from '../../shared/state/terminals'
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
@@ -107,4 +108,6 @@ export interface Config {
   announcementsMuted?: boolean
   scratchpadNotes?: Record<string, Record<string, string>>
   harnessConfig?: PersistedHarnessConfig
+  harnessConfigRoots?: HarnessConfigRoots
+  harnessConfigSourceDir?: string
 }

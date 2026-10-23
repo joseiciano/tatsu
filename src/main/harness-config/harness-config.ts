@@ -19,6 +19,7 @@ import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
   type HarnessConfigFileRef,
+  type HarnessConfigRootKey,
   type HarnessConfigScope,
   type HarnessConfigSyncDirection,
   type HarnessConfigSyncPlan,
@@ -687,7 +688,15 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return scopes
   }
 
-  private defaultRoots(): Record<string, string> {
+  scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[] {
+    const wanted = new Set<string>(keys)
+    return this.availableScopes().filter((scope) => {
+      const rootKey = this.getHarness(scope.agentKind).resources[scope.resourceType]?.rootKey
+      return rootKey !== undefined && wanted.has(rootKey)
+    })
+  }
+
+  defaultRoots(): Record<HarnessConfigRootKey, string> {
     const home = this.deps.homeDir ?? this.deps.env?.HOME ?? homedir()
     const codexHome = this.deps.env?.CODEX_HOME || join(home, '.codex')
     const claudeHome = this.deps.env?.CLAUDE_CONFIG_DIR || join(home, '.claude')
@@ -711,7 +720,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private resolveRoot(descriptor: HarnessConfigResourceResolver): string {
     const rootKey = descriptor.rootKey
     if (!rootKey) throw new HarnessConfigError('unsupported-scope', 'The resolver has no verified known root')
-    const configured = this.deps.knownRoots?.[rootKey]
+    const configured = (this.deps.knownRoots?.() as Record<string, string | undefined> | undefined)?.[rootKey]
     // OPENCODE_CONFIG_DIR has no verified contract with the managed entrypoints this
     // service knows (agents/skills/commands subdirectories). Honoring it would point
     // scans at a root whose layout we cannot verify; silently ignoring it would scan
@@ -725,7 +734,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     ) {
       throw new HarnessConfigError('unsupported-scope', 'The resolver has multiple active configuration roots')
     }
-    const value = configured === undefined ? this.defaultRoots()[rootKey] : configured
+    const value = configured === undefined ? (this.defaultRoots() as Record<string, string>)[rootKey] : configured
     if (!value || value.trim() === '' || !isAbsolute(value)) {
       throw new HarnessConfigError('unsupported-scope', 'The resolver known root is unavailable')
     }
