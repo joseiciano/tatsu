@@ -7,6 +7,7 @@ interface MonacoDiffEditorProps {
   modified: string
   filePath?: string
   readOnly?: boolean
+  sideBySide?: boolean
   fontFamily?: string
   fontSize?: number
   onModifiedChange?: (value: string) => void
@@ -22,6 +23,7 @@ export function MonacoDiffEditor({
   modified,
   filePath,
   readOnly = true,
+  sideBySide = false,
   fontFamily,
   fontSize,
   onModifiedChange,
@@ -54,7 +56,7 @@ export function MonacoDiffEditor({
 
     const editor = monaco.editor.createDiffEditor(hostRef.current, {
       theme: 'harness',
-      renderSideBySide: false,
+      renderSideBySide: sideBySide,
       readOnly,
       originalEditable: false,
       automaticLayout: true,
@@ -174,6 +176,10 @@ export function MonacoDiffEditor({
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly })
   }, [readOnly])
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({ renderSideBySide: sideBySide })
+  }, [sideBySide])
 
   useEffect(() => {
     editorRef.current?.updateOptions({
