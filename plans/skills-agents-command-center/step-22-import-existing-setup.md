@@ -1,14 +1,14 @@
 ---
 goal: Import an existing file-based template setup into the Tatsu template source folder
 date_created: 2026-10-22
-last_updated: 2026-10-22
-status: 'Planned'
+last_updated: 2026-10-23
+status: 'Completed'
 tags: [feature, main-process, harness-config, templates, migration]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 22 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It adds a one-time import that turns an existing template-and-build setup (for example a dotfiles folder that renders agents, skills, and commands with scripts) into Tatsu templates and fragments ([Step 18](./step-18-template-source-model.md)). After import, Tatsu owns the harness folders and the old build should stop linking into them. Terminology follows [implementation-details.md](./implementation-details.md).
 
@@ -37,15 +37,15 @@ The reference layout this step is designed against:
 
 - **GOAL-001**: Convert a file listing into templates, fragments, and a report.
 
-- [ ] **TASK-001**: Add `src/main/template-import/` with a pure `importTemplateSetup(listing, options)` returning templates, fragments, and a report of dropped blocks, unsupported settings, duplicates, and covered commands.
-- [ ] **TASK-002**: Add a transport handler `harnessConfig:previewImport` that reads chosen folders and returns the report, and `harnessConfig:applyImport` that writes the confirmed result through `TemplateSourceStore`.
+- [x] **TASK-001**: Add `src/main/template-import/` with a pure `importTemplateSetup(listing, options)` returning templates, fragments, and a report of dropped blocks, unsupported settings, duplicates, and covered commands.
+- [x] **TASK-002**: Add a transport handler `harnessConfig:previewImport` that reads chosen folders and returns the report, and `harnessConfig:applyImport` that writes the confirmed result through `TemplateSourceStore`.
 
 ### Implementation Phase 2: Wizard
 
 - **GOAL-002**: Make the import reviewable.
 
-- [ ] **TASK-003**: Add `ConfigImportWizard.tsx` with folder selection, preview, conflict choices, and confirmation.
-- [ ] **TASK-004**: Show the post-import cut-over guidance per REQ-008.
+- [x] **TASK-003**: Add `ConfigImportWizard.tsx` with folder selection, preview, conflict choices, and confirmation.
+- [x] **TASK-004**: Show the post-import cut-over guidance per REQ-008.
 
 ## 3. Alternatives
 
