@@ -46,6 +46,8 @@ The end state that proves it works:
 
 ## Gotchas
 
+- Only skill → command for Opencode has run. Command → skill and the Claude
+  "already available" notice come from source and are unproven.
 - `Create command` appears both as row actions and as the submit button. Use
   `{ name: 'Create command', exact: true }` for the submit button; row actions
   are labeled `Create command from <name>`.

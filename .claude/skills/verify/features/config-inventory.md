@@ -41,6 +41,9 @@ The end state that proves it works:
 
 ## Gotchas
 
+- Run so far: entry point 1, the tabs, the seeded rows with `Disk only`, and
+  `Managed elsewhere` on `linked-skill`. The agent filter, search, and entry
+  points 2 and 3 come from source.
 - Entry point 2 needs an open repository, and the seed adds none. Driving it
   needs a git repo under the scratch dir, added via **Open Repository**, which
   uses the native picker. Unproven in the web client.

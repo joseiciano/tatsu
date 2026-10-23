@@ -39,7 +39,8 @@ mkdir -p "$SANDBOX_HOME" "$DATA_DIR" "$EVIDENCE"
 git -C "$REPO" rev-parse HEAD > "$EVIDENCE/git-rev.txt"
 
 LOG="$SCRATCH/server.log"
-HOME="$SANDBOX_HOME" HARNESS_DATA_DIR="$DATA_DIR" \
+env -u CLAUDE_CONFIG_DIR -u CODEX_HOME -u OPENCODE_CONFIG_DIR \
+  HOME="$SANDBOX_HOME" HARNESS_DATA_DIR="$DATA_DIR" \
   node dist-headless/main/index.js --port 0 --host 127.0.0.1 > "$LOG" 2>&1 &
 PID=$!
 
