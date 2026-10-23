@@ -248,6 +248,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     setDialogActionError(null)
     setDialogActionNotice(null)
     setDialogReviewUsable(true)
+    setTemplateOpenRef(null)
   }, [invalidateRead])
 
   // REQ-009: an active-backend switch invalidates every page-local
