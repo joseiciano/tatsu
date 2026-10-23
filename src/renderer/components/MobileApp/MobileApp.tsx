@@ -4,7 +4,7 @@ import { useWorktrees, usePanes, useTerminals, usePrs, useSettings, useSnooze } 
 import { useBackend } from '../../backend'
 import { groupWorktrees, type WorktreeGroup } from '../../worktree-sort'
 import { getLeaves } from '../../../shared/state/terminals'
-import { isChatRuntimeId } from '../../../shared/state/json-claude'
+import { chatRuntimeAvailable } from '../../../shared/state/json-claude'
 import type { PtyStatus, TerminalTab, Worktree, PRStatus } from '../../types'
 import { MobileTerminal } from '../MobileTerminal'
 import { MobileRightPanel } from '../MobileRightPanel'
@@ -260,6 +260,7 @@ interface HeaderProps {
 }
 
 function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, pickerOpen, onTogglePicker, onSelectTab, onConvertTabType, rightPanelOpen, onToggleRightPanel }: HeaderProps): JSX.Element {
+  const chatAgentsEnabled = useSettings().experimentalChatAgentsEnabled
   const repoLabel = worktree ? worktree.repoRoot.split('/').pop() || worktree.repoRoot : null
   return (
     <header className="shrink-0 flex items-stretch border-b border-border bg-panel h-11">
@@ -292,7 +293,7 @@ function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, picker
         {tabs.map((tab) => {
           const convertible =
             !!onConvertTabType &&
-            ((tab.type === 'agent' && isChatRuntimeId(tab.agentKind ?? 'claude')) || tab.type === 'json-claude')
+            ((tab.type === 'agent' && chatRuntimeAvailable(tab.agentKind ?? 'claude', chatAgentsEnabled)) || tab.type === 'json-claude')
           return (
             <TabChip
               key={tab.id}

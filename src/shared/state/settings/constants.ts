@@ -66,6 +66,7 @@ export const initialSettings: SettingsState = {
   viewerLogin: null,
   harnessStarred: null,
   autoUpdateEnabled: true,
+  experimentalChatAgentsEnabled: false,
   harnessSystemPromptEnabled: true,
   harnessSystemPrompt: '',
   harnessSystemPromptMain: '',

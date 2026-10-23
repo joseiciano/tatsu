@@ -75,6 +75,7 @@ export interface Config {
   harnessAutoStarred?: boolean
   costs?: CostsState
   autoUpdateEnabled?: boolean
+  experimentalChatAgentsEnabled?: boolean
   shareClaudeSettings?: boolean
   hooksConsent?: 'pending' | 'accepted' | 'declined'
   hooksMigratedToGlobal?: boolean

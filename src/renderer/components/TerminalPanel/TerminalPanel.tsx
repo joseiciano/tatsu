@@ -9,10 +9,10 @@ import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import type { WorkspacePane, TerminalTab, PtyStatus, AgentKind } from '../../types'
 import { AGENT_REGISTRY, agentDisplayName, cycleAltAgent } from '../../../shared/agent-registry'
-import { isChatRuntimeId } from '../../../shared/state/json-claude'
+import { chatRuntimeAvailable } from '../../../shared/state/json-claude'
 import { Tooltip } from '../Tooltip'
 import { repoNameColor } from '../RepoIcon'
-import { getClientId, useTerminalProgress, useTerminalSession } from '../../store'
+import { getClientId, useSettings, useTerminalProgress, useTerminalSession } from '../../store'
 import { useBackend } from '../../backend'
 
 /** Chip shown in the tab bar when other clients are attached to the
@@ -420,6 +420,7 @@ export function TerminalPanel({
   topBarTrailingExtendPx = 0,
   showAppTitle = false
 }: TerminalPanelProps): JSX.Element {
+  const chatAgentsEnabled = useSettings().experimentalChatAgentsEnabled
   const backend = useBackend()
   const { setNodeRef: setPaneDropRef } = useDroppable({ id: pane.id })
   const slotHostRef = useRef<HTMLDivElement | null>(null)
@@ -594,7 +595,7 @@ export function TerminalPanel({
               const isJsonClaude = tab.type === 'json-claude'
               const convertible =
                 !!onConvertTabType &&
-                ((tab.type === 'agent' && isChatRuntimeId(tab.agentKind ?? 'claude')) || isJsonClaude)
+                ((tab.type === 'agent' && chatRuntimeAvailable(tab.agentKind ?? 'claude', chatAgentsEnabled)) || isJsonClaude)
               return (
                 <SortableTab
                   key={tab.id}

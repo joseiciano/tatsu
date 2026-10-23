@@ -68,6 +68,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, piModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
+    case 'settings/experimentalChatAgentsEnabledChanged':
+      return { ...state, experimentalChatAgentsEnabled: event.payload }
     case 'settings/harnessSystemPromptEnabledChanged':
       return { ...state, harnessSystemPromptEnabled: event.payload }
     case 'settings/harnessSystemPromptChanged':

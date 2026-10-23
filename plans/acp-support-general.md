@@ -62,11 +62,19 @@ Done on branch `acp-support` (rebased on main, which added the Pi agent):
 - Phase 7 (partial) — `available_commands_update` → slash commands;
   `plan` → the TodoWrite card.
 
+- Phase 8 (partial) — `settings.experimentalChatAgentsEnabled` (default
+  off) gates every OpenCode/Codex chat entry point: default tab type,
+  "Switch to Chat", conversion in PanesFSM, session start in main, and the
+  per-agent Interface toggles in Settings; the switch lives under
+  Settings → Experimental → Chat agents.
+
 Not done — see Phases 7, 8:
 
 - `session_info_update` → tab title; `usage_update` cost (see below).
-- A signed + notarized build has not yet run with the new layout.
-- Release gate flag.
+- A signed + notarized build has not yet run with the new layout
+  (dispatch `build-mac.yml` from this branch, install the DMG, open a
+  chat tab per agent with the flag on).
+- Flip the flag default on after that, and delete it one release later.
 
 Probe findings (2026-10-23, bundled binaries, this machine):
 
@@ -412,10 +420,13 @@ runtime). Required behavior for OpenCode and Codex:
 
 ### Phase 8 — Release gate and docs
 
-- Decision: gate OpenCode/Codex chat behind a settings flag (default
-  off) until Phase 5 and Phase 6 are verified in a signed build. Today
-  the default tab type keeps new tabs on terminal, but "Switch to Chat"
-  is visible to every user; the flag hides that too.
+- Done: `experimentalChatAgentsEnabled` (default off) hides every
+  OpenCode/Codex chat entry point; `chatRuntimeAvailable(kind, flag)` in
+  `shared/state/json-claude` is the one predicate, used by PanesFSM
+  (`chatEnabledFor`), main's session start, and the renderer's
+  convert/switch affordances.
+- Open: verify in a signed build, flip the default, delete the flag one
+  release later.
 - Update `AGENTS.md`: chat tabs route through `ChatRuntimeRegistry` to
   `ClaudeAcpRuntime` (SDK) or `AcpStdioRuntime` (OpenCode, Codex); list
   `acp-stdio.ts`, `acp-stdio-client.ts`, `runtime-path-resolver.ts`;

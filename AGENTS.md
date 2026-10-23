@@ -586,8 +586,10 @@ hard dependency on `gh`.
   but main routes those calls through `ChatRuntimeRegistry` by the
   session's agent kind: `claude` → `ClaudeAcpRuntime` (Agent SDK
   `query()`), `opencode` / `codex` → `AcpStdioRuntime` (spawned agent
-  speaking ACP over stdio). Pi has no chat runtime; `isChatRuntimeId`
-  from `shared/state/json-claude` gates every chat entry point.
+  speaking ACP over stdio). Pi has no chat runtime, and OpenCode/Codex
+  chat is behind `settings.experimentalChatAgentsEnabled` (default off);
+  `chatRuntimeAvailable(kind, flag)` from `shared/state/json-claude` is
+  the one predicate every chat entry point uses.
 - **Bundled agent runtimes and packaging** — the agents' native binaries
   (`@anthropic-ai/claude-agent-sdk-<os>-<arch>`, `opencode-<os>-<arch>`,
   `@openai/codex-<os>-<arch>`) are optional deps that pnpm keeps under

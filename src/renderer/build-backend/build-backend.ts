@@ -365,6 +365,7 @@ export function buildBackend(
     getAvailableEditors: () => req('config:getAvailableEditors'),
 
     downloadRuntime: (agentKind: DownloadableRuntime) => req('runtimes:download', agentKind),
+    setExperimentalChatAgentsEnabled: (enabled: boolean) => req('config:setExperimentalChatAgentsEnabled', enabled),
     authenticateJsonClaude: (sessionId: string, methodId: string, apiKey?: string) =>
       req('jsonClaude:authenticate', sessionId, methodId, apiKey),
     refreshRuntimes: () => req('runtimes:refresh'),

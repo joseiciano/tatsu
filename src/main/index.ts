@@ -77,7 +77,7 @@ import type { AddRepoResult } from '../shared/repo-pick'
 import { isWorktreeMerged } from '../shared/state/prs'
 import { MAX_WAKE } from '../shared/state/snooze'
 import { hasScratchpadNote } from '../shared/state/scratchpad'
-import { isChatRuntimeId } from '../shared/state/json-claude'
+import { chatRuntimeAvailable, type ChatRuntimeId } from '../shared/state/json-claude'
 import {
   DEFAULT_LIGHT_THEME,
   DEFAULT_DARK_THEME,
@@ -776,6 +776,7 @@ const panesFSM = new PanesFSM(store, {
     return getAgent(kind).latestSessionId(wtPath)
   },
   getDefaultAgentKind: () => toAgentKind(store.getSnapshot().state.settings.defaultAgent),
+  chatEnabledFor: (agentKind) => chatAgentEnabled(agentKind),
   getDefaultTabType: (agentKind) => {
     const s = store.getSnapshot().state.settings
     if (agentKind === 'opencode') {
@@ -820,6 +821,10 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
     }
   }
   return undefined
+}
+
+function chatAgentEnabled(kind: AgentKind | undefined): kind is ChatRuntimeId {
+  return chatRuntimeAvailable(kind, store.getSnapshot().state.settings.experimentalChatAgentsEnabled)
 }
 
 function findJsonClaudeTab(sessionId: string): { worktreePath: string; tab: TerminalTab } | undefined {
@@ -869,8 +874,8 @@ function startJsonClaudeSession(
   if (!kind) {
     throw new Error(`No agent kind for json-claude session ${sessionId}`)
   }
-  if (!isChatRuntimeId(kind)) {
-    throw new Error(`Agent kind ${kind} has no chat runtime (session ${sessionId})`)
+  if (!chatAgentEnabled(kind)) {
+    throw new Error(`Agent kind ${kind} has no chat runtime enabled (session ${sessionId})`)
   }
   // Route explicitly by agent kind for the first start — there is no slice
   // entry yet to route on, and hasSession()/capabilities need a runtime.
@@ -1782,6 +1787,20 @@ function registerIpcHandlers(): void {
     store.dispatch({
       type: 'settings/shareClaudeSettingsChanged',
       payload: config.shareClaudeSettings !== false
+    })
+    return true
+  })
+
+  transport.onRequest('config:setExperimentalChatAgentsEnabled', (_ctx, enabled: boolean) => {
+    if (enabled) {
+      config.experimentalChatAgentsEnabled = true
+    } else {
+      delete config.experimentalChatAgentsEnabled
+    }
+    saveConfig(config)
+    store.dispatch({
+      type: 'settings/experimentalChatAgentsEnabledChanged',
+      payload: config.experimentalChatAgentsEnabled === true
     })
     return true
   })

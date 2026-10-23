@@ -4,6 +4,7 @@ import {
   jsonClaudeReducer,
   stripJsonClaudeEntries,
   defaultAcpCapabilities,
+  chatRuntimeAvailable,
   type JsonClaudeState,
   type JsonClaudeChatEntry
 } from '.'
@@ -1530,5 +1531,20 @@ describe('stripJsonClaudeEntries', () => {
     expect(stripped.sessions[SID]).not.toBe(state.sessions[SID])
     expect(stripped.sessions[SID].entries).toEqual([])
     expect(stripped.sessions[SID].entriesHydrated).toBe(false)
+  })
+})
+
+describe('chatRuntimeAvailable', () => {
+  it.each([
+    { name: 'claude with flag off', kind: 'claude', flag: false, expected: true },
+    { name: 'claude with flag on', kind: 'claude', flag: true, expected: true },
+    { name: 'opencode with flag off', kind: 'opencode', flag: false, expected: false },
+    { name: 'opencode with flag on', kind: 'opencode', flag: true, expected: true },
+    { name: 'codex with flag off', kind: 'codex', flag: false, expected: false },
+    { name: 'codex with flag on', kind: 'codex', flag: true, expected: true },
+    { name: 'pi with flag on', kind: 'pi', flag: true, expected: false },
+    { name: 'undefined kind with flag on', kind: undefined, flag: true, expected: false }
+  ] as const)('$name → $expected', ({ kind, flag, expected }) => {
+    expect(chatRuntimeAvailable(kind, flag)).toBe(expected)
   })
 })

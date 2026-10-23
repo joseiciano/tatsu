@@ -28,6 +28,10 @@ interface PanesFSMOptions {
    *  returns 'json', a default agent tab of that kind spawns as a json-
    *  claude tab instead of an xterm-hosted one. */
   getDefaultTabType?: (agentKind: AgentKind) => 'xterm' | 'json'
+  /** Whether a chat tab may be created or converted to for this agent kind
+   *  right now (release gate for OpenCode/Codex). Defaults to the static
+   *  runtime list. */
+  chatEnabledFor?: (agentKind: AgentKind) => boolean
   /** Tear down the PTY backing a closed tab. Called for agent + shell
    *  tabs when they're removed from the tree (closeTab, restartAgentTab,
    *  clearForWorktree). Authoritative on the main side so PTY lifetime
@@ -235,7 +239,7 @@ export class PanesFSM {
     // side we pre-spawn the subprocess and send it as the first message
     // via startJsonClaudeWithPrompt below.
     const wantsJson =
-      isChatRuntimeId(agentKind) &&
+      this._chatEnabled(agentKind) &&
       this.opts.getDefaultTabType?.(agentKind) === 'json' &&
       !opts?.teleportSessionId
     let agentTab: TerminalTab
@@ -433,7 +437,7 @@ export class PanesFSM {
     if (!tab) return
     if (tab.type === newType) return
     if (tab.type !== 'agent' && tab.type !== 'json-claude') return
-    if (newType === 'json-claude' && !isChatRuntimeId(tab.agentKind ?? 'claude')) return
+    if (newType === 'json-claude' && !this._chatEnabled(tab.agentKind ?? 'claude')) return
     const sessionId = tab.sessionId ?? crypto.randomUUID()
     if (tab.type === 'agent') {
       this.opts.killTabPty?.(tabId)
@@ -492,6 +496,10 @@ export class PanesFSM {
       leaf.id === paneId ? { ...leaf, activeTabId: tabId } : leaf
     )
     this.commit(wtPath, updated)
+  }
+
+  private _chatEnabled(agentKind: AgentKind): boolean {
+    return this.opts.chatEnabledFor ? this.opts.chatEnabledFor(agentKind) : isChatRuntimeId(agentKind)
   }
 
   /** Record the agent-assigned session id on a json-claude tab once the

@@ -112,6 +112,16 @@ describe('settingsReducer', () => {
     expect(next.prReviewPrompt).toBe('Focus on security issues only.')
   })
 
+  it('experimentalChatAgentsEnabledChanged gates OpenCode/Codex chat, off by default', () => {
+    expect(initialSettings.experimentalChatAgentsEnabled).toBe(false)
+    const on = apply(initialSettings, {
+      type: 'settings/experimentalChatAgentsEnabledChanged',
+      payload: true
+    })
+    expect(on.experimentalChatAgentsEnabled).toBe(true)
+    expect(apply(on, { type: 'settings/experimentalChatAgentsEnabledChanged', payload: false }).experimentalChatAgentsEnabled).toBe(false)
+  })
+
   it('autoUpdateEnabledChanged toggles auto-update flag', () => {
     expect(initialSettings.autoUpdateEnabled).toBe(true)
     const off = apply(initialSettings, {

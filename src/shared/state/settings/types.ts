@@ -96,6 +96,10 @@ export interface SettingsState {
   viewerLogin: string | null
   harnessStarred: boolean | null
   autoUpdateEnabled: boolean
+  /** Release gate for OpenCode and Codex chat tabs. Off hides every chat
+   *  entry point for those agents until the download + login flows have
+   *  shipped in a signed build. */
+  experimentalChatAgentsEnabled: boolean
   harnessSystemPromptEnabled: boolean
   harnessSystemPrompt: string
   harnessSystemPromptMain: string
@@ -216,6 +220,7 @@ export type SettingsEvent =
   | { type: 'settings/codexModelChanged'; payload: string | null }
   | { type: 'settings/opencodeModelChanged'; payload: string | null }
   | { type: 'settings/autoUpdateEnabledChanged'; payload: boolean }
+  | { type: 'settings/experimentalChatAgentsEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptChanged'; payload: string }
   | { type: 'settings/harnessSystemPromptMainChanged'; payload: string }
