@@ -154,7 +154,7 @@ function renderForHarness(
 
   const marker = templateMarker(template.kind, template.name)
   const frontmatter: Record<string, unknown> = {}
-  if (output.frontmatterName || block.name !== undefined) frontmatter.name = outputName
+  if (output.frontmatterName) frontmatter.name = outputName
   if (template.description.length > 0 || 'description' in block.frontmatter) {
     frontmatter.description = template.description
   }

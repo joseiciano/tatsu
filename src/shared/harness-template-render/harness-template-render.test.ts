@@ -117,6 +117,16 @@ describe('renderTemplates golden output', () => {
     )
   })
 
+  it('names path-named Opencode agents by file only, even with a block name override', () => {
+    const renamed = template({ name: 'reviewer', harnesses: { opencode: { name: 'critic', frontmatter: {} } } })
+    const { resources, errors } = renderTemplates([renamed], fragments)
+    expect(errors).toEqual([])
+    expect(resources[0].relativePath).toBe('critic.md')
+    expect(resources[0].content).toBe(
+      ['---', 'description: Reviews code', '---', '<!-- tatsu-template: agent/reviewer -->', 'Review the diff.', ''].join('\n')
+    )
+  })
+
   it('renders a skill with inlined references, including a block name override', () => {
     const { resources, errors } = renderTemplates([skill], fragments)
     expect(errors).toEqual([])
