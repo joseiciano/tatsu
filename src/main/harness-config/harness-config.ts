@@ -15,7 +15,7 @@ import type { Stats } from 'fs'
 import { homedir } from 'os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path'
 
-import type { HarnessConfigResourceType } from '../../shared/agent-registry'
+import { resourcePathForName, type HarnessConfigResourceType } from '../../shared/agent-registry'
 import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
@@ -27,6 +27,7 @@ import {
   type HarnessConfigSyncStatus,
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
+import { readTemplateRef } from '../../shared/harness-template-render'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
 import type {
@@ -85,6 +86,13 @@ const markdownResolver = (
   nameToRelativePath
 })
 
+const sharedPath = (agentKind: ManagedHarnessKind, resourceType: HarnessConfigResourceType) =>
+  (name: string): string => {
+    const relativePath = resourcePathForName(agentKind, resourceType, name)
+    if (relativePath === null) throw new HarnessConfigError('invalid-name', 'The resolver cannot derive a resource path')
+    return relativePath
+  }
+
 const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
   claude: {
     agentKind: 'claude',
@@ -96,7 +104,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://code.claude.com/docs/en/sub-agents.md',
         'agents',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`
+        sharedPath('claude', 'agents')
       ),
       skills: markdownResolver(
         'claudeSkills',
@@ -104,7 +112,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://code.claude.com/docs/en/skills',
         'skills',
         /(?:^|\/)SKILL\.md$/,
-        (name) => `${name}/SKILL.md`,
+        sharedPath('claude', 'skills'),
         { aliasResourceTypes: ['commands'], maxDepth: 1 }
       ),
       commands: markdownResolver(
@@ -113,7 +121,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://code.claude.com/docs/en/skills',
         'commands',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('claude', 'commands'),
         { aliasSourceResourceTypes: ['skills'] }
       )
     }
@@ -128,7 +136,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://learn.chatgpt.com/docs/agent-configuration/agents-md.md',
         'agents',
         /^AGENTS(?:\.override)?\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('codex', 'agents'),
         { maxDepth: 0 }
       ),
       skills: markdownResolver(
@@ -137,7 +145,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://learn.chatgpt.com/docs/build-skills.md',
         'skills',
         /(?:^|\/)SKILL\.md$/,
-        (name) => `${name}/SKILL.md`,
+        sharedPath('codex', 'skills'),
         { maxDepth: 1 }
       ),
       commands: unsupported('codex-commands-unsupported-v1', 'Codex commands have no verified managed entrypoint')
@@ -153,7 +161,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://opencode.ai/docs/agents',
         'agents',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('opencode', 'agents'),
         { maxDepth: 0 }
       ),
       skills: markdownResolver(
@@ -162,7 +170,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://opencode.ai/docs/skills',
         'skills',
         /(?:^|\/)SKILL\.md$/,
-        (name) => `${name}/SKILL.md`,
+        sharedPath('opencode', 'skills'),
         { maxDepth: 1 }
       ),
       commands: markdownResolver(
@@ -171,7 +179,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://opencode.ai/docs/commands',
         'commands',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('opencode', 'commands'),
         { maxDepth: 0 }
       )
     }
@@ -1062,6 +1070,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         }
         const resourceLinkedFrom = rootLinkedFrom ?? linkedFrom
         if (resourceLinkedFrom) ref.linkedFrom = resourceLinkedFrom
+        const templateRef = readTemplateRef(bytes.toString('utf8'))
+        if (templateRef) ref.templateRef = templateRef
         byId.set(id, { ref, descriptor, root })
       }
     }
@@ -1184,6 +1194,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         updatedAt: resource.updatedAt
       }
       if (linkedFrom) ref.linkedFrom = linkedFrom
+      const templateRef = readTemplateRef(resource.content)
+      if (templateRef) ref.templateRef = templateRef
       entries.set(expectedId, {
         resource: { ...resource, id: expectedId, hash: contentHash },
         ref,
