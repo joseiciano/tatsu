@@ -121,6 +121,21 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
     }
     case 'settings/announcementsMutedChanged':
       return { ...state, announcementsMuted: event.payload }
+    case 'settings/harnessConfigRootsChanged': {
+      const { key, path } = event.payload
+      const current = state.harnessConfigRoots
+      if (path === null) {
+        if (!(key in current)) return state
+        const next = { ...current }
+        delete next[key]
+        return { ...state, harnessConfigRoots: next }
+      }
+      if (current[key] === path) return state
+      return { ...state, harnessConfigRoots: { ...current, [key]: path } }
+    }
+    case 'settings/harnessConfigSourceDirChanged':
+      if (state.harnessConfigSourceDir === event.payload) return state
+      return { ...state, harnessConfigSourceDir: event.payload }
     default: {
       const _exhaustive: never = event
       void _exhaustive
