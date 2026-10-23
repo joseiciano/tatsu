@@ -75,6 +75,7 @@ import type { AddRepoResult } from '../shared/repo-pick'
 import { isWorktreeMerged } from '../shared/state/prs'
 import { MAX_WAKE } from '../shared/state/snooze'
 import { hasScratchpadNote } from '../shared/state/scratchpad'
+import { isChatRuntimeId } from '../shared/state/json-claude'
 import {
   DEFAULT_LIGHT_THEME,
   DEFAULT_DARK_THEME,
@@ -839,6 +840,9 @@ function startJsonClaudeSession(
     existing?.agentKind ?? agentKind ?? findJsonClaudeTabAgentKind(sessionId)
   if (!kind) {
     throw new Error(`No agent kind for json-claude session ${sessionId}`)
+  }
+  if (!isChatRuntimeId(kind)) {
+    throw new Error(`Agent kind ${kind} has no chat runtime (session ${sessionId})`)
   }
   // Route explicitly by agent kind for the first start — there is no slice
   // entry yet to route on, and hasSession()/capabilities need a runtime.

@@ -1,4 +1,10 @@
-import type { ChatRuntimeCapabilities, JsonClaudeState } from './types'
+import type { AgentKind, ChatRuntimeCapabilities, ChatRuntimeId, JsonClaudeState } from './types'
+
+export const CHAT_RUNTIME_IDS: readonly ChatRuntimeId[] = ['claude', 'opencode', 'codex']
+
+export function isChatRuntimeId(kind: AgentKind | undefined): kind is ChatRuntimeId {
+  return kind !== undefined && (CHAT_RUNTIME_IDS as readonly string[]).includes(kind)
+}
 
 /** Tool names that the approval card groups under "Allow edits this
  *  session". Granting any of these grants all of them — every tool that

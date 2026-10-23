@@ -13,6 +13,7 @@ import {
 } from '@dnd-kit/core'
 import type { PaneNode, PaneLeaf, PaneSplit, PtyStatus, AgentKind } from '../../types'
 import { getLeaves, findLeafByTabId } from '../../../shared/state/terminals'
+import { isChatRuntimeId } from '../../../shared/state/json-claude'
 import { TerminalPanel } from '../TerminalPanel'
 import { XTerminal } from '../XTerminal'
 import { DiffView } from '../DiffView'
@@ -618,7 +619,7 @@ export function WorkspaceView({
                         : undefined
                     }
                     onSwitchToChat={
-                      tab.type === 'agent' && onConvertTabType
+                      tab.type === 'agent' && isChatRuntimeId(tab.agentKind ?? 'claude') && onConvertTabType
                         ? (): void => onConvertTabType(worktreePath, tab.id, 'json-claude')
                         : undefined
                     }

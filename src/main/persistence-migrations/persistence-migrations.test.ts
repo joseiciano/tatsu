@@ -486,7 +486,6 @@ describe('v7 → v8: introduce harnessConfig', () => {
     runMigrations(c)
     expect(c.harnessConfig).toEqual({ version: 1, resources: [] })
     expect(c.schemaVersion).toBe(SCHEMA_VERSION)
-    expect(c.schemaVersion).toBe(SCHEMA_VERSION)
   })
 })
 

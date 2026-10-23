@@ -405,6 +405,32 @@ describe('PanesFSM.convertTabType', () => {
     const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
     expect(leaf.tabs[0].label).toBe('Opencode')
   })
+
+  it('leaves a pi agent tab and its PTY untouched when asked to convert to json-claude', () => {
+    const store = new Store()
+    const killTabPty = vi.fn()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      killTabPty
+    })
+    const wtPath = '/wt/convert-pi'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'agent-pi', type: 'agent', label: 'Pi', agentKind: 'pi' }],
+      activeTabId: 'agent-pi'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-pi', 'json-claude')
+
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    expect(leaf.tabs).toHaveLength(1)
+    expect(leaf.tabs[0]).toMatchObject({ id: 'agent-pi', type: 'agent', agentKind: 'pi' })
+    expect(leaf.activeTabId).toBe('agent-pi')
+    expect(killTabPty).not.toHaveBeenCalled()
+  })
 })
 
 describe('PanesFSM.ensureInitialized per-agent default tab type', () => {
@@ -453,6 +479,26 @@ describe('PanesFSM.ensureInitialized per-agent default tab type', () => {
     const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
     const chatTab = leaf.tabs.find((t) => t.type === 'json-claude')
     expect(chatTab).toBeUndefined()
+  })
+
+  it('creates an xterm agent tab for pi even when its default type is json', () => {
+    const store = new Store()
+    const startJsonClaudeWithPrompt = vi.fn()
+    const fsm = new PanesFSM(store, {
+      persist: () => {},
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null,
+      getDefaultTabType: () => 'json',
+      startJsonClaudeWithPrompt
+    })
+    const wtPath = '/wt/acp-pi-default'
+    fsm.ensureInitialized(wtPath, { agentKind: 'pi', initialPrompt: 'hello pi' })
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    expect(leaf.tabs.find((t) => t.type === 'json-claude')).toBeUndefined()
+    const agentTab = leaf.tabs.find((t) => t.type === 'agent')
+    expect(agentTab).toMatchObject({ agentKind: 'pi', initialPrompt: 'hello pi' })
+    expect(leaf.activeTabId).toBe(agentTab!.id)
+    expect(startJsonClaudeWithPrompt).not.toHaveBeenCalled()
   })
 })
 

@@ -17,6 +17,7 @@ import {
 } from '../../shared/state/terminals'
 import type { PersistedPaneNode } from '../persistence'
 import { agentDisplayName, getAgentInfo } from '../../shared/agent-registry'
+import { isChatRuntimeId } from '../../shared/state/json-claude'
 
 interface PanesFSMOptions {
   persist: (panes: Record<string, PaneNode>) => void
@@ -233,6 +234,7 @@ export class PanesFSM {
     // side we pre-spawn the subprocess and send it as the first message
     // via startJsonClaudeWithPrompt below.
     const wantsJson =
+      isChatRuntimeId(agentKind) &&
       this.opts.getDefaultTabType?.(agentKind) === 'json' &&
       !opts?.teleportSessionId
     let agentTab: TerminalTab
@@ -430,6 +432,7 @@ export class PanesFSM {
     if (!tab) return
     if (tab.type === newType) return
     if (tab.type !== 'agent' && tab.type !== 'json-claude') return
+    if (newType === 'json-claude' && !isChatRuntimeId(tab.agentKind ?? 'claude')) return
     const sessionId = tab.sessionId ?? crypto.randomUUID()
     if (tab.type === 'agent') {
       this.opts.killTabPty?.(tabId)

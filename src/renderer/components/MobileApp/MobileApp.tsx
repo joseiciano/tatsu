@@ -4,6 +4,7 @@ import { useWorktrees, usePanes, useTerminals, usePrs, useSettings, useSnooze } 
 import { useBackend } from '../../backend'
 import { groupWorktrees, type WorktreeGroup } from '../../worktree-sort'
 import { getLeaves } from '../../../shared/state/terminals'
+import { isChatRuntimeId } from '../../../shared/state/json-claude'
 import type { PtyStatus, TerminalTab, Worktree, PRStatus } from '../../types'
 import { MobileTerminal } from '../MobileTerminal'
 import { MobileRightPanel } from '../MobileRightPanel'
@@ -291,7 +292,7 @@ function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, picker
         {tabs.map((tab) => {
           const convertible =
             !!onConvertTabType &&
-            ((tab.type === 'agent' && tab.agentKind === 'claude') || tab.type === 'json-claude')
+            ((tab.type === 'agent' && isChatRuntimeId(tab.agentKind ?? 'claude')) || tab.type === 'json-claude')
           return (
             <TabChip
               key={tab.id}
