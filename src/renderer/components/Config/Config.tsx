@@ -16,6 +16,7 @@ import { ConfigTabs } from './ConfigTabs'
 import { ConfigResourceList, buildConfigResourceGroups } from './ConfigResourceList'
 import { ConfigEditor } from './ConfigEditor'
 import { ConfigSyncDialog } from './ConfigSyncDialog'
+import { ConfigTemplates } from './ConfigTemplates'
 import { decideFreshPlanOutcome, toConfigSyncReview } from './config-sync-review'
 import { deriveConfigConversionOutcome } from './config-conversion'
 import type {
@@ -30,7 +31,9 @@ import type {
   ConfigSelection,
   ConfigSyncReview,
   ConfigSyncStage,
-  ConfigTabDefinition
+  ConfigTabDefinition,
+  ConfigViewId,
+  ConfigViewTabDefinition
 } from './types'
 
 const TABS: readonly ConfigTabDefinition[] = [
@@ -38,6 +41,8 @@ const TABS: readonly ConfigTabDefinition[] = [
   { id: 'skills', label: 'Skills' },
   { id: 'commands', label: 'Commands' }
 ]
+
+const VIEW_TABS: readonly ConfigViewTabDefinition[] = [...TABS, { id: 'templates', label: 'Templates' }]
 
 const AGENT_FILTER_OPTIONS: readonly ConfigAgentFilterOption[] = [
   { id: 'all', label: 'All' },
@@ -122,6 +127,10 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
   const [activeTab, setActiveTab] = useState<HarnessConfigResourceType>('agents')
   const [agentFilter, setAgentFilter] = useState<ConfigAgentFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [templatesDirty, setTemplatesDirty] = useState(false)
+  const [templateOpenRef, setTemplateOpenRef] = useState<string | null>(null)
+  const activeView: ConfigViewId = templatesOpen ? 'templates' : activeTab
 
   const [selected, setSelected] = useState<ConfigSelection | null>(null)
   const [selectedRef, setSelectedRef] = useState<HarnessConfigFileRef | null>(null)
@@ -239,6 +248,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     setDialogActionError(null)
     setDialogActionNotice(null)
     setDialogReviewUsable(true)
+    setTemplateOpenRef(null)
   }, [invalidateRead])
 
   // REQ-009: an active-backend switch invalidates every page-local
@@ -266,9 +276,9 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         : false
 
   const confirmDiscard = useCallback((): boolean => {
-    if (!isDirty) return true
+    if (!isDirty && !templatesDirty) return true
     return window.confirm('Discard unsaved changes in the Config editor?')
-  }, [isDirty])
+  }, [isDirty, templatesDirty])
 
   // A config-folder change in Settings moves the roots under every scope,
   // so drop the per-session scanned bookkeeping and per-scope errors and
@@ -489,13 +499,33 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
   }, [invalidateRead])
 
   const handleTabChange = useCallback(
-    (tab: HarnessConfigResourceType) => {
-      if (tab === activeTab) return
+    (view: ConfigViewId) => {
+      if (view === activeView) return
       if (!confirmDiscard()) return
-      setActiveTab(tab)
-      clearSelectionAndEditor()
+      if (view === 'templates') {
+        clearSelectionAndEditor()
+        setTemplateOpenRef(null)
+        setTemplatesOpen(true)
+        return
+      }
+      setTemplatesOpen(false)
+      setTemplatesDirty(false)
+      if (view !== activeTab) {
+        setActiveTab(view)
+        clearSelectionAndEditor()
+      }
     },
-    [activeTab, confirmDiscard, clearSelectionAndEditor]
+    [activeView, activeTab, confirmDiscard, clearSelectionAndEditor]
+  )
+
+  const handleEditTemplate = useCallback(
+    (templateRef: string) => {
+      if (!confirmDiscard()) return
+      clearSelectionAndEditor()
+      setTemplateOpenRef(templateRef)
+      setTemplatesOpen(true)
+    },
+    [confirmDiscard, clearSelectionAndEditor]
   )
 
   const handleAgentFilterChange = useCallback(
@@ -1296,9 +1326,10 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     <div className="flex flex-col h-full min-h-0 bg-panel">
       <ConfigTabs
         onClose={handleClose}
-        tabs={TABS}
-        activeTab={activeTab}
+        tabs={VIEW_TABS}
+        activeTab={activeView}
         onTabChange={handleTabChange}
+        showAgentFilter={!templatesOpen}
         agentFilterOptions={AGENT_FILTER_OPTIONS}
         agentFilter={agentFilter}
         onAgentFilterChange={handleAgentFilterChange}
@@ -1331,51 +1362,63 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
           </button>
         </div>
       )}
-      <div className="flex flex-1 min-h-0">
-        <div className="w-72 shrink-0 border-r border-border min-h-0 overflow-hidden">
-          <ConfigResourceList
-            groups={displayGroups}
-            deferredHarnesses={deferredHarnesses}
-            searchActive={searchActive}
-            sharedError={harnessConfig.error}
-            onSelectResource={handleSelectResource}
-            onCreate={handleEnterCreate}
-            onSync={handleSync}
-            onCreateCommand={handleCreateCommand}
-            onCreateSkill={handleCreateSkill}
-            onOpenConfigFolders={onOpenConfigFolders}
-          />
+      {templatesOpen ? (
+        <ConfigTemplates
+          key={activeBackend.id}
+          initialTemplateRef={templateOpenRef}
+          searchQuery={searchQuery}
+          onDirtyChange={setTemplatesDirty}
+          fontFamily={settings.terminalFontFamily}
+          fontSize={settings.terminalFontSize}
+        />
+      ) : (
+        <div className="flex flex-1 min-h-0">
+          <div className="w-72 shrink-0 border-r border-border min-h-0 overflow-hidden">
+            <ConfigResourceList
+              groups={displayGroups}
+              deferredHarnesses={deferredHarnesses}
+              searchActive={searchActive}
+              sharedError={harnessConfig.error}
+              onSelectResource={handleSelectResource}
+              onCreate={handleEnterCreate}
+              onSync={handleSync}
+              onCreateCommand={handleCreateCommand}
+              onCreateSkill={handleCreateSkill}
+              onEditTemplate={handleEditTemplate}
+              onOpenConfigFolders={onOpenConfigFolders}
+            />
+          </div>
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+            <ConfigEditor
+              view={editorView}
+              draft={draft}
+              onDraftChange={setDraft}
+              nameDraft={createName}
+              onNameDraftChange={setCreateName}
+              dirty={isDirty}
+              busy={mutationBusy || readBusy}
+              canEdit={canEdit}
+              canSave={canSave}
+              canCreate={canCreate}
+              canDelete={canDelete}
+              error={actionError}
+              fontFamily={settings.terminalFontFamily}
+              fontSize={settings.terminalFontSize}
+              onSave={() => {
+                if (canSave) void handleSave()
+              }}
+              onCreate={() => {
+                if (canCreate) void handleSubmitCreate()
+              }}
+              onDelete={() => {
+                if (canDelete) void handleDelete()
+              }}
+              onCancel={handleCancelCreate}
+              onReset={handleResetDraft}
+            />
+          </div>
         </div>
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <ConfigEditor
-            view={editorView}
-            draft={draft}
-            onDraftChange={setDraft}
-            nameDraft={createName}
-            onNameDraftChange={setCreateName}
-            dirty={isDirty}
-            busy={mutationBusy || readBusy}
-            canEdit={canEdit}
-            canSave={canSave}
-            canCreate={canCreate}
-            canDelete={canDelete}
-            error={actionError}
-            fontFamily={settings.terminalFontFamily}
-            fontSize={settings.terminalFontSize}
-            onSave={() => {
-              if (canSave) void handleSave()
-            }}
-            onCreate={() => {
-              if (canCreate) void handleSubmitCreate()
-            }}
-            onDelete={() => {
-              if (canDelete) void handleDelete()
-            }}
-            onCancel={handleCancelCreate}
-            onReset={handleResetDraft}
-          />
-        </div>
-      </div>
+      )}
       <ConfigSyncDialog
         open={dialogOpen}
         review={dialogReview}

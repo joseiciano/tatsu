@@ -1,14 +1,14 @@
 ---
 goal: Add Config page UI to create and edit templates and fragments with a live rendered preview
 date_created: 2026-10-22
-last_updated: 2026-10-22
-status: 'Planned'
+last_updated: 2026-10-23
+status: 'Completed'
 tags: [feature, renderer, react, harness-config, templates]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 21 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It adds the editing surface for templates and fragments to the Config page from [Step 7](./step-07-config-page-shell.md), using the renderer from [Step 19](./step-19-template-renderer.md) for a live preview. Terminology follows [implementation-details.md](./implementation-details.md).
 
@@ -31,16 +31,16 @@ This plan is Step 21 of the [Skills-Agents-Commands-Sync plan](./skills-agents-c
 
 - **GOAL-001**: Make templates findable.
 
-- [ ] **TASK-001**: Add the `Templates` view and its lists to `ConfigTabs.tsx` and `Config.tsx`.
-- [ ] **TASK-002**: Add `templateRef` display and "Edit template" to `ConfigResourceList.tsx`.
+- [x] **TASK-001**: Add the `Templates` view and its lists to `ConfigTabs.tsx` and `Config.tsx`.
+- [x] **TASK-002**: Add `templateRef` display and "Edit template" to `ConfigResourceList.tsx`.
 
 ### Implementation Phase 2: Editors
 
 - **GOAL-002**: Edit templates and fragments safely.
 
-- [ ] **TASK-003**: Add `ConfigTemplateEditor.tsx` with the fields in REQ-003 and the preview in REQ-004.
-- [ ] **TASK-004**: Add `ConfigFragmentEditor.tsx` with usage list and confirmation per REQ-005.
-- [ ] **TASK-005**: Wire saves to the Step 18 handlers and the out-of-sync notice.
+- [x] **TASK-003**: Add `ConfigTemplateEditor.tsx` with the fields in REQ-003 and the preview in REQ-004.
+- [x] **TASK-004**: Add `ConfigFragmentEditor.tsx` with usage list and confirmation per REQ-005.
+- [x] **TASK-005**: Wire saves to the Step 18 handlers and the out-of-sync notice.
 
 ## 3. Alternatives
 
