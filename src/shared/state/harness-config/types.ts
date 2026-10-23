@@ -106,6 +106,8 @@ export type HarnessConfigErrorCode =
   | 'delete-failed'
   | 'desired-state-failed'
   | 'linked-resource'
+  | 'invalid-template'
+  | 'invalid-target'
 
 export interface HarnessConfigAppliedOperation {
   type: 'create' | 'overwrite' | 'delete' | 'adopt'
