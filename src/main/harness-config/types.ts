@@ -126,6 +126,7 @@ export interface HarnessConfigDesiredResource {
 export interface HarnessConfigTemplateSource {
   templates: readonly (RenderableTemplate & { hash?: string })[]
   fragments: readonly (RenderableFragment & { hash?: string })[]
+  errors?: readonly { relativePath: string; message: string }[]
 }
 
 export interface HarnessConfigShadowedEntry {

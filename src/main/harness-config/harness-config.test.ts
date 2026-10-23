@@ -2048,7 +2048,7 @@ describe('harness-config template sync', () => {
   type FragmentSeed = { name: string; content: string; hash?: string }
   type TemplateFixture = Fixture & {
     roots: Record<string, string>
-    source: { templates: TemplateSeed[]; fragments: FragmentSeed[] }
+    source: { templates: TemplateSeed[]; fragments: FragmentSeed[]; errors: { relativePath: string; message: string }[] }
     detach: ReturnType<typeof vi.fn>
   }
 
@@ -2075,7 +2075,7 @@ describe('harness-config template sync', () => {
       roots[key] = join(fixtureRoot, key)
       mkdirSync(roots[key], { recursive: true })
     }
-    const source: TemplateFixture['source'] = { templates: [], fragments: [] }
+    const source: TemplateFixture['source'] = { templates: [], fragments: [], errors: [] }
     const detach = vi.fn()
     const fixture = makeFixture({
       root: fixtureRoot,
@@ -2084,7 +2084,7 @@ describe('harness-config template sync', () => {
       deps: {
         homeDir: join(fixtureRoot, 'home'),
         env: { HOME: join(fixtureRoot, 'home') },
-        loadTemplateSource: () => ({ templates: source.templates, fragments: source.fragments }),
+        loadTemplateSource: () => ({ templates: source.templates, fragments: source.fragments, errors: source.errors }),
         detachTemplateTarget: detach,
         ...options.deps
       }
@@ -2267,6 +2267,40 @@ describe('harness-config template sync', () => {
     const adopt = fixture.service.planAdoptFromDisk(claudeAgents)
     await fixture.service.applyPlan({ scope: claudeAgents, planId: adopt.planId, confirmed: true })
     expect(fixture.desired.resources).toEqual([])
+  })
+
+  it('holds earlier output of a template whose file no longer parses (REQ-007)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [])
+    fixture.source.errors = [{ relativePath: 'agents/reviewer.md', message: 'Invalid frontmatter' }]
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.status).toBe('conflict')
+    expect(comparison.diskOnly).toEqual([])
+    expect(comparison.renderErrors).toEqual([
+      expect.objectContaining({ templateRef: 'agent/reviewer', message: 'Invalid frontmatter' })
+    ])
+    expect(comparison.renderErrors?.[0].held.map((ref) => ref.relativePath)).toEqual(['reviewer.md'])
+    expect(fixture.service.planSync(opencodeAgents).renderErrors).toBeUndefined()
+
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(true)
+  })
+
+  it('keeps a stored entry shadowed by a kept template when adopting (REQ-002)', async () => {
+    const id = physicalId('claude', 'claudeAgents', 'reviewer.md')
+    const stored = refToDesired({ id, agentKind: 'claude', relativePath: 'reviewer.md', resourceType: 'agents' }, 'stored text')
+    const fixture = makeTemplateFixture({ desired: [stored] })
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+
+    const keep = fixture.service.planAdoptFromDisk(claudeAgents)
+    await fixture.service.applyPlan({ scope: claudeAgents, planId: keep.planId, confirmed: true })
+    const kept = fixture.desired.resources.find((resource) => resource.id === id)
+    expect(kept?.content).toBe('stored text')
   })
 
   it('backs up an existing file before syncing template output over it (TEST-006)', async () => {

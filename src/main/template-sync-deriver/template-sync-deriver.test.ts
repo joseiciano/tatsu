@@ -135,6 +135,54 @@ describe('TemplateSyncDeriver', () => {
     expect(store.ofType('harnessConfig/comparisonLoaded')).toHaveLength(2)
   })
 
+  it('rescans the last known scopes of a template whose file stops parsing', () => {
+    const { store, service, flush } = setup({ 'opencode:agents': 'conflict' })
+    store.emit({
+      type: 'harnessConfig/templateChanged',
+      payload: template('reviewer', { harnesses: { opencode: { frontmatter: {} } } })
+    })
+    flush()
+    service.planSync.mockClear()
+
+    store.emit({ type: 'harnessConfig/templateRemoved', payload: { kind: 'agent', name: 'reviewer' } })
+    store.emit({
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'agents/reviewer.md', message: 'Invalid frontmatter' }
+    })
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope))).toEqual(['opencode:agents'])
+
+    service.planSync.mockClear()
+    store.emit({
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'agents/reviewer.md', message: 'Another typo' }
+    })
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope))).toEqual(['opencode:agents'])
+  })
+
+  it('rescans every harness for a template that never parsed', () => {
+    const { store, service, flush } = setup()
+    store.emit({
+      type: 'harnessConfig/templatesLoaded',
+      payload: { templates: [], errors: [{ relativePath: 'skills/deploy/TEMPLATE.md', message: 'bad' }], loadedAt: 1 }
+    })
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope)).sort()).toEqual([
+      'claude:skills',
+      'codex:skills',
+      'opencode:skills'
+    ])
+
+    service.planSync.mockClear()
+    store.emit({
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'fragments/tone.md', message: 'bad' }
+    })
+    flush()
+    expect(service.planSync).not.toHaveBeenCalled()
+  })
+
   it('rescans scopes of templates that use a changed fragment only', () => {
     const { store, service, flush } = setup({ 'opencode:agents': 'conflict' })
     const users = template('user', { fragments: ['tone'], harnesses: { opencode: { frontmatter: {} } } })

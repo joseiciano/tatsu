@@ -1,6 +1,7 @@
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import type { HarnessConfigService } from '../harness-config'
 import type { StateEvent } from '../../shared/state'
+import { classifyTemplateSourcePath, TEMPLATE_HARNESSES } from '../../shared/harness-templates'
 import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
@@ -8,7 +9,9 @@ import {
   type HarnessConfigScope,
   type HarnessConfigScopeKey,
   type HarnessConfigState,
-  type HarnessTemplate
+  type HarnessTemplate,
+  type HarnessTemplateHarnesses,
+  type HarnessTemplateParseError
 } from '../../shared/state/harness-config'
 
 type TemplateTargets = Pick<HarnessTemplate, 'kind' | 'harnesses'>
@@ -54,6 +57,7 @@ function sameScopes(left: readonly string[], right: readonly string[]): boolean 
 export class TemplateSyncDeriver {
   private readonly deps: TemplateSyncDeriverDeps
   private readonly targets = new Map<string, TemplateTargets>()
+  private readonly lastKnownTargets = new Map<string, TemplateTargets>()
   private readonly pending = new Map<HarnessConfigScopeKey, HarnessConfigScope>()
   private notifyPending = false
   private scheduled = false
@@ -65,7 +69,7 @@ export class TemplateSyncDeriver {
 
   start(): void {
     if (this.unsubscribe) return
-    for (const template of this.harnessConfig().templates.templates) this.targets.set(templateKey(template), template)
+    for (const template of this.harnessConfig().templates.templates) this.track(template)
     this.unsubscribe = this.deps.store.subscribe((event) => this.onEvent(event))
   }
 
@@ -74,6 +78,33 @@ export class TemplateSyncDeriver {
     this.unsubscribe = null
     this.pending.clear()
     this.notifyPending = false
+  }
+
+  private track(template: HarnessTemplate): void {
+    const key = templateKey(template)
+    this.targets.set(key, template)
+    this.lastKnownTargets.set(key, template)
+  }
+
+  /** A template file that fails to parse has no readable targets, so the
+   *  scopes it last landed in are used, or every harness when it never
+   *  parsed in this session. */
+  private errorTargets(errors: readonly Pick<HarnessTemplateParseError, 'relativePath'>[]): TemplateTargets[] {
+    const result: TemplateTargets[] = []
+    for (const { relativePath } of errors) {
+      const entry = classifyTemplateSourcePath(relativePath)
+      if (!entry || entry.type === 'fragment') continue
+      const kind = entry.type === 'reference' ? 'skill' : entry.kind
+      const known = this.lastKnownTargets.get(templateKey({ kind, name: entry.name }))
+      if (known) {
+        result.push(known)
+        continue
+      }
+      const harnesses: HarnessTemplateHarnesses = {}
+      for (const harness of TEMPLATE_HARNESSES) harnesses[harness] = { frontmatter: {} }
+      result.push({ kind, harnesses })
+    }
+    return result
   }
 
   private harnessConfig(): HarnessConfigState {
@@ -87,14 +118,14 @@ export class TemplateSyncDeriver {
         // new template lands in is re-derived.
         const previous = [...this.targets.values()]
         this.targets.clear()
-        for (const template of event.payload.templates) this.targets.set(templateKey(template), template)
-        this.queue([...previous, ...event.payload.templates], false)
+        for (const template of event.payload.templates) this.track(template)
+        this.queue([...previous, ...event.payload.templates, ...this.errorTargets(event.payload.errors)], false)
         return
       }
       case 'harnessConfig/templateChanged': {
         const key = templateKey(event.payload)
         const previous = this.targets.get(key)
-        this.targets.set(key, event.payload)
+        this.track(event.payload)
         this.queue(previous ? [previous, event.payload] : [event.payload], true)
         return
       }
@@ -105,6 +136,9 @@ export class TemplateSyncDeriver {
         if (previous) this.queue([previous], true)
         return
       }
+      case 'harnessConfig/templateSourceErrorChanged':
+        this.queue(this.errorTargets([event.payload]), true)
+        return
       case 'harnessConfig/fragmentsLoaded':
         // Every fragment was replaced, so every template may render differently.
         this.queue(this.harnessConfig().templates.templates, false)
