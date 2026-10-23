@@ -123,7 +123,7 @@ function AdoptChoice({
           <input
             type="radio"
             name={name}
-            className="icon-sm"
+            className="icon-base"
             checked={!detach}
             disabled={disabled}
             onChange={() => onChange(id, false)}
@@ -134,7 +134,7 @@ function AdoptChoice({
           <input
             type="radio"
             name={name}
-            className="icon-sm"
+            className="icon-base"
             checked={detach}
             disabled={disabled}
             onChange={() => onChange(id, true)}
