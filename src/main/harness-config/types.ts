@@ -121,6 +121,7 @@ export type HarnessConfigReadResult = HarnessConfigReadFileResult
 export interface HarnessConfigFilesystem {
   readdirSync(path: string, options: { withFileTypes: true }): Dirent[]
   lstatSync(path: string): Stats
+  statSync(path: string): Stats
   readFileSync(path: string): Buffer
   writeFileSync(path: string, data: string | Uint8Array, options?: { flag?: string }): void
   renameSync(oldPath: string, newPath: string): void

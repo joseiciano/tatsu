@@ -46,7 +46,8 @@ function serializeRef(ref: HarnessConfigFileRef): string {
     hash: ref.hash,
     existsOnDisk: ref.existsOnDisk,
     managed: ref.managed,
-    updatedAt: ref.updatedAt
+    updatedAt: ref.updatedAt,
+    linkedFrom: ref.linkedFrom ?? null
   })
 }
 

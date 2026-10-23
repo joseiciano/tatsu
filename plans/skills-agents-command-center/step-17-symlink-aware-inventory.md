@@ -2,13 +2,13 @@
 goal: Inventory symlinked harness resources read-only while keeping writes off symlinked paths
 date_created: 2026-10-22
 last_updated: 2026-10-22
-status: 'Planned'
+status: 'Completed'
 tags: [feature, main-process, harness-config, path-safety]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 17 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It makes the harness config service read configuration that is symlinked from somewhere else, such as a dotfiles repository, without writing through those links. Terminology follows [implementation-details.md](./implementation-details.md).
 
@@ -43,17 +43,17 @@ A common real-world layout hits all three, and its build deletes and regenerates
 
 - **GOAL-001**: Read through symlinks, never write through them.
 
-- [ ] **TASK-001**: Update `resolveRoot()` per REQ-001.
-- [ ] **TASK-002**: Update `walk()` per REQ-002 and set `linkedFrom` per REQ-003.
-- [ ] **TASK-003**: Split `assertRealContainment()` into a read mode and a write mode per REQ-004 and REQ-005. Write mode keeps today's checks.
-- [ ] **TASK-004**: Add `linked-resource` to `HarnessConfigErrorCode` and reject linked targets in direct mutations and in sync plan generation.
+- [x] **TASK-001**: Update `resolveRoot()` per REQ-001.
+- [x] **TASK-002**: Update `walk()` per REQ-002 and set `linkedFrom` per REQ-003.
+- [x] **TASK-003**: Split `assertRealContainment()` into a read mode and a write mode per REQ-004 and REQ-005. Write mode keeps today's checks.
+- [x] **TASK-004**: Add `linked-resource` to `HarnessConfigErrorCode` and reject linked targets in direct mutations and in sync plan generation.
 
 ### Implementation Phase 2: UI
 
 - **GOAL-002**: Make managed-elsewhere resources visible and understandable.
 
-- [ ] **TASK-005**: Badge and disable actions in `ConfigResourceList.tsx` and `ConfigEditor.tsx`.
-- [ ] **TASK-006**: Show excluded entries in `ConfigSyncDialog.tsx`.
+- [x] **TASK-005**: Badge and disable actions in `ConfigResourceList.tsx` and `ConfigEditor.tsx`.
+- [x] **TASK-006**: Show excluded entries in `ConfigSyncDialog.tsx`.
 
 ## 3. Alternatives
 
