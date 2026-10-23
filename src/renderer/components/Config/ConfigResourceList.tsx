@@ -9,6 +9,7 @@ import {
 import { isHarnessConfigCapabilityEnabled } from '../../../shared/agent-registry'
 import type {
   BuildConfigResourceGroupsInput,
+  ConfigDeferredHarness,
   ConfigDriftBadge,
   ConfigResourceGroup,
   ConfigResourceListProps,
@@ -279,8 +280,28 @@ function GroupHeader({
   )
 }
 
+function DeferredHarnessSection({ harness }: { harness: ConfigDeferredHarness }): JSX.Element {
+  return (
+    <div
+      className="border-b border-border/60"
+      data-testid={`config-deferred-${harness.agentKind}`}
+      aria-disabled="true"
+    >
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 opacity-60">
+        <AgentIcon kind={harness.agentKind} className="icon-sm" />
+        <span className="text-xs font-medium text-fg-bright flex-1 min-w-0 truncate">
+          {harness.displayName}
+        </span>
+        <span className="text-xs text-faint shrink-0">Deferred</span>
+      </div>
+      <div className="px-2.5 pb-1.5 text-xs text-faint">{harness.note}</div>
+    </div>
+  )
+}
+
 export function ConfigResourceList({
   groups,
+  deferredHarnesses,
   searchActive,
   sharedError,
   onSelectResource,
@@ -333,6 +354,9 @@ export function ConfigResourceList({
             )}
           </div>
         </div>
+      ))}
+      {deferredHarnesses.map((harness) => (
+        <DeferredHarnessSection key={harness.agentKind} harness={harness} />
       ))}
     </div>
   )
