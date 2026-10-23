@@ -26,11 +26,13 @@ import {
   ShieldAlert,
   Sparkles
 } from 'lucide-react'
-import { useJsonClaudeSession, useSettings } from '../../store'
+import { useJsonClaudeSession, useRuntimeStatus, useSettings } from '../../store'
 import { useBackend } from '../../backend'
 import { useJsonClaudeApprovals } from '../../hooks/useJsonClaudeApprovals'
 import { JsonClaudeApprovalCard } from '../JsonClaudeApprovalCard'
 import { Tooltip } from '../Tooltip'
+import { RuntimeDownloadCard } from '../RuntimeDownloadCard'
+import { agentDisplayName } from '../../../shared/agent-registry'
 import { dispatchToolCard, ToolCardChrome } from '../json-mode-cards'
 import { ToolGroup } from '../json-mode-cards/ToolGroup'
 import { TaskCard } from '../json-mode-cards/TaskCard'
@@ -677,6 +679,20 @@ function renderEntries(
       })
       continue
     }
+    if (entry.kind === 'error' && entry.errorKind === 'runtime-missing') {
+      rows.push({
+        key: entry.entryId,
+        entryId: entry.entryId,
+        type: 'text',
+        node: (
+          <div className="my-2 text-xs text-muted">
+            <span className="font-semibold text-fg">Runtime not installed</span>
+            {entry.errorMessage ? ` — ${entry.errorMessage}` : ''}
+          </div>
+        )
+      })
+      continue
+    }
     if (entry.kind === 'error' && entry.errorKind === 'auth-failure') {
       rows.push({
         key: entry.entryId,
@@ -926,6 +942,28 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       ? `${modKeySymbol}↵`
       : `${modKeySymbol}Enter`
   const sendHotkeyAria = sendOnEnter ? 'Enter' : `${modKeyWord}+Enter`
+  const runtimeStatus = useRuntimeStatus(session?.agentKind)
+  const runtimeAgentName = agentDisplayName(session?.agentKind)
+  const runtimeBlocksSend =
+    runtimeStatus.state === 'missing' ||
+    runtimeStatus.state === 'downloading' ||
+    runtimeStatus.state === 'error'
+  const runtimeCardVisible =
+    runtimeBlocksSend ||
+    (runtimeStatus.state === 'ready' && session?.state === 'exited')
+  const sendDisabledReason = runtimeBlocksSend
+    ? `download the ${runtimeAgentName} runtime first`
+    : null
+  const restartRuntimeSession = useCallback(async () => {
+    await backend.killJsonClaude(sessionId)
+    await backend.startJsonClaude(sessionId, worktreePath)
+  }, [backend, sessionId, worktreePath])
+  const downloadRuntime = useCallback(async () => {
+    const kind = session?.agentKind
+    if (kind !== 'opencode' && kind !== 'codex') return
+    const ok = await backend.downloadRuntime(kind)
+    if (ok) await restartRuntimeSession()
+  }, [backend, session?.agentKind, restartRuntimeSession])
   const composerPlaceholder = sendOnEnter
     ? 'Message Claude — Enter to send, Shift+Enter for newline'
     : `Message Claude — ${modKeyWord}+Enter to send`
@@ -1612,6 +1650,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       path: a.path ?? ''
     }))
     if (!session || state === 'exited') return
+    if (sendDisabledReason) return
     if (!text && images.length === 0) return
     backend.sendJsonClaudeMessage(
       sessionId,
@@ -1926,6 +1965,16 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           </button>
         </div>
       )}
+      {session && runtimeCardVisible && (
+        <div className="shrink-0 border-t border-border px-2">
+          <RuntimeDownloadCard
+            agentKind={session.agentKind}
+            status={runtimeStatus}
+            onDownload={() => void downloadRuntime()}
+            onRetry={() => void restartRuntimeSession()}
+          />
+        </div>
+      )}
       <div className="shrink-0 border-t border-border p-2">
         <div className="relative rounded-md border border-border bg-panel focus-within:border-accent transition-colors">
           {mentionItems.length > 0 && (
@@ -2047,9 +2096,11 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
               }
             }}
             placeholder={
-              mode === 'asleep'
-                ? 'Type to wake this session…'
-                : composerPlaceholder
+              sendDisabledReason
+                ? `Message ${runtimeAgentName} — ${sendDisabledReason}`
+                : mode === 'asleep'
+                  ? 'Type to wake this session…'
+                  : composerPlaceholder
             }
             // text-base (16px) below sm: prevents iOS Safari from zooming
             // the viewport when the textarea takes focus. text-sm on
@@ -2097,9 +2148,12 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
             )}
             <button
               onClick={() => send()}
-              disabled={!draft.trim() && attachments.length === 0}
+              disabled={
+                !!sendDisabledReason ||
+                (!draft.trim() && attachments.length === 0)
+              }
               aria-label={`Send (${sendHotkeyAria})`}
-              title={`Send (${sendHotkeyAria})`}
+              title={sendDisabledReason ?? `Send (${sendHotkeyAria})`}
               className="px-2.5 py-0.5 bg-accent text-white rounded text-xs font-medium disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
             >
               <span>Send</span>

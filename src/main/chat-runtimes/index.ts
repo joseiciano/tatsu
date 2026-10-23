@@ -16,6 +16,7 @@ export {
 export { AcpStdioClient, type AcpStdioClientOptions } from './acp-stdio-client'
 export {
   BundledRuntimeResolver,
+  RuntimeMissingError,
   codexPlatformPackageId,
   codexTargetTriple,
   type RuntimeLaunchConfig,

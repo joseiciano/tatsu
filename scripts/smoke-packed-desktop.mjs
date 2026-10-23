@@ -2,10 +2,10 @@
 // Packaged-desktop runtime smoke. Finds the unpacked Electron app that
 // electron-builder wrote under release/ for the host platform, validates the
 // runtime closure staged at <Resources>/runtimes by scripts/electron-after-pack.mjs,
-// and boots each bundled runtime credential-free:
-//   - claude:   `claude --version` must exit 0
-//   - opencode: `opencode acp` must stay alive past the boot grace window
-//   - codex:    codex-acp over node with CODEX_PATH must stay alive too
+// and boots the bundled Claude binary credential-free (`claude --version`
+// must exit 0). OpenCode and Codex are not in the desktop bundle — they are
+// downloaded on first chat use; scripts/smoke-runtime-download.mjs covers
+// them.
 //
 // Usage: node scripts/smoke-packed-desktop.mjs [<path to Resources dir>]
 // Runs in build-mac.yml / build-linux.yml / release.yml right after packaging,
@@ -17,7 +17,6 @@ import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runtimeExecutables, validateStagedRuntimeClosure } from './runtime-closure.mjs'
-import { spawnBounded } from './smoke-bundled-runtimes.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -92,19 +91,6 @@ async function main() {
   const claude = await runExpectExit0([exe.claude, '--version'])
   results.push({ name: 'claude', ...claude })
   console.log(`[smoke-desktop] claude: ${claude.code}`)
-
-  console.log('[smoke-desktop] spawning opencode acp')
-  const opencode = await spawnBounded([exe.opencode, 'acp'])
-  results.push({ name: 'opencode', ...opencode })
-  console.log(`[smoke-desktop] opencode: ${opencode.ok ? 'booted' : opencode.code}`)
-
-  console.log('[smoke-desktop] spawning codex-acp')
-  const codex = await spawnBounded([process.execPath, exe.codexAcpScript], {
-    CODEX_PATH: exe.codex,
-    ELECTRON_RUN_AS_NODE: '1'
-  })
-  results.push({ name: 'codex', ...codex })
-  console.log(`[smoke-desktop] codex: ${codex.ok ? 'booted' : codex.code}`)
 
   if (results.some((r) => !r.ok)) {
     process.exit(1)

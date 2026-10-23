@@ -100,6 +100,7 @@ export interface JsonClaudeChatEntry {
     | 'rate-limit-error'
     | 'auth-failure'
     | 'protocol-version'
+    | 'runtime-missing'
   /** For kind === 'error'. Human-readable detail (exitReason, rate-limit
    *  retry-at timestamp, original auth error string, etc.). */
   errorMessage?: string

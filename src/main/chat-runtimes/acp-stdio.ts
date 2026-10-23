@@ -18,6 +18,7 @@ import type {
   JsonClaudeMessageBlock
 } from '../../shared/state/json-claude'
 import type { AgentKind } from '../../shared/state/terminals'
+import { RuntimeMissingError } from './runtime-path-resolver'
 import {
   AcpStdioClient,
   type AcpStdioClientOptions
@@ -44,8 +45,12 @@ export interface AcpStdioRuntimeOptions {
   /** Which agent kind this runtime serves — used for routing + sessionStarted. */
   agentKind: AgentKind
   /** Command + args for the ACP stdio subprocess, e.g. ['opencode', 'acp']. */
-  command: string[]
+  command?: string[]
   env?: NodeJS.ProcessEnv
+  /** Resolves command + env at spawn time instead of construction, so a
+   *  runtime downloaded after boot is picked up and a missing one surfaces
+   *  as a `runtime-missing` card on the session rather than a boot crash. */
+  launch?: () => { command: string[]; env?: NodeJS.ProcessEnv }
   clientInfo?: { name: string; version: string }
   /** Injectable client factory for tests. Defaults to a real AcpStdioClient. */
   createClient?: (opts: AcpStdioClientOptions) => AcpStdioClient
@@ -90,6 +95,7 @@ export class AcpStdioRuntime implements ChatRuntime {
   private agentKind: AgentKind
   private command: string[]
   private env?: NodeJS.ProcessEnv
+  private launch: () => { command: string[]; env?: NodeJS.ProcessEnv }
   private clientInfo: { name: string; version: string }
   private createClient: (opts: AcpStdioClientOptions) => AcpStdioClient
   private flushIntervalMs: number
@@ -100,8 +106,12 @@ export class AcpStdioRuntime implements ChatRuntime {
   constructor(store: Store, opts: AcpStdioRuntimeOptions) {
     this.store = store
     this.agentKind = opts.agentKind
-    this.command = opts.command
+    if (!opts.command && !opts.launch) {
+      throw new Error('AcpStdioRuntime needs either command or launch')
+    }
+    this.command = opts.command ?? []
     this.env = opts.env
+    this.launch = opts.launch ?? (() => ({ command: this.command, env: this.env }))
     this.clientInfo = opts.clientInfo ?? { name: 'harness', version: '1.0.0' }
     this.createClient = opts.createClient ?? ((o) => new AcpStdioClient(o))
     this.flushIntervalMs = opts.flushIntervalMs ?? 50
@@ -299,6 +309,10 @@ export class AcpStdioRuntime implements ChatRuntime {
       // Client bootstrap failed (spawn/initialize). This is not recoverable —
       // surface a terminal error + exited, never a recoverable idle.
       if (!this._isCurrent(sessionId, session)) return
+      if (err instanceof RuntimeMissingError) {
+        this._terminateWithError(sessionId, session, err.message, 'runtime-missing')
+        return
+      }
       this._terminateWithError(
         sessionId,
         session,
@@ -345,9 +359,10 @@ export class AcpStdioRuntime implements ChatRuntime {
     sessionId: string,
     session: AcpRuntimeSession
   ): Promise<void> {
+    const launch = this.launch()
     const client = this.createClient({
-      command: this.command,
-      env: this.env,
+      command: launch.command,
+      env: launch.env,
       clientInfo: this.clientInfo,
       requestTimeoutMs: this.requestTimeoutMs
     })

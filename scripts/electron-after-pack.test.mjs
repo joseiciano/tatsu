@@ -78,15 +78,12 @@ describe('stageDesktopRuntimes', () => {
     expect(context.packager.platformSpecificBuildOptions.binaries).toEqual(['/pre'])
   })
 
-  it('appends the staged native executables to existing mac binaries for signing', async () => {
+  it('appends the staged claude binary to existing mac binaries for signing', async () => {
     const context = makeContext({ os: 'darwin', arch: 3, binaries: ['/pre/helper'] })
     await stageDesktopRuntimes(context, { stage: async () => {}, validate: () => [] })
     expect(context.packager.platformSpecificBuildOptions.binaries).toEqual([
       '/pre/helper',
-      `${RUNTIMES}/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude`,
-      `${RUNTIMES}/node_modules/opencode-darwin-arm64/bin/opencode`,
-      `${RUNTIMES}/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex`,
-      `${RUNTIMES}/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex-code-mode-host`
+      `${RUNTIMES}/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude`
     ])
   })
 
@@ -97,24 +94,18 @@ describe('stageDesktopRuntimes', () => {
     context.appOutDir = '/out/mac'
     context.arch = 1
     await stageDesktopRuntimes(context, deps)
-    const binaries = context.packager.platformSpecificBuildOptions.binaries
-    expect(binaries).toHaveLength(5)
-    expect(binaries[0]).toBe('/pre/helper')
-    expect(binaries.filter((p) => p.includes('/out/mac-arm64/'))).toEqual([])
-    expect(binaries).toContain(
-      '/out/mac/Harness.app/Contents/Resources/runtimes/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex'
-    )
+    expect(context.packager.platformSpecificBuildOptions.binaries).toEqual([
+      '/pre/helper',
+      '/out/mac/Harness.app/Contents/Resources/runtimes/node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/claude'
+    ])
   })
 
   it('creates the mac binaries list when none was configured', async () => {
     const context = makeContext({ os: 'darwin', arch: 1 })
     await stageDesktopRuntimes(context, { stage: async () => {}, validate: () => [] })
-    const binaries = context.packager.platformSpecificBuildOptions.binaries
-    expect(binaries).toHaveLength(4)
-    expect(binaries.every((p) => p.startsWith(`${RUNTIMES}/node_modules/`))).toBe(true)
-    expect(binaries).toContain(
-      `${RUNTIMES}/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex`
-    )
+    expect(context.packager.platformSpecificBuildOptions.binaries).toEqual([
+      `${RUNTIMES}/node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/claude`
+    ])
   })
 
   it('does not touch binaries on linux', async () => {

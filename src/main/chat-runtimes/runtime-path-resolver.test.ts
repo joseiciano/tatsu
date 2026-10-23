@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   BundledRuntimeResolver,
+  type BundledRuntimeResolverOptions,
   codexPlatformPackageId,
   codexTargetTriple,
   defaultRuntimesRoot,
+  RuntimeMissingError,
   stagedClaudeExecutablePath
 } from './runtime-path-resolver'
 
@@ -11,7 +13,11 @@ const APP_ASAR = '/Applications/Harness.app/Contents/Resources/app.asar'
 
 // Deterministic fake package resolver rooted inside app.asar so the
 // app.asar → app.asar.unpacked rewrite is exercised end-to-end.
-function makeResolver(platform: string, arch: string) {
+function makeResolver(
+  platform: string,
+  arch: string,
+  extra: Partial<BundledRuntimeResolverOptions> = {}
+) {
   const APP_UNPACKED = APP_ASAR.replace('app.asar', 'app.asar.unpacked')
   const map: Record<string, string> = {
     'opencode-ai/package.json': `${APP_ASAR}/node_modules/opencode-ai/package.json`,
@@ -45,7 +51,8 @@ function makeResolver(platform: string, arch: string) {
         throw new Error(`not found: ${id} from ${dir}`)
       }
       return req
-    }
+    },
+    ...extra
   })
 }
 
@@ -158,13 +165,18 @@ describe('BundledRuntimeResolver with a staged runtimes root', () => {
     }
   }
 
-  function makeStagedResolver() {
+  const STAGED_OPENCODE = `${NM}/opencode-linux-x64/bin/opencode`
+  const STAGED_CODEX = `${NM}/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex`
+
+  function makeStagedResolver(opts: Partial<BundledRuntimeResolverOptions> = {}) {
     return new BundledRuntimeResolver({
       platform: 'linux',
       arch: 'x64',
       runtimesRoot: ROOT,
       processExecPath: '/opt/Harness/harness',
-      requireFromDir: stagedRequireFromDir
+      requireFromDir: stagedRequireFromDir,
+      exists: (p) => p === STAGED_OPENCODE || p === STAGED_CODEX,
+      ...opts
     })
   }
 
@@ -185,6 +197,49 @@ describe('BundledRuntimeResolver with a staged runtimes root', () => {
     )
   })
 
+  const DOWNLOADED_OPENCODE = '/userData/runtimes/opencode-linux-x64@1.0.0/bin/opencode'
+  const DOWNLOADED_CODEX =
+    '/userData/runtimes/@openai+codex@0.1.0-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex'
+  const downloadedBinary = (kind: 'opencode' | 'codex') =>
+    kind === 'opencode' ? DOWNLOADED_OPENCODE : DOWNLOADED_CODEX
+
+  it('bundledBinary reports only staged binaries, never a download', () => {
+    const staged = makeStagedResolver({ downloadedBinary })
+    expect(staged.bundledBinary('opencode')).toBe(STAGED_OPENCODE)
+    expect(staged.bundledBinary('codex')).toBe(STAGED_CODEX)
+
+    const downloadOnly = makeStagedResolver({ downloadedBinary, exists: () => false })
+    expect(downloadOnly.bundledBinary('opencode')).toBeUndefined()
+    expect(downloadOnly.bundledBinary('codex')).toBeUndefined()
+  })
+
+  it('prefers a staged binary over a downloaded one', () => {
+    const r = makeStagedResolver({ downloadedBinary })
+    expect(r.resolveOpenCodeExecutable()).toBe(STAGED_OPENCODE)
+    expect(r.buildCodexConfig().env?.CODEX_PATH).toBe(STAGED_CODEX)
+  })
+
+  it('launches the downloaded binary when the app did not stage one', () => {
+    const r = makeStagedResolver({ downloadedBinary, exists: () => false })
+    expect(r.buildOpenCodeConfig().command).toEqual([DOWNLOADED_OPENCODE, 'acp'])
+    expect(r.buildCodexConfig().env?.CODEX_PATH).toBe(DOWNLOADED_CODEX)
+  })
+
+  it.each([
+    { kind: 'opencode', build: (r: BundledRuntimeResolver) => r.buildOpenCodeConfig() },
+    { kind: 'codex', build: (r: BundledRuntimeResolver) => r.buildCodexConfig() }
+  ])('throws RuntimeMissingError for $kind when neither staged nor downloaded', ({ kind, build }) => {
+    const r = makeStagedResolver({ exists: () => false })
+    let caught: unknown
+    try {
+      build(r)
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(RuntimeMissingError)
+    expect((caught as RuntimeMissingError).agentKind).toBe(kind)
+  })
+
   it('ignores the staged layout when runtimesRoot is null', () => {
     const r = new BundledRuntimeResolver({
       platform: 'linux',
@@ -197,6 +252,35 @@ describe('BundledRuntimeResolver with a staged runtimes root', () => {
       requireFromDir: stagedRequireFromDir
     })
     expect(r.resolveOpenCodeExecutable()).toBe('/dev/node_modules/opencode-ai/bin/opencode.exe')
+  })
+})
+
+describe('BundledRuntimeResolver.bundledBinary outside a staged layout', () => {
+  const UNPACKED = APP_ASAR.replace('app.asar', 'app.asar.unpacked')
+  const OPENCODE = `${UNPACKED}/node_modules/opencode-ai/bin/opencode.exe`
+  const CODEX = `${UNPACKED}/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex`
+
+  it('returns the require-resolved binary when it exists on disk', () => {
+    const r = makeResolver('darwin', 'arm64', { exists: (p) => p === OPENCODE || p === CODEX })
+    expect(r.bundledBinary('opencode')).toBe(OPENCODE)
+    expect(r.bundledBinary('codex')).toBe(CODEX)
+  })
+
+  it('returns undefined when the resolved path is absent', () => {
+    const r = makeResolver('darwin', 'arm64', { exists: () => false })
+    expect(r.bundledBinary('opencode')).toBeUndefined()
+    expect(r.bundledBinary('codex')).toBeUndefined()
+  })
+
+  it('returns undefined when the package does not resolve', () => {
+    const r = makeResolver('darwin', 'arm64', {
+      exists: () => true,
+      resolvePackage: (id: string) => {
+        throw new Error(`not found: ${id}`)
+      }
+    })
+    expect(r.bundledBinary('opencode')).toBeUndefined()
+    expect(r.bundledBinary('codex')).toBeUndefined()
   })
 })
 

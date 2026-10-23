@@ -47,6 +47,9 @@ jobs:
       - name: Smoke packaged desktop runtimes
         run: node scripts/smoke-packed-desktop.mjs
 
+      - name: Smoke first-use runtime download
+        run: node scripts/smoke-runtime-download.mjs
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:

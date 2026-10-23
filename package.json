@@ -21,7 +21,7 @@
     "log:clear": "rm -f ~/Library/Application\\ Support/harness/debug.log ~/Library/Application\\ Support/harness/debug.log.1",
     "log:perf": "tail -f ~/Library/Application\\ Support/harness/perf.log",
     "log:perf:clear": "rm -f ~/Library/Application\\ Support/harness/perf.log",
-    "build": "electron-vite build && vite build --config vite.web.config.ts",
+    "build": "node scripts/gen-runtime-manifest.mjs && electron-vite build && vite build --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts",
     "build:headless": "vite build --config vite.headless.config.ts && vite build --config vite.headless-web.config.ts",
     "dev:headless": "pnpm run build:headless && HARNESS_DATA_DIR=./.headless-data HARNESS_WS_HOST=${HARNESS_WS_HOST:-127.0.0.1} node dist-headless/main/index.js",
@@ -80,6 +80,10 @@
       {
         "from": "resources/permission-prompt-mcp.js",
         "to": "permission-prompt-mcp.js"
+      },
+      {
+        "from": "resources/runtime-manifest.json",
+        "to": "runtime-manifest.json"
       }
     ],
     "mac": {
@@ -180,6 +184,7 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "tar": "^7.4.3",
     "ws": "^8.20.0"
   },
   "devDependencies": {
@@ -196,7 +201,6 @@
     "electron-vite": "^5.0.0",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.2.2",
-    "tar": "^7.4.3",
     "typescript": "^6.0.2",
     "vite": "^8.0.8",
     "vitest": "^4.1.4"

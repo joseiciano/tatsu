@@ -40,6 +40,7 @@ import type {
 } from '../../shared/transport/transport'
 import type { ElectronAPI } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
+import type { DownloadableRuntime } from '../../shared/state/runtimes'
 import type {
   HarnessConfigApplyRequest,
   HarnessConfigConversionRequest,
@@ -363,6 +364,8 @@ export function buildBackend(
     setEditor: (editorId: string) => req('config:setEditor', editorId),
     getAvailableEditors: () => req('config:getAvailableEditors'),
 
+    downloadRuntime: (agentKind: DownloadableRuntime) => req('runtimes:download', agentKind),
+    refreshRuntimes: () => req('runtimes:refresh'),
     snooze: (path: string, wakeAt: number) => req('snooze:snooze', path, wakeAt),
     unsnooze: (path: string) => req('snooze:unsnooze', path),
     setSnoozeDefaultDays: (days: number) => req('config:setSnoozeDefaultDays', days),

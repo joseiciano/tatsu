@@ -1,4 +1,5 @@
 import type { StateEvent, StateSnapshot } from '../../shared/state'
+import type { DownloadableRuntime } from '../../shared/state/runtimes'
 export type { StateEvent, StateSnapshot }
 
 import type { Worktree, PendingWorktree, PendingDeletion } from '../../shared/state/worktrees'
@@ -406,6 +407,8 @@ export interface ElectronAPI {
   setWorktreeDetail(detail: WorktreeDetail): Promise<boolean>
   setEditor(editorId: string): Promise<boolean>
   getAvailableEditors(): Promise<{ id: string; name: string }[]>
+  downloadRuntime(agentKind: DownloadableRuntime): Promise<boolean>
+  refreshRuntimes(): Promise<boolean>
   snooze(path: string, wakeAt: number): Promise<boolean>
   unsnooze(path: string): Promise<boolean>
   setSnoozeDefaultDays(days: number): Promise<boolean>

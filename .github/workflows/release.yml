@@ -102,6 +102,9 @@ jobs:
       - name: Smoke packaged desktop runtimes
         run: node scripts/smoke-packed-desktop.mjs
 
+      - name: Smoke first-use runtime download
+        run: node scripts/smoke-runtime-download.mjs
+
       - name: Attach to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,6 +151,9 @@ jobs:
 
       - name: Smoke packaged desktop runtimes
         run: node scripts/smoke-packed-desktop.mjs
+
+      - name: Smoke first-use runtime download
+        run: node scripts/smoke-runtime-download.mjs
 
       - name: Attach to GitHub release
         env:

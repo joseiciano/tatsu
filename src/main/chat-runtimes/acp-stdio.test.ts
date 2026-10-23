@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AcpStdioRuntime, defaultAcpStdioCapabilities } from './acp-stdio'
+import { RuntimeMissingError } from './runtime-path-resolver'
 import { Store } from '../store'
 import type { StateEvent } from '../../shared/state'
 
@@ -930,5 +931,134 @@ describe('AcpStdioRuntime permission + capabilities', () => {
 describe('defaultAcpStdioCapabilities', () => {
   it('returns a fresh object each call', () => {
     expect(defaultAcpStdioCapabilities()).not.toBe(defaultAcpStdioCapabilities())
+  })
+})
+describe('AcpStdioRuntime launch resolution', () => {
+  function seedLaunch(launch: () => { command: string[]; env?: NodeJS.ProcessEnv }) {
+    const { store, events } = createStore()
+    const clients: Array<{ fake: FakeAcpClient; command: string[]; env?: NodeJS.ProcessEnv }> = []
+    const runtime = new AcpStdioRuntime(store, {
+      agentKind: 'opencode',
+      launch,
+      flushIntervalMs: 5,
+      createClient: (opts) => {
+        const fake = new FakeAcpClient()
+        clients.push({ fake, command: opts.command, env: opts.env })
+        return fake as any
+      }
+    })
+    store.dispatch({
+      type: 'jsonClaude/sessionStarted',
+      payload: { sessionId: 's1', worktreePath: '/wt', agentKind: 'opencode', runtimeId: 'opencode' }
+    })
+    runtime.start('s1', '/wt')
+    return { store, events, runtime, clients }
+  }
+
+  function errorEntries(events: StateEvent[]): any[] {
+    return events
+      .filter((e) => e.type === 'jsonClaude/entryAppended' && (e as any).payload.entry.kind === 'error')
+      .map((e) => (e as any).payload.entry)
+  }
+
+  function sessionStates(events: StateEvent[]): string[] {
+    return events
+      .filter((e) => e.type === 'jsonClaude/sessionStateChanged')
+      .map((e) => (e as any).payload.state)
+  }
+
+  it('resolves the command at spawn time, so a launch config that changes after construction is used', async () => {
+    let current: { command: string[]; env?: NodeJS.ProcessEnv } = {
+      command: ['/before/opencode', 'acp']
+    }
+    const { runtime, clients } = seedLaunch(() => current)
+    current = { command: ['/downloaded/opencode', 'acp'], env: { FOO: '1' } }
+
+    runtime.send('s1', 'hi')
+    await tick()
+
+    expect(clients).toHaveLength(1)
+    expect(clients[0].command).toEqual(['/downloaded/opencode', 'acp'])
+    expect(clients[0].env).toEqual({ FOO: '1' })
+  })
+
+  it('construction and start succeed while the runtime is missing; send surfaces a runtime-missing card', async () => {
+    const { events, runtime, clients } = seedLaunch(() => {
+      throw new RuntimeMissingError('opencode')
+    })
+    expect(sessionStates(events)).toEqual(['idle'])
+
+    const snap = events.length
+    runtime.send('s1', 'hi')
+    await tick()
+
+    const post = events.slice(snap)
+    expect(clients).toHaveLength(0)
+    const errors = errorEntries(post)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].errorKind).toBe('runtime-missing')
+    expect(sessionStates(post)).not.toContain('idle')
+    expect(sessionStates(post).at(-1)).toBe('exited')
+    expect(runtime.hasSession('s1')).toBe(false)
+  })
+
+  it('after a runtime-missing failure, the next send spawns with the now-available runtime', async () => {
+    let installed: string | null = null
+    const { runtime, clients } = seedLaunch(() => {
+      if (!installed) throw new RuntimeMissingError('opencode')
+      return { command: [installed, 'acp'] }
+    })
+    runtime.send('s1', 'first')
+    await tick()
+    expect(clients).toHaveLength(0)
+
+    installed = '/userData/runtimes/opencode-linux-x64@1.0.0/bin/opencode'
+    runtime.send('s1', 'second')
+    await tick()
+
+    expect(clients).toHaveLength(1)
+    expect(clients[0].command).toEqual([installed, 'acp'])
+    expect(clients[0].fake.requests.map((r) => r.method)).toEqual([
+      'initialize',
+      'session/new',
+      'session/prompt'
+    ])
+  })
+
+  it('a new session after kill spawns with the latest launch result', async () => {
+    let path = '/first/opencode'
+    const { runtime, clients } = seedLaunch(() => ({ command: [path, 'acp'] }))
+    runtime.send('s1', 'one')
+    await tick()
+    clients[0].fake.resolvePrompt('end_turn')
+    await tick()
+
+    runtime.kill('s1')
+    path = '/second/opencode'
+    runtime.send('s1', 'two')
+    await tick()
+
+    expect(clients.map((c) => c.command)).toEqual([
+      ['/first/opencode', 'acp'],
+      ['/second/opencode', 'acp']
+    ])
+  })
+
+  it('a non-runtime-missing launch failure keeps the generic subprocess-exit card', async () => {
+    const { events, runtime } = seedLaunch(() => {
+      throw new Error('resolver exploded')
+    })
+    runtime.send('s1', 'hi')
+    await tick()
+
+    const errors = errorEntries(events)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].errorKind).toBe('subprocess-exit')
+    expect(errors[0].errorMessage).toContain('resolver exploded')
+  })
+
+  it('throws at construction when neither command nor launch is given', () => {
+    const { store } = createStore()
+    expect(() => new AcpStdioRuntime(store, { agentKind: 'opencode' })).toThrow(/command or launch/)
   })
 })

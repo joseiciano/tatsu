@@ -10,6 +10,7 @@ import { initialCosts } from '../../shared/state/costs'
 import { initialBrowser } from '../../shared/state/browser'
 import { initialJsonClaude } from '../../shared/state/json-claude'
 import { initialSnooze } from '../../shared/state/snooze'
+import { initialRuntimes } from '../../shared/state/runtimes'
 import { initialAnnouncements } from '../../shared/state/announcements'
 import { initialScratchpad } from '../../shared/state/scratchpad'
 import { initialHarnessConfig } from '../../shared/state/harness-config'
@@ -69,6 +70,7 @@ export function buildInitialAppState(
     browser: initialBrowser,
     jsonClaude: initialJsonClaude,
     snooze: config.snooze ? { byPath: { ...config.snooze } } : initialSnooze,
+    runtimes: initialRuntimes,
     announcements: initialAnnouncements,
     scratchpad: { byWorktreePath: flattenScratchpadNotes(config.scratchpadNotes) },
     harnessConfig: initialHarnessConfig,

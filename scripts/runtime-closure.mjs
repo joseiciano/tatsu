@@ -53,13 +53,13 @@ export const CODEX_ACP_DEPS = [
 ]
 
 /** Staging targets. `headless` is the self-contained server tarball: it
- *  carries everything main needs at run time. `desktop` is the Electron
- *  app's `Resources/runtimes` dir: main's own deps (node-pty, ws, the Claude
- *  SDK JS) already live in app.asar, so only the native runtimes and the
- *  Codex ACP script with its deps are staged. The `opencode-ai` launcher is
- *  skipped for desktop because its `bin/opencode.exe` is a hard link to the
- *  platform package's binary, and copying it would ship the 130 MB binary
- *  twice; the desktop resolver spawns the platform package binary directly. */
+ *  carries everything main needs at run time, all three agents included.
+ *  `desktop` is the Electron app's `Resources/runtimes` dir: main's own deps
+ *  (node-pty, ws, the Claude SDK JS) already live in app.asar, and the
+ *  OpenCode and Codex native packages are downloaded on first chat use
+ *  (src/main/runtime-downloader, resources/runtime-manifest.json), so only
+ *  the Claude native binary and the Codex ACP script with its deps are
+ *  staged. */
 export const CLOSURE_TARGETS = ['headless', 'desktop']
 
 /** Return the full list of runtime packages that must be staged for a
@@ -68,18 +68,19 @@ export function runtimeClosureForPlatform(platform, { target = 'headless' } = {}
   const pkgs = PLATFORM_PACKAGES[platform]
   if (!pkgs) throw new Error(`Unsupported platform: ${platform}`)
   if (!CLOSURE_TARGETS.includes(target)) throw new Error(`Unsupported closure target: ${target}`)
-  const runtimes = [
-    pkgs.claudePlatform,
-    pkgs.opencodePlatform,
-    '@agentclientprotocol/codex-acp',
-    '@openai/codex',
-    pkgs.codexPlatform,
-    ...CODEX_ACP_DEPS
-  ]
+  const shared = [pkgs.claudePlatform, '@agentclientprotocol/codex-acp', '@openai/codex', ...CODEX_ACP_DEPS]
   const packages =
     target === 'desktop'
-      ? runtimes
-      : ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk', 'opencode-ai', ...runtimes]
+      ? shared
+      : [
+          'node-pty',
+          'ws',
+          '@anthropic-ai/claude-agent-sdk',
+          'opencode-ai',
+          pkgs.opencodePlatform,
+          pkgs.codexPlatform,
+          ...shared
+        ]
   return { ...pkgs, packages }
 }
 
@@ -217,20 +218,23 @@ export async function stageRuntimeClosure({ repoRoot, libDir, platform, target =
 
 /** Absolute paths of the native executables and the Codex ACP script inside
  *  a staged closure. Shared by the pack validation, the packaged smokes, and
- *  the mac signing list so there is one spelling of each path. */
+ *  the mac signing list so there is one spelling of each path. The desktop
+ *  target has no OpenCode or Codex native binary (they are downloaded), so
+ *  only `claude` and `codexAcpScript` are returned for it. */
 export function runtimeExecutables(libDir, platform, { target = 'headless' } = {}) {
   const pkgs = PLATFORM_PACKAGES[platform]
   if (!pkgs) throw new Error(`Unsupported platform: ${platform}`)
   if (!CLOSURE_TARGETS.includes(target)) throw new Error(`Unsupported closure target: ${target}`)
   const nm = join(libDir, 'node_modules')
+  const shared = {
+    claude: join(nm, pkgs.claudePlatform, 'claude'),
+    codexAcpScript: join(nm, '@agentclientprotocol', 'codex-acp', 'dist', 'index.js')
+  }
+  if (target === 'desktop') return shared
   const codexBinDir = join(nm, pkgs.codexPlatform, 'vendor', pkgs.codexTriple, 'bin')
   return {
-    claude: join(nm, pkgs.claudePlatform, 'claude'),
-    opencode:
-      target === 'desktop'
-        ? join(nm, pkgs.opencodePlatform, 'bin', 'opencode')
-        : join(nm, 'opencode-ai', 'bin', pkgs.opencodeBin),
-    codexAcpScript: join(nm, '@agentclientprotocol', 'codex-acp', 'dist', 'index.js'),
+    ...shared,
+    opencode: join(nm, 'opencode-ai', 'bin', pkgs.opencodeBin),
     codex: join(codexBinDir, pkgs.codexBin),
     codexCodeModeHost: join(codexBinDir, 'codex-code-mode-host')
   }
@@ -253,24 +257,24 @@ export function validateStagedRuntimeClosure({
   const nm = join(libDir, 'node_modules')
   const exe = runtimeExecutables(libDir, platform, { target })
   const checks = [
-    { path: exe.opencode, exec: true, label: 'opencode binary' },
-    {
-      path: join(nm, pkgs.opencodePlatform, 'package.json'),
-      exec: false,
-      label: 'opencode platform package'
-    },
     { path: exe.codexAcpScript, exec: false, label: 'codex-acp script' },
     {
       path: join(nm, '@openai', 'codex', 'package.json'),
       exec: false,
       label: '@openai/codex base'
     },
-    { path: exe.codex, exec: true, label: 'codex native binary' },
-    { path: exe.codexCodeModeHost, exec: true, label: 'codex code-mode host binary' },
     { path: exe.claude, exec: true, label: 'claude binary' }
   ]
   if (target === 'headless') {
     checks.push(
+      { path: exe.opencode, exec: true, label: 'opencode binary' },
+      {
+        path: join(nm, pkgs.opencodePlatform, 'package.json'),
+        exec: false,
+        label: 'opencode platform package'
+      },
+      { path: exe.codex, exec: true, label: 'codex native binary' },
+      { path: exe.codexCodeModeHost, exec: true, label: 'codex code-mode host binary' },
       { path: join(nm, 'node-pty', 'package.json'), exec: false, label: 'node-pty' },
       { path: join(nm, 'ws', 'package.json'), exec: false, label: 'ws' },
       {

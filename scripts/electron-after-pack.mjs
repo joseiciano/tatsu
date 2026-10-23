@@ -1,16 +1,17 @@
-// electron-builder `afterPack` hook. Stages the per-arch runtime closure
-// (Claude native binary, OpenCode, Codex ACP) into the packaged app's
-// `Resources/runtimes` so the main process resolves bundled executables from
-// `process.resourcesPath` instead of app.asar.unpacked.
+// electron-builder `afterPack` hook. Stages the per-arch desktop runtime
+// closure (Claude native binary, Codex ACP script + deps) into the packaged
+// app's `Resources/runtimes` so the main process resolves bundled executables
+// from `process.resourcesPath` instead of app.asar.unpacked. The OpenCode and
+// Codex native binaries are not staged; the app downloads them on first chat
+// use (src/main/runtime-downloader).
 //
 // electron-builder's pnpm dependency collector only finds a package's
 // optional dependencies when they are hoisted to the root node_modules; the
 // platform packages live in `.pnpm/`, so without this hook the app ships
-// without the OpenCode binary and without the Claude native package. Staging
-// here also keeps the other arch's binaries out of each DMG (the mac CI
-// install carries both) and copies the hard-linked OpenCode binary once.
+// without the Claude native package. Staging here also keeps the other
+// arch's binaries out of each DMG (the mac CI install carries both).
 //
-// Runs before signing, so on macOS the staged Mach-O executables are added to
+// Runs before signing, so on macOS the staged Mach-O executable is added to
 // `mac.binaries` for codesign + notarization.
 
 import { dirname, join, sep } from 'node:path'
@@ -62,7 +63,7 @@ export async function stageDesktopRuntimes(
   }
   if (context.electronPlatformName === 'darwin') {
     const exe = runtimeExecutables(libDir, platform, { target: 'desktop' })
-    const binaries = [exe.claude, exe.opencode, exe.codex, exe.codexCodeModeHost]
+    const binaries = [exe.claude]
     // One `electron-builder --mac` run packs every arch in turn and shares
     // this options object between them, so drop the previous arch's staged
     // paths before adding ours.

@@ -1,7 +1,9 @@
-// Resolves the bundled native executables and JS entrypoints for the OpenCode
-// and Codex ACP runtimes in three layouts:
+// Resolves the native executables and JS entrypoints for the OpenCode and
+// Codex ACP runtimes in three layouts:
 //   - packaged desktop: `<resourcesPath>/runtimes/node_modules` staged by
-//     scripts/electron-after-pack.mjs (checked first);
+//     scripts/electron-after-pack.mjs holds the Codex ACP script; the native
+//     binaries come from the first-use download in userData
+//     (src/main/runtime-downloader) unless a build staged them too;
 //   - headless tarball: `lib/node_modules` staged by scripts/pack-headless.mjs,
 //     reached through ordinary require resolution from the main bundle;
 //   - dev: pnpm node_modules, also through require resolution.
@@ -11,8 +13,8 @@
 // intact. All paths returned are direct resolved executables — never a
 // PATH/global CLI lookup.
 //
-// Bundled layout (pinned in package.json):
-//   - opencode-<plat>-<arch> → bin/opencode                (native binary; desktop)
+// Package layout (pinned in package.json):
+//   - opencode-<plat>-<arch> → bin/opencode                (native binary; desktop download)
 //   - opencode-ai            → bin/opencode.exe            (hard link to it; dev + headless)
 //   - @agentclientprotocol/codex-acp → dist/index.js       (ACP stdio JS entry)
 //   - @openai/codex-<plat>-<arch>    → vendor/<triple>/bin/codex (native binary)
@@ -25,6 +27,7 @@
 import { existsSync } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join, sep } from 'path'
+import type { DownloadableRuntime } from '../../shared/state/runtimes'
 
 /** `<resourcesPath>/runtimes` when the packaged desktop app staged a runtime
  *  closure there, otherwise undefined (dev, headless, tests). */
@@ -90,6 +93,19 @@ export interface BundledRuntimeResolverOptions {
   /** Staged runtime closure root (`<resourcesPath>/runtimes`). Defaults to
    *  defaultRuntimesRoot(); pass null to force require-based resolution. */
   runtimesRoot?: string | null
+  /** A runtime downloaded into userData (see main/runtime-downloader). Used
+   *  only in the staged layout, after the staged path, so a bundled binary
+   *  always wins over a downloaded one. */
+  downloadedBinary?: (kind: DownloadableRuntime) => string | undefined
+  /** File existence probe. Injectable for tests. */
+  exists?: (p: string) => boolean
+}
+
+export class RuntimeMissingError extends Error {
+  constructor(public readonly agentKind: DownloadableRuntime) {
+    super(`${agentKind} runtime is not installed`)
+    this.name = 'RuntimeMissingError'
+  }
 }
 
 /** Darwin/Linux → @openai/codex platform package id (its optional dep name). */
@@ -125,6 +141,8 @@ export class BundledRuntimeResolver {
   private resolvePackage: (id: string) => string
   private requireFromDir: (dir: string) => PackageRequire
   private runtimesRoot: string | undefined
+  private downloadedBinary: (kind: DownloadableRuntime) => string | undefined
+  private exists: (p: string) => boolean
 
   constructor(opts: BundledRuntimeResolverOptions = {}) {
     const platform = opts.platform ?? process.platform
@@ -147,6 +165,8 @@ export class BundledRuntimeResolver {
     this.processExecPath = opts.processExecPath ?? process.execPath
     this.runtimesRoot =
       opts.runtimesRoot === null ? undefined : (opts.runtimesRoot ?? defaultRuntimesRoot())
+    this.downloadedBinary = opts.downloadedBinary ?? (() => undefined)
+    this.exists = opts.exists ?? existsSync
     this.requireFromDir =
       opts.requireFromDir ?? ((dir) => createRequire(join(dir, 'noop.js')))
     // A staged closure is a flat node_modules, so a require rooted at it
@@ -164,21 +184,54 @@ export class BundledRuntimeResolver {
     return p.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
   }
 
-  /** Native OpenCode binary: the platform package's bin/opencode in a staged
-   *  desktop closure, otherwise the opencode-ai launcher bin/opencode.exe
-   *  (a hard link to the same binary). */
-  resolveOpenCodeExecutable(): string {
-    if (this.runtimesRoot) {
-      return join(
-        this.runtimesRoot,
-        'node_modules',
-        opencodePlatformPackageId(this.platform, this.arch),
-        'bin',
-        'opencode'
-      )
+  /** Where the staged desktop closure would hold a native binary. */
+  private _stagedBinary(kind: DownloadableRuntime): string | undefined {
+    if (!this.runtimesRoot) return undefined
+    const nm = join(this.runtimesRoot, 'node_modules')
+    if (kind === 'opencode') {
+      return join(nm, opencodePlatformPackageId(this.platform, this.arch), 'bin', 'opencode')
     }
+    const triple = codexTargetTriple(this.platform, this.arch)
+    return join(nm, codexPlatformPackageId(this.platform, this.arch), 'vendor', triple, 'bin', 'codex')
+  }
+
+  /** The binary the app ships for a runtime, or undefined when the app
+   *  relies on a download. In the staged layout only the staged path counts;
+   *  in dev/headless it is whatever require resolution finds on disk. */
+  bundledBinary(kind: DownloadableRuntime): string | undefined {
+    if (this.runtimesRoot) {
+      const staged = this._stagedBinary(kind)
+      return staged && this.exists(staged) ? staged : undefined
+    }
+    try {
+      const p = kind === 'opencode' ? this._requireOpenCode() : this._requireCodexNative()
+      return this.exists(p) ? p : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** Staged first, then downloaded; throws RuntimeMissingError when the
+   *  staged layout has neither so the chat runtime can offer the download. */
+  private _stagedOrDownloaded(kind: DownloadableRuntime): string {
+    const staged = this._stagedBinary(kind)!
+    if (this.exists(staged)) return staged
+    const downloaded = this.downloadedBinary(kind)
+    if (downloaded) return downloaded
+    throw new RuntimeMissingError(kind)
+  }
+
+  private _requireOpenCode(): string {
     const pkgJson = this.resolvePackage('opencode-ai/package.json')
     return this._unpack(join(dirname(pkgJson), 'bin', 'opencode.exe'))
+  }
+
+  /** Native OpenCode binary: the platform package's bin/opencode in a staged
+   *  desktop closure (or its download), otherwise the opencode-ai launcher
+   *  bin/opencode.exe (a hard link to the same binary). */
+  resolveOpenCodeExecutable(): string {
+    if (this.runtimesRoot) return this._stagedOrDownloaded('opencode')
+    return this._requireOpenCode()
   }
 
   /** Codex ACP stdio JS entrypoint: @agentclientprotocol/codex-acp/dist/index.js. */
@@ -194,6 +247,11 @@ export class BundledRuntimeResolver {
    *  from within their declaring package dirs (works in both pnpm's nested
    *  dev layout and electron-builder's flattened packaged layout). */
   resolveCodexNativeBinary(): string {
+    if (this.runtimesRoot) return this._stagedOrDownloaded('codex')
+    return this._requireCodexNative()
+  }
+
+  private _requireCodexNative(): string {
     const acpScript = this.resolveCodexAcpScript()
     const codexBaseRequire = this.requireFromDir(dirname(acpScript))
     const basePkg = codexBaseRequire.resolve('@openai/codex/package.json')

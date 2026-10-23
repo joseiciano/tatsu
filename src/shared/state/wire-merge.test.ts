@@ -37,6 +37,15 @@ describe('mergeWireSnapshot', () => {
     expect(merged.jsonClaude).toEqual(initialState.jsonClaude)
     expect(merged.settings).toEqual(initialState.settings)
     expect(merged.harnessConfig).toEqual(initialState.harnessConfig)
+    expect(merged.runtimes).toEqual(initialState.runtimes)
+  })
+
+  it('preserves server-sent runtime statuses', () => {
+    const wire: WireSnapshotState = {
+      runtimes: { byAgent: { opencode: { state: 'ready', version: '1.18.14' } } }
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.runtimes.byAgent.opencode).toEqual({ state: 'ready', version: '1.18.14' })
   })
 
   it('preserves partial harness config snapshots while filling omitted fields', () => {

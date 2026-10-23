@@ -20,7 +20,8 @@ import { getOrCreateWsToken, rotateWsToken } from './ws-token'
 import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
-import { detectRuntime } from './paths'
+import { detectRuntime, resolveRuntimeManifestPath, userDataDir } from './paths'
+import { RuntimeDownloader, readRuntimeManifest } from './runtime-downloader'
 import { fixPathFromLoginShell } from './path-fix'
 import { parseCliFlags, USAGE, type CliFlags } from './cli-args'
 import { PlaywrightBrowserManager } from './browser-manager-playwright'
@@ -94,7 +95,7 @@ import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing
 import { startControlServer } from './control-server'
 import { writeMcpConfigForTerminal, pruneMcpConfigs } from './mcp-config'
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
-import { log, getLogFilePath } from './debug'
+import { log, getLogFilePath, formatErr } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
@@ -513,29 +514,37 @@ jsonClaudeStatusDeriver.start()
 const chatRuntimeRegistry = new ChatRuntimeRegistry(store)
 chatRuntimeRegistry.register('claude', new ClaudeAcpRuntime(store))
 // OpenCode/Codex chat runtimes are driven over shared ACP stdio, always
-// launched via the bundled executables resolved by BundledRuntimeResolver —
-// never a global CLI/PATH lookup. If a bundled runtime can't be resolved
-// (missing/unsupported platform), constructing the resolver throws a clear
-// startup error before any session could route to it.
-const bundledRuntimeResolver = new BundledRuntimeResolver()
-const openCodeConfig = bundledRuntimeResolver.buildOpenCodeConfig()
-const codexConfig = bundledRuntimeResolver.buildCodexConfig()
+// launched via executables the app controls — never a global CLI/PATH
+// lookup. Dev and headless resolve them from node_modules; the packaged
+// desktop app bundles only Claude and downloads these two on first chat use
+// (see runtime-downloader). Launch config is resolved per spawn so a
+// download that finishes after boot is picked up, and a missing runtime
+// surfaces as a `runtime-missing` card instead of a startup crash.
+const runtimeDownloader: RuntimeDownloader = new RuntimeDownloader({
+  store,
+  manifest: readRuntimeManifest(resolveRuntimeManifestPath()),
+  platform: `${process.platform}-${process.arch}`,
+  installRoot: join(userDataDir(), 'runtimes'),
+  bundledBinary: (kind): string | undefined => bundledRuntimeResolver.bundledBinary(kind)
+})
+const bundledRuntimeResolver: BundledRuntimeResolver = new BundledRuntimeResolver({
+  downloadedBinary: (kind): string | undefined => runtimeDownloader.installedBinary(kind)
+})
 chatRuntimeRegistry.register(
   'opencode',
   new AcpStdioRuntime(store, {
     agentKind: 'opencode',
-    command: openCodeConfig.command,
-    env: openCodeConfig.env
+    launch: () => bundledRuntimeResolver.buildOpenCodeConfig()
   })
 )
 chatRuntimeRegistry.register(
   'codex',
   new AcpStdioRuntime(store, {
     agentKind: 'codex',
-    command: codexConfig.command,
-    env: codexConfig.env
+    launch: () => bundledRuntimeResolver.buildCodexConfig()
   })
 )
+runtimeDownloader.publishStatuses()
 
 /** Resolve the GitHub login of whoever owns the configured token, and
  *  dispatch it so the sidebar can route PRs they didn't author into the
@@ -3183,6 +3192,21 @@ function registerIpcHandlers(): void {
       type: 'terminals/progressChanged',
       payload: { id, state, value: Number.isFinite(v) ? v : 0 }
     })
+  })
+
+  transport.onRequest('runtimes:download', async (_ctx, agentKind: string) => {
+    if (agentKind !== 'opencode' && agentKind !== 'codex') return false
+    try {
+      await runtimeDownloader.download(agentKind)
+      return true
+    } catch (err) {
+      log('runtimes', `download failed for ${agentKind}: ${formatErr(err)}`)
+      return false
+    }
+  })
+  transport.onRequest('runtimes:refresh', async () => {
+    runtimeDownloader.publishStatuses()
+    return true
   })
 
   transport.onRequest('snooze:snooze', (_ctx, path: string, wakeAt: number) => {
