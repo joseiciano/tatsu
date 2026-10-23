@@ -70,6 +70,8 @@ type Comparison = {
   diskOnly: FileRef[]
   configOnly: FileRef[]
   changed: AnyRecord[]
+  shadowed?: FileRef[]
+  renderErrors?: Array<{ templateRef: string; message: string; held: FileRef[] }>
 }
 type Plan = Comparison & {
   planId: string
