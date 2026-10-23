@@ -800,7 +800,7 @@ describe('template source channels', () => {
     references: []
   }
 
-  function setupTemplates(overrides: Record<string, unknown> = {}) {
+  function setupTemplates(overrides: Record<string, unknown> = {}, service = createFakeService()) {
     const transport = new FakeTransport()
     const store = new FakeStore()
     const templateSource = {
@@ -818,13 +818,62 @@ describe('template source channels', () => {
     registerHarnessConfigRequestHandlers({
       transport,
       store,
-      service: createFakeService(),
+      service,
       templateSource,
       log: vi.fn(),
       formatErr: vi.fn()
     })
     return { transport, store, templateSource }
   }
+
+  it('saveTemplate warns before shadowing stored entries and saves once allowed (REQ-002)', async () => {
+    const service = createFakeService({
+      templateShadows: vi.fn(() => [{ agentKind: 'claude' as const, resourceType: 'agents' as const, relativePath: 'code-reviewer.md' }])
+    })
+    const { transport, templateSource } = setupTemplates({}, service)
+    const warned = (await transport.call('harnessConfig:saveTemplate', { template: TEMPLATE, confirmed: true })) as {
+      ok: boolean
+      error: { code: string; message: string }
+    }
+    expect(warned.ok).toBe(false)
+    expect(warned.error.code).toBe('template-shadows')
+    expect(warned.error.message).toContain('claude agents code-reviewer.md')
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+
+    const saved = (await transport.call('harnessConfig:saveTemplate', {
+      template: TEMPLATE,
+      confirmed: true,
+      allowShadowing: true
+    })) as { ok: boolean }
+    expect(saved.ok).toBe(true)
+    expect(templateSource.saveTemplate).toHaveBeenCalledWith(TEMPLATE)
+  })
+
+  it('saveTemplate rejects a non-boolean allowShadowing', async () => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call('harnessConfig:saveTemplate', {
+      template: TEMPLATE,
+      confirmed: true,
+      allowShadowing: 'yes'
+    })) as { ok: boolean; error: { code: string } }
+    expect(result.error.code).toBe('invalid-request')
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('planAdoptFromDisk passes detach ids through and validates them', async () => {
+    const service = createFakeService()
+    const { transport } = setupTemplates({}, service)
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    await transport.call('harnessConfig:planAdoptFromDisk', { scope, detach: ['id-1'] })
+    expect(service.planAdoptFromDisk).toHaveBeenCalledWith(scope, { detach: ['id-1'] })
+    await transport.call('harnessConfig:planAdoptFromDisk', { scope })
+    expect(service.planAdoptFromDisk).toHaveBeenLastCalledWith(scope)
+    const invalid = (await transport.call('harnessConfig:planAdoptFromDisk', { scope, detach: [1] })) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(invalid.error.code).toBe('invalid-request')
+  })
 
   it('saveTemplate passes a validated draft to the template source', async () => {
     const { transport, templateSource } = setupTemplates()

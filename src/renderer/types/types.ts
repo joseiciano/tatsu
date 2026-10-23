@@ -17,6 +17,7 @@ import type { AddRepoResult } from '../../shared/repo-pick'
 export type { AddRepoResult }
 
 import type {
+  HarnessConfigAdoptRequest,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
@@ -44,6 +45,7 @@ import type {
   HarnessTemplateSaveRequest
 } from '../../shared/state/harness-config'
 export type {
+  HarnessConfigAdoptRequest,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
@@ -662,7 +664,7 @@ export interface ElectronAPI {
     request: HarnessConfigScopeRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
   planHarnessConfigAdoptFromDisk(
-    request: HarnessConfigScopeRequest
+    request: HarnessConfigAdoptRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
   createHarnessConfigFile(
     request: HarnessConfigApplyRequest
