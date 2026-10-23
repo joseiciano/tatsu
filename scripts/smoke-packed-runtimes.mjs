@@ -102,7 +102,6 @@ async function main() {
     )
     const codexNative = join(
       nm,
-      '@openai',
       pkgs.codexPlatform,
       'vendor',
       pkgs.codexTriple,
