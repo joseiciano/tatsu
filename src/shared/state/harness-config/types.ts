@@ -216,6 +216,92 @@ export interface HarnessConfigScanResult {
   scannedAt: number
 }
 
+// --- Template source model (Step 18) ---
+
+export type HarnessTemplateKind = 'agent' | 'skill' | 'command'
+
+/** One harness's block in a template. `frontmatter` is that harness's
+ *  native frontmatter, kept as written; `name` and `fragments` are the
+ *  only keys Tatsu reads, as per-harness overrides. */
+export interface HarnessTemplateHarnessBlock {
+  name?: string
+  fragments?: string[]
+  frontmatter: Record<string, unknown>
+}
+
+export type HarnessTemplateHarnesses = Partial<Record<ManagedHarnessKind, HarnessTemplateHarnessBlock | false>>
+
+export interface HarnessTemplateReference {
+  fileName: string
+  content: string
+}
+
+export interface HarnessTemplate {
+  kind: HarnessTemplateKind
+  name: string
+  description: string
+  fragments: string[]
+  body: string
+  harnesses: HarnessTemplateHarnesses
+  references: HarnessTemplateReference[]
+  relativePath: string
+  hash: string
+}
+
+export interface HarnessFragment {
+  name: string
+  content: string
+  relativePath: string
+  hash: string
+}
+
+export interface HarnessTemplateParseError {
+  relativePath: string
+  message: string
+}
+
+export interface HarnessTemplateTargetError {
+  agentKind: ManagedHarnessKind
+  message: string
+}
+
+export interface HarnessTemplateSourceState {
+  templates: HarnessTemplate[]
+  fragments: HarnessFragment[]
+  errors: HarnessTemplateParseError[]
+  loadedAt: number | null
+}
+
+export interface HarnessTemplateSaveRequest {
+  template: {
+    kind: HarnessTemplateKind
+    name: string
+    description: string
+    fragments: string[]
+    body: string
+    harnesses: HarnessTemplateHarnesses
+    references: HarnessTemplateReference[]
+  }
+  confirmed: boolean
+}
+
+export interface HarnessTemplateDeleteRequest {
+  kind: HarnessTemplateKind
+  name: string
+  confirmed: boolean
+}
+
+export interface HarnessFragmentSaveRequest {
+  name: string
+  content: string
+  confirmed: boolean
+}
+
+export interface HarnessFragmentDeleteRequest {
+  name: string
+  confirmed: boolean
+}
+
 export interface HarnessConfigState {
   resources: Record<HarnessConfigResourceType, HarnessConfigFileRef[]>
   comparisons: Partial<Record<HarnessConfigScopeKey, HarnessConfigComparison>>
@@ -223,6 +309,7 @@ export interface HarnessConfigState {
   error: string | null
   lastScannedAt: number | null
   lastSyncedAt: number | null
+  templates: HarnessTemplateSourceState
 }
 
 export type HarnessConfigEvent =
@@ -250,3 +337,22 @@ export type HarnessConfigEvent =
       }
     }
   | { type: 'harnessConfig/errorChanged'; payload: string | null }
+  | {
+      type: 'harnessConfig/templatesLoaded'
+      payload: { templates: HarnessTemplate[]; errors: HarnessTemplateParseError[]; loadedAt: number }
+    }
+  | { type: 'harnessConfig/templateChanged'; payload: HarnessTemplate }
+  | {
+      type: 'harnessConfig/templateRemoved'
+      payload: { kind: HarnessTemplateKind; name: string }
+    }
+  | {
+      type: 'harnessConfig/fragmentsLoaded'
+      payload: { fragments: HarnessFragment[]; errors: HarnessTemplateParseError[]; loadedAt: number }
+    }
+  | { type: 'harnessConfig/fragmentChanged'; payload: HarnessFragment }
+  | { type: 'harnessConfig/fragmentRemoved'; payload: { name: string } }
+  | {
+      type: 'harnessConfig/templateSourceErrorChanged'
+      payload: { relativePath: string; message: string | null }
+    }

@@ -97,6 +97,21 @@ describe('mergeWireSnapshot', () => {
     expect(merged.harnessConfig.error).toBe('wire error')
     expect(merged.harnessConfig.lastScannedAt).toBe(702)
     expect(merged.harnessConfig.lastSyncedAt).toBe(initialState.harnessConfig.lastSyncedAt)
+    expect(merged.harnessConfig.templates).toEqual(initialState.harnessConfig.templates)
+  })
+
+  it('fills missing template source fields from an older harnessConfig snapshot', () => {
+    const fragments = [{ name: 'style', content: 'Be brief.', relativePath: 'fragments/style.md', hash: 'h' }]
+    const wire = {
+      harnessConfig: { templates: { fragments } }
+    } as unknown as WireSnapshotState
+
+    const merged = mergeWireSnapshot(wire)
+
+    expect(merged.harnessConfig.templates.fragments).toBe(fragments)
+    expect(merged.harnessConfig.templates.templates).toEqual([])
+    expect(merged.harnessConfig.templates.errors).toEqual([])
+    expect(merged.harnessConfig.templates.loadedAt).toBeNull()
   })
 
   it('preserves server-sent values when the snapshot is complete', () => {
