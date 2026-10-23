@@ -17,6 +17,7 @@ import { ConfigResourceList, buildConfigResourceGroups } from './ConfigResourceL
 import { ConfigEditor } from './ConfigEditor'
 import { ConfigSyncDialog } from './ConfigSyncDialog'
 import { ConfigTemplates } from './ConfigTemplates'
+import { ConfigImportWizard } from './ConfigImportWizard'
 import { decideFreshPlanOutcome, toConfigSyncReview } from './config-sync-review'
 import { deriveConfigConversionOutcome } from './config-conversion'
 import type {
@@ -129,6 +130,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
   const [searchQuery, setSearchQuery] = useState('')
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [templatesDirty, setTemplatesDirty] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [templateOpenRef, setTemplateOpenRef] = useState<string | null>(null)
   const activeView: ConfigViewId = templatesOpen ? 'templates' : activeTab
 
@@ -510,6 +512,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
       }
       setTemplatesOpen(false)
       setTemplatesDirty(false)
+      setImportOpen(false)
       if (view !== activeTab) {
         setActiveTab(view)
         clearSelectionAndEditor()
@@ -518,11 +521,23 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     [activeView, activeTab, confirmDiscard, clearSelectionAndEditor]
   )
 
+  const handleOpenImport = useCallback(() => {
+    if (!confirmDiscard()) return
+    setTemplateOpenRef(null)
+    setImportOpen(true)
+  }, [confirmDiscard])
+
+  const handleCloseImport = useCallback(() => {
+    setTemplatesDirty(false)
+    setImportOpen(false)
+  }, [])
+
   const handleEditTemplate = useCallback(
     (templateRef: string) => {
       if (!confirmDiscard()) return
       clearSelectionAndEditor()
       setTemplateOpenRef(templateRef)
+      setImportOpen(false)
       setTemplatesOpen(true)
     },
     [confirmDiscard, clearSelectionAndEditor]
@@ -1362,12 +1377,22 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
           </button>
         </div>
       )}
-      {templatesOpen ? (
+      {templatesOpen && importOpen ? (
+        <ConfigImportWizard
+          key={activeBackend.id}
+          onClose={handleCloseImport}
+          onReviewScope={handleSync}
+          onDirtyChange={setTemplatesDirty}
+          fontFamily={settings.terminalFontFamily}
+          fontSize={settings.terminalFontSize}
+        />
+      ) : templatesOpen ? (
         <ConfigTemplates
           key={activeBackend.id}
           initialTemplateRef={templateOpenRef}
           searchQuery={searchQuery}
           onDirtyChange={setTemplatesDirty}
+          onImport={handleOpenImport}
           fontFamily={settings.terminalFontFamily}
           fontSize={settings.terminalFontSize}
         />

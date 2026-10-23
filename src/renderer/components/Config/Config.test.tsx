@@ -35,6 +35,7 @@ import type { BackendConnection } from '../../types'
 // for a no-op so `ConfigEditor`'s surrounding create/edit chrome (name
 // input, submit label, generated-from note) still renders normally.
 vi.mock('../MonacoEditor', () => ({ MonacoEditor: () => null }))
+vi.mock('../MonacoDiffEditor', () => ({ MonacoDiffEditor: () => null }))
 
 const { backendApi, storeState } = vi.hoisted(() => {
   const backendApi = {
