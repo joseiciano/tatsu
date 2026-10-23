@@ -67,7 +67,11 @@ export interface HarnessTemplateSourceLike {
 export interface HarnessTemplateImportLike {
   /** Reads the picked folders; never writes to them (Step 22 CON-001). */
   readListing(folders: HarnessTemplateImportFolders): TemplateImportListing
-  existing(): { templates: readonly HarnessTemplate[]; fragments: readonly HarnessFragment[] }
+  existing(): {
+    templates: readonly HarnessTemplate[]
+    fragments: readonly HarnessFragment[]
+    errors?: readonly { relativePath: string }[]
+  }
 }
 
 export interface RegisterHarnessConfigRequestHandlersDeps {
@@ -681,6 +685,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     return planTemplateImport(listing, choices, {
       existingTemplates: existing.templates,
       existingFragments: existing.fragments,
+      existingErrors: existing.errors,
       templateShadows: (draft) =>
         service.templateShadows(draft).map((entry) => `${entry.agentKind} ${entry.resourceType} ${entry.relativePath}`),
       currentContent: (agentKind, resourceType, relativePath) => {

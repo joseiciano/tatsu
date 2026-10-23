@@ -1,4 +1,4 @@
-import type { HarnessTemplateDraft } from '../../shared/harness-templates'
+import { classifyTemplateSourcePath, type HarnessTemplateDraft } from '../../shared/harness-templates'
 import { renderTemplates, templateMarker } from '../../shared/harness-template-render'
 import { sha256Hex } from '../../shared/sha256'
 import type {
@@ -16,6 +16,9 @@ import { importTemplateSetup, isImported, type TemplateImportListing } from './t
 export interface TemplateImportPlanDeps {
   existingTemplates: readonly HarnessTemplate[]
   existingFragments: readonly HarnessFragment[]
+  /** Source files that exist but failed to parse; their names still
+   *  count as taken (REQ-007). */
+  existingErrors?: readonly { relativePath: string }[]
   /** Stored entries a template would hide, as display strings. */
   templateShadows(draft: HarnessTemplateDraft): string[]
   /** The file now in the harness folder at that path, if any. */
@@ -46,6 +49,12 @@ export function planTemplateImport(
     ...deps.existingTemplates.map((template) => `${template.kind}/${template.name}`),
     ...deps.existingFragments.map((fragment) => `fragment/${fragment.name}`)
   ])
+  for (const { relativePath } of deps.existingErrors ?? []) {
+    const entry = classifyTemplateSourcePath(relativePath)
+    if (entry?.type === 'template') existing.add(`${entry.kind}/${entry.name}`)
+    else if (entry?.type === 'reference') existing.add(`skill/${entry.name}`)
+    else if (entry?.type === 'fragment') existing.add(`fragment/${entry.name}`)
+  }
   const result = importTemplateSetup(listing, { ...choices, existing, outsideSettings: deps.outsideSettings })
 
   const fragments = result.fragments.filter((entry) => isImported(entry.item))

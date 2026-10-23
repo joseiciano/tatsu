@@ -488,14 +488,22 @@ export function importTemplateSetup(listing: TemplateImportListing, options: Tem
     }
   }
 
+  // The skill/command alias exists only for Claude skills, so only an
+  // imported skill that targets Claude covers a same-name command.
+  const coveringSkills = new Set(
+    skills.filter((entry) => entry.draft && entry.item.targets.includes('claude')).map((entry) => entry.item.name)
+  )
   const coveredCommands: HarnessTemplateImportCoveredCommand[] = []
   const commands: ImportedTemplate[] = []
   const commandNames = new Set<string>()
   for (const { seed } of importer.flatTemplates(listing.commands, 'command', 'command')) {
     const built = importer.buildTemplate(seed)
-    if (candidates.has(built.item.name)) {
+    if (coveringSkills.has(built.item.name)) {
       coveredCommands.push({ name: built.item.name, skill: built.item.name, sourcePath: built.item.sourcePath })
       continue
+    }
+    if (candidates.has(built.item.name)) {
+      built.item.notes.push('A skill has the same name but does not cover this command for Claude, so it is imported')
     }
     if (built.draft && commandNames.has(built.item.name)) {
       built.item.action = 'invalid'

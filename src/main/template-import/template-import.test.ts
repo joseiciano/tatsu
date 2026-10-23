@@ -172,6 +172,14 @@ describe('importTemplateSetup', () => {
     expect(result.templates.some((entry) => entry.item.key === 'command/deploy')).toBe(false)
   })
 
+  it('imports a same-name command when the skill does not target Claude', () => {
+    const result = run(fixture(), { harnesses: ['opencode'] })
+    expect(result.coveredCommands).toEqual([])
+    const deploy = result.templates.find((entry) => entry.item.key === 'command/deploy')!
+    expect(deploy.draft).not.toBeNull()
+    expect(deploy.item.notes.some((note) => note.includes('same name'))).toBe(true)
+  })
+
   it('blocks duplicate skill names across source folders until one is chosen (TEST-003)', () => {
     const listing = fixture()
     listing.skills[1].files['deploy/SKILL.md'] = DEPLOY_SKILL.replace('Deploy the app', 'Other deploy')
@@ -302,6 +310,20 @@ describe('planTemplateImport', () => {
       'command/release'
     ])
     expect(plan.fragments.map((fragment) => fragment.name)).toEqual(['house-style', 'safety'])
+  })
+
+  it('treats a source file that fails to parse as an existing name that needs a choice', () => {
+    const plan = planTemplateImport(fixture(), choices(), {
+      existingTemplates: [],
+      existingFragments: [],
+      existingErrors: [{ relativePath: 'agents/reviewer.md' }, { relativePath: 'skills/deploy/references/x.md' }],
+      templateShadows: () => [],
+      currentContent: () => null
+    })
+    const actions = Object.fromEntries(plan.preview.items.map((item) => [item.key, item.action]))
+    expect(actions['agent/reviewer']).toBe('undecided')
+    expect(actions['skill/deploy']).toBe('undecided')
+    expect(plan.preview.blockingReasons).toHaveLength(2)
   })
 
   it('reports render errors for imported templates that use unknown fragments', () => {
