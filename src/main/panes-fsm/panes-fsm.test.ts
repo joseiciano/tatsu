@@ -431,6 +431,183 @@ describe('PanesFSM.convertTabType', () => {
     expect(leaf.activeTabId).toBe('agent-pi')
     expect(killTabPty).not.toHaveBeenCalled()
   })
+
+  it('carries an opencode agent tab sessionId onto the chat tab as agentSessionId', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/acp-to-chat'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'agent-1', type: 'agent', label: 'Opencode', agentKind: 'opencode', sessionId: 'ses_term' }],
+      activeTabId: 'agent-1'
+    })
+
+    fsm.convertTabType(wtPath, 'agent-1', 'json-claude')
+
+    const tab = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.agentSessionId).toBe('ses_term')
+  })
+
+  it('resumes an opencode chat tab agentSessionId as the terminal sessionId', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/acp-to-terminal'
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: sessionId,
+          type: 'json-claude',
+          label: 'Chat',
+          sessionId,
+          agentKind: 'opencode',
+          agentSessionId: 'ses_chat',
+          mode: 'awake'
+        }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const tab = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.sessionId).toBe('ses_chat')
+  })
+
+  it('falls back to the chat tab sessionId when an opencode chat has no agentSessionId', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/acp-to-terminal-fresh'
+    const sessionId = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: sessionId, type: 'json-claude', label: 'Chat', sessionId, agentKind: 'opencode', mode: 'awake' }],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+
+    const tab = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0]
+    expect(tab.sessionId).toBe(sessionId)
+  })
+
+  it('round-trips an opencode agentSessionId through chat → terminal → chat', () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/acp-roundtrip'
+    const sessionId = 'cccccccc-cccc-4ccc-cccc-cccccccccccc'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: sessionId,
+          type: 'json-claude',
+          label: 'Chat',
+          sessionId,
+          agentKind: 'opencode',
+          agentSessionId: 'ses_keep',
+          mode: 'awake'
+        }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(wtPath, sessionId, 'agent')
+    const agentTabId = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0].id
+    fsm.convertTabType(wtPath, agentTabId, 'json-claude')
+
+    const tab = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.agentSessionId).toBe('ses_keep')
+  })
+
+  it('never carries an agentSessionId across a claude conversion', () => {
+    const { fsm, store } = buildFSM()
+    const toChatPath = '/wt/claude-to-chat'
+    seedLeaf(store, toChatPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'agent-1', type: 'agent', label: 'Claude', agentKind: 'claude', sessionId: 'sess-1' }],
+      activeTabId: 'agent-1'
+    })
+    const toTerminalPath = '/wt/claude-to-terminal'
+    const sessionId = 'dddddddd-dddd-4ddd-dddd-dddddddddddd'
+    seedLeaf(store, toTerminalPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        {
+          id: sessionId,
+          type: 'json-claude',
+          label: 'Chat',
+          sessionId,
+          agentKind: 'claude',
+          agentSessionId: 'stray',
+          mode: 'awake'
+        }
+      ],
+      activeTabId: sessionId
+    })
+
+    fsm.convertTabType(toChatPath, 'agent-1', 'json-claude')
+    fsm.convertTabType(toTerminalPath, sessionId, 'agent')
+
+    const chatTab = (store.getSnapshot().state.terminals.panes[toChatPath] as PaneLeaf).tabs[0]
+    expect('agentSessionId' in chatTab).toBe(false)
+    const agentTab = (store.getSnapshot().state.terminals.panes[toTerminalPath] as PaneLeaf).tabs[0]
+    expect(agentTab.sessionId).toBe(sessionId)
+  })
+})
+
+describe('PanesFSM.setTabAgentSessionId', () => {
+  it('records the agent session id on the tab and persists the updated panes', () => {
+    const store = new Store()
+    const persisted: Record<string, PaneNode>[] = []
+    const fsm = new PanesFSM(store, {
+      persist: (panes) => persisted.push(panes),
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null
+    })
+    const wtPath = '/wt/set-agent-session'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'chat-1', type: 'json-claude', label: 'Chat', sessionId: 'chat-1', agentKind: 'opencode' }],
+      activeTabId: 'chat-1'
+    })
+
+    fsm.setTabAgentSessionId(wtPath, 'chat-1', 'ses_new')
+
+    const tab = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0]
+    expect(tab.agentSessionId).toBe('ses_new')
+    const last = persisted.at(-1)?.[wtPath] as PaneLeaf | undefined
+    expect(last?.tabs[0].agentSessionId).toBe('ses_new')
+  })
+
+  it('does not persist when the tab is unknown', () => {
+    const store = new Store()
+    const persist = vi.fn()
+    const fsm = new PanesFSM(store, {
+      persist,
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null
+    })
+    const wtPath = '/wt/set-agent-session-missing'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'chat-1', type: 'json-claude', label: 'Chat', sessionId: 'chat-1', agentKind: 'opencode' }],
+      activeTabId: 'chat-1'
+    })
+
+    fsm.setTabAgentSessionId(wtPath, 'missing', 'ses_new')
+    fsm.setTabAgentSessionId('/wt/unknown', 'chat-1', 'ses_new')
+
+    expect(persist).not.toHaveBeenCalled()
+  })
 })
 
 describe('PanesFSM.ensureInitialized per-agent default tab type', () => {
@@ -562,5 +739,36 @@ describe('PanesFSM.restoreFromConfig', () => {
     const leaf = tree as PaneLeaf
     const chatTab = leaf.tabs.find((t) => t.id === 'chat-1')
     expect(chatTab && 'runtime' in chatTab).toBe(false)
+  })
+
+  it('keeps a persisted agentSessionId on json-claude tabs and adds no key when absent', async () => {
+    const { fsm, store } = buildFSM()
+    const wtPath = '/wt/restore-agent-session'
+    await fsm.restoreFromConfig({
+      _ignored: {
+        [wtPath]: {
+          type: 'leaf',
+          id: 'pane-1',
+          tabs: [
+            {
+              id: 'chat-1',
+              type: 'json-claude',
+              label: 'Chat',
+              agentKind: 'opencode',
+              sessionId: 'chat-1',
+              agentSessionId: 'ses_saved'
+            },
+            { id: 'chat-2', type: 'json-claude', label: 'Chat', agentKind: 'opencode', sessionId: 'chat-2' }
+          ],
+          activeTabId: 'chat-1'
+        }
+      }
+    })
+    fsm.ensureInitialized(wtPath)
+    const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
+    const withId = leaf.tabs.find((t) => t.id === 'chat-1')
+    const withoutId = leaf.tabs.find((t) => t.id === 'chat-2')
+    expect(withId?.agentSessionId).toBe('ses_saved')
+    expect(withoutId && 'agentSessionId' in withoutId).toBe(false)
   })
 })

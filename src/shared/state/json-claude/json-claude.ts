@@ -36,6 +36,7 @@ export function jsonClaudeReducer(
       // kind/id the runtime requested.
       const agentKind = existing?.agentKind ?? event.payload.agentKind
       const runtimeId = existing?.runtimeId ?? event.payload.runtimeId
+      const agentSessionId = existing?.agentSessionId ?? event.payload.agentSessionId
       return {
         ...state,
         sessions: {
@@ -45,6 +46,7 @@ export function jsonClaudeReducer(
             worktreePath,
             agentKind,
             runtimeId,
+            ...(agentSessionId ? { agentSessionId } : {}),
             state: 'connecting',
             exitCode: null,
             exitReason: null,
@@ -61,6 +63,17 @@ export function jsonClaudeReducer(
             sessionAllowedDecisions: existing?.sessionAllowedDecisions ?? {},
             capabilities
           }
+        }
+      }
+    }
+    case 'jsonClaude/agentSessionIdChanged': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session || session.agentSessionId === event.payload.agentSessionId) return state
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: { ...session, agentSessionId: event.payload.agentSessionId }
         }
       }
     }

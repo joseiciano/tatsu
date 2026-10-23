@@ -1,4 +1,4 @@
-import type { ChatRuntime } from './types'
+import type { ChatRuntime, ApprovalDecision } from './types'
 import type { Store } from '../store'
 import type { AgentKind } from '../../shared/state/terminals'
 import type {
@@ -6,7 +6,7 @@ import type {
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
-export type { ChatRuntime } from './types'
+export type { ChatRuntime, ApprovalDecision } from './types'
 export { ClaudeAcpRuntime, resolveClaudeAgentSdkExecutablePath } from './claude-acp'
 export {
   AcpStdioRuntime,
@@ -70,6 +70,7 @@ export class ChatRuntimeRegistry {
     opts?: {
       permissionMode?: JsonClaudePermissionMode
       modelOverride?: string
+      agentSessionId?: string
     }
   ): void {
     this.getRuntime(sessionId).start(sessionId, worktreePath, opts)
@@ -99,6 +100,24 @@ export class ChatRuntimeRegistry {
 
   rewindTo(sessionId: string, fromEntryId: string): { ok: boolean; reason?: string } {
     return this.getRuntime(sessionId).rewindTo(sessionId, fromEntryId)
+  }
+
+  async authenticate(sessionId: string, methodId: string): Promise<{ ok: boolean; error?: string }> {
+    const runtime = this.getRuntime(sessionId)
+    if (!runtime.authenticate) {
+      return { ok: false, error: 'This runtime has no in-app login' }
+    }
+    return runtime.authenticate(sessionId, methodId)
+  }
+
+  /** Route an approval answer to the runtime that raised it. The pending
+   *  approval in the slice names the session, and the session names the
+   *  runtime. */
+  resolveApproval(requestId: string, decision: ApprovalDecision): boolean {
+    const pending = this.store.getSnapshot().state.jsonClaude.pendingApprovals[requestId]
+    if (!pending) return false
+    const runtime = this.getRuntime(pending.sessionId)
+    return runtime.resolveApproval?.(requestId, decision) ?? false
   }
 
   setPermissionMode(sessionId: string, mode: JsonClaudePermissionMode): void {

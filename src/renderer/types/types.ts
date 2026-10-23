@@ -408,6 +408,11 @@ export interface ElectronAPI {
   setEditor(editorId: string): Promise<boolean>
   getAvailableEditors(): Promise<{ id: string; name: string }[]>
   downloadRuntime(agentKind: DownloadableRuntime): Promise<boolean>
+  authenticateJsonClaude(
+    sessionId: string,
+    methodId: string,
+    apiKey?: string
+  ): Promise<{ ok: boolean; error?: string }>
   refreshRuntimes(): Promise<boolean>
   snooze(path: string, wakeAt: number): Promise<boolean>
   unsnooze(path: string): Promise<boolean>

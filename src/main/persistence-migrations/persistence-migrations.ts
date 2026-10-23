@@ -22,6 +22,8 @@ export interface PersistedTab {
   label: string
   agentKind?: AgentKind
   sessionId?: string
+  /** For json-claude tabs on ACP agents: the agent's own session id. */
+  agentSessionId?: string
   /** For browser tabs: last URL so we can restore the tab on reload. */
   url?: string
   /** For shell tabs: command passed via `zsh -ilc <command>` (agent-spawned). */

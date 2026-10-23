@@ -3,7 +3,7 @@ import { createRequire } from 'module'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { PtyManager } from './pty-manager'
-import { ChatRuntimeRegistry } from './chat-runtimes'
+import { ChatRuntimeRegistry, type ApprovalDecision } from './chat-runtimes'
 import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
 import { AcpStdioRuntime } from './chat-runtimes/acp-stdio'
 import { BundledRuntimeResolver } from './chat-runtimes/runtime-path-resolver'
@@ -21,6 +21,7 @@ import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
 import { detectRuntime, resolveRuntimeManifestPath, userDataDir } from './paths'
+import { shellQuote } from './shell-quote'
 import { RuntimeDownloader, readRuntimeManifest } from './runtime-downloader'
 import { fixPathFromLoginShell } from './path-fix'
 import { parseCliFlags, USAGE, type CliFlags } from './cli-args'
@@ -537,11 +538,16 @@ chatRuntimeRegistry.register(
     launch: () => bundledRuntimeResolver.buildOpenCodeConfig()
   })
 )
+const OPENAI_API_KEY_SECRET = 'openaiApiKey'
 chatRuntimeRegistry.register(
   'codex',
   new AcpStdioRuntime(store, {
     agentKind: 'codex',
-    launch: () => bundledRuntimeResolver.buildCodexConfig()
+    launch: () => {
+      const cfg = bundledRuntimeResolver.buildCodexConfig()
+      const key = process.env.OPENAI_API_KEY ?? process.env.CODEX_API_KEY ?? getSecret(OPENAI_API_KEY_SECRET)
+      return key ? { ...cfg, env: { ...cfg.env, OPENAI_API_KEY: key } } : cfg
+    }
   })
 )
 runtimeDownloader.publishStatuses()
@@ -718,7 +724,8 @@ function treeToPersistedNode(node: PaneNode): PersistedPaneNode | null {
           command: stripped.command,
           cwd: stripped.cwd,
           model: stripped.model,
-          ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {})
+          ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {}),
+          ...(stripped.agentSessionId ? { agentSessionId: stripped.agentSessionId } : {})
         }
       })
     if (tabs.length === 0) return null
@@ -815,6 +822,18 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
   return undefined
 }
 
+function findJsonClaudeTab(sessionId: string): { worktreePath: string; tab: TerminalTab } | undefined {
+  const panes = store.getSnapshot().state.terminals.panes
+  for (const [worktreePath, tree] of Object.entries(panes)) {
+    for (const leaf of getLeaves(tree)) {
+      for (const tab of leaf.tabs) {
+        if (tab.id === sessionId && tab.type === 'json-claude') return { worktreePath, tab }
+      }
+    }
+  }
+  return undefined
+}
+
 /** Look up a json-claude tab's persisted `agentKind` by sessionId (which
  *  is also the tab id for json-claude tabs). Used when a fresh json-claude
  *  session starts before its slice entry exists, so the registry can route
@@ -867,7 +886,8 @@ function startJsonClaudeSession(
       runtimeId: kind,
       defaultPermissionMode:
         store.getSnapshot().state.settings.jsonModeDefaultPermissionMode,
-      capabilities
+      capabilities,
+      agentSessionId: findJsonClaudeTab(sessionId)?.tab.agentSessionId
     }
   })
   const permMode =
@@ -878,6 +898,16 @@ function startJsonClaudeSession(
     modelOverride: findJsonClaudeTabModel(sessionId)
   })
 }
+
+// The agent assigns ACP session ids at session/new; record each on its tab
+// so the next start (wake, reload, convert) can session/load it.
+store.subscribe((event) => {
+  if (event.type !== 'jsonClaude/agentSessionIdChanged') return
+  const { sessionId, agentSessionId } = event.payload
+  const hit = findJsonClaudeTab(sessionId)
+  if (!hit || hit.tab.agentSessionId === agentSessionId) return
+  panesFSM.setTabAgentSessionId(hit.worktreePath, hit.tab.id, agentSessionId)
+})
 
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
@@ -2678,7 +2708,12 @@ function registerIpcHandlers(): void {
 
   transport.onRequest(
     'jsonClaude:resolveApproval',
-    () => false
+    (_ctx, requestId: string, decision: ApprovalDecision) => {
+      if (!requestId || !decision || (decision.behavior !== 'allow' && decision.behavior !== 'deny')) {
+        return false
+      }
+      return chatRuntimeRegistry.resolveApproval(requestId, decision)
+    }
   )
 
   transport.onRequest(
@@ -2783,12 +2818,45 @@ function registerIpcHandlers(): void {
     }
   )
 
+  // Terminal-type login (OpenCode's `opencode auth login`): open a shell tab
+  // in the worktree that runs the bundled/downloaded binary, never a PATH
+  // lookup. Codex logs in in-process through jsonClaude:authenticate.
   transport.onRequest(
     'jsonClaude:openAuthLoginTab',
     (_ctx, worktreePath: string, sessionId: string): { ok: true; tabId: string } | { ok: false; error: string } => {
-      void worktreePath
-      void sessionId
-      return { ok: false, error: 'Auth login is not supported by the ACP runtime' }
+      if (!worktreePath || !sessionId) return { ok: false, error: 'missing worktree or session' }
+      const kind = store.getSnapshot().state.jsonClaude.sessions[sessionId]?.agentKind
+      if (kind !== 'opencode') {
+        return { ok: false, error: `${kind ?? 'this agent'} logs in from the chat card, not a terminal` }
+      }
+      let binary: string
+      try {
+        binary = bundledRuntimeResolver.resolveOpenCodeExecutable()
+      } catch (err) {
+        return { ok: false, error: formatErr(err) }
+      }
+      const tabId = `shell-${Date.now()}`
+      panesFSM.addTab(worktreePath, {
+        id: tabId,
+        type: 'shell',
+        label: 'OpenCode login',
+        command: `${shellQuote(binary)} auth login`
+      })
+      return { ok: true, tabId }
+    }
+  )
+
+  // In-process login for ACP agents. An API key is kept in the encrypted
+  // secrets store and reaches the agent through its launch env (see the
+  // Codex launch config), so the runtime respawns before authenticating.
+  transport.onRequest(
+    'jsonClaude:authenticate',
+    async (_ctx, sessionId: string, methodId: string, apiKey?: string) => {
+      if (!sessionId || !methodId) return { ok: false, error: 'missing session or method' }
+      if (typeof apiKey === 'string' && apiKey.trim()) {
+        setSecret(OPENAI_API_KEY_SECRET, apiKey.trim())
+      }
+      return chatRuntimeRegistry.authenticate(sessionId, methodId)
     }
   )
 

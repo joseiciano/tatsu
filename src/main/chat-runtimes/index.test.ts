@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ChatRuntimeRegistry } from './index'
 import { Store } from '../store'
+import type { ApprovalDecision, ChatRuntime } from './types'
 
 function createMockRuntime(): import('./types').ChatRuntime {
   return {
@@ -92,5 +93,109 @@ describe('ChatRuntimeRegistry.getRuntime (per-session routing)', () => {
     expect(registry.getRuntime('c')).toBe(claude)
     expect(registry.getRuntime('o')).toBe(opencode)
     expect(registry.getRuntime('x')).toBe(codex)
+  })
+})
+
+describe('ChatRuntimeRegistry.resolveApproval', () => {
+  function seedApproval(store: Store, requestId: string, sessionId: string): void {
+    store.dispatch({
+      type: 'jsonClaude/approvalRequested',
+      payload: { requestId, sessionId, toolName: 'bash', input: {}, timestamp: 0 }
+    })
+  }
+
+  function recordingRuntime(answer: boolean) {
+    const calls: Array<{ requestId: string; decision: ApprovalDecision }> = []
+    const runtime: ChatRuntime = {
+      ...createMockRuntime(),
+      resolveApproval: (requestId, decision) => {
+        calls.push({ requestId, decision })
+        return answer
+      }
+    }
+    return { runtime, calls }
+  }
+
+  it("routes the answer to the runtime of the pending approval's session", () => {
+    const store = new Store()
+    seedSession(store, 'c', 'claude')
+    seedSession(store, 'o', 'opencode')
+    seedApproval(store, 'o-perm-1', 'o')
+    const registry = new ChatRuntimeRegistry(store)
+    const claude = recordingRuntime(true)
+    const opencode = recordingRuntime(true)
+    registry.register('claude', claude.runtime)
+    registry.register('opencode', opencode.runtime)
+
+    expect(registry.resolveApproval('o-perm-1', { behavior: 'deny', interrupt: true })).toBe(true)
+    expect(opencode.calls).toEqual([
+      { requestId: 'o-perm-1', decision: { behavior: 'deny', interrupt: true } }
+    ])
+    expect(claude.calls).toEqual([])
+  })
+
+  it("returns the runtime's answer when it does not recognize the request", () => {
+    const store = new Store()
+    seedSession(store, 'o', 'opencode')
+    seedApproval(store, 'o-perm-1', 'o')
+    const registry = new ChatRuntimeRegistry(store)
+    registry.register('opencode', recordingRuntime(false).runtime)
+
+    expect(registry.resolveApproval('o-perm-1', { behavior: 'allow' })).toBe(false)
+  })
+
+  it('returns false without touching any runtime for an unknown request id', () => {
+    const store = new Store()
+    seedSession(store, 'o', 'opencode')
+    const registry = new ChatRuntimeRegistry(store)
+    const opencode = recordingRuntime(true)
+    registry.register('opencode', opencode.runtime)
+
+    expect(registry.resolveApproval('nope', { behavior: 'allow' })).toBe(false)
+    expect(opencode.calls).toEqual([])
+  })
+
+  it('returns false when the owning runtime has no resolveApproval', () => {
+    const store = new Store()
+    seedSession(store, 'c', 'claude')
+    seedApproval(store, 'c-perm-1', 'c')
+    const registry = new ChatRuntimeRegistry(store)
+    registry.register('claude', createMockRuntime())
+
+    expect(registry.resolveApproval('c-perm-1', { behavior: 'allow' })).toBe(false)
+  })
+})
+
+describe('ChatRuntimeRegistry.authenticate', () => {
+  it("routes the login to the runtime of the session's agent kind and returns its result", async () => {
+    const store = new Store()
+    seedSession(store, 'c', 'claude')
+    seedSession(store, 'x', 'codex')
+    const registry = new ChatRuntimeRegistry(store)
+    const calls: Array<{ runtime: string; sessionId: string; methodId: string }> = []
+    const recording = (name: string, result: { ok: boolean; error?: string }): ChatRuntime => ({
+      ...createMockRuntime(),
+      authenticate: async (sessionId, methodId) => {
+        calls.push({ runtime: name, sessionId, methodId })
+        return result
+      }
+    })
+    registry.register('claude', recording('claude', { ok: true }))
+    registry.register('codex', recording('codex', { ok: false, error: 'denied' }))
+
+    await expect(registry.authenticate('x', 'api-key')).resolves.toEqual({ ok: false, error: 'denied' })
+    expect(calls).toEqual([{ runtime: 'codex', sessionId: 'x', methodId: 'api-key' }])
+  })
+
+  it('returns ok false with a message when the runtime has no in-app login', async () => {
+    const store = new Store()
+    seedSession(store, 'c', 'claude')
+    const registry = new ChatRuntimeRegistry(store)
+    registry.register('claude', createMockRuntime())
+
+    await expect(registry.authenticate('c', 'chat-gpt')).resolves.toEqual({
+      ok: false,
+      error: expect.stringMatching(/\S/)
+    })
   })
 })

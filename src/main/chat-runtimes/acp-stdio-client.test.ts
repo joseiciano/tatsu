@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EventEmitter } from 'events'
-import { AcpStdioClient } from './acp-stdio-client'
+import { ACP_AUTH_REQUIRED, AcpRequestError, AcpStdioClient } from './acp-stdio-client'
 
 /** Build a fake ChildProcess whose stdout we control, so framing behavior
  *  (split frames, multiple frames per chunk, malformed lines) is deterministic. */
@@ -109,16 +109,31 @@ describe('AcpStdioClient request/response', () => {
     await expect(p).resolves.toEqual({ pong: true })
   })
 
-  it('rejects a request when the agent returns a JSON-RPC error', async () => {
+  it('rejects a JSON-RPC error reply with an AcpRequestError carrying code and data', async () => {
     const { client, fake } = makeClient()
-    const p = client.request('boom', {})
+    const p = client.request('session/new', {})
     const id = lastRequestId(fake)
     pushFrame(fake, {
       jsonrpc: '2.0',
       id,
-      error: { code: -32000, message: 'nope' }
+      error: { code: ACP_AUTH_REQUIRED, message: 'Authentication required', data: { methods: ['chat-gpt'] } }
     })
-    await expect(p).rejects.toThrow(/nope/)
+    const err = (await p.catch((e) => e)) as AcpRequestError
+    expect(err).toBeInstanceOf(AcpRequestError)
+    expect(err.message).toBe('Authentication required')
+    expect(err.code).toBe(-32000)
+    expect(err.data).toEqual({ methods: ['chat-gpt'] })
+  })
+
+  it('rejects an error reply with no message using a message that names the code', async () => {
+    const { client, fake } = makeClient()
+    const p = client.request('boom', {})
+    const id = lastRequestId(fake)
+    pushFrame(fake, { jsonrpc: '2.0', id, error: { code: -32603 } })
+    const err = (await p.catch((e) => e)) as AcpRequestError
+    expect(err).toBeInstanceOf(AcpRequestError)
+    expect(err.code).toBe(-32603)
+    expect(err.message).toContain('-32603')
   })
 
   it('rejects a request that never receives a response after the configured timeout', async () => {

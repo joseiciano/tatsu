@@ -52,15 +52,38 @@ Done on branch `acp-support` (rebased on main, which added the Pi agent):
   desktop + download smokes run in the mac/linux workflows; `AGENTS.md`
   documents the layout.
 
-Not done — see Phases 5, 7, 8:
+- Phase 5 — approvals (`session/request_permission` → the existing
+  approval card, grants keyed on the ACP tool `kind`), login (auth-required
+  detection, per-method actions on the auth card: Codex `api-key` /
+  `chat-gpt` in-process, OpenCode terminal tab), continuity
+  (`agentSessionId` on tabs + slice, `session/load` replay, conversion
+  carries the id both ways), permission mode via `session/set_mode`, model
+  via `session/set_config_option`, `acceptEdits` auto-allows `edit` calls.
+- Phase 7 (partial) — `available_commands_update` → slash commands;
+  `plan` → the TodoWrite card.
 
-- Login from a chat tab (OpenCode and Codex).
-- Tool approvals (every `session/request_permission` is answered
-  `cancelled`, so any tool that needs approval is refused).
-- Conversation continuity across tab conversion and app restart.
-- Model selection (per-tab model override is ignored by the stdio runtime).
+Not done — see Phases 7, 8:
+
+- `session_info_update` → tab title; `usage_update` cost (see below).
 - A signed + notarized build has not yet run with the new layout.
 - Release gate flag.
+
+Probe findings (2026-10-23, bundled binaries, this machine):
+
+- Codex `session/new` returns `modes.availableModes` = read-only / agent /
+  agent-full-access and `configOptions` = `mode`, `collaboration_mode`,
+  `model` (current `gpt-5.2-codex`); OpenCode returns `modes: null` and a
+  `model` select whose `options` list every configured provider model.
+- OpenCode emits `usage_update { used, size, cost: { amount, currency } }`
+  after `session/new`, so a per-session USD cost is available for OpenCode
+  even though per-model token counts are not.
+- Credential failures are not always `-32000`: OpenCode reports an expired
+  key as `-32603` "This API key has expired…", and this machine's Codex
+  config reports a missing provider key as plain assistant text. Auth
+  detection therefore also matches the error message.
+- Neither agent reached a tool call here (both blocked at the model by
+  this machine's credentials), so the `title` vs `kind` mapping follows
+  the ACP spec, not an observed frame.
 
 ## Bundled agent facts (measured 2026-10-23, darwin-arm64)
 
@@ -326,9 +349,9 @@ runtime). Required behavior for OpenCode and Codex:
 
 | Update | Decision |
 |---|---|
-| `available_commands_update` | Support: dispatch `jsonClaude/slashCommandsChanged` with the command names; send as `/name args` text in `session/prompt` (verify each agent accepts prefixed text). |
-| `plan` | Support: map entries to the existing TodoWrite helper (`json-claude-todos`) — same shape (content, priority, status). |
-| `usage_update` | Defer: ACP gives context `{ size, used, cost? }`, not per-model token counts, so it cannot fill `SessionUsage`. Keep `hasCostTracking: false`; revisit if the agents expose per-turn usage. |
+| `available_commands_update` | Done: `jsonClaude/slashCommandsChanged` with the command names, `hasSlashCommands` capability; the renderer sends `/name args` as prompt text (verify each agent accepts prefixed text). |
+| `plan` | Done: entries become a synthetic `TodoWrite` tool_use block with an empty result, so the existing TodoWrite card renders them. |
+| `usage_update` | Open: OpenCode sends `cost.amount` in USD, Codex sends `usage: null`. `SessionUsage` wants per-model tokens; add a lighter "session cost only" path to the costs slice for agents that report a total, or keep `hasCostTracking: false`. |
 | `session_info_update` | Support: title → tab label when the user has not renamed the tab. |
 | `current_mode_update`, `config_option_update` | Support (see Model selection). |
 | `fs/*`, `terminal/*` client methods | Keep advertising none. Agents fall back to their own fs/terminal. Revisit only if an agent refuses to run tools without them. |
@@ -358,14 +381,18 @@ runtime). Required behavior for OpenCode and Codex:
 
 ### Phase 4 — Wiring + rollout surface — done except release gate (Phase 8)
 
-### Phase 5 — Make chat tabs usable: login, approvals, continuity, model
+### Phase 5 — Make chat tabs usable: login, approvals, continuity, model — done
 
-Order within the phase, each its own commit with tests:
-
-1. Approvals mapping (unblocks every tool that needs approval).
-2. Auth-required detection + per-method login actions.
-3. `session/load` continuity + session id persistence on the tab.
-4. Permission-mode and model via `session/set_config_option`.
+1. Approvals mapping. Session grants key on the ACP tool `kind`
+   (`execute`, `edit`, …) because `title` describes one call; the title
+   rides in the approval's `input` so the card still shows it.
+2. Auth-required detection (`-32000` or a credential-shaped message) +
+   per-method login actions; the parked prompt is retried after login.
+3. `session/load` continuity + `agentSessionId` persisted on the tab;
+   conversion carries it both ways; failed loads fall back to a new
+   session with a notice.
+4. Permission mode via `session/set_mode` (Codex modes), model via
+   `session/set_config_option`; `acceptEdits` auto-allows `edit` calls.
 
 ### Phase 6 — Packaging correctness — done except item 5
 

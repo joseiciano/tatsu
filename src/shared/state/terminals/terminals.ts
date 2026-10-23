@@ -248,7 +248,7 @@ export function terminalsReducer(
       return changed ? { ...state, sessions: nextSessions } : state
     }
     case 'terminals/tabTypeChanged': {
-      const { worktreePath, tabId, newId, newType, newLabel, agentKind } =
+      const { worktreePath, tabId, newId, newType, newLabel, agentKind, agentSessionId } =
         event.payload
       const tree = state.panes[worktreePath]
       if (!tree) return state
@@ -270,6 +270,7 @@ export function terminalsReducer(
               label: newLabel,
               sessionId,
               agentKind,
+              ...(agentSessionId ? { agentSessionId } : {}),
               mode: 'awake' as const
             }
           }
@@ -278,7 +279,7 @@ export function terminalsReducer(
             type: 'agent' as const,
             agentKind,
             label: newLabel,
-            sessionId
+            sessionId: agentSessionId ?? sessionId
           }
         })
         const activeTabId = leaf.activeTabId === tabId ? newId : leaf.activeTabId
@@ -309,6 +310,25 @@ export function terminalsReducer(
         ]
         mutated = true
         return { ...leaf, tabs: nextTabs }
+      })
+      if (!mutated) return state
+      return { ...state, panes: { ...state.panes, [worktreePath]: updated } }
+    }
+    case 'terminals/tabAgentSessionIdChanged': {
+      const { worktreePath, tabId, agentSessionId } = event.payload
+      const tree = state.panes[worktreePath]
+      if (!tree) return state
+      let mutated = false
+      const updated = mapLeaves(tree, (leaf) => {
+        const i = leaf.tabs.findIndex((t) => t.id === tabId)
+        if (i === -1) return leaf
+        const tab = leaf.tabs[i]
+        if (tab.agentSessionId === agentSessionId) return leaf
+        mutated = true
+        return {
+          ...leaf,
+          tabs: [...leaf.tabs.slice(0, i), { ...tab, agentSessionId }, ...leaf.tabs.slice(i + 1)]
+        }
       })
       if (!mutated) return state
       return { ...state, panes: { ...state.panes, [worktreePath]: updated } }

@@ -175,6 +175,7 @@ export class PanesFSM {
         label: t.label,
         agentKind: t.agentKind,
         sessionId: t.sessionId,
+        ...(t.agentSessionId ? { agentSessionId: t.agentSessionId } : {}),
         url: t.url,
         command: t.command,
         cwd: t.cwd,
@@ -449,11 +450,20 @@ export class PanesFSM {
         : `agent-${wtPath.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`
     const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName(tab.agentKind ?? 'claude')
     // Preserve the agent kind so the destination tab routes to the same
-    // runtime.
+    // runtime. For ACP agents the agent's own session id travels too:
+    // chat → terminal resumes it on the CLI; terminal → chat offers the
+    // terminal's session id to session/load (best effort — the runtime
+    // starts a new session when the agent does not know it).
     const agentKind = tab.agentKind ?? 'claude'
+    const agentSessionId =
+      agentKind === 'claude'
+        ? undefined
+        : tab.type === 'json-claude'
+          ? tab.agentSessionId
+          : tab.sessionId
     this.store.dispatch({
       type: 'terminals/tabTypeChanged',
-      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel, agentKind }
+      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel, agentKind, agentSessionId }
     })
     this.opts.persist(this.buildPersistPayload())
   }
@@ -482,6 +492,20 @@ export class PanesFSM {
       leaf.id === paneId ? { ...leaf, activeTabId: tabId } : leaf
     )
     this.commit(wtPath, updated)
+  }
+
+  /** Record the agent-assigned session id on a json-claude tab once the
+   *  runtime learns it, so the next start can `session/load` it. */
+  setTabAgentSessionId(wtPath: string, tabId: string, agentSessionId: string): void {
+    const tree = this.getTree(wtPath)
+    if (!tree) return
+    const leaf = findLeafByTabId(tree, tabId)
+    if (!leaf) return
+    this.store.dispatch({
+      type: 'terminals/tabAgentSessionIdChanged',
+      payload: { worktreePath: wtPath, tabId, agentSessionId }
+    })
+    this.opts.persist(this.buildPersistPayload())
   }
 
   renameTab(wtPath: string, tabId: string, label: string): void {

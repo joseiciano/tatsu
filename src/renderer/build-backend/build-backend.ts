@@ -365,6 +365,8 @@ export function buildBackend(
     getAvailableEditors: () => req('config:getAvailableEditors'),
 
     downloadRuntime: (agentKind: DownloadableRuntime) => req('runtimes:download', agentKind),
+    authenticateJsonClaude: (sessionId: string, methodId: string, apiKey?: string) =>
+      req('jsonClaude:authenticate', sessionId, methodId, apiKey),
     refreshRuntimes: () => req('runtimes:refresh'),
     snooze: (path: string, wakeAt: number) => req('snooze:snooze', path, wakeAt),
     unsnooze: (path: string) => req('snooze:unsnooze', path),

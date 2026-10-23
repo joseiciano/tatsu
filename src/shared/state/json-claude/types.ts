@@ -11,6 +11,16 @@ export type JsonClaudeSessionState =
  *  Codex can route once their runtimes land. */
 export type ChatRuntimeId = 'claude' | 'opencode' | 'codex'
 
+/** An ACP `authMethods` entry. `terminal` methods must be run by the user
+ *  in a shell (OpenCode's `opencode auth login`); the rest complete
+ *  in-process through `authenticate` (Codex's api-key / chat-gpt). */
+export interface JsonClaudeAuthMethod {
+  id: string
+  name: string
+  description?: string
+  type?: 'agent' | 'terminal'
+}
+
 export interface ChatRuntimeCapabilities {
   canInterrupt: boolean
   canRewind: boolean
@@ -101,9 +111,13 @@ export interface JsonClaudeChatEntry {
     | 'auth-failure'
     | 'protocol-version'
     | 'runtime-missing'
+    | 'session-load-failed'
   /** For kind === 'error'. Human-readable detail (exitReason, rate-limit
    *  retry-at timestamp, original auth error string, etc.). */
   errorMessage?: string
+  /** For errorKind === 'auth-failure' on ACP runtimes: the login methods
+   *  the agent advertised at `initialize`, so the card can offer each. */
+  authMethods?: JsonClaudeAuthMethod[]
   /** For kind === 'error' with errorKind === 'subprocess-exit'. Whether the
    *  exit was clean (user closed the tab) or unexpected (crash). */
   exitWasClean?: boolean
@@ -153,6 +167,9 @@ export interface JsonClaudeSession {
    *  agentKind, but kept separate so a future runtime swap doesn't
    *  rewrite the agent identity. */
   runtimeId: ChatRuntimeId
+  /** ACP agents: the agent-assigned session id (OpenCode `ses_*`, Codex
+   *  thread id). Set after `session/new`; reused for `session/load`. */
+  agentSessionId?: string
   state: JsonClaudeSessionState
   exitCode: number | null
   exitReason: string | null
@@ -265,7 +282,14 @@ export type JsonClaudeEvent =
         /** Capability flags advertised by the runtime. If omitted, the
          *  reducer seeds ACP defaults. */
         capabilities?: ChatRuntimeCapabilities
+        /** ACP agent session to continue (from the tab). Ignored when the
+         *  slice session already carries one. */
+        agentSessionId?: string
       }
+    }
+  | {
+      type: 'jsonClaude/agentSessionIdChanged'
+      payload: { sessionId: string; agentSessionId: string }
     }
   | {
       type: 'jsonClaude/sessionStateChanged'

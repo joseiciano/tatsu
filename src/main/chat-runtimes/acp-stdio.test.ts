@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { AcpStdioRuntime, defaultAcpStdioCapabilities } from './acp-stdio'
+import { AcpStdioRuntime, acpModeFor, defaultAcpStdioCapabilities, parseAuthMethods } from './acp-stdio'
+import { ACP_AUTH_REQUIRED, AcpRequestError } from './acp-stdio-client'
 import { RuntimeMissingError } from './runtime-path-resolver'
 import { Store } from '../store'
 import type { StateEvent } from '../../shared/state'
@@ -23,8 +24,15 @@ class FakeAcpClient {
   onErrorCb: ((err: Error) => void) | null = null
   onMalformedCb: ((raw: string) => void) | null = null
 
+  /** Per-method override consulted before the defaults below, so a test can
+   *  make any request reject (e.g. with an AcpRequestError) or vary its reply
+   *  across calls. */
+  responders: Record<string, (params: any) => Promise<any>> = {}
+
   request(method: string, params: unknown, timeoutMs?: number): Promise<any> {
     this.requests.push({ method, params, timeoutMs })
+    const responder = this.responders[method]
+    if (responder) return responder(params)
     if (method === 'initialize') {
       if (this.initReject) return Promise.reject(this.initReject)
       if (this.initBlocked) return new Promise(() => {})
@@ -91,7 +99,13 @@ function eventsOf(events: StateEvent[], type: string): StateEvent[] {
 }
 
 function seed(
-  opts: { flushIntervalMs?: number; initResult?: any; requestTimeoutMs?: number } = {}
+  opts: {
+    flushIntervalMs?: number
+    initResult?: any
+    requestTimeoutMs?: number
+    agentSessionId?: string
+    modelOverride?: string
+  } = {}
 ) {
   const { store, events } = createStore()
   const fake = new FakeAcpClient()
@@ -110,10 +124,11 @@ function seed(
       sessionId: 's1',
       worktreePath: '/wt',
       agentKind: 'opencode',
-      runtimeId: 'opencode'
+      runtimeId: 'opencode',
+      ...(opts.agentSessionId ? { agentSessionId: opts.agentSessionId } : {})
     }
   })
-  runtime.start('s1', '/wt')
+  runtime.start('s1', '/wt', opts.modelOverride ? { modelOverride: opts.modelOverride } : undefined)
   return { store, events, fake, runtime }
 }
 
@@ -880,29 +895,305 @@ describe('AcpStdioRuntime interrupt / kill / exit', () => {
   })
 })
 
-describe('AcpStdioRuntime permission + capabilities', () => {
-  it('responds to session/request_permission with the cancelled outcome', async () => {
-    const { fake, runtime } = seed()
-    runtime.send('s1', 'hi')
+describe('AcpStdioRuntime permission requests', () => {
+  /** Options deliberately ordered so that "take the first option" or
+   *  "take the first allow/reject" picks the wrong one. */
+  const ALL_OPTIONS = [
+    { optionId: 'opt-reject-always', name: 'Never', kind: 'reject_always' },
+    { optionId: 'opt-allow-always', name: 'Always', kind: 'allow_always' },
+    { optionId: 'opt-reject-once', name: 'Reject', kind: 'reject_once' },
+    { optionId: 'opt-allow-once', name: 'Allow', kind: 'allow_once' }
+  ]
+
+  function permissionParams(
+    options: Array<{ optionId: string; name: string; kind: string }> = ALL_OPTIONS,
+    toolCall: Record<string, unknown> = {
+      toolCallId: 'call_1',
+      title: 'Run `ls`',
+      kind: 'execute',
+      rawInput: { command: 'ls' }
+    }
+  ) {
+    return { sessionId: 'acp-sess-1', toolCall, options }
+  }
+
+  async function seedWithPrompt() {
+    const seeded = seed()
+    seeded.runtime.send('s1', 'hi')
     await tick()
-    const result = fake.onRequestCb?.('session/request_permission', {
-      sessionId: 'acp-sess-1',
-      toolCall: { toolCallId: 'call_1' }
+    return seeded
+  }
+
+  function requestPermission(fake: FakeAcpClient, params: unknown = permissionParams()): Promise<any> {
+    return fake.onRequestCb!('session/request_permission', params) as Promise<any>
+  }
+
+  function trackSettled(p: Promise<any>): { settled: boolean } {
+    const state = { settled: false }
+    p.then(() => {
+      state.settled = true
     })
-    expect(result).toEqual({ outcome: { outcome: 'cancelled' } })
+    return state
+  }
+
+  function grantForSession(store: Store, toolName: string): void {
+    store.dispatch({
+      type: 'jsonClaude/sessionToolApprovalsGranted',
+      payload: { sessionId: 's1', toolNames: [toolName] }
+    })
+  }
+
+  it('surfaces a request as a pending approval and leaves the agent waiting', async () => {
+    const { store, fake } = await seedWithPrompt()
+    const reply = trackSettled(requestPermission(fake))
+    await tick()
+
+    expect(reply.settled).toBe(false)
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({
+      's1-perm-1': {
+        requestId: 's1-perm-1',
+        sessionId: 's1',
+        toolName: 'execute',
+        input: { title: 'Run `ls`', command: 'ls' },
+        toolUseId: 'call_1',
+        timestamp: expect.any(Number)
+      }
+    })
   })
 
-  it('exposes conservative capabilities by default', () => {
-    const { runtime } = seed()
-    const caps = runtime.getCapabilities('s1')
-    expect(caps).toEqual(defaultAcpStdioCapabilities())
-    expect(caps.canInterrupt).toBe(true)
-    expect(caps.canRewind).toBe(false)
-    expect(caps.canSetPermissionMode).toBe(false)
-    expect(caps.canApproveTools).toBe(false)
-    expect(caps.canResume).toBe(false)
+  it.each([
+    {
+      name: 'is the stable kind, not the per-call title, so session grants match later calls',
+      toolCall: { toolCallId: 'c', title: 'Edit src/a.ts', kind: 'edit', rawInput: { path: 'src/a.ts' } },
+      expected: { toolName: 'edit', input: { title: 'Edit src/a.ts', path: 'src/a.ts' } }
+    },
+    {
+      name: 'keeps the agent title field when rawInput already has one',
+      toolCall: { toolCallId: 'c', title: 'ignored', kind: 'edit', rawInput: { title: 'from input' } },
+      expected: { toolName: 'edit', input: { title: 'from input' } }
+    },
+    {
+      name: "falls back to 'tool' with no kind",
+      toolCall: { toolCallId: 'c', title: 'Something' },
+      expected: { toolName: 'tool', input: { title: 'Something' } }
+    }
+  ])('pending approval tool name $name', async ({ toolCall, expected }) => {
+    const { store, fake } = await seedWithPrompt()
+    void requestPermission(fake, permissionParams(ALL_OPTIONS, toolCall))
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals['s1-perm-1']).toMatchObject(
+      expected
+    )
   })
 
+  it('gives each request in a session a distinct request id', async () => {
+    const { store, fake } = await seedWithPrompt()
+    void requestPermission(fake)
+    void requestPermission(fake)
+    expect(Object.keys(store.getSnapshot().state.jsonClaude.pendingApprovals).sort()).toEqual([
+      's1-perm-1',
+      's1-perm-2'
+    ])
+  })
+
+  it('allow answers with the allow_once option and clears the pending approval', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(fake)
+
+    expect(runtime.resolveApproval('s1-perm-1', { behavior: 'allow' })).toBe(true)
+    await expect(reply).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-allow-once' }
+    })
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({})
+  })
+
+  it('allow after the user granted the tool for the session answers allow_always', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(fake)
+
+    grantForSession(store, 'execute')
+    runtime.resolveApproval('s1-perm-1', { behavior: 'allow' })
+    await expect(reply).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-allow-always' }
+    })
+  })
+
+  it('allow falls back to allow_always when the agent offers no allow_once', async () => {
+    const { fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(
+      fake,
+      permissionParams(ALL_OPTIONS.filter((o) => o.kind !== 'allow_once'))
+    )
+    runtime.resolveApproval('s1-perm-1', { behavior: 'allow' })
+    await expect(reply).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-allow-always' }
+    })
+  })
+
+  it('deny answers with the reject_once option without interrupting', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(fake)
+
+    expect(runtime.resolveApproval('s1-perm-1', { behavior: 'deny' })).toBe(true)
+    await expect(reply).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-reject-once' }
+    })
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({})
+    expect(fake.notifications.map((n) => n.method)).not.toContain('session/cancel')
+  })
+
+  it('deny falls back to reject_always when the agent offers no reject_once', async () => {
+    const { fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(
+      fake,
+      permissionParams(ALL_OPTIONS.filter((o) => o.kind !== 'reject_once'))
+    )
+    runtime.resolveApproval('s1-perm-1', { behavior: 'deny' })
+    await expect(reply).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-reject-always' }
+    })
+  })
+
+  it('deny with interrupt rejects the request and cancels the turn', async () => {
+    const { fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(fake)
+
+    runtime.resolveApproval('s1-perm-1', { behavior: 'deny', interrupt: true })
+    await expect(reply).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-reject-once' }
+    })
+    expect(fake.notifications).toContainEqual({
+      method: 'session/cancel',
+      params: { sessionId: 'acp-sess-1' }
+    })
+  })
+
+  it('answers cancelled when the agent offers no option matching the decision', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(
+      fake,
+      permissionParams(ALL_OPTIONS.filter((o) => o.kind.startsWith('reject')))
+    )
+
+    expect(runtime.resolveApproval('s1-perm-1', { behavior: 'allow' })).toBe(true)
+    await expect(reply).resolves.toEqual({ outcome: { outcome: 'cancelled' } })
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({})
+  })
+
+  it('auto-allows a tool already granted for the session without raising a card', async () => {
+    const { store, events, fake } = await seedWithPrompt()
+    grantForSession(store, 'execute')
+
+    await expect(requestPermission(fake)).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'opt-allow-always' }
+    })
+    expect(eventsOf(events, 'jsonClaude/approvalRequested')).toHaveLength(0)
+  })
+
+  it('auto-allow uses allow_once when the agent offers no allow_always', async () => {
+    const { store, events, fake } = await seedWithPrompt()
+    grantForSession(store, 'execute')
+
+    await expect(
+      requestPermission(fake, permissionParams(ALL_OPTIONS.filter((o) => o.kind !== 'allow_always')))
+    ).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'opt-allow-once' } })
+    expect(eventsOf(events, 'jsonClaude/approvalRequested')).toHaveLength(0)
+  })
+
+  it('a session grant for a different tool still raises a card', async () => {
+    const { store, fake } = await seedWithPrompt()
+    grantForSession(store, 'edit')
+    const reply = trackSettled(requestPermission(fake))
+    await tick()
+
+    expect(reply.settled).toBe(false)
+    expect(Object.keys(store.getSnapshot().state.jsonClaude.pendingApprovals)).toEqual([
+      's1-perm-1'
+    ])
+  })
+
+  it('interrupt answers every open request with cancelled and clears them from the slice', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const first = requestPermission(fake)
+    const second = requestPermission(fake)
+
+    runtime.interrupt('s1')
+    await expect(first).resolves.toEqual({ outcome: { outcome: 'cancelled' } })
+    await expect(second).resolves.toEqual({ outcome: { outcome: 'cancelled' } })
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({})
+  })
+
+  it('kill answers open requests with cancelled and clears them from the slice', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const reply = requestPermission(fake)
+
+    runtime.kill('s1')
+    await expect(reply).resolves.toEqual({ outcome: { outcome: 'cancelled' } })
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({})
+  })
+
+  it('unexpected subprocess exit answers open requests with cancelled and clears the slice', async () => {
+    const { store, fake } = await seedWithPrompt()
+    const reply = requestPermission(fake)
+
+    fake.onExitCb?.(1, null)
+    await expect(reply).resolves.toEqual({ outcome: { outcome: 'cancelled' } })
+    expect(store.getSnapshot().state.jsonClaude.pendingApprovals).toEqual({})
+  })
+
+  it('a request id answered once cannot be answered again', async () => {
+    const { fake, runtime } = await seedWithPrompt()
+    void requestPermission(fake)
+
+    expect(runtime.resolveApproval('s1-perm-1', { behavior: 'allow' })).toBe(true)
+    expect(runtime.resolveApproval('s1-perm-1', { behavior: 'deny' })).toBe(false)
+  })
+
+  const acceptEditsCases: Array<{ name: string; mode: 'default' | 'acceptEdits'; kind: string; options?: typeof ALL_OPTIONS; autoAllowed?: string }> = [
+    { name: 'acceptEdits auto-allows an edit with allow_always', mode: 'acceptEdits', kind: 'edit', autoAllowed: 'opt-allow-always' },
+    {
+      name: 'acceptEdits auto-allows an edit with allow_once when no allow_always is offered',
+      mode: 'acceptEdits',
+      kind: 'edit',
+      options: ALL_OPTIONS.filter((o) => o.kind !== 'allow_always'),
+      autoAllowed: 'opt-allow-once'
+    },
+    { name: 'acceptEdits still asks before executing a command', mode: 'acceptEdits', kind: 'execute' },
+    { name: 'default mode still asks before an edit', mode: 'default', kind: 'edit' }
+  ]
+  for (const c of acceptEditsCases) {
+    it(c.name, async () => {
+      const { store, events, fake } = await seedWithPrompt()
+      store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId: 's1', mode: c.mode } })
+      const reply = requestPermission(
+        fake,
+        permissionParams(c.options ?? ALL_OPTIONS, { toolCallId: 'c', title: 'Edit a.ts', kind: c.kind, rawInput: {} })
+      )
+      if (c.autoAllowed) {
+        await expect(reply).resolves.toEqual({ outcome: { outcome: 'selected', optionId: c.autoAllowed } })
+        expect(eventsOf(events, 'jsonClaude/approvalRequested')).toHaveLength(0)
+      } else {
+        const settled = trackSettled(reply)
+        await tick()
+        expect(settled.settled).toBe(false)
+        expect(Object.keys(store.getSnapshot().state.jsonClaude.pendingApprovals)).toEqual(['s1-perm-1'])
+      }
+    })
+  }
+
+  it('returns false for an unknown request id and leaves open requests pending', async () => {
+    const { store, fake, runtime } = await seedWithPrompt()
+    const reply = trackSettled(requestPermission(fake))
+
+    expect(runtime.resolveApproval('s1-perm-99', { behavior: 'allow' })).toBe(false)
+    await tick()
+    expect(reply.settled).toBe(false)
+    expect(Object.keys(store.getSnapshot().state.jsonClaude.pendingApprovals)).toEqual([
+      's1-perm-1'
+    ])
+  })
+})
+
+describe('AcpStdioRuntime capabilities', () => {
   it('flips canResume when initialize advertises sessionCapabilities.resume', async () => {
     const { events, runtime } = seed({
       initResult: {
@@ -917,14 +1208,295 @@ describe('AcpStdioRuntime permission + capabilities', () => {
     expect((capsChanged[0] as any).payload.capabilities.canResume).toBe(true)
   })
 
-  it('rewind/setPermissionMode are no-ops consistent with capabilities', () => {
-    const { events, runtime } = seed()
+  it('rewind is refused', () => {
+    const { runtime } = seed()
     expect(runtime.rewindTo('s1', 'x')).toEqual({
       ok: false,
       reason: expect.any(String)
     })
-    expect(() => runtime.setPermissionMode('s1', 'acceptEdits')).not.toThrow()
-    expect(eventsOf(events, 'jsonClaude/permissionModeChanged')).toHaveLength(0)
+  })
+
+  it('merges canSetPermissionMode from session/new modes with canResume from initialize', async () => {
+    const { fake, runtime } = seed({
+      initResult: { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: {} } } }
+    })
+    fake.newResult = {
+      sessionId: 'acp-sess-1',
+      modes: { availableModes: [{ id: 'agent', name: 'Agent' }], currentModeId: 'agent' }
+    }
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(runtime.getCapabilities('s1')).toMatchObject({ canResume: true, canSetPermissionMode: true })
+  })
+
+  it('leaves canSetPermissionMode off when the agent offers no modes', async () => {
+    const { runtime } = seed()
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(runtime.getCapabilities('s1').canSetPermissionMode).toBe(false)
+  })
+})
+
+describe('acpModeFor', () => {
+  const modes = (...ids: string[]) => ids.map((id) => ({ id, name: id }))
+  const cases: Array<{ name: string; mode: 'plan' | 'default' | 'acceptEdits'; modes: Array<{ id: string; name: string }>; expected: string | undefined }> = [
+    { name: 'plan prefers read-only over plan', mode: 'plan', modes: modes('plan', 'read-only', 'agent'), expected: 'read-only' },
+    { name: 'plan falls back to plan', mode: 'plan', modes: modes('agent', 'plan'), expected: 'plan' },
+    { name: 'plan never maps to a write mode', mode: 'plan', modes: modes('agent', 'default'), expected: undefined },
+    { name: 'default prefers agent', mode: 'default', modes: modes('auto', 'default', 'agent'), expected: 'agent' },
+    { name: 'default falls back to default before auto', mode: 'default', modes: modes('auto', 'default'), expected: 'default' },
+    { name: 'acceptEdits falls back to auto', mode: 'acceptEdits', modes: modes('read-only', 'auto'), expected: 'auto' },
+    { name: 'full access is never selected', mode: 'default', modes: modes('read-only', 'agent-full-access'), expected: undefined },
+    { name: 'no modes yields nothing', mode: 'acceptEdits', modes: [], expected: undefined }
+  ]
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(acpModeFor(c.mode, c.modes)).toBe(c.expected)
+    })
+  }
+})
+
+describe('AcpStdioRuntime permission mode + model sync', () => {
+  const CODEX_MODES = {
+    availableModes: [
+      { id: 'read-only', name: 'Read Only' },
+      { id: 'agent', name: 'Agent' },
+      { id: 'agent-full-access', name: 'Agent (full access)' }
+    ],
+    currentModeId: 'agent'
+  }
+
+  function setModeRequests(fake: FakeAcpClient) {
+    return fake.requests.filter((r) => r.method === 'session/set_mode').map((r) => r.params)
+  }
+
+  function setModelRequests(fake: FakeAcpClient) {
+    return fake.requests.filter((r) => r.method === 'session/set_config_option').map((r) => r.params)
+  }
+
+  it("pushes the slice's plan mode to the agent as read-only on the ACP session id", async () => {
+    const { store, fake, runtime } = seed()
+    store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId: 's1', mode: 'plan' } })
+    fake.newResult = { sessionId: 'acp-sess-1', modes: CODEX_MODES }
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(setModeRequests(fake)).toEqual([{ sessionId: 'acp-sess-1', modeId: 'read-only' }])
+  })
+
+  it('pushes the mode from a session/load result too', async () => {
+    const { fake, runtime } = seed({
+      agentSessionId: 'prev-acp',
+      initResult: { protocolVersion: 1, agentCapabilities: { loadSession: true } }
+    })
+    fake.responders['session/load'] = () => Promise.resolve({ modes: CODEX_MODES })
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(setModeRequests(fake)).toEqual([{ sessionId: 'prev-acp', modeId: 'agent' }])
+  })
+
+  it('sends no set_mode when the agent offers no matching mode', async () => {
+    const { store, fake, runtime } = seed()
+    store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId: 's1', mode: 'plan' } })
+    fake.newResult = { sessionId: 'acp-sess-1', modes: { availableModes: [{ id: 'agent', name: 'Agent' }] } }
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(setModeRequests(fake)).toEqual([])
+  })
+
+  it('setPermissionMode later sends set_mode for the mapped mode', async () => {
+    const { fake, runtime } = seed()
+    fake.newResult = { sessionId: 'acp-sess-1', modes: CODEX_MODES }
+    runtime.send('s1', 'hi')
+    await tick()
+    runtime.setPermissionMode('s1', 'plan')
+    expect(setModeRequests(fake).at(-1)).toEqual({ sessionId: 'acp-sess-1', modeId: 'read-only' })
+  })
+
+  it('setPermissionMode sends nothing when the agent has no modes', async () => {
+    const { fake, runtime } = seed()
+    runtime.send('s1', 'hi')
+    await tick()
+    runtime.setPermissionMode('s1', 'plan')
+    expect(setModeRequests(fake)).toEqual([])
+  })
+
+  it('setPermissionMode sends nothing while the ACP session is dropped awaiting login', async () => {
+    const { fake, runtime } = seed()
+    fake.newResult = { sessionId: 'acp-sess-1', modes: CODEX_MODES }
+    runtime.send('s1', 'hi')
+    await tick()
+    fake.rejectPrompt(new AcpRequestError('Authentication required', ACP_AUTH_REQUIRED))
+    await tick()
+    runtime.setPermissionMode('s1', 'plan')
+    expect(setModeRequests(fake)).toEqual([{ sessionId: 'acp-sess-1', modeId: 'agent' }])
+  })
+
+  it("sets the tab's model pin when the agent's current model differs", async () => {
+    const { fake, runtime } = seed({ modelOverride: 'gpt-5' })
+    fake.newResult = {
+      sessionId: 'acp-sess-1',
+      configOptions: [{ id: 'model', type: 'select', currentValue: 'gpt-4' }]
+    }
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(setModelRequests(fake)).toEqual([
+      { sessionId: 'acp-sess-1', configOptionId: 'model', value: 'gpt-5' }
+    ])
+  })
+
+  const noModelCases: Array<{ name: string; modelOverride?: string; configOptions?: unknown }> = [
+    { name: 'the current model already matches', modelOverride: 'gpt-5', configOptions: [{ id: 'model', currentValue: 'gpt-5' }] },
+    { name: 'the agent exposes no model option', modelOverride: 'gpt-5', configOptions: [{ id: 'effort', currentValue: 'low' }] },
+    { name: 'no override was given', configOptions: [{ id: 'model', currentValue: 'gpt-4' }] }
+  ]
+  for (const c of noModelCases) {
+    it(`sends no model change when ${c.name}`, async () => {
+      const { fake, runtime } = seed({ modelOverride: c.modelOverride })
+      fake.newResult = { sessionId: 'acp-sess-1', configOptions: c.configOptions }
+      runtime.send('s1', 'hi')
+      await tick()
+      expect(setModelRequests(fake)).toEqual([])
+    })
+  }
+})
+
+describe('AcpStdioRuntime session continuity (session/load)', () => {
+  const LOADABLE = { protocolVersion: 1, agentCapabilities: { loadSession: true } }
+
+  function slice(store: Store) {
+    return store.getSnapshot().state.jsonClaude.sessions['s1']
+  }
+
+  function transcript(store: Store): Array<{ kind: string; text: string }> {
+    return slice(store).entries.map((e: any) => ({
+      kind: e.kind,
+      text: e.kind === 'assistant' ? (e.blocks ?? []).map((b: any) => b.text ?? b.name).join('|') : (e.text ?? e.errorKind)
+    }))
+  }
+
+  /** session/load streams these updates as history, then resolves. */
+  function replaying(fake: FakeAcpClient, updates: any[], result: any = {}) {
+    fake.responders['session/load'] = () => {
+      for (const u of updates) fake.pushUpdate(u, 'prev-acp')
+      return Promise.resolve(result)
+    }
+  }
+
+  const HISTORY = [
+    { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'first ' } },
+    { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'question' } },
+    { sessionUpdate: 'agent_message_chunk', messageId: 'm1', content: { type: 'text', text: 'first answer' } },
+    { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'second question' } }
+  ]
+
+  it('loads the previous agent session and prompts on it instead of creating a new one', async () => {
+    const { fake, runtime } = seed({ agentSessionId: 'prev-acp', initResult: LOADABLE })
+    runtime.send('s1', 'continue')
+    await tick()
+
+    expect(fake.requests.map((r) => r.method)).toEqual(['initialize', 'session/load', 'session/prompt'])
+    expect(fake.requests[1].params).toEqual({ sessionId: 'prev-acp', cwd: '/wt', mcpServers: [] })
+    expect(fake.requests[2].params.sessionId).toBe('prev-acp')
+  })
+
+  const newSessionCases = [
+    { name: 'the agent cannot load sessions', agentSessionId: 'prev-acp', initResult: { protocolVersion: 1, agentCapabilities: {} } },
+    { name: 'loadSession is truthy but not true', agentSessionId: 'prev-acp', initResult: { protocolVersion: 1, agentCapabilities: { loadSession: {} } } },
+    { name: 'there is no previous agent session', agentSessionId: undefined, initResult: LOADABLE }
+  ]
+  for (const c of newSessionCases) {
+    it(`creates a new session when ${c.name}`, async () => {
+      const { fake, runtime } = seed({ agentSessionId: c.agentSessionId, initResult: c.initResult })
+      runtime.send('s1', 'hi')
+      await tick()
+      expect(fake.requests.map((r) => r.method)).toEqual(['initialize', 'session/new', 'session/prompt'])
+      expect(fake.requests[2].params.sessionId).toBe('acp-sess-1')
+    })
+  }
+
+  it('records the id of a newly created session on the slice', async () => {
+    const { store, runtime } = seed()
+    runtime.send('s1', 'hi')
+    await tick()
+    expect(slice(store).agentSessionId).toBe('acp-sess-1')
+  })
+
+  it('rebuilds the transcript from the replay on a fresh slice, before the new prompt', async () => {
+    const { store, fake, runtime } = seed({
+      agentSessionId: 'prev-acp',
+      initResult: LOADABLE,
+      flushIntervalMs: 10_000
+    })
+    replaying(fake, HISTORY)
+    runtime.send('s1', 'continue')
+    await tick()
+
+    expect(transcript(store)).toEqual([
+      { kind: 'user', text: 'first question' },
+      { kind: 'assistant', text: 'first answer' },
+      { kind: 'user', text: 'second question' },
+      { kind: 'user', text: 'continue' }
+    ])
+  })
+
+  it('drops the replay when the slice already holds the transcript', async () => {
+    const { store, fake, runtime } = seed({
+      agentSessionId: 'prev-acp',
+      initResult: LOADABLE,
+      flushIntervalMs: 10_000
+    })
+    store.dispatch({
+      type: 'jsonClaude/entryAppended',
+      payload: { sessionId: 's1', entry: { entryId: 'prior', kind: 'user', text: 'prior', timestamp: 0 } }
+    })
+    replaying(fake, [
+      ...HISTORY,
+      { sessionUpdate: 'tool_call', toolCallId: 'old_call', title: 'Read', kind: 'read', rawInput: {} }
+    ])
+    runtime.send('s1', 'continue')
+    await tick()
+
+    expect(transcript(store)).toEqual([
+      { kind: 'user', text: 'prior' },
+      { kind: 'user', text: 'continue' }
+    ])
+  })
+
+  it('after a silent replay, live agent output still renders', async () => {
+    const { store, fake, runtime } = seed({
+      agentSessionId: 'prev-acp',
+      initResult: LOADABLE,
+      flushIntervalMs: 10_000
+    })
+    replaying(fake, HISTORY)
+    runtime.send('s1', 'continue')
+    await tick()
+    fake.pushUpdate({ sessionUpdate: 'agent_message_chunk', messageId: 'm9', content: { type: 'text', text: 'live' } }, 'prev-acp')
+    fake.resolvePrompt('end_turn')
+    await tick()
+
+    expect(transcript(store).at(-1)).toEqual({ kind: 'assistant', text: 'live' })
+  })
+
+  it('a failed load leaves a notice naming the agent, then starts a new session', async () => {
+    const { store, fake, runtime } = seed({ agentSessionId: 'prev-acp', initResult: LOADABLE })
+    fake.responders['session/load'] = () => Promise.reject(new AcpRequestError('session not found', -32603))
+    runtime.send('s1', 'continue')
+    await tick()
+
+    const notices = slice(store).entries.filter((e) => e.errorKind === 'session-load-failed')
+    expect(notices).toHaveLength(1)
+    expect(notices[0].kind).toBe('system')
+    expect(notices[0].errorMessage).toContain('opencode')
+    expect(fake.requests.map((r) => r.method)).toEqual([
+      'initialize',
+      'session/load',
+      'session/new',
+      'session/prompt'
+    ])
+    expect(fake.requests[3].params.sessionId).toBe('acp-sess-1')
+    expect(slice(store).agentSessionId).toBe('acp-sess-1')
+    expect(slice(store).state).toBe('running')
   })
 })
 
@@ -1060,5 +1632,407 @@ describe('AcpStdioRuntime launch resolution', () => {
   it('throws at construction when neither command nor launch is given', () => {
     const { store } = createStore()
     expect(() => new AcpStdioRuntime(store, { agentKind: 'opencode' })).toThrow(/command or launch/)
+  })
+})
+
+describe('parseAuthMethods', () => {
+  const cases: Array<{ name: string; raw: unknown; expected: unknown }> = [
+    {
+      name: 'an explicit terminal type is terminal',
+      raw: [{ id: 'login', name: 'Login', type: 'terminal' }],
+      expected: [{ id: 'login', name: 'Login', type: 'terminal' }]
+    },
+    {
+      name: 'a description naming the terminal is terminal (OpenCode opencode-login)',
+      raw: [
+        {
+          id: 'opencode-login',
+          name: 'Login with opencode',
+          description: 'Run `opencode auth login` in the terminal'
+        }
+      ],
+      expected: [
+        {
+          id: 'opencode-login',
+          name: 'Login with opencode',
+          description: 'Run `opencode auth login` in the terminal',
+          type: 'terminal'
+        }
+      ]
+    },
+    {
+      name: 'a method with neither a terminal type nor description is agent-run',
+      raw: [{ id: 'chat-gpt', name: 'Login with ChatGPT', description: 'Opens a browser' }],
+      expected: [
+        { id: 'chat-gpt', name: 'Login with ChatGPT', description: 'Opens a browser', type: 'agent' }
+      ]
+    },
+    {
+      name: 'a word merely containing "terminal" does not make it terminal',
+      raw: [{ id: 'x', name: 'X', description: 'Uses terminals-api tokens' }],
+      expected: [{ id: 'x', name: 'X', description: 'Uses terminals-api tokens', type: 'agent' }]
+    },
+    {
+      name: 'a missing or empty name falls back to the id',
+      raw: [{ id: 'api-key' }, { id: 'other', name: '' }],
+      expected: [
+        { id: 'api-key', name: 'api-key', type: 'agent' },
+        { id: 'other', name: 'other', type: 'agent' }
+      ]
+    },
+    {
+      name: 'malformed entries are skipped and valid neighbours kept',
+      raw: [null, 'api-key', { name: 'no id' }, { id: 7 }, { id: 'ok', name: 'OK' }],
+      expected: [{ id: 'ok', name: 'OK', type: 'agent' }]
+    },
+    { name: 'a non-array yields no methods', raw: { id: 'x' }, expected: [] }
+  ]
+
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(parseAuthMethods(c.raw)).toEqual(c.expected)
+    })
+  }
+})
+
+describe('AcpStdioRuntime login (auth required)', () => {
+  const AUTH_METHODS = [
+    { id: 'chat-gpt', name: 'Login with ChatGPT', description: 'Opens a browser' },
+    { id: 'api-key', name: 'Use an API key' },
+    {
+      id: 'opencode-login',
+      name: 'Login with opencode',
+      description: 'Run `opencode auth login` in the terminal'
+    }
+  ]
+
+  const authRequired = () => new AcpRequestError('Authentication required', ACP_AUTH_REQUIRED)
+
+  /** Every spawn gets a fresh FakeAcpClient, recorded in `clients`, so a
+   *  restart is observable. `configure` runs on each before it is used. */
+  function seedAuth(
+    opts: {
+      initResult?: any
+      configure?: (fake: FakeAcpClient, index: number) => void
+    } = {}
+  ) {
+    const { store, events } = createStore()
+    const clients: FakeAcpClient[] = []
+    let launches = 0
+    const runtime = new AcpStdioRuntime(store, {
+      agentKind: 'codex',
+      launch: () => {
+        launches++
+        return { command: ['codex-acp'] }
+      },
+      flushIntervalMs: 5,
+      createClient: () => {
+        const fake = new FakeAcpClient()
+        fake.initResult = opts.initResult ?? {
+          protocolVersion: 1,
+          agentCapabilities: {},
+          authMethods: AUTH_METHODS
+        }
+        opts.configure?.(fake, clients.length)
+        clients.push(fake)
+        return fake as any
+      }
+    })
+    store.dispatch({
+      type: 'jsonClaude/sessionStarted',
+      payload: { sessionId: 's1', worktreePath: '/wt', agentKind: 'codex', runtimeId: 'codex' }
+    })
+    runtime.start('s1', '/wt')
+    return { store, events, runtime, clients, launches: () => launches }
+  }
+
+  /** session/new fails with auth-required until `loggedIn.value` is set. */
+  function gatedSessionNew(fake: FakeAcpClient, loggedIn: { value: boolean }): void {
+    fake.responders['session/new'] = () =>
+      loggedIn.value ? Promise.resolve({ sessionId: 'acp-sess-1' }) : Promise.reject(authRequired())
+  }
+
+  function slice(store: Store) {
+    return store.getSnapshot().state.jsonClaude.sessions['s1']
+  }
+
+  function authCards(store: Store): any[] {
+    return slice(store).entries.filter((e) => e.kind === 'error' && e.errorKind === 'auth-failure')
+  }
+
+  function userEntries(store: Store): any[] {
+    return slice(store).entries.filter((e) => e.kind === 'user')
+  }
+
+  function sessionStates(events: StateEvent[]): string[] {
+    return events
+      .filter((e) => e.type === 'jsonClaude/sessionStateChanged')
+      .map((e) => (e as any).payload.state)
+  }
+
+  /** Seed a session whose first prompt was parked on an auth failure. */
+  async function seedParked(opts: { configure?: (fake: FakeAcpClient, index: number) => void } = {}) {
+    const loggedIn = { value: false }
+    const seeded = seedAuth({
+      configure: (fake, i) => {
+        gatedSessionNew(fake, loggedIn)
+        opts.configure?.(fake, i)
+      }
+    })
+    seeded.runtime.send('s1', 'fix the bug')
+    await tick()
+    expect(authCards(seeded.store)).toHaveLength(1)
+    return { ...seeded, loggedIn }
+  }
+
+  describe('initialize capabilities', () => {
+    it('advertises canOpenAuthLogin when the agent offers a terminal login', async () => {
+      const { events, runtime } = seedAuth()
+      runtime.send('s1', 'hi')
+      await tick()
+      const caps = eventsOf(events, 'jsonClaude/capabilitiesChanged')
+      expect(caps).toHaveLength(1)
+      expect((caps[0] as any).payload.capabilities.canOpenAuthLogin).toBe(true)
+    })
+
+    it('does not advertise canOpenAuthLogin when every login runs inside the agent', async () => {
+      const { events, runtime } = seedAuth({
+        initResult: {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {} } },
+          authMethods: [AUTH_METHODS[0], AUTH_METHODS[1]]
+        }
+      })
+      runtime.send('s1', 'hi')
+      await tick()
+      const caps = eventsOf(events, 'jsonClaude/capabilitiesChanged')
+      expect(caps).toHaveLength(1)
+      expect((caps[0] as any).payload.capabilities).toMatchObject({
+        canResume: true,
+        canOpenAuthLogin: false
+      })
+    })
+  })
+
+  describe('auth failure handling', () => {
+    it('session/new auth-required shows a login card, keeps the subprocess, and goes idle', async () => {
+      const { store, events, runtime, clients } = seedAuth({
+        configure: (fake) => {
+          fake.responders['session/new'] = () =>
+            Promise.reject(new AcpRequestError('Sign in to continue', ACP_AUTH_REQUIRED))
+        }
+      })
+      runtime.send('s1', 'hi')
+      await tick()
+
+      const cards = authCards(store)
+      expect(cards).toHaveLength(1)
+      expect(cards[0].errorMessage).toContain('Sign in to continue')
+      expect(cards[0].authMethods).toEqual(parseAuthMethods(AUTH_METHODS))
+      expect(slice(store).state).toBe('idle')
+      expect(slice(store).busy).toBe(false)
+      expect(sessionStates(events)).not.toContain('exited')
+      expect(clients).toHaveLength(1)
+      expect(clients[0].killCalls).toBe(0)
+      expect(clients[0].requests.map((r) => r.method)).not.toContain('session/prompt')
+      expect(runtime.hasSession('s1')).toBe(true)
+    })
+
+    const promptCases: Array<{ name: string; error: AcpRequestError; auth: boolean }> = [
+      { name: 'code -32000', error: new AcpRequestError('Auth required', ACP_AUTH_REQUIRED), auth: true },
+      {
+        name: 'a -32603 whose message reports an expired API key',
+        error: new AcpRequestError('This API key has expired', -32603),
+        auth: true
+      },
+      {
+        name: 'a -32603 saying authentication is required',
+        error: new AcpRequestError('Authentication required', -32603),
+        auth: true
+      },
+      { name: 'a -32603 with an unrelated message', error: new AcpRequestError('boom', -32603), auth: false }
+    ]
+
+    for (const c of promptCases) {
+      it(`session/prompt rejecting with ${c.name} ${c.auth ? 'is' : 'is not'} treated as a login failure`, async () => {
+        const { store, events, runtime, clients } = seedAuth()
+        runtime.send('s1', 'hi')
+        await tick()
+        clients[0].rejectPrompt(c.error)
+        await tick()
+
+        const errors = slice(store).entries.filter((e) => e.kind === 'error')
+        expect(errors).toHaveLength(1)
+        expect(errors[0].errorMessage).toContain(c.error.message)
+        if (c.auth) {
+          expect(errors[0].errorKind).toBe('auth-failure')
+          expect(errors[0].authMethods).toEqual(parseAuthMethods(AUTH_METHODS))
+        } else {
+          expect(errors[0].errorKind).not.toBe('auth-failure')
+          expect(errors[0].authMethods).toBeUndefined()
+        }
+        expect(slice(store).state).toBe('idle')
+        expect(sessionStates(events)).not.toContain('exited')
+        expect(clients[0].killCalls).toBe(0)
+      })
+    }
+
+    it('session/load auth-required shows the login card instead of a load-failed notice or a new session', async () => {
+      const { store, runtime, clients } = seedAuth({
+        initResult: { protocolVersion: 1, agentCapabilities: { loadSession: true }, authMethods: AUTH_METHODS },
+        configure: (fake) => {
+          fake.responders['session/load'] = () => Promise.reject(authRequired())
+        }
+      })
+      store.dispatch({ type: 'jsonClaude/agentSessionIdChanged', payload: { sessionId: 's1', agentSessionId: 'prev-acp' } })
+      runtime.send('s1', 'hi')
+      await tick()
+
+      expect(authCards(store)).toHaveLength(1)
+      expect(slice(store).entries.filter((e) => e.errorKind === 'session-load-failed')).toHaveLength(0)
+      expect(clients[0].requests.map((r) => r.method)).toEqual(['initialize', 'session/load'])
+      expect(slice(store).state).toBe('idle')
+    })
+
+    it('a non-auth session/new failure still terminates the session', async () => {
+      const { store, events, runtime, clients } = seedAuth({
+        configure: (fake) => {
+          fake.responders['session/new'] = () => Promise.reject(new AcpRequestError('boom', -32603))
+        }
+      })
+      runtime.send('s1', 'hi')
+      await tick()
+
+      expect(authCards(store)).toHaveLength(0)
+      expect(sessionStates(events).at(-1)).toBe('exited')
+      expect(clients[0].killCalls).toBe(1)
+      expect(runtime.hasSession('s1')).toBe(false)
+    })
+  })
+
+  describe('authenticate', () => {
+    it('rejects an unknown session without touching any client', async () => {
+      const { runtime, clients } = seedAuth()
+      await expect(runtime.authenticate('nope', 'chat-gpt')).resolves.toEqual({
+        ok: false,
+        error: expect.any(String)
+      })
+      expect(clients).toHaveLength(0)
+    })
+
+    it('rejects a method the agent did not advertise without sending authenticate', async () => {
+      const { runtime, clients } = await seedParked()
+      await expect(runtime.authenticate('s1', 'made-up')).resolves.toEqual({
+        ok: false,
+        error: expect.stringContaining('made-up')
+      })
+      expect(clients[0].requests.map((r) => r.method)).not.toContain('authenticate')
+    })
+
+    it('refuses a terminal-only method without sending authenticate', async () => {
+      const { store, runtime, clients } = await seedParked()
+      const res = await runtime.authenticate('s1', 'opencode-login')
+      expect(res.ok).toBe(false)
+      expect(res.error).toBeTruthy()
+      await tick()
+      expect(clients).toHaveLength(1)
+      expect(clients[0].requests.map((r) => r.method)).not.toContain('authenticate')
+      expect(clients[0].requests.map((r) => r.method)).not.toContain('session/prompt')
+      expect(authCards(store)).toHaveLength(1)
+    })
+
+    it('an in-agent login authenticates on the live subprocess and retries the parked prompt', async () => {
+      const { store, runtime, clients, loggedIn } = await seedParked()
+      clients[0].responders['authenticate'] = () => {
+        loggedIn.value = true
+        return Promise.resolve({})
+      }
+      const before = clients[0].requests.length
+
+      await expect(runtime.authenticate('s1', 'chat-gpt')).resolves.toEqual({ ok: true })
+      await tick()
+
+      expect(clients).toHaveLength(1)
+      expect(clients[0].killCalls).toBe(0)
+      const after = clients[0].requests.slice(before)
+      expect(after.map((r) => r.method)).toEqual(['authenticate', 'session/new', 'session/prompt'])
+      expect(after[0].params).toEqual({ methodId: 'chat-gpt' })
+      expect(after[2].params.prompt).toEqual([{ type: 'text', text: 'fix the bug' }])
+      expect(userEntries(store)).toHaveLength(1)
+      expect(slice(store).state).toBe('running')
+    })
+
+    it('api-key restarts the subprocess (ignoring the old exit) and re-initializes before authenticating', async () => {
+      const { store, events, runtime, clients, loggedIn, launches } = await seedParked({
+        configure: (fake) => {
+          fake.responders['authenticate'] = () => {
+            loggedIn.value = true
+            return Promise.resolve({})
+          }
+        }
+      })
+      expect(launches()).toBe(1)
+
+      await expect(runtime.authenticate('s1', 'api-key')).resolves.toEqual({ ok: true })
+      await tick()
+
+      expect(launches()).toBe(2)
+      expect(clients).toHaveLength(2)
+      expect(clients[0].killCalls).toBe(1)
+      expect(clients[0].requests.map((r) => r.method)).not.toContain('authenticate')
+      const fresh = clients[1].requests
+      expect(fresh.map((r) => r.method)).toEqual([
+        'initialize',
+        'authenticate',
+        'session/new',
+        'session/prompt'
+      ])
+      expect(fresh[1].params).toEqual({ methodId: 'api-key' })
+      expect(fresh[3].params.prompt).toEqual([{ type: 'text', text: 'fix the bug' }])
+
+      // The deliberately killed subprocess exiting must not look like a crash.
+      clients[0].onExitCb?.(null, 'SIGTERM')
+      expect(sessionStates(events)).not.toContain('exited')
+      expect(runtime.hasSession('s1')).toBe(true)
+      expect(slice(store).entries.filter((e) => e.errorKind === 'subprocess-exit')).toHaveLength(0)
+    })
+
+    it('an agent-rejected login reports the error and keeps the prompt parked for the next attempt', async () => {
+      const { store, runtime, clients, loggedIn } = await seedParked()
+      clients[0].responders['authenticate'] = () =>
+        Promise.reject(new AcpRequestError('browser login was cancelled', -32603))
+      const before = clients[0].requests.length
+
+      await expect(runtime.authenticate('s1', 'chat-gpt')).resolves.toEqual({
+        ok: false,
+        error: 'browser login was cancelled'
+      })
+      await tick()
+      expect(clients[0].requests.slice(before).map((r) => r.method)).toEqual(['authenticate'])
+      expect(slice(store).state).toBe('idle')
+
+      clients[0].responders['authenticate'] = () => {
+        loggedIn.value = true
+        return Promise.resolve({})
+      }
+      await expect(runtime.authenticate('s1', 'chat-gpt')).resolves.toEqual({ ok: true })
+      await tick()
+      const prompts = clients[0].requests.filter((r) => r.method === 'session/prompt')
+      expect(prompts).toHaveLength(1)
+      expect(prompts[0].params.prompt).toEqual([{ type: 'text', text: 'fix the bug' }])
+    })
+
+    it('a message sent while parked runs normally and leaves the login card in place', async () => {
+      const { store, runtime, clients } = await seedParked()
+      runtime.send('s1', 'second try')
+      await tick()
+
+      expect(userEntries(store).map((e) => e.text)).toEqual(['fix the bug', 'second try'])
+      expect(authCards(store).length).toBeGreaterThanOrEqual(1)
+      expect(slice(store).state).toBe('idle')
+      expect(slice(store).busy).toBe(false)
+      expect(clients).toHaveLength(1)
+      expect(clients[0].killCalls).toBe(0)
+    })
   })
 })

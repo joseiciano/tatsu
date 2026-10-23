@@ -59,6 +59,58 @@ describe('jsonClaudeReducer', () => {
     expect(state.sessions[SID].runtimeId).toBe('claude')
   })
 
+  it('sessionStarted seeds agentSessionId only when the payload carries one', () => {
+    const start = (agentSessionId?: string): JsonClaudeState =>
+      jsonClaudeReducer(initialJsonClaude, {
+        type: 'jsonClaude/sessionStarted',
+        payload: { sessionId: SID, worktreePath: WT, agentKind: 'opencode', runtimeId: 'opencode', agentSessionId }
+      })
+    expect(start('ses_abc').sessions[SID].agentSessionId).toBe('ses_abc')
+    expect('agentSessionId' in start().sessions[SID]).toBe(false)
+  })
+
+  it('sessionStarted keeps an existing agentSessionId over the payload on re-attach', () => {
+    const started = (state: JsonClaudeState, agentSessionId?: string): JsonClaudeState =>
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/sessionStarted',
+        payload: { sessionId: SID, worktreePath: WT, agentKind: 'opencode', runtimeId: 'opencode', agentSessionId }
+      })
+    const first = started(initialJsonClaude, 'ses_old')
+    expect(started(first, 'ses_new').sessions[SID].agentSessionId).toBe('ses_old')
+    expect(started(first).sessions[SID].agentSessionId).toBe('ses_old')
+    const none = started(initialJsonClaude)
+    expect(started(none, 'ses_new').sessions[SID].agentSessionId).toBe('ses_new')
+  })
+
+  it('agentSessionIdChanged sets agentSessionId on a known session', () => {
+    const state = seedSession(initialJsonClaude)
+    const next = jsonClaudeReducer(state, {
+      type: 'jsonClaude/agentSessionIdChanged',
+      payload: { sessionId: SID, agentSessionId: 'ses_abc' }
+    })
+    expect(next.sessions[SID].agentSessionId).toBe('ses_abc')
+    expect(next.sessions[SID].worktreePath).toBe(WT)
+  })
+
+  it('agentSessionIdChanged returns the same state when unchanged or the session is unknown', () => {
+    const state = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/agentSessionIdChanged',
+      payload: { sessionId: SID, agentSessionId: 'ses_abc' }
+    })
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/agentSessionIdChanged',
+        payload: { sessionId: SID, agentSessionId: 'ses_abc' }
+      })
+    ).toBe(state)
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/agentSessionIdChanged',
+        payload: { sessionId: 'unknown', agentSessionId: 'ses_abc' }
+      })
+    ).toBe(state)
+  })
+
   it('sessionStateChanged updates state + exit info', () => {
     let state = seedSession(initialJsonClaude)
     state = jsonClaudeReducer(state, {

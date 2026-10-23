@@ -20,6 +20,21 @@ export interface AcpStdioClientOptions {
   requestTimeoutMs?: number
 }
 
+/** A JSON-RPC error reply from the agent. `code` -32000 is ACP's
+ *  "authentication required". */
+export class AcpRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly code?: number,
+    public readonly data?: unknown
+  ) {
+    super(message)
+    this.name = 'AcpRequestError'
+  }
+}
+
+export const ACP_AUTH_REQUIRED = -32000
+
 type RequestHandler = (
   method: string,
   params: unknown
@@ -237,8 +252,10 @@ export class AcpStdioClient {
     if (pending.timer) clearTimeout(pending.timer)
     if (msg.error) {
       pending.reject(
-        new Error(
-          msg.error.message ?? `ACP request failed (code ${msg.error.code ?? 'unknown'})`
+        new AcpRequestError(
+          msg.error.message ?? `ACP request failed (code ${msg.error.code ?? 'unknown'})`,
+          typeof msg.error.code === 'number' ? msg.error.code : undefined,
+          msg.error.data
         )
       )
     } else {
