@@ -68,7 +68,7 @@ The reference layout this step is designed against:
 - **TEST-001**: A fixture modeled on the reference layout imports agents with blocks, fragments, skills with references, and commands, and reports `omp` blocks and Opencode-only settings.
 - **TEST-002**: A generated command matching a skill is reported as covered and not imported.
 - **TEST-003**: Duplicate skill names across source folders block the import until resolved.
-- **TEST-004**: Rendering the imported templates for Claude produces files equal to the old build output for agents and commands without references (golden comparison on the fixture).
+- **TEST-004**: Rendering the imported templates for Claude produces files equal to the old build output, apart from the provenance marker (Step 19 REQ-007), for agents and commands without references (golden comparison on the fixture).
 - **TEST-005**: `pnpm typecheck`, `pnpm build`, `pnpm test`.
 
 ## 7. Risks & Assumptions
