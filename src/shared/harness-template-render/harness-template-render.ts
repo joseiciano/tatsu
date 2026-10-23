@@ -19,7 +19,7 @@ import type {
   ManagedHarnessKind
 } from '../state/harness-config'
 
-export const RENDERER_VERSION = 1
+export const RENDERER_VERSION = 2
 
 export const TEMPLATE_MARKER_KEY = 'tatsu-template'
 
@@ -83,7 +83,7 @@ export function templateMarker(kind: HarnessTemplateKind, name: string): string 
 
 /** Reads the provenance marker from a rendered file, in either form. */
 export function readTemplateRef(content: string): string | null {
-  const lines = normalizeNewlines(content).split('\n')
+  const lines = normalizeNewlines(content.replace(/^\uFEFF/, '')).split('\n')
   let bodyStart = 0
   let candidate: unknown = null
   if (lines[0] === '---') {
@@ -111,6 +111,7 @@ export function readTemplateRef(content: string): string | null {
 }
 
 function serializeFrontmatter(data: Record<string, unknown>): string {
+  if (Object.keys(data).length === 0) return ''
   return dump(data, { schema: CORE_SCHEMA, noRefs: true, lineWidth: -1 })
 }
 
@@ -237,7 +238,7 @@ export function renderTemplates(
   for (const [key, resources] of outputsByTemplate) {
     if (errorsByTemplate.has(key)) continue
     for (const resource of resources) {
-      const pathKey = `${resource.agentKind}\0${resource.resourceType}\0${resource.relativePath}`
+      const pathKey = `${resource.agentKind}\0${resource.resourceType}\0${resource.relativePath.toLowerCase()}`
       claims.set(pathKey, [...(claims.get(pathKey) ?? []), resource])
     }
   }

@@ -285,6 +285,25 @@ describe('renderTemplates errors', () => {
     expect(resources.map((resource) => resource.templateName)).toEqual(['healthy'])
   })
 
+  it('reports output paths that differ only by case as duplicates', () => {
+    const upper = template({ kind: 'command', name: 'x', harnesses: { claude: { name: 'Foo', frontmatter: {} } } })
+    const lower = template({ kind: 'command', name: 'foo', harnesses: { claude: { frontmatter: {} } } })
+    const { resources, errors } = renderTemplates([upper, lower], fragments)
+    expect(errors.map(({ templateName, code }) => ({ templateName, code }))).toEqual([
+      { templateName: 'foo', code: 'duplicate-output' },
+      { templateName: 'x', code: 'duplicate-output' }
+    ])
+    expect(resources).toEqual([])
+  })
+
+  it('writes an empty frontmatter block without a YAML map literal', () => {
+    const bare = template({ kind: 'command', name: 'bare', description: '', harnesses: { opencode: { frontmatter: {} } } })
+    const { resources, errors } = renderTemplates([bare], fragments)
+    expect(errors).toEqual([])
+    expect(resources[0].content).toBe('---\n---\n<!-- tatsu-template: command/bare -->\nReview the diff.\n')
+    expect(readTemplateRef(resources[0].content)).toBe('command/bare')
+  })
+
   it('does not treat the same name in different harnesses or resource types as a duplicate', () => {
     const agentShared = template({ name: 'same', harnesses: { claude: { frontmatter: {} } } })
     const commandShared = template({ kind: 'command', name: 'same', harnesses: { claude: { frontmatter: {} } } })
@@ -321,5 +340,10 @@ describe('readTemplateRef', () => {
     expect(readTemplateRef('---\nname: x\n---\nintro\n<!-- tatsu-template: agent/x -->\n')).toBeNull()
     expect(readTemplateRef('---\n: [bad\n---\n<!-- tatsu-template: agent/x -->\n')).toBe('agent/x')
     expect(readTemplateRef('<!-- tatsu-template: skill/x -->\nbody')).toBe('skill/x')
+  })
+
+  it('reads a marker from a file saved with a UTF-8 BOM', () => {
+    expect(readTemplateRef('\uFEFF---\ntatsu-template: command/x\n---\n')).toBe('command/x')
+    expect(readTemplateRef('\uFEFF<!-- tatsu-template: skill/x -->\nbody')).toBe('skill/x')
   })
 })
