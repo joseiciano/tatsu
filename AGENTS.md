@@ -163,6 +163,7 @@ src/
 │   │   ├── transport-websocket/   # Browser/remote WS client transport
 │   │   └── parse-connection-url/  # Backend connection URL parser
 │   ├── agent-registry/            # Agent metadata helpers
+│   ├── code-diff/                 # Code diff tool wire types (worktree vs base ref)
 │   ├── cost-summary/              # Cost summary types/helpers
 │   ├── github-types/              # GitHub-facing shared types
 │   ├── perf-types/                # Perf sample/metric types
@@ -418,7 +419,7 @@ selector (`useJsonClaudeSession(id)`) and use that in components that
 care about one entity. The whole-slice hook is only correct in the few
 places that genuinely need the full map (sidebar grouping, etc.).
 
-**Diagnosing in production.** The HUD at Cmd+Shift+D shows live event
+**Diagnosing in production.** The HUD at Cmd+Alt+P shows live event
 rates and a stacked bar of which event types are firing most. The
 `perf.log` file (see "How performance debugging works" below) captures
 per-event detail including `[cascade]` lines when these anti-patterns
@@ -509,7 +510,7 @@ What gets written to `perf.log` (and where the threshold lives):
 - `[git-op]` — per-call timing breakdown for slow git functions, capturing exec/post/bytes split.
 - `[microtask-drift]` — main-thread blocks ≥50ms (higher resolution than the 500ms event-loop sampler).
 
-The HUD at **Cmd+Shift+D** shows live aggregates (rates, history sparkline,
+The HUD at **Cmd+Alt+P** shows live aggregates (rates, history sparkline,
 React commits per second, top event types). `perf.log` captures the
 per-event detail the HUD can't display. They're complementary —
 `PerfMonitor` aggregates for the HUD, `perfLog` writes discrete
@@ -779,3 +780,4 @@ The following feature flags gate specific features:
 | `ENABLE_COST` | `false` | Command Center Costs tab |
 | `ENABLE_TIMELINE` | `false` | Command Center Timeline tab |
 | `ENABLE_MY_WEEK` | `false` | Command Center My week tab |
+| `ENABLE_CODE_DIFF` | `true` | Code diff tool (worktree vs a chosen base ref) |
