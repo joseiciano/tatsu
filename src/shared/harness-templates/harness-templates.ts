@@ -136,7 +136,7 @@ function parseNameList(value: unknown, field: string): string[] {
   })
 }
 
-function parseHarnessBlock(harness: ManagedHarnessKind, value: unknown): HarnessTemplateHarnessBlock | false {
+export function parseTemplateHarnessBlock(harness: ManagedHarnessKind, value: unknown): HarnessTemplateHarnessBlock | false {
   if (value === false) return false
   if (value === null) return { frontmatter: {} }
   if (!isPlainObject(value)) throw new Error(`${harness} must be a frontmatter mapping or false`)
@@ -191,7 +191,7 @@ export function parseTemplateSource(
     const harnesses: HarnessTemplateHarnesses = {}
     for (const harness of TEMPLATE_HARNESSES) {
       if (Object.prototype.hasOwnProperty.call(data, harness)) {
-        harnesses[harness] = parseHarnessBlock(harness, data[harness])
+        harnesses[harness] = parseTemplateHarnessBlock(harness, data[harness])
       }
     }
     if (kind !== 'skill' && references.length > 0) throw new Error('Only skill templates can have reference files')
