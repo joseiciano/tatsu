@@ -12,8 +12,11 @@ import type {
   HarnessConfigMutationPlan,
   HarnessConfigReadFileResult,
   HarnessConfigScope,
-  HarnessConfigSyncPlan
+  HarnessConfigSyncPlan,
+  HarnessTemplate,
+  HarnessTemplateImportPreview
 } from '../../shared/state/harness-config'
+import type { TemplateImportListing } from '../template-import'
 import type { HarnessConfigConnectionContext } from './harness-config-transport'
 
 type Handler = (ctx: HarnessConfigConnectionContext, payload: unknown) => unknown | Promise<unknown>
@@ -949,5 +952,190 @@ describe('template source channels', () => {
     const { transport } = setup()
     const result = await transport.call('harnessConfig:saveFragment', { name: 'style', content: 'x', confirmed: true })
     expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unsupported-scope' }) })
+  })
+})
+
+describe('template import channels (Step 22)', () => {
+  const FOLDERS = { agents: '/dots/agents', agentFragments: null, skills: [], references: null, commands: null }
+  const CHOICES = { harnesses: ['claude'], duplicateChoices: {}, conflictChoices: {} }
+  const AGENT = '---\nname: reviewer\ndescription: Reviews\nclaude:\n  model: opus\n---\nReview.\n'
+
+  function listing(files: Record<string, string>): TemplateImportListing {
+    return {
+      agents: { root: '/dots/agents', files, links: {}, skipped: [] },
+      agentFragments: null,
+      skills: [],
+      references: null,
+      commands: null
+    }
+  }
+
+  function setupImport(options: { existing?: HarnessTemplate[]; service?: HarnessConfigService } = {}) {
+    const transport = new FakeTransport()
+    const store = new FakeStore()
+    const service = options.service ?? createFakeService()
+    let files: Record<string, string> = { 'reviewer.md': AGENT }
+    const templateSource = {
+      saveTemplate: vi.fn((draft) => ({ ...draft, relativePath: `agents/${draft.name}.md`, hash: 'h' })),
+      deleteTemplate: vi.fn(),
+      saveFragment: vi.fn((name: string, content: string) => ({
+        name,
+        content,
+        relativePath: `fragments/${name}.md`,
+        hash: 'h'
+      })),
+      deleteFragment: vi.fn()
+    }
+    const readListing = vi.fn(() => listing(files))
+    registerHarnessConfigRequestHandlers({
+      transport,
+      store,
+      service,
+      templateSource,
+      templateImport: { readListing, existing: () => ({ templates: options.existing ?? [], fragments: [] }) },
+      log: vi.fn(),
+      formatErr: vi.fn()
+    })
+    return {
+      transport,
+      templateSource,
+      readListing,
+      setFiles: (next: Record<string, string>) => {
+        files = next
+      }
+    }
+  }
+
+  async function preview(transport: FakeTransport, choices: unknown = CHOICES) {
+    return (await transport.call('harnessConfig:previewImport', { folders: FOLDERS, choices })) as {
+      ok: true
+      value: HarnessTemplateImportPreview
+    }
+  }
+
+  it('previews without writing and applies only after confirmation', async () => {
+    const { transport, templateSource, readListing } = setupImport()
+    const result = await preview(transport)
+    expect(result.ok).toBe(true)
+    expect(result.value.items.map((item) => [item.key, item.action])).toEqual([['agent/reviewer', 'create']])
+    expect(readListing).toHaveBeenCalledWith(FOLDERS)
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+
+    const unconfirmed = await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: false
+    })
+    expect(unconfirmed).toEqual({ ok: false, error: expect.objectContaining({ code: 'unconfirmed-plan' }) })
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+
+    const applied = (await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: true
+    })) as { ok: true; value: { written: string[] } }
+    expect(applied.value.written).toEqual(['agent/reviewer'])
+    expect(templateSource.saveTemplate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'agent', name: 'reviewer' }))
+  })
+
+  it('refuses to apply when the source folders changed since the preview', async () => {
+    const { transport, templateSource, setFiles } = setupImport()
+    const result = await preview(transport)
+    setFiles({ 'reviewer.md': AGENT.replace('Review.', 'Review carefully.') })
+    const applied = await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: true
+    })
+    expect(applied).toEqual({ ok: false, error: expect.objectContaining({ code: 'stale-plan' }) })
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('refuses to apply while an existing template has no skip or replace choice', async () => {
+    const existing = [
+      {
+        kind: 'agent',
+        name: 'reviewer',
+        description: '',
+        fragments: [],
+        body: '',
+        harnesses: {},
+        references: [],
+        relativePath: 'agents/reviewer.md',
+        hash: 'h'
+      } as HarnessTemplate
+    ]
+    const { transport, templateSource } = setupImport({ existing })
+    const result = await preview(transport)
+    expect(result.value.items[0]).toMatchObject({ conflict: true, action: 'undecided' })
+    expect(result.value.blockingReasons).toHaveLength(1)
+    const blocked = await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: true
+    })
+    expect(blocked).toEqual({ ok: false, error: expect.objectContaining({ code: 'invalid-template' }) })
+
+    const replaceChoices = { ...CHOICES, conflictChoices: { 'agent/reviewer': 'replace' } }
+    const replace = await preview(transport, replaceChoices)
+    const applied = (await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: replaceChoices,
+      fingerprint: replace.value.fingerprint,
+      confirmed: true
+    })) as { ok: boolean }
+    expect(applied.ok).toBe(true)
+    expect(templateSource.saveTemplate).toHaveBeenCalledTimes(1)
+  })
+
+  it('requires allowShadowing when an imported template hides stored entries', async () => {
+    const service = createFakeService({
+      templateShadows: vi.fn(() => [
+        { agentKind: 'claude' as const, resourceType: 'agents' as const, relativePath: 'reviewer.md' }
+      ])
+    })
+    const { transport, templateSource } = setupImport({ service })
+    const result = await preview(transport)
+    expect(result.value.shadows).toEqual(['claude agents reviewer.md'])
+    const request = { folders: FOLDERS, choices: CHOICES, fingerprint: result.value.fingerprint, confirmed: true }
+    expect(await transport.call('harnessConfig:applyImport', request)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'template-shadows' })
+    })
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+    const allowed = (await transport.call('harnessConfig:applyImport', { ...request, allowShadowing: true })) as {
+      ok: boolean
+    }
+    expect(allowed.ok).toBe(true)
+  })
+
+  it('shows the current harness file next to the rendered output', async () => {
+    const service = createFakeService({
+      scan: vi.fn(() => [makeRef({ id: 'disk-1', resourceType: 'agents', relativePath: 'reviewer.md' })]),
+      readFile: vi.fn(() => ({ ref: makeRef(), content: 'old build output', hash: 'x' }))
+    })
+    const { transport } = setupImport({ service })
+    const result = await preview(transport)
+    expect(result.value.files).toEqual([
+      expect.objectContaining({ agentKind: 'claude', relativePath: 'reviewer.md', current: 'old build output' })
+    ])
+  })
+
+  it.each([
+    ['an unmanaged harness', { folders: FOLDERS, choices: { ...CHOICES, harnesses: ['pi'] } }],
+    ['a bad conflict choice', { folders: FOLDERS, choices: { ...CHOICES, conflictChoices: { 'agent/x': 'merge' } } }],
+    ['missing folders', { choices: CHOICES }]
+  ])('previewImport rejects %s', async (_label, payload) => {
+    const { transport, readListing } = setupImport()
+    const result = (await transport.call('harnessConfig:previewImport', payload)) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(result.error.code).toBe('invalid-request')
+    expect(readListing).not.toHaveBeenCalled()
   })
 })
