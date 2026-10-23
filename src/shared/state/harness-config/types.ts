@@ -55,6 +55,18 @@ export interface HarnessConfigFileRef {
   /** `<kind>/<name>` of the template that rendered this file, read from
    *  its provenance marker (Step 19). Absent for hand-written files. */
   templateRef?: string
+  /** `'template'` when this Tatsu config entry is built from a template
+   *  (Step 20); absent for stored entries and disk refs. */
+  source?: 'template'
+}
+
+/** A template whose render failed. It contributes nothing to Tatsu
+ *  config, and `held` lists its earlier disk output, which sync to disk
+ *  leaves alone instead of deleting (Step 20 REQ-007). */
+export interface HarnessConfigRenderErrorEntry {
+  templateRef: string
+  message: string
+  held: HarnessConfigFileRef[]
 }
 
 export type HarnessConfigSyncDirection = 'sync-to-disk' | 'adopt-from-disk'
@@ -73,6 +85,9 @@ export interface HarnessConfigComparison {
   configOnly: HarnessConfigFileRef[]
   changed: HarnessConfigChangedRef[]
   comparedAt: number
+  /** Stored entries hidden by a template that renders to the same path. */
+  shadowed?: HarnessConfigFileRef[]
+  renderErrors?: HarnessConfigRenderErrorEntry[]
 }
 
 export interface HarnessConfigSyncPlan {
@@ -85,6 +100,11 @@ export interface HarnessConfigSyncPlan {
   changed: HarnessConfigChangedRef[]
   generatedAt: number
   fingerprint: string
+  shadowed?: HarnessConfigFileRef[]
+  renderErrors?: HarnessConfigRenderErrorEntry[]
+  /** Adopt only: template-built ids whose disk content is stored as a
+   *  plain entry while that harness is removed from the template. */
+  detach?: string[]
 }
 
 // --- Main-process service contracts, shared so main and renderer (via
@@ -111,9 +131,10 @@ export type HarnessConfigErrorCode =
   | 'linked-resource'
   | 'invalid-template'
   | 'invalid-target'
+  | 'template-shadows'
 
 export interface HarnessConfigAppliedOperation {
-  type: 'create' | 'overwrite' | 'delete' | 'adopt'
+  type: 'create' | 'overwrite' | 'delete' | 'adopt' | 'detach'
   id?: string
   relativePath?: string
 }
@@ -187,6 +208,13 @@ export type HarnessConfigRequestResult<T> =
  *  channels — each accepts exactly `{ scope }` and nothing else. */
 export interface HarnessConfigScopeRequest {
   scope: HarnessConfigScope
+}
+
+export interface HarnessConfigAdoptRequest {
+  scope: HarnessConfigScope
+  /** Template-built ids to detach; every other template-built id keeps
+   *  its template and is skipped (Step 20 REQ-006). */
+  detach?: string[]
 }
 
 export interface HarnessConfigReadRequest {
@@ -288,6 +316,8 @@ export interface HarnessTemplateSaveRequest {
     references: HarnessTemplateReference[]
   }
   confirmed: boolean
+  /** Set after the user saw the `template-shadows` warning. */
+  allowShadowing?: boolean
 }
 
 export interface HarnessTemplateDeleteRequest {
@@ -315,6 +345,14 @@ export interface HarnessConfigState {
   lastScannedAt: number | null
   lastSyncedAt: number | null
   templates: HarnessTemplateSourceState
+  templateSyncNotice: HarnessConfigTemplateSyncNotice | null
+}
+
+/** Scopes a template or fragment save put out of sync with disk
+ *  (Step 20 REQ-005). */
+export interface HarnessConfigTemplateSyncNotice {
+  scopes: HarnessConfigScopeKey[]
+  changedAt: number
 }
 
 export type HarnessConfigEvent =
@@ -357,6 +395,7 @@ export type HarnessConfigEvent =
     }
   | { type: 'harnessConfig/fragmentChanged'; payload: HarnessFragment }
   | { type: 'harnessConfig/fragmentRemoved'; payload: { name: string } }
+  | { type: 'harnessConfig/templateSyncNoticeChanged'; payload: HarnessConfigTemplateSyncNotice | null }
   | {
       type: 'harnessConfig/templateSourceErrorChanged'
       payload: { relativePath: string; message: string | null }

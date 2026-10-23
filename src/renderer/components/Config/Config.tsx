@@ -160,6 +160,8 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
   const [dialogActionError, setDialogActionError] = useState<string | null>(null)
   const [dialogActionNotice, setDialogActionNotice] = useState<string | null>(null)
   const [dialogReviewUsable, setDialogReviewUsable] = useState(true)
+  const [dialogDetachIds, setDialogDetachIds] = useState<ReadonlySet<string>>(new Set())
+  const [dismissedTemplateNoticeAt, setDismissedTemplateNoticeAt] = useState<number | null>(null)
 
   // Session bookkeeping — plain refs so they never themselves trigger a
   // render; every async chain captures these at call time and re-checks
@@ -961,6 +963,17 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     setDialogActionError(null)
     setDialogActionNotice(null)
     setDialogReviewUsable(true)
+    setDialogDetachIds(new Set())
+  }, [])
+
+  const handleDetachChange = useCallback((id: string, detach: boolean) => {
+    setDialogDetachIds((current) => {
+      if (current.has(id) === detach) return current
+      const next = new Set(current)
+      if (detach) next.add(id)
+      else next.delete(id)
+      return next
+    })
   }, [])
 
   const handleDialogCancel = useCallback(() => {
@@ -1014,6 +1027,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         setDialogActionError(null)
         setDialogActionNotice(null)
         setDialogReviewUsable(true)
+        setDialogDetachIds(new Set())
         setDialogOpen(true)
       })()
     },
@@ -1036,6 +1050,10 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
       const displayedReviewKey = dialogReview.reviewKey
       const agentName = dialogAgentName
       const resourceLabel = dialogResourceLabel
+      const templateConfigIds = new Set(
+        dialogReview.sections.changed.filter((pair) => pair.config.ref.source === 'template').map((pair) => pair.config.ref.id)
+      )
+      const detach = [...dialogDetachIds].filter((id) => templateConfigIds.has(id)).sort()
 
       const isStale = (): boolean =>
         dialogTokenRef.current !== token ||
@@ -1052,7 +1070,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
           planResult =
             direction === 'sync-to-disk'
               ? await backend.planHarnessConfigSyncToDisk({ scope })
-              : await backend.planHarnessConfigAdoptFromDisk({ scope })
+              : await backend.planHarnessConfigAdoptFromDisk(detach.length > 0 ? { scope, detach } : { scope })
         } catch (err) {
           if (isStale()) return
           setDialogActionError(requestFailureMessage(err))
@@ -1165,6 +1183,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
       backend,
       dialogAgentName,
       dialogResourceLabel,
+      dialogDetachIds,
       closeDialog,
       showScopeNotice,
       setScopeStatus
@@ -1254,6 +1273,18 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     [agentFilter, activeTab]
   )
 
+  const templateNotice = harnessConfig.templateSyncNotice
+  const templateNoticeScopes = useMemo(() => {
+    if (!templateNotice || templateNotice.changedAt === dismissedTemplateNoticeAt) return []
+    return templateNotice.scopes.flatMap((key) => {
+      const comparison = harnessConfig.comparisons[key]
+      if (!comparison || comparison.status === 'synced') return []
+      const agentName = getAgentInfo(comparison.scope.agentKind).displayName
+      const resourceLabel = TABS.find((t) => t.id === comparison.scope.resourceType)?.label ?? comparison.scope.resourceType
+      return [{ key, scope: comparison.scope, label: `${agentName} · ${resourceLabel}` }]
+    })
+  }, [templateNotice, dismissedTemplateNoticeAt, harnessConfig.comparisons])
+
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
   const canEdit =
@@ -1274,6 +1305,32 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
       />
+      {templateNotice && templateNoticeScopes.length > 0 && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-border bg-app/30 text-xs text-dim"
+        >
+          <span className="text-fg-bright">Template changes put these scopes out of sync with disk:</span>
+          {templateNoticeScopes.map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              onClick={() => handleSync(entry.scope)}
+              className="text-accent hover:underline cursor-pointer"
+            >
+              Review {entry.label}
+            </button>
+          ))}
+          <span className="text-faint">Each scope is synced on its own.</span>
+          <button
+            type="button"
+            onClick={() => setDismissedTemplateNoticeAt(templateNotice.changedAt)}
+            className="ml-auto text-dim hover:text-fg cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex flex-1 min-h-0">
         <div className="w-72 shrink-0 border-r border-border min-h-0 overflow-hidden">
           <ConfigResourceList
@@ -1328,6 +1385,8 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         reviewUsable={dialogReviewUsable}
         actionError={dialogActionError}
         actionNotice={dialogActionNotice}
+        detachIds={dialogDetachIds}
+        onDetachChange={handleDetachChange}
         onSyncToDisk={() => handleOutcomeClick('sync-to-disk')}
         onAdoptFromDisk={() => handleOutcomeClick('adopt-from-disk')}
         onCancel={handleDialogCancel}

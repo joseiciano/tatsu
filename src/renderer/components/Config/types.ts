@@ -228,7 +228,7 @@ export interface ConfigSyncFileRow {
   /** Stable React key. */
   key: string
   ref: HarnessConfigFileRef
-  sourceLabel: 'Disk' | 'Tatsu config'
+  sourceLabel: 'Disk' | 'Tatsu config' | 'Template'
   updatedAtLabel: string
   /** `sha256:<first 12 chars>` — the default visual label (REQ-007). */
   hashShortLabel: string
@@ -249,6 +249,18 @@ export interface ConfigSyncReviewSections {
   diskOnly: ConfigSyncFileRow[]
   configOnly: ConfigSyncFileRow[]
   changed: ConfigSyncChangedRow[]
+  /** Stored entries hidden by template output at the same path (Step 20). */
+  shadowed: ConfigSyncFileRow[]
+  renderErrors: ConfigSyncRenderErrorRow[]
+}
+
+/** A template that failed to render, with its earlier disk output that
+ *  sync leaves in place (Step 20 REQ-007). */
+export interface ConfigSyncRenderErrorRow {
+  key: string
+  templateRef: string
+  message: string
+  held: ConfigSyncFileRow[]
 }
 
 /** Renderer-local, non-authorizing projection of either a returned
@@ -278,6 +290,9 @@ export interface ConfigSyncDialogProps {
   reviewUsable: boolean
   actionError: string | null
   actionNotice: string | null
+  /** Template-built ids the user chose to detach on adopt (REQ-006). */
+  detachIds: ReadonlySet<string>
+  onDetachChange: (id: string, detach: boolean) => void
   onSyncToDisk: () => void
   onAdoptFromDisk: () => void
   onCancel: () => void

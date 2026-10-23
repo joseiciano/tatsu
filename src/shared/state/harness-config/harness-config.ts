@@ -56,7 +56,8 @@ export const initialHarnessConfig: HarnessConfigState = {
   error: null,
   lastScannedAt: null,
   lastSyncedAt: null,
-  templates: initialHarnessTemplateSource
+  templates: initialHarnessTemplateSource,
+  templateSyncNotice: null
 }
 
 export function harnessConfigScopeKey(scope: HarnessConfigScope): HarnessConfigScopeKey {
@@ -334,6 +335,22 @@ export function harnessConfigReducer(
       return withTemplateSource(state, {
         errors: upsertSorted(current, { relativePath, message }, (error) => error.relativePath === relativePath, compareErrors)
       })
+    }
+
+    case 'harnessConfig/templateSyncNoticeChanged': {
+      const next = event.payload
+      const current = state.templateSyncNotice
+      if (current === next) return state
+      if (
+        current &&
+        next &&
+        current.changedAt === next.changedAt &&
+        current.scopes.length === next.scopes.length &&
+        current.scopes.every((key, index) => key === next.scopes[index])
+      ) {
+        return state
+      }
+      return { ...state, templateSyncNotice: next === null ? null : { scopes: [...next.scopes], changedAt: next.changedAt } }
     }
 
     default: {

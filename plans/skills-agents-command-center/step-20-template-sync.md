@@ -2,13 +2,13 @@
 goal: Sync rendered template output to harness folders through the existing scoped, confirmed plan flow
 date_created: 2026-10-22
 last_updated: 2026-10-22
-status: 'Planned'
+status: 'Completed'
 tags: [feature, main-process, harness-config, templates, sync]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 20 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It makes rendered template output ([Step 19](./step-19-template-renderer.md)) part of Tatsu config, so the existing compare, sync-to-disk, and conflict flows handle templates without a second sync path. Terminology follows [implementation-details.md](./implementation-details.md), as amended for templates.
 
@@ -30,18 +30,18 @@ This plan is Step 20 of the [Skills-Agents-Commands-Sync plan](./skills-agents-c
 
 - **GOAL-001**: Treat rendered output as desired state.
 
-- [ ] **TASK-001**: Add a `desiredForScope` source that merges stored resources with rendered resources per REQ-001 and REQ-002.
-- [ ] **TASK-002**: Extend `planFingerprint` per REQ-003.
-- [ ] **TASK-003**: Re-render on every template or fragment slice event and rescan only the scopes the change touches (anti-pattern #1 in [AGENTS.md](../../AGENTS.md)).
+- [x] **TASK-001**: Add a `desiredForScope` source that merges stored resources with rendered resources per REQ-001 and REQ-002.
+- [x] **TASK-002**: Extend `planFingerprint` per REQ-003.
+- [x] **TASK-003**: Re-render on every template or fragment slice event and rescan only the scopes the change touches (anti-pattern #1 in [AGENTS.md](../../AGENTS.md)).
 
 ### Implementation Phase 2: Conflict flow
 
 - **GOAL-002**: Make template-driven conflicts understandable.
 
-- [ ] **TASK-004**: Add `source` and `templateRef` to compare entries and show them in `ConfigSyncDialog.tsx`.
-- [ ] **TASK-005**: Implement adopt options per REQ-006.
-- [ ] **TASK-006**: Show render errors per REQ-007 and blocked links per REQ-008.
-- [ ] **TASK-007**: Add the "scopes now out of sync" notice per REQ-005.
+- [x] **TASK-004**: Add `source` and `templateRef` to compare entries and show them in `ConfigSyncDialog.tsx`.
+- [x] **TASK-005**: Implement adopt options per REQ-006.
+- [x] **TASK-006**: Show render errors per REQ-007 and blocked links per REQ-008.
+- [x] **TASK-007**: Add the "scopes now out of sync" notice per REQ-005.
 
 ## 3. Alternatives
 

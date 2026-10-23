@@ -93,7 +93,8 @@ function state(overrides: StateOverrides = {}): HarnessConfigState {
     error: null,
     lastScannedAt: null,
     lastSyncedAt: null,
-    templates: initialHarnessConfig.templates
+    templates: initialHarnessConfig.templates,
+    templateSyncNotice: null
   }
 
   return {
@@ -113,6 +114,7 @@ describe('harnessConfigReducer', () => {
       'lastSyncedAt',
       'loading',
       'resources',
+      'templateSyncNotice',
       'templates'
     ])
     expect(initialHarnessConfig.templates).toEqual({ templates: [], fragments: [], errors: [], loadedAt: null })
@@ -664,5 +666,23 @@ describe('harnessConfigReducer templates', () => {
         payload: { relativePath: 'agents/a.md', message: null }
       })
     ).toBe(cleared)
+  })
+})
+
+describe('harnessConfigReducer template sync notice', () => {
+  it('templateSyncNoticeChanged sets, dedups, and clears the notice', () => {
+    const set = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templateSyncNoticeChanged',
+      payload: { scopes: ['claude:agents', 'opencode:agents'], changedAt: 10 }
+    })
+    expect(set.templateSyncNotice).toEqual({ scopes: ['claude:agents', 'opencode:agents'], changedAt: 10 })
+    const same = apply(set, {
+      type: 'harnessConfig/templateSyncNoticeChanged',
+      payload: { scopes: ['claude:agents', 'opencode:agents'], changedAt: 10 }
+    })
+    expect(same).toBe(set)
+    const cleared = apply(set, { type: 'harnessConfig/templateSyncNoticeChanged', payload: null })
+    expect(cleared.templateSyncNotice).toBeNull()
+    expect(apply(cleared, { type: 'harnessConfig/templateSyncNoticeChanged', payload: null })).toBe(cleared)
   })
 })

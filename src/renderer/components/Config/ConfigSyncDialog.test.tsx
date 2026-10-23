@@ -47,12 +47,81 @@ function baseProps(overrides: Partial<ConfigSyncDialogProps> = {}): ConfigSyncDi
     reviewUsable: true,
     actionError: null,
     actionNotice: null,
+    detachIds: new Set(),
+    onDetachChange: () => {},
     onSyncToDisk: () => {},
     onAdoptFromDisk: () => {},
     onCancel: () => {},
     ...overrides
   }
 }
+
+describe('ConfigSyncDialog templates', () => {
+  const templateRef = (overrides: Partial<HarnessConfigFileRef> = {}): HarnessConfigFileRef =>
+    ref({ source: 'template', templateRef: 'skill/one', updatedAt: 0, existsOnDisk: false, ...overrides })
+
+  const templateComparison: HarnessConfigComparison = {
+    ...comparison,
+    diskOnly: [],
+    configOnly: [templateRef({ id: 'tmpl-new', relativePath: 'new/SKILL.md' })],
+    changed: [
+      {
+        disk: ref({ id: 'tmpl-changed', relativePath: 'changed/SKILL.md', hash: 'disk-hash' }),
+        config: templateRef({ id: 'tmpl-changed', relativePath: 'changed/SKILL.md', hash: 'tmpl-hash' })
+      }
+    ],
+    shadowed: [ref({ id: 'tmpl-new', relativePath: 'new/SKILL.md', hash: 'stored-hash' })],
+    renderErrors: [
+      {
+        templateRef: 'skill/broken',
+        message: 'Unknown fragment: tone',
+        held: [ref({ id: 'held-1', relativePath: 'broken/SKILL.md', templateRef: 'skill/broken' })]
+      }
+    ]
+  }
+
+  it('labels template entries and states what adopt does with each one (REQ-006)', () => {
+    const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: toConfigSyncReview(templateComparison) })} />)
+    expect(html).toContain('Template: skill/one')
+    expect(html).toContain('Built from skill/one')
+    expect(html).toContain('Adopt keeps this template output')
+    expect(html).toContain('Keep template (skip this file)')
+    expect(html).toContain('Detach from template')
+    expect(html.match(/type="radio"/g)).toHaveLength(2)
+  })
+
+  it('checks the detach option for ids the user chose', () => {
+    const keep = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: toConfigSyncReview(templateComparison) })} />)
+    expect(keep).toMatch(/checked=""[^>]*\/>Keep template/)
+    const detach = renderToStaticMarkup(
+      <ConfigSyncDialog
+        {...baseProps({ review: toConfigSyncReview(templateComparison), detachIds: new Set(['tmpl-changed']) })}
+      />
+    )
+    expect(detach).toMatch(/checked=""[^>]*\/>Detach from template/)
+  })
+
+  it('shows render errors with held files and shadowed stored entries (REQ-002/REQ-007)', () => {
+    const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: toConfigSyncReview(templateComparison) })} />)
+    expect(html).toContain('Template errors')
+    expect(html).toContain('skill/broken')
+    expect(html).toContain('Unknown fragment: tone')
+    expect(html).toContain('broken/SKILL.md')
+    expect(html).toContain('sync to disk and adopt both leave them alone')
+    expect(html).toContain('Hidden by a template')
+  })
+
+  it('tells the user to remove a link before template output can be written (REQ-008)', () => {
+    const linked = toConfigSyncReview({
+      ...comparison,
+      diskOnly: [],
+      changed: [],
+      configOnly: [templateRef({ linkedFrom: '/dotfiles/skills' })]
+    })
+    const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: linked })} />)
+    expect(html).toContain('Remove the link')
+  })
+})
 
 describe('ConfigSyncDialog', () => {
   it('renders nothing when closed or without a review', () => {

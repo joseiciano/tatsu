@@ -238,6 +238,18 @@ describe('TemplateSourceStore writes', () => {
     expect(state.templates.templates[0].body).toBe('Changed\n')
   })
 
+  it('detaches one harness from a template and keeps the rest of it', () => {
+    const store = makeStore()
+    store.load()
+    store.saveTemplate(draft({ harnesses: { claude: { frontmatter: { model: 'opus' } }, opencode: { frontmatter: {} } } }))
+    const detached = store.detachTarget('agent/reviewer', 'claude')
+    expect(detached.harnesses).toEqual({ claude: false, opencode: { frontmatter: {} } })
+    expect(detached.body).toBe('Review the diff.\n')
+    expect(state.templates.templates[0].harnesses.claude).toBe(false)
+    expect(list('agents')).toHaveLength(2)
+    expect(() => store.detachTarget('agent/missing', 'claude')).toThrow(HarnessConfigError)
+  })
+
   it('aborts the save when the backup fails', () => {
     const failing: HarnessConfigFilesystem = {
       ...(fs as unknown as HarnessConfigFilesystem),

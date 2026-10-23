@@ -111,7 +111,8 @@ function setStore(
     error: null,
     lastScannedAt: null,
     lastSyncedAt: null,
-    templates: { templates: [], fragments: [], errors: [], loadedAt: null }
+    templates: { templates: [], fragments: [], errors: [], loadedAt: null },
+    templateSyncNotice: null
   }
   storeState.activeBackend = { id: 'local', label: 'Local', url: '', kind: 'local', addedAt: 0 }
   storeState.settings = {}
@@ -520,5 +521,96 @@ describe('Config deferred harnesses (Step 14 TASK-008/TEST-007)', () => {
     )
     expect(requestedKinds.length).toBeGreaterThan(0)
     expect(requestedKinds).not.toContain('pi')
+  })
+})
+
+describe('Config template sync (Step 20)', () => {
+  const agentsScope: HarnessConfigScope = { agentKind: 'claude', resourceType: 'agents' }
+
+  function templateConflict(): HarnessConfigComparison {
+    return {
+      scope: agentsScope,
+      status: 'conflict',
+      diskOnly: [],
+      configOnly: [],
+      changed: [
+        {
+          disk: ref({ id: 'tmpl-1', resourceType: 'agents', relativePath: 'reviewer.md', hash: 'disk' }),
+          config: ref({
+            id: 'tmpl-1',
+            resourceType: 'agents',
+            relativePath: 'reviewer.md',
+            hash: 'template',
+            source: 'template',
+            templateRef: 'agent/reviewer'
+          })
+        }
+      ],
+      comparedAt: 1
+    }
+  }
+
+  function setNotice(): void {
+    const state = storeState.harnessConfig!
+    storeState.harnessConfig = {
+      ...state,
+      comparisons: {
+        ...state.comparisons,
+        'claude:agents': templateConflict()
+      },
+      templateSyncNotice: { scopes: ['claude:agents', 'opencode:skills'], changedAt: 5 }
+    }
+  }
+
+  it('lists only scopes still out of sync after a template save, each linking to its review (REQ-005)', async () => {
+    setNotice()
+    backendApi.compareHarnessConfig.mockImplementation(async () => ({ ok: true, value: templateConflict() }))
+    await renderConfig()
+    await flush()
+
+    const notice = container.querySelector('[role="status"]')
+    expect(notice?.textContent).toContain('Template changes put these scopes out of sync with disk')
+    expect(notice?.textContent).toContain('Review Claude Code · Agents')
+    expect(notice?.textContent).not.toContain('OpenCode')
+
+    click(findButtonByText('Review Claude Code · Agents'))
+    await flush()
+    expect(backendApi.compareHarnessConfig).toHaveBeenLastCalledWith({ scope: agentsScope })
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain('Template: agent/reviewer')
+  })
+
+  it('hides the notice once dismissed', async () => {
+    setNotice()
+    await renderConfig()
+    await flush()
+    click(findButtonByText('Dismiss'))
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  })
+
+  it('sends the detach choice with the adopt plan request (REQ-006)', async () => {
+    setNotice()
+    backendApi.compareHarnessConfig.mockImplementation(async () => ({ ok: true, value: templateConflict() }))
+    backendApi.planHarnessConfigAdoptFromDisk.mockResolvedValue({
+      ok: true,
+      value: { ...templateConflict(), planId: 'plan-1', direction: 'adopt-from-disk', generatedAt: 1, fingerprint: 'fp' }
+    } satisfies HarnessConfigRequestResult<HarnessConfigSyncPlan>)
+    backendApi.adoptHarnessConfigFromDisk.mockResolvedValue({
+      ok: true,
+      value: { scope: agentsScope, planId: 'plan-1', applied: [], resultingRefs: [], requiresRescan: true }
+    } satisfies HarnessConfigRequestResult<HarnessConfigApplyResult>)
+    await renderConfig()
+    await flush()
+    click(findButtonByText('Review Claude Code · Agents'))
+    await flush()
+
+    const detach = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((input) =>
+      input.parentElement?.textContent?.startsWith('Detach from template')
+    )
+    click(detach ?? null)
+    click(findButtonByText('Adopt current disk files into Tatsu config'))
+    await flush()
+    await flush()
+    expect(backendApi.planHarnessConfigAdoptFromDisk).toHaveBeenCalledWith({ scope: agentsScope, detach: ['tmpl-1'] })
+    expect(backendApi.adoptHarnessConfigFromDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
   })
 })

@@ -27,12 +27,21 @@ import {
   type HarnessConfigSyncStatus,
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
-import { readTemplateRef } from '../../shared/harness-template-render'
+import {
+  readTemplateRef,
+  renderTemplates,
+  templateMarker,
+  type RenderableTemplate,
+  type TemplateRenderResult
+} from '../../shared/harness-template-render'
+import { classifyTemplateSourcePath, TEMPLATE_KIND_RESOURCE_TYPE, templateTargets } from '../../shared/harness-templates'
+import type { HarnessTemplate } from '../../shared/state/harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
 import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
+  HarnessConfigAdoptOptions,
   HarnessConfigApplyResult,
   HarnessConfigConversionResult,
   HarnessConfigConversionSource,
@@ -45,6 +54,8 @@ import type {
   HarnessConfigResourceResolver,
   HarnessConfigService,
   HarnessConfigServiceDeps,
+  HarnessConfigShadowedEntry,
+  HarnessConfigTemplateSource,
   HarnessResolver
 } from './types'
 import { HarnessConfigError } from './types'
@@ -54,6 +65,7 @@ const MANAGED_HARNESSES: readonly ManagedHarnessKind[] = ['claude', 'codex', 'op
 const BACKUP_SUFFIX = /\.x-backup-\d{8}T\d{9}Z(?:-\d+)?$/
 const MAX_LIVE_PLANS = 64
 const MAX_ATTEMPTED_PLAN_IDS = 512
+const EMPTY_TEMPLATE_SOURCE: HarnessConfigTemplateSource = { templates: [], fragments: [] }
 
 const unsupported = (identity: string, reason: string): HarnessConfigResourceResolver => ({
   supported: false,
@@ -219,6 +231,13 @@ type DiskOperation = {
   descriptorResourceType: HarnessConfigResourceType
 }
 
+type DetachTarget = {
+  id: string
+  relativePath: string
+  templateRef: string
+  agentKind: ManagedHarnessKind
+}
+
 type PrivatePlan = {
   publicPlan: HarnessConfigSyncPlan | HarnessConfigMutationPlan
   scopeKey: string
@@ -226,8 +245,10 @@ type PrivatePlan = {
   diskFingerprint: string
   configFingerprint: string
   resolverIdentity: string
+  templateFingerprint: string
   operations: DiskOperation[]
   adoptedResources?: HarnessConfigDesiredResource[]
+  detachTargets?: DetachTarget[]
   attempted: boolean
 }
 
@@ -237,13 +258,28 @@ type MutationOutcome = {
   existed: boolean
   before?: Buffer
 }
+type ScopeRenderError = { templateRef: string; message: string }
+
 type SnapshotState = {
   scope: HarnessConfigScope
   disk: DiskEntry[]
   desired: HarnessConfigDesiredResource[]
+  shadowed: HarnessConfigDesiredResource[]
+  renderErrors: ScopeRenderError[]
+  sourceErrors: ScopeRenderError[]
   diskFingerprint: string
   configFingerprint: string
   resolverIdentity: string
+  templateFingerprint: string
+}
+
+type ScopeTemplateState = {
+  desired: HarnessConfigDesiredResource[]
+  rendered: HarnessConfigDesiredResource[]
+  shadowed: HarnessConfigDesiredResource[]
+  renderErrors: ScopeRenderError[]
+  sourceErrors: ScopeRenderError[]
+  templateFingerprint: string
 }
 
 type ComparisonState = SnapshotState & {
@@ -252,6 +288,7 @@ type ComparisonState = SnapshotState & {
   configOnly: ConfigEntry[]
   changed: Array<{ disk: DiskEntry; config: ConfigEntry }>
   config: ConfigEntry[]
+  heldIds: string[]
 }
 
 const nodeFilesystem: HarnessConfigFilesystem = {
@@ -313,6 +350,25 @@ function cloneRef(ref: HarnessConfigFileRef): HarnessConfigFileRef {
   return { ...ref, aliasResourceTypes: [...ref.aliasResourceTypes] }
 }
 
+type ReviewFields = Pick<
+  HarnessConfigSyncPlan,
+  'status' | 'diskOnly' | 'configOnly' | 'changed' | 'shadowed' | 'renderErrors'
+>
+
+function cloneReviewFields(comparison: HarnessConfigComparison): ReviewFields {
+  const fields: ReviewFields = {
+    status: comparison.status,
+    diskOnly: comparison.diskOnly.map(cloneRef),
+    configOnly: comparison.configOnly.map(cloneRef),
+    changed: comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) }))
+  }
+  if (comparison.shadowed) fields.shadowed = comparison.shadowed.map(cloneRef)
+  if (comparison.renderErrors) {
+    fields.renderErrors = comparison.renderErrors.map((entry) => ({ ...entry, held: entry.held.map(cloneRef) }))
+  }
+  return fields
+}
+
 export class HarnessConfigServiceImpl implements HarnessConfigService {
   private readonly deps: HarnessConfigServiceDeps
   private readonly fs: HarnessConfigFilesystem
@@ -321,6 +377,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private readonly plans = new Map<string, PrivatePlan>()
   private readonly attemptedPlanIds = new Set<string>()
   private tempSequence = 0
+  private renderCache: { source: HarnessConfigTemplateSource; result: TemplateRenderResult } | null = null
 
   constructor(deps: HarnessConfigServiceDeps = {}) {
     this.deps = deps
@@ -434,15 +491,12 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (excluded > 0 && operations.length === 0) this.rejectLinked()
       operations.sort((a, b) => lexicalCompare(a.relativePath, b.relativePath) || lexicalCompare(a.type, b.type))
       const generatedAt = this.clock()
-      const fingerprint = this.planFingerprint(state.diskFingerprint, state.configFingerprint, state.resolverIdentity)
+      const fingerprint = this.planFingerprint(state)
       const publicPlan: HarnessConfigSyncPlan = {
         planId: this.uuid(),
         scope: cloneScope(scope),
         direction: 'sync-to-disk',
-        status: state.comparison.status,
-        diskOnly: state.comparison.diskOnly.map(cloneRef),
-        configOnly: state.comparison.configOnly.map(cloneRef),
-        changed: state.comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) })),
+        ...cloneReviewFields(state.comparison),
         generatedAt,
         fingerprint
       }
@@ -451,27 +505,57 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     })
   }
 
-  planAdoptFromDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan {
+  planAdoptFromDisk(scope: HarnessConfigScope, options: HarnessConfigAdoptOptions = {}): HarnessConfigSyncPlan {
     return this.guard('planAdoptFromDisk', () => {
       const state = this.buildComparison(scope)
-      const adoptedResources = state.disk.map(({ ref }) => {
-        const bytes = this.readInventoryBytes(ref.absolutePath)
-        return this.desiredFromRef(ref, bytes.toString('utf8'))
+      // REQ-006: adopt never rewrites a template. Template-built files are
+      // skipped ("Keep template") unless the user chose to detach them.
+      const templateEntries = new Map(
+        state.config.filter(({ resource }) => resource.source === 'template').map((entry) => [entry.ref.id, entry])
+      )
+      const heldIds = new Set(state.heldIds)
+      const diskIds = new Set(state.disk.map(({ ref }) => ref.id))
+      const detach = [...new Set(options.detach ?? [])].sort(lexicalCompare)
+      for (const id of detach) {
+        if (!templateEntries.has(id) || !diskIds.has(id)) {
+          throw new HarnessConfigError('unknown-resource', 'Only template-built files that exist on disk can be detached')
+        }
+      }
+      if (detach.length > 0 && !this.deps.detachTemplateTarget) {
+        throw new HarnessConfigError('desired-state-failed', 'Detaching from a template is unavailable')
+      }
+      const detachSet = new Set(detach)
+      const adoptedResources = state.disk
+        .filter(({ ref }) => !heldIds.has(ref.id) && (!templateEntries.has(ref.id) || detachSet.has(ref.id)))
+        .map(({ ref }) => {
+          const bytes = this.readInventoryBytes(ref.absolutePath)
+          return this.desiredFromRef(ref, bytes.toString('utf8'))
+        })
+      // REQ-002: a stored entry hidden by a kept template stays stored.
+      const keptShadowed = state.shadowed.filter((resource) => !detachSet.has(resource.id))
+      const uniqueResources = [
+        ...new Map([...adoptedResources, ...keptShadowed].map((resource) => [resource.id, resource])).values()
+      ]
+      const detachTargets: DetachTarget[] = detach.map((id) => {
+        const entry = templateEntries.get(id)!
+        return {
+          id,
+          relativePath: entry.ref.relativePath,
+          templateRef: entry.resource.templateRef!,
+          agentKind: scope.agentKind
+        }
       })
-      const uniqueResources = [...new Map(adoptedResources.map((resource) => [resource.id, resource])).values()]
       const generatedAt = this.clock()
-      const fingerprint = this.planFingerprint(state.diskFingerprint, state.configFingerprint, state.resolverIdentity)
+      const fingerprint = this.planFingerprint(state)
       const publicPlan: HarnessConfigSyncPlan = {
         planId: this.uuid(),
         scope: cloneScope(scope),
         direction: 'adopt-from-disk',
-        status: state.comparison.status,
-        diskOnly: state.comparison.diskOnly.map(cloneRef),
-        configOnly: state.comparison.configOnly.map(cloneRef),
-        changed: state.comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) })),
+        ...cloneReviewFields(state.comparison),
         generatedAt,
         fingerprint
       }
+      if (detach.length > 0) publicPlan.detach = detach
       this.rememberPlan(publicPlan.planId, {
         publicPlan,
         scopeKey: harnessConfigScopeKey(scope),
@@ -479,8 +563,10 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         diskFingerprint: state.diskFingerprint,
         configFingerprint: state.configFingerprint,
         resolverIdentity: state.resolverIdentity,
+        templateFingerprint: state.templateFingerprint,
         operations: [],
         adoptedResources: uniqueResources,
+        detachTargets,
         attempted: false
       })
       return publicPlan
@@ -594,7 +680,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (
         current.diskFingerprint !== plan.diskFingerprint ||
         current.configFingerprint !== plan.configFingerprint ||
-        current.resolverIdentity !== plan.resolverIdentity
+        current.resolverIdentity !== plan.resolverIdentity ||
+        current.templateFingerprint !== plan.templateFingerprint
       ) {
         this.consumePlan(request.planId)
         throw new HarnessConfigError('stale-plan', 'The plan no longer matches current harness configuration')
@@ -615,6 +702,20 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
             applied,
             requiresRescan: true
           })
+        }
+        // Stored first, then detached: a failed detach leaves a stored copy
+        // the template still shadows, never lost disk content.
+        for (const target of plan.detachTargets ?? []) {
+          try {
+            await this.deps.detachTemplateTarget!(target.templateRef, target.agentKind)
+            applied.push({ type: 'detach', id: target.id, relativePath: target.relativePath })
+          } catch (error) {
+            throw new HarnessConfigError('desired-state-failed', 'Unable to detach the resource from its template', {
+              cause: error,
+              applied,
+              requiresRescan: true
+            })
+          }
         }
       } else if (plan.direction === 'sync-to-disk') {
         for (const operation of plan.operations) {
@@ -727,6 +828,44 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
     }
     return scopes
+  }
+
+  scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[] {
+    return this.guard('scopesForTemplates', () => {
+      const scopes = this.availableScopes()
+      const selected = new Map<string, HarnessConfigScope>()
+      for (const template of templates) {
+        const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[template.kind]
+        for (const agentKind of templateTargets(template)) {
+          for (const scope of scopes) {
+            if (this.outputLandsInScope(scope, agentKind, resourceType)) selected.set(harnessConfigScopeKey(scope), scope)
+          }
+        }
+      }
+      return [...selected.values()]
+    })
+  }
+
+  templateShadows(template: RenderableTemplate): HarnessConfigShadowedEntry[] {
+    return this.guard('templateShadows', () => {
+      const { source } = this.templateRender()
+      const render = this.deps.render ?? renderTemplates
+      const { resources } = render([template], source.fragments)
+      const storedIds = new Set(this.loadDesired().map((resource) => resource.id))
+      const shadows: HarnessConfigShadowedEntry[] = []
+      for (const resource of resources) {
+        const descriptor = this.getHarness(resource.agentKind).resources[resource.resourceType]
+        if (!descriptor?.supported || !descriptor.rootKey) continue
+        if (storedIds.has(physicalId(resource.agentKind, descriptor.rootKey, resource.relativePath))) {
+          shadows.push({
+            agentKind: resource.agentKind,
+            resourceType: resource.resourceType,
+            relativePath: resource.relativePath
+          })
+        }
+      }
+      return shadows
+    })
   }
 
   scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[] {
@@ -1012,16 +1151,149 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private snapshot(scope: HarnessConfigScope): SnapshotState {
     this.getDescriptor(scope)
     const desired = this.loadDesired()
-    const disk = this.scanDisk(scope, desired)
-    const scopedDesired = this.desiredForScope(scope, desired)
+    const templates = this.templateStateForScope(scope, this.desiredForScope(scope, desired))
+    const disk = this.scanDisk(scope, [...desired, ...templates.rendered])
     return {
       scope: cloneScope(scope),
       disk,
-      desired: scopedDesired,
+      desired: templates.desired,
+      shadowed: templates.shadowed,
+      renderErrors: templates.renderErrors,
+      sourceErrors: templates.sourceErrors,
       diskFingerprint: this.diskFingerprint(disk),
-      configFingerprint: this.configFingerprint(scopedDesired),
-      resolverIdentity: this.resolverIdentity(scope)
+      configFingerprint: this.configFingerprint([...templates.desired, ...templates.shadowed]),
+      resolverIdentity: this.resolverIdentity(scope),
+      templateFingerprint: templates.templateFingerprint
     }
+  }
+
+  private templateRender(): { source: HarnessConfigTemplateSource; result: TemplateRenderResult } {
+    const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
+    const cached = this.renderCache
+    if (cached && cached.source.templates === source.templates && cached.source.fragments === source.fragments) {
+      return cached
+    }
+    const render = this.deps.render ?? renderTemplates
+    this.renderCache = { source, result: render(source.templates, source.fragments) }
+    return this.renderCache
+  }
+
+  private outputLandsInScope(
+    scope: HarnessConfigScope,
+    agentKind: ManagedHarnessKind,
+    resourceType: HarnessConfigResourceType
+  ): boolean {
+    if (agentKind !== scope.agentKind) return false
+    if (resourceType === scope.resourceType) return true
+    const descriptor = this.getHarness(agentKind).resources[resourceType]
+    return Boolean(descriptor?.supported && descriptor.aliasResourceTypes?.includes(scope.resourceType))
+  }
+
+  private templateTouchesScope(scope: HarnessConfigScope, template: Pick<HarnessTemplate, 'kind' | 'harnesses'>): boolean {
+    const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[template.kind]
+    return templateTargets(template).some((agentKind) => this.outputLandsInScope(scope, agentKind, resourceType))
+  }
+
+  /** REQ-001/REQ-002/REQ-003: Tatsu config for a scope is the stored
+   *  entries plus the template output landing in it. Template output wins
+   *  a shared path and the stored entry is reported as shadowed. */
+  private templateStateForScope(
+    scope: HarnessConfigScope,
+    stored: HarnessConfigDesiredResource[]
+  ): ScopeTemplateState {
+    const { source, result } = this.templateRender()
+    const rendered: HarnessConfigDesiredResource[] = []
+    for (const resource of result.resources) {
+      if (!this.outputLandsInScope(scope, resource.agentKind, resource.resourceType)) continue
+      const descriptor = this.getHarness(resource.agentKind).resources[resource.resourceType]
+      if (!descriptor?.supported || !descriptor.rootKey) continue
+      const canonicalResourceType = descriptor.canonicalResourceType ?? resource.resourceType
+      rendered.push({
+        id: physicalId(resource.agentKind, descriptor.rootKey, resource.relativePath),
+        agentKind: resource.agentKind,
+        resourceType: canonicalResourceType,
+        canonicalResourceType,
+        aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
+        relativePath: resource.relativePath,
+        label: this.labelFor(resource.relativePath, canonicalResourceType),
+        content: resource.content,
+        hash: resource.hash,
+        updatedAt: 0,
+        source: 'template',
+        templateRef: templateMarker(resource.templateKind, resource.templateName)
+      })
+    }
+    const renderedIds = new Set(rendered.map((resource) => resource.id))
+    const shadowed = stored.filter((resource) => renderedIds.has(resource.id))
+    const desired = [...stored.filter((resource) => !renderedIds.has(resource.id)), ...rendered].sort(
+      (a, b) => lexicalCompare(a.id, b.id) || lexicalCompare(a.relativePath, b.relativePath)
+    )
+
+    const contributing = source.templates
+      .filter((template) => this.templateTouchesScope(scope, template))
+      .map((template) => ({ template, ref: templateMarker(template.kind, template.name) }))
+      .sort((a, b) => lexicalCompare(a.ref, b.ref))
+    const contributingRefs = new Set(contributing.map(({ ref }) => ref))
+    const messages = new Map<string, string[]>()
+    for (const error of result.errors) {
+      const ref = templateMarker(error.templateKind, error.templateName)
+      if (!contributingRefs.has(ref)) continue
+      messages.set(ref, [...(messages.get(ref) ?? []), error.message])
+    }
+    const renderErrors = [...messages.entries()]
+      .sort(([a], [b]) => lexicalCompare(a, b))
+      .map(([templateRef, list]) => ({ templateRef, message: list.join(' ') }))
+
+    const sourceErrors = this.templateSourceErrors(source)
+
+    const fragmentNames = new Set<string>()
+    for (const { template } of contributing) {
+      for (const name of template.fragments) fragmentNames.add(name)
+      for (const block of Object.values(template.harnesses)) {
+        if (block) for (const name of block.fragments ?? []) fragmentNames.add(name)
+      }
+    }
+    const fragments = new Map(source.fragments.map((fragment) => [fragment.name, fragment]))
+    const templateFingerprint = sha256(JSON.stringify([
+      result.rendererVersion,
+      contributing.map(({ template, ref }) => [ref, template.hash ?? this.renderableHash(template)]),
+      sourceErrors.map(({ templateRef, message }) => [templateRef, message]),
+      [...fragmentNames].sort(lexicalCompare).map((name) => {
+        const fragment = fragments.get(name)
+        return [name, fragment ? fragment.hash ?? sha256(fragment.content) : null]
+      })
+    ]))
+    return { desired, rendered, shadowed, renderErrors, sourceErrors, templateFingerprint }
+  }
+
+  /** REQ-007: a template file that no longer parses is missing from the
+   *  template list, so its harness targets are unknown. Its parse error is
+   *  keyed by template ref so any earlier output on disk can be held. */
+  private templateSourceErrors(source: HarnessConfigTemplateSource): ScopeRenderError[] {
+    const loaded = new Set(source.templates.map((template) => templateMarker(template.kind, template.name)))
+    const messages = new Map<string, string[]>()
+    for (const error of source.errors ?? []) {
+      const entry = classifyTemplateSourcePath(error.relativePath)
+      if (!entry || entry.type === 'fragment') continue
+      const ref = templateMarker(entry.type === 'reference' ? 'skill' : entry.kind, entry.name)
+      if (loaded.has(ref)) continue
+      messages.set(ref, [...(messages.get(ref) ?? []), error.message])
+    }
+    return [...messages.entries()]
+      .sort(([a], [b]) => lexicalCompare(a, b))
+      .map(([templateRef, list]) => ({ templateRef, message: list.join(' ') }))
+  }
+
+  private renderableHash(template: RenderableTemplate): string {
+    return sha256(JSON.stringify([
+      template.kind,
+      template.name,
+      template.description,
+      template.fragments,
+      template.body,
+      template.harnesses,
+      template.references
+    ]))
   }
 
   private scanDisk(scope: HarnessConfigScope, desired: HarnessConfigDesiredResource[]): DiskEntry[] {
@@ -1194,8 +1466,9 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         updatedAt: resource.updatedAt
       }
       if (linkedFrom) ref.linkedFrom = linkedFrom
-      const templateRef = readTemplateRef(resource.content)
+      const templateRef = resource.templateRef ?? readTemplateRef(resource.content)
       if (templateRef) ref.templateRef = templateRef
+      if (resource.source === 'template') ref.source = 'template'
       entries.set(expectedId, {
         resource: { ...resource, id: expectedId, hash: contentHash },
         ref,
@@ -1225,21 +1498,49 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const config = this.configEntries(scope, state.desired)
     const diskById = new Map(state.disk.map((entry) => [entry.ref.id, entry]))
     const configById = new Map(config.map((entry) => [entry.ref.id, entry]))
-    const diskOnly = state.disk.filter((entry) => !configById.has(entry.ref.id))
+    // REQ-007: earlier output of a template that no longer renders is held
+    // back from disk-only, so sync to disk never deletes it.
+    const erroredRefs = new Set([...state.renderErrors, ...state.sourceErrors].map(({ templateRef }) => templateRef))
+    const held = new Map<string, DiskEntry[]>()
+    const diskOnly: DiskEntry[] = []
+    for (const entry of state.disk) {
+      if (configById.has(entry.ref.id)) continue
+      const templateRef = entry.ref.templateRef
+      if (templateRef && erroredRefs.has(templateRef)) held.set(templateRef, [...(held.get(templateRef) ?? []), entry])
+      else diskOnly.push(entry)
+    }
+    const renderedRefs = new Set(state.renderErrors.map(({ templateRef }) => templateRef))
+    const renderErrors = [
+      ...state.renderErrors,
+      ...state.sourceErrors.filter(({ templateRef }) => !renderedRefs.has(templateRef) && held.has(templateRef))
+    ].sort((a, b) => lexicalCompare(a.templateRef, b.templateRef))
     const configOnly = config.filter((entry) => !diskById.has(entry.ref.id))
     const changed = state.disk.flatMap((disk) => {
       const desired = configById.get(disk.ref.id)
       return desired && desired.ref.hash !== disk.ref.hash ? [{ disk, config: desired }] : []
     })
+    let status = comparisonStatus(diskOnly, configOnly, changed)
+    if (status === 'synced' && renderErrors.length > 0) status = 'conflict'
     const comparison: HarnessConfigComparison = {
       scope: cloneScope(scope),
-      status: comparisonStatus(diskOnly, configOnly, changed),
+      status,
       diskOnly: diskOnly.map(({ ref }) => cloneRef(ref)),
       configOnly: configOnly.map(({ ref }) => cloneRef(ref)),
       changed: changed.map(({ disk, config }) => ({ disk: cloneRef(disk.ref), config: cloneRef(config.ref) })),
       comparedAt: this.clock()
     }
-    return { ...state, comparison, diskOnly, configOnly, changed, config }
+    if (state.shadowed.length > 0) {
+      comparison.shadowed = this.configEntries(scope, state.shadowed).map(({ ref }) => cloneRef(ref))
+    }
+    if (renderErrors.length > 0) {
+      comparison.renderErrors = renderErrors.map(({ templateRef, message }) => ({
+        templateRef,
+        message,
+        held: (held.get(templateRef) ?? []).map(({ ref }) => cloneRef(ref))
+      }))
+    }
+    const heldIds = [...held.values()].flatMap((entries) => entries.map(({ ref }) => ref.id))
+    return { ...state, comparison, diskOnly, configOnly, changed, config, heldIds }
   }
 
   private diskFingerprint(entries: DiskEntry[]): string {
@@ -1257,7 +1558,9 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       resource.label,
       resource.content,
       resource.hash,
-      resource.updatedAt
+      resource.updatedAt,
+      resource.source ?? null,
+      resource.templateRef ?? null
     ])))
   }
 
@@ -1279,8 +1582,10 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     ]))
   }
 
-  private planFingerprint(diskFingerprint: string, configFingerprint: string, resolverIdentity: string): string {
-    return sha256(`${diskFingerprint}\0${configFingerprint}\0${resolverIdentity}`)
+  private planFingerprint(state: SnapshotState): string {
+    return sha256(
+      `${state.diskFingerprint}\0${state.configFingerprint}\0${state.resolverIdentity}\0${state.templateFingerprint}`
+    )
   }
 
   private storePlan(
@@ -1295,6 +1600,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       diskFingerprint: state.diskFingerprint,
       configFingerprint: state.configFingerprint,
       resolverIdentity: state.resolverIdentity,
+      templateFingerprint: state.templateFingerprint,
       operations,
       attempted: false
     })
@@ -1315,7 +1621,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       content,
       descriptorResourceType: this.descriptorResourceType(scope, descriptor)
     }
-    const fingerprint = this.planFingerprint(state.diskFingerprint, state.configFingerprint, state.resolverIdentity)
+    const fingerprint = this.planFingerprint(state)
     const publicPlan: HarnessConfigMutationPlan = {
       planId: this.uuid(),
       scope: cloneScope(scope),
@@ -1331,6 +1637,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       diskFingerprint: state.diskFingerprint,
       configFingerprint: state.configFingerprint,
       resolverIdentity: state.resolverIdentity,
+      templateFingerprint: state.templateFingerprint,
       operations: [operation],
       attempted: false
     })
