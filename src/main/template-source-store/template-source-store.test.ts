@@ -348,3 +348,23 @@ describe('TemplateSourceStore writes', () => {
     expect(list('fragments')).toEqual(['style.md.x-backup-20261022T100000000Z'])
   })
 })
+
+describe('TemplateSourceStore watcher errors', () => {
+  it('re-arms the watcher after it fails', () => {
+    vi.useFakeTimers()
+    const onErrors: (() => void)[] = []
+    const store = makeStore({
+      debounceMs: 10,
+      watch: (_dir, _onChange, onError) => {
+        onErrors.push(onError)
+        return { close: vi.fn() }
+      }
+    })
+    store.start()
+    write('fragments/style.md', 'x')
+    onErrors[0]()
+    vi.advanceTimersByTime(10)
+    expect(onErrors).toHaveLength(2)
+    expect(state.templates.fragments.map((f) => f.name)).toEqual(['style'])
+  })
+})

@@ -40,7 +40,7 @@ export interface TemplateSourceStoreDeps {
   sourceDir: () => string
   store: { dispatch(event: HarnessConfigEvent): void }
   filesystem?: HarnessConfigFilesystem
-  watch?: (dir: string, onChange: () => void) => TemplateSourceWatcher
+  watch?: (dir: string, onChange: () => void, onError: () => void) => TemplateSourceWatcher
   clock?: () => number
   debounceMs?: number
   log?: (category: string, message: string, data?: unknown) => void
@@ -76,9 +76,12 @@ function compactTimestamp(value: number): string {
   return new Date(value).toISOString().replace(/[-:.]/g, '')
 }
 
-function defaultWatch(dir: string, onChange: () => void): TemplateSourceWatcher {
+function defaultWatch(dir: string, onChange: () => void, onError: () => void): TemplateSourceWatcher {
   const watcher = nodeFs.watch(dir, { recursive: true }, () => onChange())
-  watcher.on('error', () => watcher.close())
+  watcher.on('error', () => {
+    watcher.close()
+    onError()
+  })
   return watcher
 }
 
@@ -127,7 +130,6 @@ export class TemplateSourceStore {
     this.watchedDir = null
   }
 
-  /** Re-points the store at the current source folder (Step 16 setting). */
   restart(): void {
     this.stop()
     this.start()
@@ -288,6 +290,7 @@ export class TemplateSourceStore {
       this.refreshTimer = null
       try {
         this.refresh()
+        this.ensureWatching()
       } catch (error) {
         this.log('harness-config', 'template source refresh failed', this.formatErr(error))
       }
@@ -299,7 +302,17 @@ export class TemplateSourceStore {
     if (!root || (this.watcher && this.watchedDir === root)) return
     if (!this.isDirectory(root)) return
     try {
-      this.watcher = (this.deps.watch ?? defaultWatch)(root, () => this.scheduleRefresh())
+      const watcher = (this.deps.watch ?? defaultWatch)(
+        root,
+        () => this.scheduleRefresh(),
+        () => {
+          if (this.watcher !== watcher) return
+          this.watcher = null
+          this.watchedDir = null
+          this.scheduleRefresh()
+        }
+      )
+      this.watcher = watcher
       this.watchedDir = root
     } catch (error) {
       this.log('harness-config', 'unable to watch the template source folder', this.formatErr(error))

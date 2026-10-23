@@ -88,8 +88,6 @@ function stripMarkdownSuffix(fileName: string): string | null {
   return isValidTemplateName(name) ? name : null
 }
 
-/** Maps a source-folder relative path to the entity it defines, or null
- *  for anything outside the layout (backups, temp files, stray files). */
 export function classifyTemplateSourcePath(relativePath: string): HarnessTemplateSourcePath | null {
   const segments = relativePath.split('/')
   const [top] = segments
@@ -229,8 +227,6 @@ function serializeHarnessBlock(block: HarnessTemplateHarnessBlock | false): unkn
   return out
 }
 
-/** Serializes the template file (TEMPLATE.md or <name>.md). Reference
- *  files are written verbatim beside it and are not part of this text. */
 export function serializeTemplateSource(template: HarnessTemplateDraft): string {
   const data: Record<string, unknown> = { name: template.name, description: template.description }
   if (template.fragments.length > 0) data.fragments = [...template.fragments]
@@ -248,8 +244,6 @@ export function parseFragmentSource(name: string, content: string): Omit<Harness
   return { name, content, relativePath: fragmentRelativePath(name) }
 }
 
-/** Harnesses a template targets: every harness with a block that is not
- *  `false`, in a stable order. */
 export function templateTargets(template: Pick<HarnessTemplate, 'harnesses'>): ManagedHarnessKind[] {
   return TEMPLATE_HARNESSES.filter((harness) => {
     const block = template.harnesses[harness]
