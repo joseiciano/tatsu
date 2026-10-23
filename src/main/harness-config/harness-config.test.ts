@@ -1969,6 +1969,15 @@ describe('harness-config symlink-aware inventory', () => {
     expect(readFileSync(join(kept, 'agents', 'another.md'), 'utf8')).toBe('another')
   })
 
+  it('reports a broken root link as an unavailable root', () => {
+    const fixtureRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'harness-config-broken-root-')))
+    const home = join(fixtureRoot, 'home')
+    mkdirSync(join(home, '.claude'), { recursive: true })
+    symlinkSync(join(fixtureRoot, 'missing'), join(home, '.claude', 'agents'))
+    const fixture = makeFixture({ root: fixtureRoot, fs: realFs(), deps: { homeDir: home, env: { HOME: home } } })
+    expect(() => fixture.service.scan(agents)).toThrow('The resolver known root is unavailable')
+  })
+
   it('adopts a linked resource into Tatsu config and then compares as synced', async () => {
     const { fixture } = dotfilesFixture()
     const plan = fixture.service.planAdoptFromDisk(skills)
