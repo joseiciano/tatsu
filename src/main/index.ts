@@ -67,6 +67,7 @@ import { createHarnessConfigService } from './harness-config'
 import { registerHarnessConfigRequestHandlers } from './harness-config-transport'
 import { registerHarnessConfigSettingsHandlers } from './harness-config-settings'
 import { createTemplateSourceStore } from './template-source-store'
+import { createTemplateSyncDeriver } from './template-sync-deriver'
 import { loadRepoConfig, saveRepoConfig, type RepoConfig } from './repo-config'
 import { createNewProject, type GitignorePreset } from './repo-create'
 import { resolveRepoPath } from './repo-resolve'
@@ -457,6 +458,7 @@ const templateSourceStore = createTemplateSourceStore({
   sourceDir: () => store.getSnapshot().state.settings.harnessConfigSourceDir ?? defaultHarnessConfigSourceDir(),
   store
 })
+createTemplateSyncDeriver({ store, service: harnessConfigService }).start()
 templateSourceStore.start()
 store.subscribe((event) => {
   if (event.type === 'settings/harnessConfigSourceDirChanged') templateSourceStore.restart()

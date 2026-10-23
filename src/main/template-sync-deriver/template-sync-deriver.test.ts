@@ -1,0 +1,171 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import { createTemplateSyncDeriver, type TemplateSyncDeriverStore } from '.'
+import type { StateEvent } from '../../shared/state'
+import {
+  harnessConfigReducer,
+  harnessConfigScopeKey,
+  initialHarnessConfig,
+  type HarnessConfigComparison,
+  type HarnessConfigEvent,
+  type HarnessConfigScope,
+  type HarnessConfigState,
+  type HarnessConfigSyncStatus,
+  type HarnessTemplate
+} from '../../shared/state/harness-config'
+
+function template(name: string, overrides: Partial<HarnessTemplate> = {}): HarnessTemplate {
+  return {
+    kind: 'agent',
+    name,
+    description: '',
+    fragments: [],
+    body: 'Body',
+    harnesses: { claude: { frontmatter: {} } },
+    references: [],
+    relativePath: `agents/${name}.md`,
+    hash: `${name}-1`,
+    ...overrides
+  }
+}
+
+function comparison(scope: HarnessConfigScope, status: HarnessConfigSyncStatus, comparedAt = 1): HarnessConfigComparison {
+  return { scope, status, diskOnly: [], configOnly: [], changed: [], comparedAt }
+}
+
+class FakeStore implements TemplateSyncDeriverStore {
+  state: HarnessConfigState = initialHarnessConfig
+  listeners: Array<(event: StateEvent) => void> = []
+  dispatched: HarnessConfigEvent[] = []
+
+  subscribe(listener: (event: StateEvent) => void): () => void {
+    this.listeners.push(listener)
+    return () => {
+      this.listeners = this.listeners.filter((entry) => entry !== listener)
+    }
+  }
+
+  getSnapshot(): { state: { harnessConfig: HarnessConfigState } } {
+    return { state: { harnessConfig: this.state } }
+  }
+
+  dispatch(event: HarnessConfigEvent): void {
+    this.dispatched.push(event)
+    this.state = harnessConfigReducer(this.state, event)
+  }
+
+  emit(event: HarnessConfigEvent): void {
+    this.state = harnessConfigReducer(this.state, event)
+    for (const listener of this.listeners) listener(event)
+  }
+
+  ofType(type: HarnessConfigEvent['type']): HarnessConfigEvent[] {
+    return this.dispatched.filter((event) => event.type === type)
+  }
+}
+
+function setup(statuses: Record<string, HarnessConfigSyncStatus> = {}) {
+  const store = new FakeStore()
+  const tasks: Array<() => void> = []
+  const service = {
+    planSync: vi.fn((scope: HarnessConfigScope) =>
+      comparison(scope, statuses[harnessConfigScopeKey(scope)] ?? 'synced', service.planSync.mock.calls.length)
+    ),
+    scopesForTemplates: vi.fn((templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]) => {
+      const scopes = new Map<string, HarnessConfigScope>()
+      for (const entry of templates) {
+        for (const [agentKind, block] of Object.entries(entry.harnesses)) {
+          if (!block) continue
+          const scope = { agentKind, resourceType: `${entry.kind}s` } as HarnessConfigScope
+          scopes.set(harnessConfigScopeKey(scope), scope)
+        }
+      }
+      return [...scopes.values()]
+    })
+  }
+  const deriver = createTemplateSyncDeriver({
+    store,
+    service,
+    schedule: (run) => tasks.push(run),
+    now: () => 500,
+    log: vi.fn(),
+    formatErr: String
+  })
+  deriver.start()
+  const flush = (): void => {
+    while (tasks.length > 0) tasks.shift()!()
+  }
+  return { store, service, flush }
+}
+
+describe('TemplateSyncDeriver', () => {
+  it('rescans only the scopes a template change touches and lists the ones now out of sync', () => {
+    const { store, service, flush } = setup({ 'claude:agents': 'config-only', 'opencode:agents': 'config-only' })
+    store.emit({
+      type: 'harnessConfig/templateChanged',
+      payload: template('reviewer', { harnesses: { claude: { frontmatter: {} }, opencode: { frontmatter: {} } } })
+    })
+    store.emit({ type: 'harnessConfig/templateChanged', payload: template('other', { kind: 'skill' }) })
+    expect(service.planSync).not.toHaveBeenCalled()
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope)).sort()).toEqual([
+      'claude:agents',
+      'claude:skills',
+      'opencode:agents'
+    ])
+    expect(store.ofType('harnessConfig/comparisonLoaded')).toHaveLength(3)
+    expect(store.state.templateSyncNotice).toEqual({ scopes: ['claude:agents', 'opencode:agents'], changedAt: 500 })
+  })
+
+  it('includes the targets a template dropped and skips identity comparison dispatches', () => {
+    const { store, service, flush } = setup()
+    const both = template('reviewer', { harnesses: { claude: { frontmatter: {} }, opencode: { frontmatter: {} } } })
+    store.emit({ type: 'harnessConfig/templatesLoaded', payload: { templates: [both], errors: [], loadedAt: 1 } })
+    flush()
+    expect(store.ofType('harnessConfig/comparisonLoaded')).toHaveLength(2)
+    expect(store.ofType('harnessConfig/templateSyncNoticeChanged')).toHaveLength(0)
+
+    service.planSync.mockClear()
+    store.emit({ type: 'harnessConfig/templateChanged', payload: { ...both, harnesses: { claude: { frontmatter: {} } } } })
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope)).sort()).toEqual([
+      'claude:agents',
+      'opencode:agents'
+    ])
+    expect(store.ofType('harnessConfig/comparisonLoaded')).toHaveLength(2)
+  })
+
+  it('rescans scopes of templates that use a changed fragment only', () => {
+    const { store, service, flush } = setup({ 'opencode:agents': 'conflict' })
+    const users = template('user', { fragments: ['tone'], harnesses: { opencode: { frontmatter: {} } } })
+    const blockUser = template('block-user', { kind: 'command', harnesses: { claude: { frontmatter: {}, fragments: ['tone'] } } })
+    const other = template('other', { kind: 'skill' })
+    store.emit({
+      type: 'harnessConfig/templatesLoaded',
+      payload: { templates: [users, blockUser, other], errors: [], loadedAt: 1 }
+    })
+    flush()
+    service.planSync.mockClear()
+
+    store.emit({ type: 'harnessConfig/fragmentChanged', payload: { name: 'tone', content: 'x', relativePath: 'fragments/tone.md', hash: 'h' } })
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope)).sort()).toEqual([
+      'claude:commands',
+      'opencode:agents'
+    ])
+    expect(store.state.templateSyncNotice?.scopes).toEqual(['opencode:agents'])
+  })
+
+  it('rescans a removed template’s scopes and clears the notice once everything is in sync', () => {
+    const statuses: Record<string, HarnessConfigSyncStatus> = { 'claude:agents': 'config-only' }
+    const { store, flush } = setup(statuses)
+    store.emit({ type: 'harnessConfig/templateChanged', payload: template('reviewer') })
+    flush()
+    expect(store.state.templateSyncNotice?.scopes).toEqual(['claude:agents'])
+
+    statuses['claude:agents'] = 'synced'
+    store.emit({ type: 'harnessConfig/templateRemoved', payload: { kind: 'agent', name: 'reviewer' } })
+    flush()
+    expect(store.state.templateSyncNotice).toBeNull()
+  })
+})
