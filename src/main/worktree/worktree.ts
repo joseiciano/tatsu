@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
-import { basename, join, resolve, relative, isAbsolute } from 'path'
+import { basename, dirname, join, resolve, relative, isAbsolute } from 'path'
 import {
   existsSync,
   mkdirSync,
@@ -11,7 +11,7 @@ import {
   readFileSync,
   writeFileSync
 } from 'fs'
-import { readFile, writeFile } from 'fs/promises'
+import { readFile, writeFile, lstat, readlink, realpath } from 'fs/promises'
 import { log } from '../debug'
 import { perfLog } from '../perf-log'
 import { resolveUserShell, loginShellCommandArgs } from '../user-shell'
@@ -32,9 +32,23 @@ import type {
   FileReadResult,
   FileBinaryReadResult,
   FileWriteResult,
-  WorktreeScriptResult
+  WorktreeScriptResult,
+  CodeDiffFile,
+  CodeDiffFileList,
+  CodeDiffSides,
+  ValidateRefResult,
+  BranchForCompare,
+  DefaultCompareRef,
+  FetchCompareRefResult
 } from './types'
-import { MAX_FILE_READ_BYTES, MAX_FILE_BINARY_READ_BYTES, EXT_TO_MIME, MAX_FILE_WRITE_BYTES } from './constants'
+import {
+  MAX_FILE_READ_BYTES,
+  MAX_FILE_BINARY_READ_BYTES,
+  EXT_TO_MIME,
+  MAX_FILE_WRITE_BYTES,
+  CODE_DIFF_MAX_FILES
+} from './constants'
+import { parseNameStatusZ, parseNumstatZ as parseCodeDiffNumstatZ, isUnsafeRef, countLines } from './code-diff-parse'
 
 const execFileAsync = promisify(execFile)
 
@@ -1451,4 +1465,376 @@ export async function removeWorktree(repoRoot: string, path: string, force?: boo
   const args = ['worktree', 'remove', path]
   if (force) args.push('--force')
   await execFileAsync('git', args, { cwd: repoRoot })
+}
+
+// ---------------------------------------------------------------------------
+// Code diff: worktree end state vs the merge-base with a user-picked base ref.
+
+const FETCH_TIMEOUT_MS = 15000
+const BINARY_SNIFF_BYTES = 8192
+const UNTRACKED_STAT_BATCH = 64
+
+async function gitText(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 })
+    return stdout
+  } catch {
+    return null
+  }
+}
+
+/** Exit code of a git command; -1 when it failed to run. */
+async function gitExitCode(cwd: string, args: string[]): Promise<number> {
+  try {
+    await execFileAsync('git', args, { cwd })
+    return 0
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    return typeof code === 'number' ? code : -1
+  }
+}
+
+function hasNul(buf: Buffer): boolean {
+  const end = Math.min(buf.length, BINARY_SNIFF_BYTES)
+  for (let i = 0; i < end; i++) if (buf[i] === 0) return true
+  return false
+}
+
+function refType(fullRef: string): 'branch' | 'tag' | 'commit' {
+  if (fullRef.startsWith('refs/heads/') || fullRef.startsWith('refs/remotes/')) return 'branch'
+  if (fullRef.startsWith('refs/tags/')) return 'tag'
+  return 'commit'
+}
+
+/** Resolve a user-typed ref to the full ref name git would pick, so later
+ * commands never re-resolve a short name (a branch and a tag can share one). */
+export async function validateRef(worktreePath: string, ref: string): Promise<ValidateRefResult> {
+  if (isUnsafeRef(ref)) return { ok: false, error: `Invalid ref: ${JSON.stringify(ref)}` }
+  const candidates = ref.startsWith('refs/')
+    ? [ref]
+    : [`refs/${ref}`, `refs/tags/${ref}`, `refs/heads/${ref}`, `refs/remotes/${ref}`, `refs/remotes/${ref}/HEAD`]
+  for (const candidate of candidates) {
+    const exists = await gitExitCode(worktreePath, ['show-ref', '--verify', '--quiet', candidate])
+    if (exists !== 0) continue
+    const sha = await gitText(worktreePath, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${candidate}^{commit}`])
+    if (sha?.trim()) return { ok: true, ref: candidate, sha: sha.trim(), type: refType(candidate) }
+  }
+  const sha = (await gitText(worktreePath, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]))?.trim()
+  if (sha) return { ok: true, ref: sha, sha, type: 'commit' }
+  return { ok: false, error: `Ref ${ref} not found.` }
+}
+
+export async function listBranchesForCompare(worktreePath: string): Promise<BranchForCompare[]> {
+  const out = await gitText(worktreePath, ['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes', 'refs/tags'])
+  if (!out) return []
+  const result: BranchForCompare[] = []
+  for (const line of out.split('\n')) {
+    if (line.startsWith('refs/heads/')) result.push({ name: line.slice(11), source: 'local' })
+    else if (line.startsWith('refs/remotes/') && !line.endsWith('/HEAD')) result.push({ name: line.slice(13), source: 'remote' })
+    else if (line.startsWith('refs/tags/')) result.push({ name: line.slice(10), source: 'tag' })
+  }
+  return result
+}
+
+export async function resolveDefaultCompareRef(worktreePath: string): Promise<DefaultCompareRef> {
+  let resolved = await validateRef(worktreePath, 'origin/main')
+  if (!resolved.ok) {
+    const fallback = await getDefaultBaseRef(worktreePath)
+    if (fallback === 'HEAD') return { ref: 'HEAD', fetchable: false }
+    resolved = await validateRef(worktreePath, fallback)
+    if (!resolved.ok) return { ref: 'HEAD', fetchable: false }
+  }
+  return { ref: resolved.ref, fetchable: resolved.ref.startsWith('refs/remotes/origin/') }
+}
+
+const inFlightFetches = new Map<string, Promise<FetchCompareRefResult>>()
+
+/** Fetch one origin branch on demand. Never prompts, never throws, and joins
+ * an in-flight fetch of the same repo + branch. */
+export async function fetchCompareRef(worktreePath: string, ref: string): Promise<FetchCompareRefResult> {
+  const prefix = 'refs/remotes/origin/'
+  const branch = ref.startsWith(prefix) ? ref.slice(prefix.length) : ''
+  if (!branch || isUnsafeRef(branch)) return { ok: false, error: 'Only origin branches can be fetched' }
+  const commonDir = (await gitText(worktreePath, ['rev-parse', '--path-format=absolute', '--git-common-dir']))?.trim()
+  if (!commonDir) return { ok: false, error: 'Not a git repository' }
+  const key = `${commonDir}\0${branch}`
+  const existing = inFlightFetches.get(key)
+  if (existing) return existing
+  const run = runCompareFetch(worktreePath, branch).finally(() => inFlightFetches.delete(key))
+  inFlightFetches.set(key, run)
+  return run
+}
+
+async function runCompareFetch(worktreePath: string, branch: string): Promise<FetchCompareRefResult> {
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+  if (!env.GIT_SSH_COMMAND) {
+    const sshCommand = (await gitText(worktreePath, ['config', '--get', 'core.sshCommand']))?.trim()
+    if (!sshCommand) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
+  }
+  try {
+    await execFileAsync(
+      'git',
+      ['fetch', '--no-tags', 'origin', '--end-of-options', `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
+      { cwd: worktreePath, env, timeout: FETCH_TIMEOUT_MS }
+    )
+    return { ok: true }
+  } catch (err) {
+    const e = err as { stderr?: string; killed?: boolean; message?: string }
+    if (e.killed) return { ok: false, error: 'Fetch timed out' }
+    const stderr = typeof e.stderr === 'string' ? e.stderr.trim() : ''
+    return { ok: false, error: stderr || e.message || 'Fetch failed' }
+  }
+}
+
+async function getCodeDiffMergeBase(worktreePath: string, fullRef: string): Promise<string | null> {
+  const out = await gitText(worktreePath, ['merge-base', '--end-of-options', fullRef, 'HEAD'])
+  return out?.trim() || null
+}
+
+async function statUntracked(worktreePath: string, file: CodeDiffFile): Promise<void> {
+  try {
+    const st = await lstat(join(worktreePath, file.path))
+    file.mtimeMs = st.mtimeMs
+    if (file.status !== 'untracked' || !st.isFile() || st.size > MAX_FILE_READ_BYTES) return
+    const buf = await readFile(join(worktreePath, file.path))
+    if (hasNul(buf)) return
+    file.additions = countLines(buf.toString('utf8'))
+    file.deletions = 0
+  } catch {
+    // vanished between listing and stat
+  }
+}
+
+export async function getCodeDiffFiles(worktreePath: string, baseRef: string): Promise<CodeDiffFileList> {
+  const t0 = performance.now()
+  const empty = (error: CodeDiffFileList['error'], ref: string): CodeDiffFileList => ({
+    files: [],
+    totalFiles: 0,
+    totalAdditions: 0,
+    totalDeletions: 0,
+    baseRef: ref,
+    mergeBase: '',
+    headRef: '',
+    isWorktreeDirty: false,
+    error
+  })
+
+  const resolved = await validateRef(worktreePath, baseRef)
+  if (!resolved.ok) return empty('invalid-ref', baseRef)
+  const mergeBase = await getCodeDiffMergeBase(worktreePath, resolved.ref)
+  if (!mergeBase) return empty('no-merge-base', resolved.ref)
+
+  const tExec = performance.now()
+  const diffArgs = ['--find-renames', '--find-copies', '--end-of-options', mergeBase, '--']
+  const [nameStatus, numstat, untrackedOut, headOut, headDiffCode] = await Promise.all([
+    gitText(worktreePath, ['diff', '--name-status', '-z', ...diffArgs]),
+    gitText(worktreePath, ['diff', '--numstat', '-z', ...diffArgs]),
+    gitText(worktreePath, ['ls-files', '--others', '--exclude-standard', '-z']),
+    gitText(worktreePath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    gitExitCode(worktreePath, ['diff', '--quiet', 'HEAD', '--'])
+  ])
+  const execMs = performance.now() - tExec
+  const outputBytes = (nameStatus?.length ?? 0) + (numstat?.length ?? 0) + (untrackedOut?.length ?? 0)
+
+  const counts = parseCodeDiffNumstatZ(numstat ?? '')
+  const byPath = new Map<string, CodeDiffFile>()
+  for (const entry of parseNameStatusZ(nameStatus ?? '')) {
+    const file: CodeDiffFile = { path: entry.path, status: entry.status }
+    if (entry.previousPath) file.previousPath = entry.previousPath
+    if (entry.copied) file.copied = true
+    const c = counts.get(entry.path)
+    if (c) {
+      file.additions = c.additions
+      file.deletions = c.deletions
+    }
+    byPath.set(entry.path, file)
+  }
+  const untracked = (untrackedOut ?? '').split('\0').filter(Boolean)
+  for (const path of untracked) {
+    if (!byPath.has(path)) byPath.set(path, { path, status: 'untracked' })
+  }
+
+  const all = [...byPath.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  const onDisk = all.filter((f) => f.status !== 'deleted')
+  for (let i = 0; i < onDisk.length; i += UNTRACKED_STAT_BATCH) {
+    await Promise.all(onDisk.slice(i, i + UNTRACKED_STAT_BATCH).map((f) => statUntracked(worktreePath, f)))
+  }
+
+  let totalAdditions = 0
+  let totalDeletions = 0
+  for (const f of all) {
+    totalAdditions += f.additions ?? 0
+    totalDeletions += f.deletions ?? 0
+  }
+
+  logGitOp('getCodeDiffFiles', { files: all.length }, t0, execMs, execMs, outputBytes, [execMs])
+  return {
+    files: all.slice(0, CODE_DIFF_MAX_FILES),
+    totalFiles: all.length,
+    totalAdditions,
+    totalDeletions,
+    baseRef: resolved.ref,
+    mergeBase,
+    headRef: headOut?.trim() || 'HEAD',
+    isWorktreeDirty: untracked.length > 0 || headDiffCode === 1
+  }
+}
+
+interface SideRead {
+  content: string
+  exists: boolean
+  binary: boolean
+  truncated: boolean
+  size: number
+  error?: string
+}
+
+const MISSING_SIDE: SideRead = { content: '', exists: false, binary: false, truncated: false, size: 0 }
+
+function sideFromBuffer(buf: Buffer, size: number): SideRead {
+  const truncated = size > MAX_FILE_READ_BYTES
+  const slice = truncated ? buf.subarray(0, MAX_FILE_READ_BYTES) : buf
+  if (hasNul(slice)) return { content: '', exists: true, binary: true, truncated, size }
+  return { content: slice.toString('utf8'), exists: true, binary: false, truncated, size }
+}
+
+/** Read a blob with a size cap. Above the cap, stream it and stop early
+ * instead of buffering the whole blob. */
+async function readBlobCapped(worktreePath: string, spec: string): Promise<SideRead> {
+  const sizeOut = await gitText(worktreePath, ['cat-file', '-s', spec])
+  const size = Number(sizeOut?.trim())
+  if (sizeOut == null || !Number.isFinite(size)) return MISSING_SIDE
+  if (size <= MAX_FILE_READ_BYTES) {
+    try {
+      const { stdout } = await execFileAsync('git', ['cat-file', 'blob', spec], {
+        cwd: worktreePath,
+        encoding: 'buffer',
+        maxBuffer: MAX_FILE_READ_BYTES + 1024
+      })
+      return sideFromBuffer(stdout, size)
+    } catch (err) {
+      return { ...MISSING_SIDE, error: (err as Error).message }
+    }
+  }
+  return new Promise((resolvePromise) => {
+    const child = spawn('git', ['cat-file', 'blob', spec], { cwd: worktreePath })
+    const chunks: Buffer[] = []
+    let received = 0
+    let done = false
+    const finish = (): void => {
+      if (done) return
+      done = true
+      child.kill()
+      resolvePromise(sideFromBuffer(Buffer.concat(chunks).subarray(0, MAX_FILE_READ_BYTES), size))
+    }
+    child.stdout.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+      received += chunk.length
+      if (received >= MAX_FILE_READ_BYTES) finish()
+    })
+    child.on('close', finish)
+    child.on('error', (err) => {
+      if (done) return
+      done = true
+      resolvePromise({ ...MISSING_SIDE, error: err.message })
+    })
+  })
+}
+
+/** Returns an error when `filePath` (or a parent directory through a
+ * symlink) points outside the worktree. */
+async function checkContained(worktreePath: string, filePath: string): Promise<string | null> {
+  const base = resolve(worktreePath)
+  const target = resolve(base, filePath)
+  const rel = relative(base, target)
+  if (isAbsolute(filePath) || rel === '' || rel.startsWith('..') || isAbsolute(rel)) return 'Path escapes worktree'
+  try {
+    const realBase = await realpath(base)
+    const realParent = await realpath(dirname(target))
+    const relParent = relative(realBase, realParent)
+    if (relParent.startsWith('..') || isAbsolute(relParent)) return 'Path escapes worktree'
+  } catch {
+    // parent missing: the file is deleted, nothing to read on disk
+  }
+  return null
+}
+
+async function readModifiedSide(worktreePath: string, filePath: string): Promise<SideRead & { symlink: boolean }> {
+  const target = join(worktreePath, filePath)
+  let st
+  try {
+    st = await lstat(target)
+  } catch {
+    return { ...MISSING_SIDE, symlink: false }
+  }
+  if (st.isSymbolicLink()) {
+    const link = await readlink(target)
+    return { content: link, exists: true, binary: false, truncated: false, size: Buffer.byteLength(link), symlink: true }
+  }
+  const read = await readWorktreeFile(worktreePath, filePath)
+  return {
+    content: read.content ?? '',
+    exists: read.content != null || read.binary,
+    binary: read.binary,
+    truncated: read.truncated,
+    size: read.size,
+    error: read.error,
+    symlink: false
+  }
+}
+
+export async function getCodeDiffFileSides(
+  worktreePath: string,
+  baseRef: string,
+  filePath: string,
+  previousPath?: string
+): Promise<CodeDiffSides> {
+  const t0 = performance.now()
+  const failed = (error: string): CodeDiffSides => ({
+    original: '',
+    modified: '',
+    originalExists: false,
+    modifiedExists: false,
+    originalBinary: false,
+    modifiedBinary: false,
+    originalTruncated: false,
+    modifiedTruncated: false,
+    originalSize: 0,
+    modifiedSize: 0,
+    modifiedSymlink: false,
+    error
+  })
+
+  const containment =
+    (await checkContained(worktreePath, filePath)) ??
+    (previousPath ? await checkContained(worktreePath, previousPath) : null)
+  if (containment) return failed(containment)
+
+  const resolved = await validateRef(worktreePath, baseRef)
+  if (!resolved.ok) return failed(resolved.error)
+  const mergeBase = await getCodeDiffMergeBase(worktreePath, resolved.ref)
+  if (!mergeBase) return failed(`${baseRef} and this branch share no history.`)
+
+  const tExec = performance.now()
+  const [original, modified] = await Promise.all([
+    readBlobCapped(worktreePath, `${mergeBase}:${previousPath ?? filePath}`),
+    readModifiedSide(worktreePath, filePath)
+  ])
+  const execMs = performance.now() - tExec
+  logGitOp('getCodeDiffFileSides', {}, t0, execMs, execMs, original.content.length + modified.content.length, [execMs])
+
+  return {
+    original: original.content,
+    modified: modified.content,
+    originalExists: original.exists,
+    modifiedExists: modified.exists,
+    originalBinary: original.binary,
+    modifiedBinary: modified.binary,
+    originalTruncated: original.truncated,
+    modifiedTruncated: modified.truncated,
+    originalSize: original.size,
+    modifiedSize: modified.size,
+    modifiedSymlink: modified.symlink,
+    error: original.error ?? modified.error
+  }
 }
