@@ -19,6 +19,7 @@ import { createHash } from 'crypto'
 import { tmpdir } from 'os'
 import { basename, dirname, join, resolve } from 'path'
 
+import { renderTemplates } from '../../shared/harness-template-render'
 import { createHarnessConfigService, type HarnessConfigService } from '.'
 import {
   createCommandFromSkill,
@@ -45,6 +46,7 @@ type FileRef = {
   managed: boolean
   updatedAt: number
   linkedFrom?: string
+  templateRef?: string
 }
 type RefSeed = Pick<FileRef, 'id' | 'agentKind' | 'relativePath'> & Partial<Omit<FileRef, 'id' | 'agentKind' | 'relativePath'>>
 
@@ -1985,5 +1987,56 @@ describe('harness-config symlink-aware inventory', () => {
     const adopted = fixture.desired.resources.find((resource) => resource.relativePath === 'deploy/SKILL.md')
     expect(adopted?.content).toBe('deploy skill')
     expect(fixture.service.planSync(skills).status).toBe('synced')
+  })
+})
+
+describe('harness-config template provenance', () => {
+  it('reads templateRef from rendered files in both marker forms', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-template-ref-'))
+    const claudeSkills = join(fixtureRoot, 'claude-skills')
+    const opencodeCommands = join(fixtureRoot, 'opencode-commands')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { claudeSkills, opencodeCommands },
+      deps: { homeDir: join(fixtureRoot, 'home'), env: { HOME: join(fixtureRoot, 'home') } }
+    })
+    const { resources, errors } = renderTemplates(
+      [
+        {
+          kind: 'skill',
+          name: 'deploy',
+          description: 'Deploys',
+          fragments: [],
+          body: 'Deploy it.',
+          harnesses: { claude: { frontmatter: {} } },
+          references: []
+        },
+        {
+          kind: 'command',
+          name: 'fix-ci',
+          description: 'Fixes CI',
+          fragments: [],
+          body: 'Fix it.',
+          harnesses: { opencode: { frontmatter: {} } },
+          references: []
+        }
+      ],
+      []
+    )
+    expect(errors).toEqual([])
+    const roots: Record<string, string> = { claude: claudeSkills, opencode: opencodeCommands }
+    for (const resource of resources) put(roots[resource.agentKind], resource.relativePath, resource.content)
+    put(claudeSkills, 'manual/SKILL.md', '---\nname: manual\n---\nHand written.\n')
+
+    const skills = fixture.service.scan({ agentKind: 'claude', resourceType: 'skills' })
+    expect(skills.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
+      ['deploy/SKILL.md', 'skill/deploy'],
+      ['manual/SKILL.md', undefined]
+    ])
+    expect(skills[1]).not.toHaveProperty('templateRef')
+    expect(skills[0].hash).toBe(resources.find((resource) => resource.agentKind === 'claude')?.hash)
+
+    const commands = fixture.service.scan({ agentKind: 'opencode', resourceType: 'commands' })
+    expect(commands.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([['fix-ci.md', 'command/fix-ci']])
   })
 })

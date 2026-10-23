@@ -27,6 +27,7 @@ import {
   type HarnessConfigSyncStatus,
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
+import { readTemplateRef } from '../../shared/harness-template-render'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
 import type {
@@ -1069,6 +1070,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         }
         const resourceLinkedFrom = rootLinkedFrom ?? linkedFrom
         if (resourceLinkedFrom) ref.linkedFrom = resourceLinkedFrom
+        const templateRef = readTemplateRef(bytes.toString('utf8'))
+        if (templateRef) ref.templateRef = templateRef
         byId.set(id, { ref, descriptor, root })
       }
     }
@@ -1191,6 +1194,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         updatedAt: resource.updatedAt
       }
       if (linkedFrom) ref.linkedFrom = linkedFrom
+      const templateRef = readTemplateRef(resource.content)
+      if (templateRef) ref.templateRef = templateRef
       entries.set(expectedId, {
         resource: { ...resource, id: expectedId, hash: contentHash },
         ref,

@@ -52,6 +52,9 @@ export interface HarnessConfigFileRef {
   /** Real path of the symlink that makes this resource managed elsewhere
    *  (Step 17). Display-only; never trusted as a write target. */
   linkedFrom?: string
+  /** `<kind>/<name>` of the template that rendered this file, read from
+   *  its provenance marker (Step 19). Absent for hand-written files. */
+  templateRef?: string
 }
 
 export type HarnessConfigSyncDirection = 'sync-to-disk' | 'adopt-from-disk'
