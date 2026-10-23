@@ -140,6 +140,8 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
       opencodeCommands: '/home/.config/opencode/commands'
     })),
     scopesForRootKeys: vi.fn(() => [] as HarnessConfigScope[]),
+    scopesForTemplates: vi.fn(() => [] as HarnessConfigScope[]),
+    templateShadows: vi.fn(() => []),
     ...overrides
   }
 }

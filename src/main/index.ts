@@ -446,7 +446,11 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
 const harnessConfigService = createHarnessConfigService({
   knownRoots: () => store.getSnapshot().state.settings.harnessConfigRoots,
   loadDesiredResources: () => getPersistedHarnessConfigResources(config),
-  replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)
+  replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources),
+  loadTemplateSource: () => store.getSnapshot().state.harnessConfig.templates,
+  detachTemplateTarget: (templateRef, agentKind) => {
+    templateSourceStore.detachTarget(templateRef, agentKind)
+  }
 })
 const defaultHarnessConfigSourceDir = (): string => join(userDataDir(), 'harness-config-source')
 const templateSourceStore = createTemplateSourceStore({

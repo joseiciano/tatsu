@@ -24,7 +24,8 @@ import {
   type HarnessTemplate,
   type HarnessTemplateKind,
   type HarnessTemplateParseError,
-  type HarnessTemplateReference
+  type HarnessTemplateReference,
+  type ManagedHarnessKind
 } from '../../shared/state/harness-config'
 
 export const MAX_TEMPLATE_SOURCE_FILE_BYTES = 1024 * 1024
@@ -244,6 +245,25 @@ export class TemplateSourceStore {
     const saved = this.getTemplate(draft.kind, draft.name)
     if (!saved) throw new HarnessConfigError('read-failed', 'The saved template could not be read back')
     return saved
+  }
+
+  /** Adopt "Detach from template" (Step 20 REQ-006): the template stops
+   *  targeting `agentKind`, everything else is kept. */
+  detachTarget(templateRef: string, agentKind: ManagedHarnessKind): HarnessTemplate {
+    const slash = templateRef.indexOf('/')
+    const kind = templateRef.slice(0, slash) as HarnessTemplateKind
+    const name = templateRef.slice(slash + 1)
+    const template = slash === -1 ? undefined : this.getTemplate(kind, name)
+    if (!template) throw new HarnessConfigError('unknown-resource', 'The template does not exist')
+    return this.saveTemplate({
+      kind: template.kind,
+      name: template.name,
+      description: template.description,
+      fragments: [...template.fragments],
+      body: template.body,
+      harnesses: { ...template.harnesses, [agentKind]: false },
+      references: template.references.map((reference) => ({ ...reference }))
+    })
   }
 
   deleteTemplate(kind: HarnessTemplateKind, name: string): void {
