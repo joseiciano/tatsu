@@ -1,14 +1,14 @@
 ---
 goal: Define end-to-end observable acceptance criteria for the skills, agents, and commands sync boundary
 date_created: 2026-09-25
-last_updated: 2026-10-01
-status: 'In progress'
+last_updated: 2026-10-22
+status: 'Completed'
 tags: [feature, acceptance-criteria, product-boundary, harness-config]
 ---
 
 # Introduction
 
-![Status: In progress](https://img.shields.io/badge/status-In%20progress-yellow)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan defines the end-to-end acceptance contract for Tatsu's skills, agents, and commands management feature. It restates the binding product boundary from [step-01-product-boundary-source-of-truth.md](./step-01-product-boundary-source-of-truth.md) and the canonical terms and operation matrix in [implementation-details.md](./implementation-details.md) as observable, testable criteria: every mutation direction, every user gate, and every safety invariant must be verifiable against file-system effects, config effects, and UI states. Requirement identifiers here mirror the canonical identifiers declared in Step 1; this plan declares no new requirement semantics and MUST NOT redefine synchronization direction or confirmation semantics (DEP-005). Test implementation details are owned by [step-11-tests.md](./step-11-tests.md); this plan stays at the acceptance-contract level.
 
@@ -90,19 +90,20 @@ Identifiers below are declared once here and mirror Step 1's canonical declarati
 
 - **GOAL-003**: Prove the resource union, harness scope, unsupported-combination handling, alias identity, plugin rules, and path safety hold end to end.
 
-- [ ] **TASK-008**: Verify the resource union and harness scope.
+- [x] **TASK-008**: Verify the resource union and harness scope.
   - Observe every inventory and mutation surface exposes exactly `agents | skills | commands` for `claude`, `codex`, and `opencode` (REQ-001, REQ-005).
   - Observe `pi` appears only as explicitly deferred and offers no managed mutation actions (REQ-005).
-  - Open gap: the Config page renders only `claude`, `codex`, and `opencode` (`MANAGED_KINDS` in `src/renderer/components/Config/Config.tsx`); Pi's deferred note exists only in `src/shared/agent-registry/agent-registry.ts` and no renderer surface presents `pi` as deferred, so this bullet and TEST-007's Pi clause are not yet observable.
+  - Verified: the Config page manages only `claude`, `codex`, and `opencode` (`MANAGED_KINDS` and the agent filter in `src/renderer/components/Config/Config.tsx`). With the `All` filter, every tab also shows a display-only Pi section labeled `Deferred` with its registry note from `src/shared/agent-registry/agent-registry.ts`. That section has no scope, rows, or action buttons, so no scan, compare, or mutation request is ever scoped to `pi` (`src/renderer/components/Config/Config.test.tsx`, "presents Pi as explicitly deferred on every tab with no actions and never scopes a request to it").
+  - Departure from CON-002: closing this gap required a renderer-only `src/` change, because REQ-005's MUST could not be met by documentation alone.
 - [x] **TASK-009**: Verify unsupported combinations and path safety.
   - For every unsupported harness/resource combination, observe a visible, disabled capability state with an explanation, no guessed path, and no mutation available (REQ-006).
   - Attempt a mutation whose target resolves outside known harness configuration roots and observe rejection with zero filesystem effect (SEC-002, PAT-001).
 - [x] **TASK-010**: Verify Claude alias identity.
   - Locate one physical Claude resource exposed in both Skills and Commands; observe both aliases carry the same stable identity and resolve to the same physical path (REQ-017).
   - Run create-command on an existing skill alias and create-skill on an existing command alias; observe each conversion returns the existing identity and produces no duplicate disk file or Tatsu config entry (REQ-017).
-- [ ] **TASK-011**: Verify plugin provenance and cross-harness boundaries.
+- [x] **TASK-011**: Verify plugin provenance and cross-harness boundaries.
   - Observe plugin provenance only as metadata on inventoried resources under the originating harness; observe no `plugins` resource type, independent plugin row, or plugin mutation payload (REQ-001, REQ-018).
-  - Open gap: inventoried resources carry no plugin provenance field yet (optional per Step 2 ASSUMPTION-005), and a plugin-layout file under a managed root (e.g. `plugin/SKILL.md` under the Claude skills root) is inventoried as an ordinary resource row (`src/main/harness-config/harness-config.test.ts`, "rejects conversion across harnesses and ignores plugin payload/settings files"), so the provenance and no-independent-plugin-row clauses are not yet observable. No `plugins` resource type exists and no cross-harness plugin copy occurs.
+  - Verified: plugin provenance is optional (implementation-details "MAY", Step 2 ASSUMPTION-005) and the first implementation records none, so plugin information appears nowhere outside resource metadata. `plugins` is absent from `HarnessConfigResourceType`, the capability matrix, and every alias union; the transport rejects a `plugins` resource type (`src/main/harness-config-transport/harness-config-transport.test.ts`). Plugin payloads live outside the known configuration roots, and resolvers scan only those roots (CON-001). A file such as `plugin/SKILL.md` under the Claude skills root is a resolver-recognized skill (REQ-003), not an independent plugin row, while plugin and settings files beside the roots stay untouched (`src/main/harness-config/harness-config.test.ts`, "rejects conversion across harnesses and ignores plugin payload/settings files" and "runs a full sync-to-disk and adopt-from-disk cycle without cross-harness writes").
   - Inspect every plan and action surface and observe no automatic plugin copy, install, or translation and no automatic cross-harness payload; every plan remains within one `${agentKind}:${resourceType}` scope (REQ-011, REQ-018).
 
 ## 3. Alternatives

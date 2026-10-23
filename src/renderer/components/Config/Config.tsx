@@ -22,6 +22,7 @@ import type {
   ConfigAgentFilter,
   ConfigAgentFilterOption,
   ConfigConversionSourceInfo,
+  ConfigDeferredHarness,
   ConfigDriftBadge,
   ConfigEditorView,
   ConfigProps,
@@ -47,6 +48,19 @@ const AGENT_FILTER_OPTIONS: readonly ConfigAgentFilterOption[] = [
 
 const MANAGED_KINDS: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
 const MANAGED_REGISTRY: readonly AgentInfo[] = MANAGED_KINDS.map((kind) => getAgentInfo(kind))
+const DEFERRED_KINDS = ['pi'] as const
+
+function deferredHarnessesFor(resourceType: HarnessConfigResourceType): ConfigDeferredHarness[] {
+  return DEFERRED_KINDS.map((kind) => {
+    const info = getAgentInfo(kind)
+    const capability = info.configCapabilities.find((c) => c.resourceType === resourceType)
+    return {
+      agentKind: kind,
+      displayName: info.displayName,
+      note: capability?.notes ?? `${info.displayName} config management is deferred.`
+    }
+  })
+}
 
 interface ScopeStatus {
   busy: boolean
@@ -1222,6 +1236,11 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     return { kind: 'empty' }
   }, [editorMode, createScope, selected, selectedRef, readBusy, groupsNoSearch, conversionSubmitLabel, conversionSource])
 
+  const deferredHarnesses = useMemo(
+    () => (agentFilter === 'all' ? deferredHarnessesFor(activeTab) : []),
+    [agentFilter, activeTab]
+  )
+
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
   const canEdit = editorView.kind === 'edit' && !readBusy && !readFailed && !mutationBusy
@@ -1245,6 +1264,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         <div className="w-72 shrink-0 border-r border-border min-h-0 overflow-hidden">
           <ConfigResourceList
             groups={displayGroups}
+            deferredHarnesses={deferredHarnesses}
             searchActive={searchActive}
             sharedError={harnessConfig.error}
             onSelectResource={handleSelectResource}

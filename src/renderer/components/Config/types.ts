@@ -9,6 +9,7 @@ import type {
   ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import type { AgentConfigCapability, AgentInfo } from '../../../shared/agent-registry'
+import type { AgentKind } from '../../../shared/state/terminals'
 
 /** Public contract for the Config page shell. Step 8 mounts this
  *  component as a per-client overlay and owns navigation/visibility. */
@@ -132,8 +133,18 @@ export interface ConfigTabsProps {
   onSearchChange: (value: string) => void
 }
 
+/** A harness whose config management is explicitly deferred (Step 1
+ *  REQ-005). Display-only: it has no scope, no rows, and no actions, so
+ *  nothing derived from it can reach scan, compare, or any mutation. */
+export interface ConfigDeferredHarness {
+  agentKind: AgentKind
+  displayName: string
+  note: string
+}
+
 export interface ConfigResourceListProps {
   groups: readonly ConfigResourceGroup[]
+  deferredHarnesses: readonly ConfigDeferredHarness[]
   searchActive: boolean
   sharedError: string | null
   onSelectResource: (scope: HarnessConfigScope, id: string) => void
