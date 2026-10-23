@@ -24,14 +24,20 @@ root. They are macOS scripts (`stat -f`, `dscl`, `ps eww`, `lsof`).
   builds the harness-config service without `env` (`src/main/index.ts`), so
   every default root comes from `os.homedir()`, which reads `$HOME`.
   `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `OPENCODE_CONFIG_DIR` have no effect
-  on this process. Do not rely on them.
+  on this process today. `launch.sh` unsets all three anyway, so a future
+  change that honors them cannot point a run at your real folders, and
+  `doctor.sh` fails if any of them reaches the server.
 - `HARNESS_DATA_DIR` holds `config.json`, auth tokens, and the template
   source folder (`<data>/harness-config-source` by default).
 - **Not isolated:** `/tmp/harness-status` (status-hook NDJSON) is hardcoded
   and shared with any running Tatsu. Do not click **Install hooks** and do
   not open terminal tabs during a drive.
 - `home-guard.sh` fingerprints the real harness roots before launch and
-  checks them at cleanup. A changed fingerprint fails cleanup.
+  checks them at cleanup. That covers the resource `.md` files, plus
+  `~/.claude/settings.json` and `~/.codex/hooks.json`, which is where
+  **Install hooks** writes. A changed fingerprint fails cleanup.
+  `settings.json` also changes when your other Claude sessions edit it, so
+  read the diff before you blame the run.
 
 ## Launch
 
@@ -48,7 +54,9 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
   `127.0.0.1:<ephemeral>`, and waits up to 15 s for the
   `[web-client] open http://127.0.0.1:<port>/?token=<hex>` line.
 - **Ready** means that line printed **and** `doctor.sh` passes. The web client
-  then answers 200, and the Config page lists the seeded resources.
+  then answers 200, and a WebSocket state snapshot round-trips. Journeys still
+  wait for their own first element, such as the `Resource type` tablist,
+  before they act.
 - The last stdout line is the state file. It holds `PID URL PORT SCRATCH
   SANDBOX_HOME DATA_DIR EVIDENCE LOG`. Every other script takes it.
 
@@ -77,7 +85,9 @@ checks these things:
 - The PID is alive.
 - The process environment has `HOME=<sandbox>` and `HARNESS_DATA_DIR=<sandbox>`.
 - `lsof` shows the port owned by that PID.
+- None of `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `OPENCODE_CONFIG_DIR` is set.
 - The tokenized URL returns 200.
+- `scripts/ws-smoke.mjs` completes a read-only snapshot round-trip.
 - `dist-headless` is newer than `src/`, and the launch commit is still HEAD.
 - All sandbox roots exist.
 
@@ -158,6 +168,20 @@ harness roots into evidence, runs the real-home check, and deletes
 real-home check found changes; read `real-home-check.txt`.
 
 Run cleanup after every failed attempt too, so no server or port is left behind.
+
+## Helpers
+
+All of these are executable. Run them from the repo root.
+
+| Helper | Invocation | Does |
+|---|---|---|
+| `scripts/launch.sh` | `launch.sh [--build] [run-id]` | Builds if asked, creates and seeds the sandbox, starts the server, and prints the state-file path as its last line |
+| `scripts/seed.sh` | `seed.sh <sandbox-home> <scratch-dir>` | Creates all eight harness roots and the fixtures. `launch.sh` calls it; run it by hand only to rebuild a sandbox |
+| `scripts/doctor.sh` | `doctor.sh <state.env>` | Read-only readiness and isolation check; exits 1 on any FAIL |
+| `scripts/home-guard.sh` | `home-guard.sh snapshot > before.txt` / `home-guard.sh check before.txt` | Read-only fingerprint of the real harness roots; `check` exits 1 and prints a diff on change |
+| `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops this run's server, saves evidence, runs the guard, and deletes scratch |
+| `scripts/browser.mjs` | `import { withApp, openConfig, readState } from '../browser.mjs'` | `withApp(stateFile, name, fn)` runs `fn({ page, state, shot, log })` in a fresh Chrome page; `openConfig(page)` goes from onboarding to Config; `readState(file)` parses state.env |
+| `scripts/journeys/*.mjs` | `node <journey> <state.env>` | One feature journey each; exits 0 on PASS |
 
 ## Not covered by this harness
 

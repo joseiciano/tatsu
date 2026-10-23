@@ -40,6 +40,8 @@ The end state that proves it works:
 
 ## Gotchas
 
+- Not run yet. Commit-on-Enter or blur, persistence, and the rejection of
+  relative paths come from source.
 - Entry point 2 needs an unavailable root. Delete one sandbox root (for example
   `rm -r $SANDBOX_HOME/.agents/skills`) before launch. The seed creates all of
   them by default.

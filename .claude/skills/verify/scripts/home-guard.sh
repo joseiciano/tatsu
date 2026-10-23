@@ -20,6 +20,10 @@ snapshot() {
   done
   find "$REAL_HOME/.codex" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null \
     | xargs -0 stat -f '%m %z %N' 2>/dev/null || true
+  for f in "$REAL_HOME/.claude/settings.json" "$REAL_HOME/.codex/hooks.json"; do
+    [ -e "$f" ] && stat -f '%m %z %N' "$f"
+  done
+  true
 }
 
 case "${1:-}" in

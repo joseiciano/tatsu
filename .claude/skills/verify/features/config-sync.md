@@ -44,6 +44,8 @@ The end state that proves it works:
 
 ## Gotchas
 
+- Not run yet. The claim that Adopt writes `DATA_DIR/config.json`, and the
+  dialog flow, come from source.
 - Plans go stale when a root changes (Step 16). Re-open the dialog after
   changing Config folders.
 - Hash both files before and after an action. Don't trust the badge alone.
