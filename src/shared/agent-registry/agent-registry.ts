@@ -10,6 +10,9 @@ export type AgentConfigCapability =
       status: 'supported'
       notes?: string
       aliasResourceTypes?: readonly HarnessConfigResourceType[]
+      /** `single-file` means the harness keeps this resource type in one
+       *  shared file, so a template cannot own a file per resource. */
+      layout?: 'per-resource' | 'single-file'
     }
   | {
       resourceType: HarnessConfigResourceType
@@ -17,6 +20,7 @@ export type AgentConfigCapability =
       status: 'unsupported' | 'unknown'
       notes: string
       aliasResourceTypes?: never
+      layout?: never
     }
 
 export function isHarnessConfigCapabilityEnabled(capability: AgentConfigCapability): boolean {
@@ -63,7 +67,13 @@ export const AGENT_REGISTRY: AgentInfo[] = [
     vendor: 'OpenAI',
     assignsSessionId: false,
     configCapabilities: [
-      { resourceType: 'agents', label: 'Agents', status: 'supported' },
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        notes: 'Codex agents are one top-level AGENTS.md file, not a folder of agents.',
+        layout: 'single-file'
+      },
       { resourceType: 'skills', label: 'Skills', status: 'supported' },
       {
         resourceType: 'commands',

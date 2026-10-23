@@ -66,6 +66,7 @@ import {
 import { createHarnessConfigService } from './harness-config'
 import { registerHarnessConfigRequestHandlers } from './harness-config-transport'
 import { registerHarnessConfigSettingsHandlers } from './harness-config-settings'
+import { createTemplateSourceStore } from './template-source-store'
 import { loadRepoConfig, saveRepoConfig, type RepoConfig } from './repo-config'
 import { createNewProject, type GitignorePreset } from './repo-create'
 import { resolveRepoPath } from './repo-resolve'
@@ -447,14 +448,28 @@ const harnessConfigService = createHarnessConfigService({
   loadDesiredResources: () => getPersistedHarnessConfigResources(config),
   replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)
 })
-registerHarnessConfigRequestHandlers({ transport, store, service: harnessConfigService })
+const defaultHarnessConfigSourceDir = (): string => join(userDataDir(), 'harness-config-source')
+const templateSourceStore = createTemplateSourceStore({
+  sourceDir: () => store.getSnapshot().state.settings.harnessConfigSourceDir ?? defaultHarnessConfigSourceDir(),
+  store
+})
+templateSourceStore.start()
+store.subscribe((event) => {
+  if (event.type === 'settings/harnessConfigSourceDirChanged') templateSourceStore.restart()
+})
+registerHarnessConfigRequestHandlers({
+  transport,
+  store,
+  service: harnessConfigService,
+  templateSource: templateSourceStore
+})
 registerHarnessConfigSettingsHandlers({
   transport,
   store,
   config,
   saveConfig,
   service: harnessConfigService,
-  defaultSourceDir: () => join(userDataDir(), 'harness-config-source')
+  defaultSourceDir: defaultHarnessConfigSourceDir
 })
 
 // Tails Claude Code session jsonl transcripts on Stop hook events,

@@ -2,13 +2,13 @@
 goal: Define templates and fragments and store them as files in the template source folder
 date_created: 2026-10-22
 last_updated: 2026-10-22
-status: 'Planned'
+status: 'Completed'
 tags: [feature, main-process, shared-state, harness-config, templates]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 This plan is Step 18 of the [Skills-Agents-Commands-Sync plan](./skills-agents-commands-sync.md). It defines the template source model: the files users edit so that one definition can produce agents, skills, and commands for several harnesses and reuse shared text. [Step 19](./step-19-template-renderer.md) builds harness files from this model, and [Step 20](./step-20-template-sync.md) syncs them to disk. Terminology follows [implementation-details.md](./implementation-details.md), as amended for templates.
 
@@ -54,17 +54,17 @@ This plan is Step 18 of the [Skills-Agents-Commands-Sync plan](./skills-agents-c
 
 - **GOAL-001**: One shared definition of templates and fragments.
 
-- [ ] **TASK-001**: Add `HarnessTemplate`, `HarnessTemplateHarnessBlock`, `HarnessFragment`, and parse-error types to `src/shared/state/harness-config/types.ts`.
-- [ ] **TASK-002**: Add a pure parser and serializer for the file layout in REQ-009, with round-trip tests.
-- [ ] **TASK-003**: Add target validation per REQ-007, reading capability metadata.
+- [x] **TASK-001**: Add `HarnessTemplate`, `HarnessTemplateHarnessBlock`, `HarnessFragment`, and parse-error types to `src/shared/state/harness-config/types.ts`.
+- [x] **TASK-002**: Add a pure parser and serializer for the file layout in REQ-009, with round-trip tests.
+- [x] **TASK-003**: Add target validation per REQ-007, reading capability metadata.
 
 ### Implementation Phase 2: Store
 
 - **GOAL-002**: Keep the slice in sync with the source folder.
 
-- [ ] **TASK-004**: Add `src/main/template-source-store/` with load, watch, create, update, delete, and backup.
-- [ ] **TASK-005**: Add slice events (`harnessConfig/templatesLoaded`, `harnessConfig/templateChanged`, `harnessConfig/templateRemoved`, and the same three for fragments) with `findIndex + slice` reducers per the anti-pattern rules.
-- [ ] **TASK-006**: Add transport handlers `harnessConfig:saveTemplate`, `harnessConfig:deleteTemplate`, `harnessConfig:saveFragment`, `harnessConfig:deleteFragment`, each requiring an explicit user action.
+- [x] **TASK-004**: Add `src/main/template-source-store/` with load, watch, create, update, delete, and backup.
+- [x] **TASK-005**: Add slice events (`harnessConfig/templatesLoaded`, `harnessConfig/templateChanged`, `harnessConfig/templateRemoved`, and the same three for fragments) with `findIndex + slice` reducers per the anti-pattern rules.
+- [x] **TASK-006**: Add transport handlers `harnessConfig:saveTemplate`, `harnessConfig:deleteTemplate`, `harnessConfig:saveFragment`, `harnessConfig:deleteFragment`, each requiring an explicit user action.
 
 ## 3. Alternatives
 
