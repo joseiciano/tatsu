@@ -5,6 +5,7 @@ import { log } from '../debug'
 import { makeHookCommand } from '../hooks'
 import { shellQuote } from '../shell-quote'
 import type { AgentSpawnOpts } from './index'
+import { RUN_FOLDER_GLOB, type PermissionLevel } from '../../shared/permission-level'
 
 // Claude Code strips unknown fields when it normalizes settings.json,
 // so dedup recognizes our entries by the status-dir path baked into
@@ -167,13 +168,48 @@ export function latestSessionId(cwd: string): string | null {
   }
 }
 
+export const CLAUDE_COMPLETE_STEP_TOOL = 'mcp__harness-control__complete_step'
+export const CLAUDE_READ_TOOLS = ['Read', 'Grep', 'Glob'] as const
+
+export function claudeAllowedTools(level: 'read-only' | 'edit', bashAllow: string[]): string[] {
+  if (level === 'read-only') {
+    return [...CLAUDE_READ_TOOLS, `Edit(${RUN_FOLDER_GLOB})`, CLAUDE_COMPLETE_STEP_TOOL]
+  }
+  return [
+    ...CLAUDE_READ_TOOLS,
+    'Edit',
+    'Write',
+    'NotebookEdit',
+    ...bashAllow.map((p) => `Bash(${p}:*)`),
+    CLAUDE_COMPLETE_STEP_TOOL
+  ]
+}
+
+export function claudePermissionFlags(level: PermissionLevel | undefined, bashAllow: string[] = []): string {
+  if (!level) return ''
+  if (level === 'full') return ' --permission-mode bypassPermissions'
+  return ` --allowedTools ${shellQuote(claudeAllowedTools(level, bashAllow).join(','))} --permission-mode dontAsk`
+}
+
+const CLAUDE_PERMISSION_FLAGS = /--permission-mode|--dangerously-skip-permissions|--allowedTools|--allowed-tools/
+
+function permissionFlagsFor(opts: AgentSpawnOpts): string {
+  if (!opts.permissionLevel) return ''
+  if (CLAUDE_PERMISSION_FLAGS.test(opts.command)) {
+    log('agent-spawn', 'claude command already sets permissions; permissionLevel not applied')
+    return ''
+  }
+  return claudePermissionFlags(opts.permissionLevel, opts.bashAllow ?? [])
+}
+
 export function buildSpawnArgs(opts: AgentSpawnOpts): string {
+  const permFlags = permissionFlagsFor(opts)
   const modelFlag = opts.model && !opts.command.includes('--model') ? ` --model ${shellQuote(opts.model)}` : ''
   const mcpFlag = opts.mcpConfigPath ? ` --mcp-config ${shellQuote(opts.mcpConfigPath)}` : ''
   const nameFlag = opts.sessionName ? ` --name ${shellQuote(opts.sessionName)}` : ''
   const systemPromptFlag = opts.systemPrompt ? ` --append-system-prompt ${shellQuote(opts.systemPrompt)}` : ''
   const tuiPrefix = opts.tuiFullscreen ? 'CLAUDE_CODE_NO_FLICKER=1 ' : ''
-  const cmd = `${tuiPrefix}${opts.command}${modelFlag}${mcpFlag}${nameFlag}${systemPromptFlag}`
+  const cmd = `${tuiPrefix}${opts.command}${permFlags}${modelFlag}${mcpFlag}${nameFlag}${systemPromptFlag}`
 
   if (opts.teleportSessionId && opts.sessionId) {
     const exists = sessionFileExists(opts.cwd, opts.sessionId)

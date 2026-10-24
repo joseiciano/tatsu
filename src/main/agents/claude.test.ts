@@ -17,7 +17,7 @@ vi.mock('fs', () => ({
 }))
 
 vi.mock('../debug', () => ({
-  log: () => {}
+  log: vi.fn()
 }))
 
 vi.mock('../hooks', () => ({
@@ -29,12 +29,132 @@ vi.mock('../hooks', () => ({
 
 import { homedir } from 'os'
 import { join } from 'path'
-import { buildSpawnArgs, hooksInstalled, installHooks, hookEvents, uninstallHooks } from './claude'
+import { log } from '../debug'
+import {
+  buildSpawnArgs,
+  CLAUDE_COMPLETE_STEP_TOOL,
+  CLAUDE_READ_TOOLS,
+  claudeAllowedTools,
+  claudePermissionFlags,
+  hooksInstalled,
+  installHooks,
+  hookEvents,
+  uninstallHooks
+} from './claude'
 
 const SETTINGS_PATH = join(homedir(), '.claude', 'settings.json')
 
 beforeEach(() => {
   fsState.files.clear()
+  vi.mocked(log).mockClear()
+})
+
+const READ_ONLY_LIST = 'Read,Grep,Glob,Edit(.harness/runs/**),mcp__harness-control__complete_step'
+const EDIT_LIST =
+  'Read,Grep,Glob,Edit,Write,NotebookEdit,Bash(npm test:*),Bash(git diff:*),mcp__harness-control__complete_step'
+
+describe('claudeAllowedTools (TEST-002)', () => {
+  it('read-only allows the read tools, run-folder edits and complete_step, ignoring bashAllow', () => {
+    expect(claudeAllowedTools('read-only', ['npm test'])).toEqual([
+      ...CLAUDE_READ_TOOLS,
+      'Edit(.harness/runs/**)',
+      CLAUDE_COMPLETE_STEP_TOOL
+    ])
+  })
+
+  it('edit allows every file-editing tool and one Bash rule per prefix, in input order', () => {
+    expect(claudeAllowedTools('edit', ['npm test', 'git diff'])).toEqual([
+      'Read',
+      'Grep',
+      'Glob',
+      'Edit',
+      'Write',
+      'NotebookEdit',
+      'Bash(npm test:*)',
+      'Bash(git diff:*)',
+      'mcp__harness-control__complete_step'
+    ])
+  })
+
+  it('edit with no prefixes has no Bash rule', () => {
+    expect(claudeAllowedTools('edit', []).some((t) => t.startsWith('Bash'))).toBe(false)
+  })
+})
+
+describe('claudePermissionFlags (TEST-002)', () => {
+  it.each([
+    { name: 'no level adds nothing', level: undefined, allow: ['npm test'], expected: '' },
+    { name: 'full bypasses permissions', level: 'full' as const, allow: ['npm test'], expected: ' --permission-mode bypassPermissions' },
+    {
+      name: 'read-only passes one quoted allowlist then dontAsk',
+      level: 'read-only' as const,
+      allow: [],
+      expected: ` --allowedTools '${READ_ONLY_LIST}' --permission-mode dontAsk`
+    },
+    {
+      name: 'edit passes one quoted allowlist with Bash prefixes then dontAsk',
+      level: 'edit' as const,
+      allow: ['npm test', 'git diff'],
+      expected: ` --allowedTools '${EDIT_LIST}' --permission-mode dontAsk`
+    }
+  ])('$name', ({ level, allow, expected }) => {
+    expect(claudePermissionFlags(level, allow)).toBe(expected)
+  })
+
+  it.each(['read-only', 'edit'] as const)('%s always allows complete_step and ends with dontAsk', (level) => {
+    const flags = claudePermissionFlags(level)
+    expect(flags).toContain('mcp__harness-control__complete_step')
+    expect(flags.endsWith('--permission-mode dontAsk')).toBe(true)
+  })
+})
+
+describe('buildSpawnArgs with a permission level (TEST-003)', () => {
+  const base = { command: 'claude', cwd: '/tmp/test' }
+
+  it('puts --permission-mode right after the quoted allowlist, before the prompt', () => {
+    const result = buildSpawnArgs({ ...base, initialPrompt: 'do it', permissionLevel: 'read-only' })
+    expect(result).toBe(`claude --allowedTools '${READ_ONLY_LIST}' --permission-mode dontAsk -- 'do it'`)
+  })
+
+  it.each([
+    { level: 'read-only' as const, flags: ` --allowedTools '${READ_ONLY_LIST}' --permission-mode dontAsk` },
+    { level: 'edit' as const, flags: ` --allowedTools '${EDIT_LIST}' --permission-mode dontAsk` },
+    { level: 'full' as const, flags: ' --permission-mode bypassPermissions' }
+  ])('$level: flags follow the command and every other flag keeps its order', ({ level, flags }) => {
+    const opts = {
+      ...base,
+      tuiFullscreen: true,
+      model: 'opus',
+      mcpConfigPath: '/c.json',
+      sessionName: 'repo/main',
+      systemPrompt: 'SYS',
+      initialPrompt: 'go',
+      bashAllow: ['npm test', 'git diff']
+    }
+    const withoutLevel = buildSpawnArgs(opts)
+    expect(buildSpawnArgs({ ...opts, permissionLevel: level })).toBe(
+      withoutLevel.replace('claude', `claude${flags}`)
+    )
+  })
+
+  it.each([
+    'claude --permission-mode plan',
+    'claude --dangerously-skip-permissions',
+    'claude --allowedTools Read',
+    'claude --allowed-tools Read'
+  ])('adds no permission flags when the command already has them: %s', (command) => {
+    const opts = { ...base, command, initialPrompt: 'go' }
+    expect(buildSpawnArgs({ ...opts, permissionLevel: 'edit', bashAllow: ['npm test'] })).toBe(buildSpawnArgs(opts))
+    expect(log).toHaveBeenCalledWith(
+      'agent-spawn',
+      'claude command already sets permissions; permissionLevel not applied'
+    )
+  })
+
+  it('without a level ignores bashAllow and adds no permission flags', () => {
+    const result = buildSpawnArgs({ ...base, initialPrompt: 'go', bashAllow: ['npm test'] })
+    expect(result).toBe("claude -- 'go'")
+  })
 })
 
 describe('buildSpawnArgs', () => {

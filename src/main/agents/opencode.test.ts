@@ -52,7 +52,9 @@ import {
   latestSessionId,
   stripHooksFromWorktree,
   makePluginContent,
-  PLUGIN_PATH
+  PLUGIN_PATH,
+  opencodeStepAgent,
+  opencodeStepPermission
 } from './opencode'
 
 beforeEach(() => {
@@ -214,6 +216,150 @@ describe('spawnEnv (TEST-010)', () => {
 
   it('returns no env when mcpServer is null and there is no user value', () => {
     expect(spawnEnv({ ...opts, mcpServer: null }, {}, {})).toEqual({})
+  })
+})
+
+const READ_ONLY_PERMISSION = {
+  '*': 'deny',
+  read: 'allow',
+  glob: 'allow',
+  grep: 'allow',
+  list: 'allow',
+  'harness-control_*': 'allow',
+  edit: { '*': 'deny', '.harness/runs/**': 'allow' },
+  bash: 'deny',
+  external_directory: 'deny',
+  doom_loop: 'deny'
+}
+
+describe('opencodeStepPermission (TEST-006)', () => {
+  it('full allows everything', () => {
+    expect(opencodeStepPermission('full', ['git status'])).toEqual({ '*': 'allow' })
+  })
+
+  it('read-only denies by default, allows reads, MCP and run-folder edits, and ignores bashAllow', () => {
+    expect(opencodeStepPermission('read-only', ['git status'])).toEqual(READ_ONLY_PERMISSION)
+  })
+
+  it('edit allows every edit and each bashAllow prefix with and without args', () => {
+    expect(opencodeStepPermission('edit', ['npm test', 'git diff'])).toEqual({
+      ...READ_ONLY_PERMISSION,
+      edit: 'allow',
+      bash: { '*': 'deny', 'npm test': 'allow', 'npm test *': 'allow', 'git diff': 'allow', 'git diff *': 'allow' }
+    })
+  })
+
+  it('edit with no prefixes denies all bash', () => {
+    expect(opencodeStepPermission('edit', []).bash).toEqual({ '*': 'deny' })
+  })
+
+  it('edit orders bash rules catch-all first, then each prefix and its args form', () => {
+    expect(Object.keys(opencodeStepPermission('edit', ['git status']).bash as object)).toEqual([
+      '*',
+      'git status',
+      'git status *'
+    ])
+  })
+
+  it.each(['read-only', 'edit', 'full'] as const)('%s puts the "*" catch-all first in every map', (level) => {
+    const map = opencodeStepPermission(level, ['npm test'])
+    const maps = [map, ...Object.values(map).filter((v): v is object => typeof v === 'object' && v !== null)]
+    for (const m of maps) expect(Object.keys(m)[0]).toBe('*')
+  })
+})
+
+describe('opencodeStepAgent (TEST-006)', () => {
+  it('is a primary agent without the task tool, carrying the level map and the model', () => {
+    expect(opencodeStepAgent('edit', ['npm test'], 'openai/gpt-4')).toEqual({
+      mode: 'primary',
+      description: 'Tatsu workflow step',
+      tools: { task: false },
+      permission: opencodeStepPermission('edit', ['npm test']),
+      model: 'openai/gpt-4'
+    })
+  })
+
+  it.each([
+    { name: 'undefined', model: undefined },
+    { name: 'null', model: null }
+  ])('has no model key when the model is $name', ({ model }) => {
+    expect(opencodeStepAgent('full', [], model)).not.toHaveProperty('model')
+  })
+})
+
+describe('buildOpencodeConfig with a permission level (TEST-007)', () => {
+  const opts: AgentSpawnOpts = { command: 'opencode', cwd: '/w', mcpServer: SPEC }
+
+  it('adds the step agent next to the user agents, the MCP server and every other key', () => {
+    const config = buildOpencodeConfig(
+      { ...opts, permissionLevel: 'edit', bashAllow: ['git status'], model: 'openai/gpt-4' },
+      { agent: { mine: { mode: 'subagent' } }, theme: 'x' }
+    )
+    expect(config).toEqual({
+      theme: 'x',
+      mcp: { 'harness-control': HARNESS_CONTROL },
+      agent: {
+        mine: { mode: 'subagent' },
+        'harness-step': opencodeStepAgent('edit', ['git status'], 'openai/gpt-4')
+      }
+    })
+  })
+
+  it('overwrites a user-defined harness-step agent', () => {
+    const config = buildOpencodeConfig(
+      { ...opts, permissionLevel: 'read-only' },
+      { agent: { 'harness-step': { mode: 'subagent', permission: { '*': 'allow' } } } }
+    )
+    expect((config.agent as Record<string, unknown>)['harness-step']).toEqual(opencodeStepAgent('read-only', []))
+  })
+
+  it('adds no agent section without a level', () => {
+    expect(buildOpencodeConfig(opts, { theme: 'x' })).not.toHaveProperty('agent')
+  })
+
+  it('adds no harness-step agent when the command already picks an agent', () => {
+    const config = buildOpencodeConfig(
+      { ...opts, command: 'opencode --agent build', permissionLevel: 'full' },
+      { agent: { mine: { mode: 'subagent' } } }
+    )
+    expect(config.agent).toEqual({ mine: { mode: 'subagent' } })
+  })
+})
+
+describe('spawnEnv with a permission level (TEST-007)', () => {
+  const parsed = (env: Record<string, string>) => JSON.parse(env.OPENCODE_CONFIG_CONTENT)
+
+  it('emits one OPENCODE_CONFIG_CONTENT holding both the MCP server and the step agent', () => {
+    const env = spawnEnv({ command: 'opencode', cwd: '/w', mcpServer: SPEC, permissionLevel: 'read-only' }, {}, {})
+    expect(Object.keys(env)).toEqual(['OPENCODE_CONFIG_CONTENT'])
+    expect(parsed(env).mcp['harness-control']).toEqual(HARNESS_CONTROL)
+    expect(parsed(env).agent['harness-step'].permission).toEqual(READ_ONLY_PERMISSION)
+  })
+
+  it('still emits the step agent when there is no MCP server', () => {
+    const env = spawnEnv({ command: 'opencode', cwd: '/w', mcpServer: null, permissionLevel: 'full' }, {}, {})
+    expect(parsed(env)).toEqual({ agent: { 'harness-step': opencodeStepAgent('full', []) } })
+  })
+})
+
+describe('buildSpawnArgs with a permission level (TEST-007)', () => {
+  const base = { command: 'opencode', cwd: '/tmp/test' }
+
+  it('launches the step agent before --model and --prompt', () => {
+    const result = buildSpawnArgs({ ...base, permissionLevel: 'edit', model: 'openai/gpt-4', initialPrompt: 'hello' })
+    expect(result).toBe("opencode --agent harness-step --model 'openai/gpt-4' --prompt 'hello'")
+  })
+
+  it('launches the step agent before --session on resume', () => {
+    const result = buildSpawnArgs({ ...base, permissionLevel: 'read-only', sessionId: 'existing-session-id' })
+    expect(result).toBe("opencode --agent harness-step --session 'existing-session-id'")
+  })
+
+  it('keeps a command-line --agent and logs that the level is not applied', () => {
+    const result = buildSpawnArgs({ ...base, command: 'opencode --agent build', permissionLevel: 'full', initialPrompt: 'hi' })
+    expect(result).toBe("opencode --agent build --prompt 'hi'")
+    expect(result).not.toContain('harness-step')
+    expect(log).toHaveBeenCalledWith('agent-spawn', 'opencode command already sets --agent; permissionLevel not applied')
   })
 })
 

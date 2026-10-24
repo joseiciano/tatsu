@@ -10,7 +10,9 @@ import {
 } from '.'
 import type { AgentSpawnConfig, AgentSpawnerDeps } from '.'
 import type { AgentKind, AgentModule, AgentSpawnOpts, HarnessMcpServerSpec } from '../agents'
+import * as claude from '../agents/claude'
 import * as opencode from '../agents/opencode'
+import * as pi from '../agents/pi'
 import { log } from '../debug'
 import type { Worktree } from '../../shared/state/worktrees'
 import { initialTerminals } from '../../shared/state/terminals'
@@ -758,5 +760,113 @@ describe('clients cannot set a permission level (TEST-009)', () => {
     expect(outcome).toBe('attached')
     expect(buildSpawnArgs).not.toHaveBeenCalled()
     expect(createCalls).toHaveLength(1)
+  })
+})
+
+describe('buildAgentLaunch with real agent modules per permission level (TEST-010)', () => {
+  const MCP_PATH = () => '/c.json'
+  const READ_ONLY_LIST = 'Read,Grep,Glob,Edit(.harness/runs/**),mcp__harness-control__complete_step'
+
+  beforeEach(() => {
+    vi.mocked(log).mockClear()
+  })
+
+  describe('claude', () => {
+    const realAgents = { claude: claude as unknown as AgentModule }
+
+    it.each([
+      {
+        level: 'read-only' as const,
+        flags: ` --allowedTools '${READ_ONLY_LIST}' --permission-mode dontAsk`
+      },
+      {
+        level: 'edit' as const,
+        flags:
+          " --allowedTools 'Read,Grep,Glob,Edit,Write,NotebookEdit,Bash(git status:*),mcp__harness-control__complete_step' --permission-mode dontAsk"
+      },
+      { level: 'full' as const, flags: ' --permission-mode bypassPermissions' }
+    ])('$level puts the mapping-table flags right after the command', ({ level, flags }) => {
+      const { spawner } = build({ realAgents, writeMcpConfig: MCP_PATH })
+
+      const { command } = spawner.buildAgentLaunch({
+        terminalId: 't1',
+        cwd: '/wt',
+        agentKind: 'claude',
+        initialPrompt: 'go',
+        permissionLevel: level,
+        bashAllow: ['git status', 'bad,entry']
+      })
+
+      expect(command).toContain(`claude${flags}`)
+    })
+
+    it('no level adds no permission flags', () => {
+      const { spawner } = build({ realAgents, writeMcpConfig: MCP_PATH })
+
+      const { command } = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'claude', bashAllow: ['git status'] })
+
+      expect(command).not.toContain('--permission-mode')
+      expect(command).not.toContain('--allowedTools')
+    })
+  })
+
+  describe('opencode', () => {
+    const realAgents = { opencode: opencode as unknown as AgentModule }
+    const launch = (permissionLevel?: 'read-only' | 'edit' | 'full') =>
+      build({ realAgents, writeMcpConfig: MCP_PATH }).spawner.buildAgentLaunch({
+        terminalId: 't1',
+        cwd: '/wt',
+        agentKind: 'opencode',
+        permissionLevel,
+        bashAllow: ['git status', 'bad,entry']
+      })
+    const config = (env: Record<string, string>) => JSON.parse(env.OPENCODE_CONFIG_CONTENT)
+
+    it.each([
+      { level: 'read-only' as const, bash: 'deny', edit: { '*': 'deny', '.harness/runs/**': 'allow' } },
+      {
+        level: 'edit' as const,
+        bash: { '*': 'deny', 'git status': 'allow', 'git status *': 'allow' },
+        edit: 'allow'
+      }
+    ])('$level launches harness-step and ships its permission map with the MCP server', ({ level, bash, edit }) => {
+      const { command, env } = launch(level)
+
+      expect(command).toContain('opencode --agent harness-step')
+      const parsed = config(env)
+      expect(parsed.mcp['harness-control']).toBeDefined()
+      expect(parsed.agent['harness-step'].permission).toMatchObject({ '*': 'deny', bash, edit })
+    })
+
+    it('full launches harness-step with an allow-all map', () => {
+      const { command, env } = launch('full')
+
+      expect(command).toContain('opencode --agent harness-step')
+      expect(config(env).agent['harness-step'].permission).toEqual({ '*': 'allow' })
+    })
+
+    it('no level launches no step agent', () => {
+      const { command, env } = launch(undefined)
+
+      expect(command).not.toContain('--agent')
+      expect(config(env)).not.toHaveProperty('agent')
+    })
+  })
+
+  describe('pi', () => {
+    const realAgents = { pi: pi as unknown as AgentModule }
+    const NOT_SUPPORTED = 'permissionLevel not supported for pi; spawning with defaults'
+    const req = { terminalId: 't1', cwd: '/wt', agentKind: 'pi' as const, initialPrompt: 'go', bashAllow: ['git status'] }
+
+    it.each(['read-only', 'edit', 'full'] as const)('%s spawns exactly as with no level and logs that it is ignored', (level) => {
+      const { spawner } = build({ realAgents })
+      const withoutLevel = spawner.buildAgentLaunch(req)
+      expect(log).not.toHaveBeenCalledWith('agent-spawn', NOT_SUPPORTED)
+
+      const withLevel = spawner.buildAgentLaunch({ ...req, permissionLevel: level })
+
+      expect(withLevel).toEqual(withoutLevel)
+      expect(log).toHaveBeenCalledWith('agent-spawn', NOT_SUPPORTED)
+    })
   })
 })

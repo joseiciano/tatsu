@@ -4,6 +4,7 @@ import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { log } from '../debug'
 import type { AgentSpawnOpts } from './index'
+import { RUN_FOLDER_GLOB, type PermissionLevel } from '../../shared/permission-level'
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
@@ -207,6 +208,57 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+export const OPENCODE_STEP_AGENT = 'harness-step'
+
+export function opencodeStepPermission(level: PermissionLevel, bashAllow: string[]): Record<string, unknown> {
+  if (level === 'full') return { '*': 'allow' }
+  const restricted = {
+    '*': 'deny',
+    read: 'allow',
+    glob: 'allow',
+    grep: 'allow',
+    list: 'allow',
+    'harness-control_*': 'allow'
+  }
+  if (level === 'read-only') {
+    return {
+      ...restricted,
+      edit: { '*': 'deny', [RUN_FOLDER_GLOB]: 'allow' },
+      bash: 'deny',
+      external_directory: 'deny',
+      doom_loop: 'deny'
+    }
+  }
+  return {
+    ...restricted,
+    edit: 'allow',
+    bash: {
+      '*': 'deny',
+      ...Object.fromEntries(bashAllow.flatMap((p) => [[p, 'allow'], [`${p} *`, 'allow']]))
+    },
+    external_directory: 'deny',
+    doom_loop: 'deny'
+  }
+}
+
+export function opencodeStepAgent(
+  level: PermissionLevel,
+  bashAllow: string[],
+  model?: string | null
+): Record<string, unknown> {
+  return {
+    mode: 'primary',
+    description: 'Tatsu workflow step',
+    tools: { task: false },
+    permission: opencodeStepPermission(level, bashAllow),
+    ...(model ? { model } : {})
+  }
+}
+
+function stepAgentApplies(opts: AgentSpawnOpts): boolean {
+  return !!opts.permissionLevel && !opts.command.includes('--agent')
+}
+
 export function buildOpencodeConfig(
   opts: AgentSpawnOpts,
   base: Record<string, unknown>
@@ -222,6 +274,12 @@ export function buildOpencodeConfig(
         environment: server.env,
         enabled: true
       }
+    }
+  }
+  if (opts.permissionLevel && stepAgentApplies(opts)) {
+    config.agent = {
+      ...(isPlainObject(base.agent) ? base.agent : {}),
+      [OPENCODE_STEP_AGENT]: opencodeStepAgent(opts.permissionLevel, opts.bashAllow ?? [], opts.model)
     }
   }
   return config
@@ -251,6 +309,11 @@ export function spawnEnv(
 
 export function buildSpawnArgs(opts: AgentSpawnOpts): string {
   let cmd = opts.command
+
+  if (opts.permissionLevel) {
+    if (stepAgentApplies(opts)) cmd += ` --agent ${OPENCODE_STEP_AGENT}`
+    else log('agent-spawn', 'opencode command already sets --agent; permissionLevel not applied')
+  }
 
   if (opts.model && !opts.command.includes('--model') && !opts.command.includes('-m ')) {
     cmd += ` --model ${shellQuote(opts.model)}`
