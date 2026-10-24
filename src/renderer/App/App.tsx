@@ -803,7 +803,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
   }
 
   const settingsOverlay = showSettings ? (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 no-drag">
       <Settings
         onClose={() => {
           setShowSettings(false)
@@ -825,7 +825,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
   ) : null
 
   const configOverlay = showConfig ? (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 no-drag">
       <Config
         onClose={() => setShowConfig(false)}
         onOpenConfigFolders={() => {
