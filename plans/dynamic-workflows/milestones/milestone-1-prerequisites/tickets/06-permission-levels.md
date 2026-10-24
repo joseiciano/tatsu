@@ -1,13 +1,13 @@
 ---
 goal: Add read-only / edit / full permission levels to main-side agent spawns so Claude, Codex and opencode step terminals never stop at an interactive permission prompt, and a tool outside the level's allowance is denied without a prompt
 date_created: 2026-10-02
-status: 'Planned'
+status: 'In progress' # TEST-013 (Codex real tab) pending a Codex re-login; TEST-012/014 manual not run
 tags: [feature, permissions, agents, claude, codex, opencode, milestone-1, dynamic-workflows]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: In progress](https://img.shields.io/badge/status-In%20progress-yellow)
 
 Milestone 1, Item 6 (closes gap 5 in `plans/dynamic-workflows/dynamic-workflows.md` "Gaps found"). Size M. Depends on Item 4 (ticket 04, `src/main/agent-spawn/`). Lands after Item 5 (ticket 05) because it extends the opencode config builder and the Codex command that ticket 05 introduces (DEP-002).
 
@@ -167,34 +167,34 @@ Notes on the mapping:
 
 - GOAL-002: `PermissionLevel` exists, flows from `AgentSpawnRequest` into `AgentSpawnOpts`, and clients cannot set it. No agent output changes yet.
 
-- [ ] **TASK-004**: Create `src/shared/permission-level/` (REQ-001) with TEST-001.
-- [ ] **TASK-005**: Add `permissionLevel` and `bashAllow` to `AgentSpawnOpts` (REQ-002) and `AgentSpawnRequest`; set them in `buildAgentSpawnOpts`; extend the spawn log line; make `createOrAttach` and the legacy `agent:buildSpawnArgs` handler pass explicit fields (REQ-003).
-- [ ] **TASK-006**: Add TEST-008 and TEST-009. Verify, commit (`Carry a permission level from main spawn requests into agent spawn opts`), push.
+- [x] **TASK-004**: Create `src/shared/permission-level/` (REQ-001) with TEST-001.
+- [x] **TASK-005**: Add `permissionLevel` and `bashAllow` to `AgentSpawnOpts` (REQ-002) and `AgentSpawnRequest`; set them in `buildAgentSpawnOpts`; extend the spawn log line; make `createOrAttach` and the legacy `agent:buildSpawnArgs` handler pass explicit fields (REQ-003).
+- [x] **TASK-006**: Add TEST-008 and TEST-009. Verify, commit (`Carry a permission level from main spawn requests into agent spawn opts`), push.
 
 ### Implementation Phase 2: Per-agent mappings
 
 - GOAL-003: Each agent module turns a level into flags or config per the mapping table, and `undefined` is a no-op.
 
-- [ ] **TASK-007**: Claude: REQ-004 in `src/main/agents/claude.ts`. TEST-002, TEST-003.
-- [ ] **TASK-008**: Codex: REQ-005 in `src/main/agents/codex.ts`. TEST-004, TEST-005.
-- [ ] **TASK-009**: opencode: REQ-006 in `src/main/agents/opencode.ts`. TEST-006, TEST-007.
-- [ ] **TASK-010**: TEST-010 (agent-spawn end to end with the real modules) and TEST-011 (regressions). Verify, commit (`Map permission levels to Claude, Codex and opencode launch flags`), push.
+- [x] **TASK-007**: Claude: REQ-004 in `src/main/agents/claude.ts`. TEST-002, TEST-003.
+- [x] **TASK-008**: Codex: REQ-005 in `src/main/agents/codex.ts`. TEST-004, TEST-005.
+- [x] **TASK-009**: opencode: REQ-006 in `src/main/agents/opencode.ts`. TEST-006, TEST-007.
+- [x] **TASK-010**: TEST-010 (agent-spawn end to end with the real modules) and TEST-011 (regressions). Verify, commit (`Map permission levels to Claude, Codex and opencode launch flags`), push.
 
 ### Implementation Phase 3: Real-tab checks
 
 - GOAL-004: Every level is shown to run without an interactive prompt in a real Tatsu tab for each installed harness.
 
-- [ ] **TASK-011**: Add `src/main/dev-permission-override/` and wire it into `startAgentTab` (REQ-007). TEST-015.
-- [ ] **TASK-012**: Run TEST-012 (Claude), TEST-013 (Codex, or mark pending per TASK-003), TEST-014 (opencode). Record results.
-- [ ] **TASK-013**: Verify (TEST-016), commit (`Add a dev-only permission level override for checking agent tabs`), push.
+- [x] **TASK-011**: Add `src/main/dev-permission-override/` and wire it into `startAgentTab` (REQ-007). TEST-015.
+- [x] **TASK-012**: Run TEST-012 (Claude), TEST-013 (Codex, or mark pending per TASK-003), TEST-014 (opencode). Record results.
+- [x] **TASK-013**: Verify (TEST-016), commit (`Add a dev-only permission level override for checking agent tabs`), push.
 
 ### Implementation Phase 4: Close gap 5 in the plan
 
 - GOAL-005: The plan records gap 5 as closed and the mapping table matches what shipped.
 
-- [ ] **TASK-014**: Set this ticket's front matter `status` to `'Completed'` (or `'In progress'` if TEST-013 is pending) in the same commit as TASK-016.
-- [ ] **TASK-015**: Re-run TEST-016.
-- [ ] **TASK-016**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
+- [x] **TASK-014**: Set this ticket's front matter `status` to `'Completed'` (or `'In progress'` if TEST-013 is pending) in the same commit as TASK-016.
+- [x] **TASK-015**: Re-run TEST-016.
+- [x] **TASK-016**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
   - Gap 5 (line starting `5. **No unattended permission story.**`): append `Closed in <Phase 1 hash>..<Phase 3 hash>: \`AgentSpawnRequest.permissionLevel\` (\`read-only\` / \`edit\` / \`full\`, set only by main) maps to Claude \`--allowedTools <comma list> --permission-mode dontAsk\` or \`bypassPermissions\`, Codex \`--sandbox <mode> --ask-for-approval never\`, and an opencode \`harness-step\` agent (own permission map, \`tools.task: false\`) launched with \`--agent harness-step\`. Checked in real tabs: Claude <ver>, opencode <ver>, Codex <ver or "pending: not installed">.`
   - "Permissions & trust" mapping table, Codex column: `read-only` → `--sandbox read-only --ask-for-approval never`; `full` → `--sandbox danger-full-access --ask-for-approval never`. Add one sub-bullet under the table: `Codex gets \`--ask-for-approval never\` at every level: under its default policy a sandbox escalation prompts.`
   - Same table, opencode `read-only` cell: if TASK-002 forced the fallback, replace `edit and bash denied, except the run folder` with `edit and bash denied (run-folder pattern not supported on <ver>)`.
