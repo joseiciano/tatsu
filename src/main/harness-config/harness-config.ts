@@ -30,6 +30,7 @@ import {
 import {
   readTemplateRef,
   renderTemplates,
+  templateFragmentNames,
   templateMarker,
   type RenderableTemplate,
   type TemplateRenderResult
@@ -1248,10 +1249,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
     const fragmentNames = new Set<string>()
     for (const { template } of contributing) {
-      for (const name of template.fragments) fragmentNames.add(name)
-      for (const block of Object.values(template.harnesses)) {
-        if (block) for (const name of block.fragments ?? []) fragmentNames.add(name)
-      }
+      for (const name of templateFragmentNames(template)) fragmentNames.add(name)
     }
     const fragments = new Map(source.fragments.map((fragment) => [fragment.name, fragment]))
     const templateFingerprint = sha256(JSON.stringify([

@@ -1,6 +1,7 @@
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import type { HarnessConfigService } from '../harness-config'
 import type { StateEvent } from '../../shared/state'
+import { templateFragmentNames } from '../../shared/harness-template-render'
 import { classifyTemplateSourcePath, TEMPLATE_HARNESSES } from '../../shared/harness-templates'
 import {
   harnessConfigScopeKey,
@@ -36,8 +37,7 @@ function templateKey(template: Pick<HarnessTemplate, 'kind' | 'name'>): string {
 }
 
 function usesFragment(template: HarnessTemplate, name: string): boolean {
-  if (template.fragments.includes(name)) return true
-  return Object.values(template.harnesses).some((block) => Boolean(block && block.fragments?.includes(name)))
+  return templateFragmentNames(template).includes(name)
 }
 
 function comparisonKey(comparison: HarnessConfigComparison): string {
