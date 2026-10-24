@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
 import { PanesFSM } from '.'
+import { createAgentSpawner } from '../agent-spawn'
+import type { AgentSpawnerDeps } from '../agent-spawn'
+import type { AgentModule, AgentSpawnOpts } from '../agents'
 import type { PaneLeaf, PaneNode, TerminalTab } from '../../shared/state/terminals'
+import { getLeaves } from '../../shared/state/terminals'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -12,14 +16,28 @@ vi.mock('../debug', () => ({
   log: vi.fn()
 }))
 
-function buildFSM(): { fsm: PanesFSM; store: Store } {
-  const store = new Store()
+type PanesFSMOptions = ConstructorParameters<typeof PanesFSM>[1]
+
+function buildFSM(
+  extra: Partial<PanesFSMOptions> = {},
+  store: Store = new Store()
+): { fsm: PanesFSM; store: Store } {
   const fsm = new PanesFSM(store, {
     persist: () => {},
     getRepoRootForWorktree: () => undefined,
-    getLatestClaudeSessionId: async () => null
+    getLatestClaudeSessionId: async () => null,
+    ...extra
   })
   return { fsm, store }
+}
+
+function allTabs(store: Store, wtPath: string): TerminalTab[] {
+  const tree = store.getSnapshot().state.terminals.panes[wtPath]
+  return tree ? getLeaves(tree).flatMap((l) => l.tabs) : []
+}
+
+function startSpy() {
+  return vi.fn<NonNullable<PanesFSMOptions['startAgentTab']>>()
 }
 
 function seedLeaf(store: Store, wtPath: string, leaf: PaneLeaf): void {
@@ -405,5 +423,287 @@ describe('PanesFSM.addTab', () => {
     fsm.addTab(wtPath, { id: 'sh-2', type: 'shell', label: 'Shell 2' }, 'pane-gone')
     const leaf = store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf
     expect(leaf.tabs.map((t) => t.id)).toEqual(['sh-1', 'sh-2'])
+  })
+})
+
+describe('PanesFSM main-side agent start', () => {
+  const WORKTREE = { repoRoot: '/r/repo', branch: 'feat' }
+  const agentTab = (id: string): TerminalTab => ({
+    id,
+    type: 'agent',
+    agentKind: 'claude',
+    label: 'Claude',
+    sessionId: `${id}-session`
+  })
+
+  describe('opt-in start (TEST-015)', () => {
+    it('ensureInitialized with fromMain starts the new agent tab once, after it is in the slice', () => {
+      const wtPath = '/wt/from-main'
+      const inSliceAtCall: boolean[] = []
+      const store = new Store()
+      const startAgentTab = startSpy().mockImplementation((wt, tab) => {
+        inSliceAtCall.push(allTabs(store, wt).some((t) => t.id === tab.id))
+      })
+      const { fsm } = buildFSM({ startAgentTab }, store)
+
+      fsm.ensureInitialized(wtPath, { fromMain: true, initialPrompt: 'go', worktree: WORKTREE })
+
+      expect(startAgentTab).toHaveBeenCalledTimes(1)
+      const [calledWt, calledTab, calledWorktree] = startAgentTab.mock.calls[0]
+      expect(calledWt).toBe(wtPath)
+      expect(calledTab.type).toBe('agent')
+      expect(calledTab.initialPrompt).toBe('go')
+      expect(calledWorktree).toEqual(WORKTREE)
+      expect(allTabs(store, wtPath).find((t) => t.type === 'agent')?.id).toBe(calledTab.id)
+      expect(inSliceAtCall).toEqual([true])
+    })
+
+    it('ensureInitialized without fromMain does not start the agent tab', () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      fsm.ensureInitialized('/wt/ui', { initialPrompt: 'go', worktree: WORKTREE })
+      expect(allTabs(store, '/wt/ui').some((t) => t.type === 'agent')).toBe(true)
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+
+    it('addTab with fromMain starts an agent tab committed as a new leaf', () => {
+      const wtPath = '/wt/add-empty'
+      const inSliceAtCall: boolean[] = []
+      const store = new Store()
+      const startAgentTab = startSpy().mockImplementation((wt, tab) => {
+        inSliceAtCall.push(allTabs(store, wt).some((t) => t.id === tab.id))
+      })
+      const { fsm } = buildFSM({ startAgentTab }, store)
+
+      fsm.addTab(wtPath, agentTab('agent-new'), undefined, { fromMain: true })
+
+      expect(startAgentTab).toHaveBeenCalledTimes(1)
+      expect(startAgentTab.mock.calls[0][0]).toBe(wtPath)
+      expect(startAgentTab.mock.calls[0][1].id).toBe('agent-new')
+      expect(inSliceAtCall).toEqual([true])
+    })
+
+    it('addTab with fromMain starts an agent tab appended to an existing pane', () => {
+      const wtPath = '/wt/add-append'
+      const inSliceAtCall: boolean[] = []
+      const store = new Store()
+      const startAgentTab = startSpy().mockImplementation((wt, tab) => {
+        inSliceAtCall.push(allTabs(store, wt).some((t) => t.id === tab.id))
+      })
+      const { fsm } = buildFSM({ startAgentTab }, store)
+      seedLeaf(store, wtPath, {
+        type: 'leaf',
+        id: 'pane-1',
+        tabs: [{ id: 'sh-1', type: 'shell', label: 'Shell' }],
+        activeTabId: 'sh-1'
+      })
+
+      fsm.addTab(wtPath, agentTab('agent-new'), undefined, { fromMain: true })
+
+      expect(startAgentTab).toHaveBeenCalledTimes(1)
+      expect(startAgentTab.mock.calls[0][1].id).toBe('agent-new')
+      expect(inSliceAtCall).toEqual([true])
+    })
+
+    it('addTab without fromMain does not start the agent tab', () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      const wtPath = '/wt/add-ui'
+      fsm.addTab(wtPath, agentTab('agent-a'))
+      fsm.addTab(wtPath, agentTab('agent-b'), undefined, {})
+      expect(allTabs(store, wtPath).map((t) => t.id)).toEqual(['agent-a', 'agent-b'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+
+    it.each<{ name: string; tab: TerminalTab }>([
+      { name: 'shell', tab: { id: 'sh-new', type: 'shell', label: 'Shell' } },
+      { name: 'browser', tab: { id: 'br-new', type: 'browser', label: 'Browser', url: 'https://x' } }
+    ])('addTab of a $name tab with fromMain does not start anything', ({ tab }) => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      fsm.addTab('/wt/non-agent', tab, undefined, { fromMain: true })
+      expect(allTabs(store, '/wt/non-agent').map((t) => t.id)).toEqual([tab.id])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+
+    it('restartAgentTab does not start the restarted agent tab', () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      const wtPath = '/wt/restart'
+      seedLeaf(store, wtPath, {
+        type: 'leaf',
+        id: 'pane-1',
+        tabs: [agentTab('agent-1')],
+        activeTabId: 'agent-1'
+      })
+      fsm.restartAgentTab(wtPath, 'agent-1', 'agent-2')
+      expect(allTabs(store, wtPath).map((t) => t.id)).toEqual(['agent-2'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+
+    it('convertTabType to agent does not start the converted tab', () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      const wtPath = '/wt/convert'
+      const sessionId = 'dddddddd-dddd-4ddd-dddd-dddddddddddd'
+      seedLeaf(store, wtPath, {
+        type: 'leaf',
+        id: 'pane-1',
+        tabs: [{ id: sessionId, type: 'json-claude', label: 'Chat', sessionId, mode: 'awake' }],
+        activeTabId: sessionId
+      })
+      fsm.convertTabType(wtPath, sessionId, 'agent')
+      expect(allTabs(store, wtPath).map((t) => t.type)).toEqual(['agent'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('double start is harmless (TEST-015b)', () => {
+    function buildWithSpawner() {
+      const store = new Store()
+      const running = new Set<string>()
+      const create = vi.fn((id: string) => {
+        running.add(id)
+        return true
+      })
+      const pty: AgentSpawnerDeps['pty'] = {
+        hasTerminal: (id: string) => running.has(id),
+        create: create as unknown as AgentSpawnerDeps['pty']['create'],
+        getHistory: () => ''
+      }
+      const buildSpawnArgs = vi.fn((_opts: AgentSpawnOpts) => 'AGENT_CMD')
+      const spawner = createAgentSpawner({
+        pty,
+        store,
+        getConfig: () => ({}),
+        writeMcpConfig: () => '/mcp.json',
+        getAgent: () => ({ defaultCommand: 'claude', buildSpawnArgs }) as unknown as AgentModule
+      })
+      const outcomes: string[] = []
+      const startAgentTab: NonNullable<PanesFSMOptions['startAgentTab']> = (wtPath, tab) => {
+        outcomes.push(
+          spawner.spawnAgentTerminal({
+            terminalId: tab.id,
+            cwd: wtPath,
+            agentKind: tab.agentKind ?? 'claude'
+          })
+        )
+      }
+      const { fsm } = buildFSM({ startAgentTab }, store)
+      return { fsm, store, create, buildSpawnArgs, outcomes, startAgentTab }
+    }
+
+    it('a second ensureInitialized for the same worktree spawns no second PTY', () => {
+      const { fsm, create, buildSpawnArgs, outcomes } = buildWithSpawner()
+      const wtPath = '/wt/double-init'
+      fsm.ensureInitialized(wtPath, { fromMain: true, initialPrompt: 'go', worktree: WORKTREE })
+      fsm.ensureInitialized(wtPath, { fromMain: true, initialPrompt: 'go', worktree: WORKTREE })
+      expect(outcomes).toEqual(['spawned'])
+      expect(create).toHaveBeenCalledTimes(1)
+      expect(buildSpawnArgs).toHaveBeenCalledTimes(1)
+    })
+
+    it('starting the same agent tab twice attaches the second time instead of spawning', () => {
+      const { fsm, store, create, buildSpawnArgs, outcomes, startAgentTab } = buildWithSpawner()
+      const wtPath = '/wt/double-start'
+      fsm.addTab(wtPath, agentTab('agent-twice'), undefined, { fromMain: true })
+      const tab = allTabs(store, wtPath).find((t) => t.id === 'agent-twice')!
+      startAgentTab(wtPath, tab)
+      expect(outcomes).toEqual(['spawned', 'attached'])
+      expect(create).toHaveBeenCalledTimes(1)
+      expect(buildSpawnArgs).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('restored tabs do not start (TEST-016)', () => {
+    const persistedAgent = (wtPath: string) => ({
+      _ignored: {
+        [wtPath]: {
+          type: 'leaf' as const,
+          id: 'pane-restored',
+          tabs: [
+            {
+              id: 'agent-restored',
+              type: 'agent' as const,
+              label: 'Claude',
+              agentKind: 'claude' as const,
+              sessionId: 'restored-session'
+            }
+          ],
+          activeTabId: 'agent-restored'
+        }
+      }
+    })
+
+    it('boot-style ensureInitialized without opts creates the default tabs and starts nothing', () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      fsm.ensureInitialized('/wt/boot')
+      expect(allTabs(store, '/wt/boot').map((t) => t.type)).toEqual(['agent', 'shell'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+
+    it('ensureInitialized with fromMain promotes a sleeping tree without starting its agent tab', async () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      const wtPath = '/wt/restored-init'
+      await fsm.restoreFromConfig(persistedAgent(wtPath))
+
+      fsm.ensureInitialized(wtPath, { fromMain: true, initialPrompt: 'x' })
+
+      expect(allTabs(store, wtPath).map((t) => t.id)).toEqual(['agent-restored'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+
+    it('addTab adopts a sleeping tree without starting its agent tab, and fromMain starts only the new tab', async () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      const wtPath = '/wt/restored-add'
+      await fsm.restoreFromConfig(persistedAgent(wtPath))
+
+      fsm.addTab(wtPath, { id: 'sh-new', type: 'shell', label: 'Shell' })
+      expect(allTabs(store, wtPath).map((t) => t.id)).toEqual(['agent-restored', 'sh-new'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+
+      fsm.addTab(wtPath, agentTab('agent-new'), undefined, { fromMain: true })
+      expect(startAgentTab).toHaveBeenCalledTimes(1)
+      expect(startAgentTab.mock.calls[0][1].id).toBe('agent-new')
+    })
+  })
+
+  describe('json default (TEST-017)', () => {
+    it('ensureInitialized with fromMain starts the json-claude session with the prompt, not an agent PTY', () => {
+      const startAgentTab = startSpy()
+      const startJsonClaudeWithPrompt =
+        vi.fn<NonNullable<PanesFSMOptions['startJsonClaudeWithPrompt']>>()
+      const { fsm, store } = buildFSM({
+        startAgentTab,
+        startJsonClaudeWithPrompt,
+        getDefaultClaudeTabType: () => 'json'
+      })
+      const wtPath = '/wt/json-default'
+
+      fsm.ensureInitialized(wtPath, { fromMain: true, initialPrompt: 'x' })
+
+      const chat = allTabs(store, wtPath).find((t) => t.type === 'json-claude')!
+      expect(startJsonClaudeWithPrompt.mock.calls).toEqual([[chat.id, wtPath, 'x']])
+      expect(startAgentTab).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('no double start (TEST-022)', () => {
+    it('a later ensureInitialized without opts returns the same tree and does not start again', () => {
+      const startAgentTab = startSpy()
+      const { fsm, store } = buildFSM({ startAgentTab })
+      const wtPath = '/wt/no-double'
+
+      const first = fsm.ensureInitialized(wtPath, { fromMain: true, initialPrompt: 'go' })
+      const panesBefore = store.getSnapshot().state.terminals.panes
+      const second = fsm.ensureInitialized(wtPath)
+
+      expect(second).toBe(first)
+      expect(store.getSnapshot().state.terminals.panes).toBe(panesBefore)
+      expect(startAgentTab).toHaveBeenCalledTimes(1)
+    })
   })
 })

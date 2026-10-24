@@ -96,7 +96,7 @@ import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
 import { toAgentKind } from './agent-kind'
-import { createAgentSpawner, parseSpawnSpec } from './agent-spawn'
+import { createAgentSpawner, parseSpawnSpec, resolveSpawnSize, agentSessionName } from './agent-spawn'
 
 // Runtime detection — Electron sets process.versions.electron, plain
 // Node leaves it undefined. The mode picks itself; there's no env-var
@@ -754,6 +754,23 @@ const panesFSM = new PanesFSM(store, {
   },
   startJsonClaude: (sessionId, worktreePath) => {
     startJsonClaudeSession(sessionId, worktreePath)
+  },
+  startAgentTab: (wtPath, tab, worktree) => {
+    const state = store.getSnapshot().state
+    const wt = worktree ?? state.worktrees.list.find((w) => w.path === wtPath)
+    const size = resolveSpawnSize(state.terminals, wtPath, tab.id)
+    agentSpawner.spawnAgentTerminal({
+      terminalId: tab.id,
+      cwd: wtPath,
+      agentKind: tab.agentKind ?? 'claude',
+      sessionId: tab.sessionId,
+      initialPrompt: tab.initialPrompt,
+      teleportSessionId: tab.teleportSessionId,
+      sessionName: agentSessionName(wt, state.settings.nameClaudeSessions),
+      modelOverride: tab.model,
+      cols: size.cols,
+      rows: size.rows
+    })
   }
 })
 
@@ -807,9 +824,17 @@ const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',
   getWorktreeBaseMode: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
-  onWorktreeCreated: ({ createdPath, initialPrompt, teleportSessionId, agentKind, model }) => {
+  onWorktreeCreated: ({ createdPath, repoRoot, branch, initialPrompt, teleportSessionId, agentKind, model }) => {
     void prPoller.refreshAll()
-    panesFSM.ensureInitialized(createdPath, { initialPrompt, teleportSessionId, agentKind, model })
+    const fromMain = !!(initialPrompt || teleportSessionId)
+    panesFSM.ensureInitialized(createdPath, {
+      initialPrompt,
+      teleportSessionId,
+      agentKind,
+      model,
+      fromMain,
+      worktree: { repoRoot, branch }
+    })
     if (teleportSessionId) {
       setTimeout(() => void worktreesFSM.refreshList(), 10_000)
     }
@@ -3443,7 +3468,7 @@ async function runBoot(): Promise<void> {
         // no-ops, then tell the renderer to focus the new path.
         const p = payload as {
           repoRoot: string
-          worktree: { path: string }
+          worktree: { path: string; branch: string }
           initialPrompt?: string
           agentKind?: AgentKind
           model?: string
@@ -3451,7 +3476,9 @@ async function runBoot(): Promise<void> {
         panesFSM.ensureInitialized(p.worktree.path, {
           initialPrompt: p.initialPrompt,
           agentKind: p.agentKind,
-          model: p.model
+          model: p.model,
+          fromMain: !!p.initialPrompt,
+          worktree: { repoRoot: p.repoRoot, branch: p.worktree.branch }
         })
         void worktreesFSM.refreshList().then(() => {
           broadcastToAllWindows(channel, payload)

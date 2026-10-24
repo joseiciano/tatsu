@@ -62,6 +62,14 @@ interface PanesFSMOptions {
    *  fresh subprocess. Idempotent: a no-op if the session is already
    *  running. */
   startJsonClaude?: (sessionId: string, worktreePath: string) => void
+  /** Start the PTY for an agent tab main created with `fromMain`, so it
+   *  runs whether or not any client has it open. Never called for
+   *  UI-initiated or restored tabs. */
+  startAgentTab?: (
+    wtPath: string,
+    tab: TerminalTab,
+    worktree?: { repoRoot: string; branch: string }
+  ) => void
 }
 
 function newPaneId(): string {
@@ -211,6 +219,8 @@ export class PanesFSM {
       teleportSessionId?: string
       agentKind?: AgentKind
       model?: string
+      fromMain?: boolean
+      worktree?: { repoRoot: string; branch: string }
     }
   ): PaneNode {
     const existing = this.getTree(wtPath)
@@ -283,10 +293,13 @@ export class PanesFSM {
         jsonClaudeKickoff.initialPrompt
       )
     }
+    if (opts?.fromMain && agentTab.type === 'agent') {
+      this.opts.startAgentTab?.(wtPath, agentTab, opts.worktree)
+    }
     return pane
   }
 
-  addTab(wtPath: string, tab: TerminalTab, paneId?: string): void {
+  addTab(wtPath: string, tab: TerminalTab, paneId?: string, opts?: { fromMain?: boolean }): void {
     // Brand-new json-claude tabs default to 'awake' — the user just
     // clicked to create one, so the renderer's auto-spawn path should
     // proceed. Slept-by-default only applies to tabs hydrated from
@@ -315,6 +328,9 @@ export class PanesFSM {
         activeTabId: normalizedTab.id
       }
       this.commit(wtPath, pane)
+      if (opts?.fromMain && normalizedTab.type === 'agent') {
+        this.opts.startAgentTab?.(wtPath, normalizedTab)
+      }
       return
     }
     const leaves = getLeaves(tree)
@@ -329,6 +345,9 @@ export class PanesFSM {
       }
     })
     this.commit(wtPath, updated)
+    if (opts?.fromMain && normalizedTab.type === 'agent') {
+      this.opts.startAgentTab?.(wtPath, normalizedTab)
+    }
   }
 
   /** Tear down a json-claude tab's subprocess while leaving its tab

@@ -61,6 +61,8 @@ interface WorktreesFSMOptions {
    * default Claude+Shell pair is created with the initial prompt. */
   onWorktreeCreated: (params: {
     createdPath: string
+    repoRoot: string
+    branch: string
     initialPrompt?: string
     teleportSessionId?: string
     agentKind?: AgentKind
@@ -258,6 +260,8 @@ export class WorktreesFSM {
 
     this.opts.onWorktreeCreated({
       createdPath: created.path,
+      repoRoot,
+      branch: created.branch,
       initialPrompt,
       teleportSessionId,
       agentKind,
