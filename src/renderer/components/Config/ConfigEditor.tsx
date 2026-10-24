@@ -17,6 +17,12 @@ function synthesizeFilePath(absolutePath: string | null, nameDraft: string): str
   return trimmed.includes('.') ? trimmed : `${trimmed}.md`
 }
 
+const INLINE_FRAGMENT_HINT = /\{\{fragment:|<!--\s*tatsu:fragment\b/
+
+function usesInlineFragments(draft: string): boolean {
+  return INLINE_FRAGMENT_HINT.test(draft)
+}
+
 export function ConfigEditor({
   view,
   draft,
@@ -164,6 +170,12 @@ export function ConfigEditor({
           <span className="min-w-0 break-all">
             Read-only. Linked from {linkedFrom}. {LINKED_RESOURCE_EXPLANATION}
           </span>
+        </div>
+      )}
+      {usesInlineFragments(draft) && (
+        <div className="px-3 py-1.5 text-xs text-faint border-b border-border">
+          Saving turns each <code>{'{{fragment:name}}'}</code> line into a marked section with the fragment text.
+          Change the text of a marked section in its fragment, so every file using it stays the same.
         </div>
       )}
       {error && <div className="px-3 py-1.5 text-xs text-danger border-b border-border">{error}</div>}
