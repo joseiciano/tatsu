@@ -1950,11 +1950,18 @@ describe('harness-config symlink-aware inventory', () => {
   const commands = { agentKind: 'claude', resourceType: 'commands' }
 
   it('scans a symlinked root folder and marks every entry as managed elsewhere', () => {
-    const { fixture, build } = dotfilesFixture()
+    const { fixture, claudeHome, build } = dotfilesFixture()
     const refs = fixture.service.scan(agents)
     expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(['reviewer.md'])
     expect(refs[0].linkedFrom).toBe(join(build, 'agents'))
-    expect(refs[0].absolutePath).toBe(join(build, 'agents', 'reviewer.md'))
+    expect(refs[0].absolutePath).toBe(join(claudeHome, 'agents', 'reviewer.md'))
+  })
+
+  it('reads a file in a symlinked root from its target while reporting the configured path', () => {
+    const { fixture, claudeHome } = dotfilesFixture()
+    const result = fixture.service.readFile(physicalId('claude', 'claudeAgents', 'reviewer.md')) as AnyRecord
+    expect(result.content).toBe('reviewer')
+    expect(result.ref.absolutePath).toBe(join(claudeHome, 'agents', 'reviewer.md'))
   })
 
   it('inventories symlinked skill folders and command files with linkedFrom set', () => {
@@ -2078,13 +2085,19 @@ describe('harness-config symlink-aware inventory', () => {
   })
 
   it('treats a symlinked root as a plain folder at its real path when an override is set', async () => {
-    const { fixture, build } = dotfilesFixture({ override: true })
+    const { fixture, claudeHome, build } = dotfilesFixture({ override: true })
     expect(fixture.service.scan(agents)[0].linkedFrom).toBeUndefined()
     const plan = fixture.service.prepareCreate(agents, 'new-agent', 'new')
-    await fixture.service.applyPlan({ scope: agents, planId: plan.planId, confirmed: true })
+    expect(plan.resource.absolutePath).toBe(join(claudeHome, 'agents', 'new-agent.md'))
+    const result = await fixture.service.applyPlan({ scope: agents, planId: plan.planId, confirmed: true })
     const written = join(build, 'agents', 'new-agent.md')
     expect(lstatSync(written).isFile()).toBe(true)
     expect(readFileSync(written, 'utf8')).toBe('new')
+    expect(lstatSync(join(claudeHome, 'agents')).isSymbolicLink()).toBe(true)
+    expect(result.resultingRefs.map((ref: FileRef) => [ref.relativePath, ref.absolutePath, ref.linkedFrom])).toEqual([
+      ['new-agent.md', join(claudeHome, 'agents', 'new-agent.md'), undefined],
+      ['reviewer.md', join(claudeHome, 'agents', 'reviewer.md'), undefined]
+    ])
   })
 
   it('ignores a symlink above the root when deciding managed-elsewhere', async () => {

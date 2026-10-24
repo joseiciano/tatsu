@@ -215,10 +215,16 @@ type WalkEntry = {
 
 type RootInfo = {
   root: string
+  lexicalRoot: string
   rootLinkedFrom?: string
 }
 
 type ContainmentMode = 'read' | 'write'
+
+// absolutePath is the real location every read, write and containment check
+// uses; displayPath keeps the configured root so a symlinked root is shown
+// where the user configured it rather than at its target.
+type ResolvedCandidate = { root: string; relativePath: string; absolutePath: string; displayPath: string }
 
 type DiskEntry = {
   ref: HarnessConfigFileRef
@@ -464,7 +470,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           }
           const hash = sha256(bytes)
           return {
-            ref: { ...entry.ref, absolutePath: target.absolutePath, hash },
+            ref: { ...entry.ref, absolutePath: target.displayPath, hash },
             content: bytes.toString('utf8'),
             hash
           }
@@ -638,7 +644,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
         label: this.labelFor(target.relativePath, canonicalResourceType),
         relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
+        absolutePath: target.displayPath,
         hash: sha256(Buffer.from(content, 'utf8')),
         existsOnDisk: false,
         managed: true,
@@ -1050,7 +1056,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     }
     // A Step 16 override is the user's opt-in to write at the root's real
     // location; without one, a symlinked root is managed elsewhere (REQ-003b).
-    return rootIsLink && configured === undefined ? { root, rootLinkedFrom: root } : { root }
+    return rootIsLink && configured === undefined ? { root, lexicalRoot, rootLinkedFrom: root } : { root, lexicalRoot }
   }
 
   private descriptorMatches(descriptor: HarnessConfigResourceResolver, relativePath: string): boolean {
@@ -1087,8 +1093,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     suppliedRelativePath: string,
     mustExist: boolean,
     mode: ContainmentMode = 'write'
-  ): { root: string; relativePath: string; absolutePath: string } {
-    const root = this.resolveRoot(descriptor)
+  ): ResolvedCandidate {
+    const { root, lexicalRoot } = this.resolveRootInfo(descriptor)
     const relativePath = this.validateRelativePath(suppliedRelativePath, descriptor)
     const absolutePath = resolve(root, ...relativePath.split('/'))
     if (absolutePath !== root && !absolutePath.startsWith(root + sep)) {
@@ -1096,7 +1102,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     }
     if (mode === 'read') this.assertReadContainment(root, relativePath, mustExist)
     else this.assertRealContainment(root, absolutePath, mustExist)
-    return { root, relativePath, absolutePath }
+    return { root, relativePath, absolutePath, displayPath: resolve(lexicalRoot, ...relativePath.split('/')) }
   }
 
   private isWithin(base: string, candidate: string): boolean {
@@ -1483,7 +1489,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const walked: WalkEntry[] = []
       this.walk(root, '', 0, descriptor, walked, new Set([root]))
       for (const { relativePath, linkedFrom } of walked) {
-        let target: { root: string; relativePath: string; absolutePath: string }
+        let target: ResolvedCandidate
         try {
           target = this.resolveCandidate(descriptor, relativePath, true, 'read')
         } catch (error) {
@@ -1509,7 +1515,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           aliasResourceTypes,
           label: this.labelFor(target.relativePath, canonicalResourceType),
           relativePath: target.relativePath,
-          absolutePath: target.absolutePath,
+          absolutePath: target.displayPath,
           hash: sha256(bytes),
           existsOnDisk: true,
           managed: desiredIds.has(id),
@@ -1634,7 +1640,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         aliasResourceTypes,
         label: resource.label || this.labelFor(target.relativePath, canonicalResourceType),
         relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
+        absolutePath: target.displayPath,
         hash: contentHash,
         existsOnDisk: false,
         managed: true,
@@ -2091,7 +2097,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
         label: this.labelFor(target.relativePath, canonicalResourceType),
         relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
+        absolutePath: target.displayPath,
         hash: sha256(bytes),
         existsOnDisk: true,
         managed: true,
