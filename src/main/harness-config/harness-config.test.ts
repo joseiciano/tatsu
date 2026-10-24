@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -221,6 +222,8 @@ function makeFsAdapter(overrides: AnyRecord = {}): FsAdapter {
     mkdirSync,
     existsSync,
     realpathSync: (value: string) => resolve(value),
+    readlinkSync: (value: string) => readlinkSync(value),
+    symlinkSync: (target: string, value: string) => symlinkSync(target, value),
     ...overrides
   }
 }
@@ -1020,11 +1023,22 @@ describe('confirmation, staleness, and path security', () => {
     const targetRef = fixture.service.scan(scope).find((ref: FileRef) => ref.relativePath === 'link.md')
     expect(targetRef).toBeUndefined()
   })
-  it('rejects creates beneath dangling symlink directories', async () => {
+  it('replaces a dangling symlink directory with a real folder only once a create is confirmed', async () => {
     const { fixture, scope } = createFixture()
     const missingTarget = join(fixture.root, 'missing-target')
-    symlinkSync(missingTarget, join(fixture.roots.agents, 'dangling'))
-    await rejectsCode(() => fixture.service.prepareCreate(scope, 'dangling/new', 'secret'), 'unsafe-path')
+    const link = join(fixture.roots.agents, 'dangling')
+    symlinkSync(missingTarget, link)
+
+    const plan = fixture.service.prepareCreate(scope, 'dangling/new', 'secret')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }), 'unconfirmed-plan')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(lstatSync(link).isDirectory()).toBe(true)
+    expect(readFileSync(join(link, 'new.md'), 'utf8')).toBe('secret')
+    expect(existsSync(missingTarget)).toBe(false)
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toContain('dangling/new.md')
   })
 
   it('creates parent directories only after confirmed create validation', async () => {
@@ -2066,7 +2080,7 @@ describe('harness-config symlink-aware inventory', () => {
     expect(backupFiles(dirname(link))).toEqual([])
   })
 
-  it('deletes the target of a symlinked command file, leaves the link dangling, and drops it from the scan', async () => {
+  it('deletes the target of a symlinked command file, removes the now-dangling link, and drops it from the scan', async () => {
     const { fixture, claudeHome, build } = dotfilesFixture()
     const link = join(claudeHome, 'commands', 'ship.md')
     const target = join(build, 'commands', 'ship.md')
@@ -2074,12 +2088,93 @@ describe('harness-config symlink-aware inventory', () => {
     await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
 
     expect(existsSync(target)).toBe(false)
-    expect(lstatSync(link).isSymbolicLink()).toBe(true)
-    expect(existsSync(link)).toBe(false)
+    expect(() => lstatSync(link)).toThrow()
     const backups = backupFiles(join(build, 'commands'))
     expect(backups).toHaveLength(1)
     expect(readFileSync(join(build, 'commands', backups[0]), 'utf8')).toBe('ship')
+    expect(backupFiles(join(claudeHome, 'commands'))).toEqual([])
     expect(fixture.service.scan(commands).map((ref: FileRef) => ref.relativePath)).not.toContain('ship.md')
+  })
+
+  it('recreates a command deleted through its link as a regular file in the configured folder', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const deletion = fixture.service.prepareDelete(commands, physicalId('claude', 'claudeCommands', 'ship.md'))
+    await fixture.service.applyPlan({ scope: commands, planId: deletion.planId, confirmed: true })
+
+    const creation = fixture.service.prepareCreate(commands, 'ship', 'ship again')
+    await fixture.service.applyPlan({ scope: commands, planId: creation.planId, confirmed: true })
+
+    expect(lstatSync(link).isFile()).toBe(true)
+    expect(readFileSync(link, 'utf8')).toBe('ship again')
+    expect(existsSync(join(build, 'commands', 'ship.md'))).toBe(false)
+    const recreated = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'ship.md')!
+    expect(recreated.linkedFrom).toBeUndefined()
+  })
+
+  it('creates a command over a dangling file link left behind outside Tatsu, without resurrecting the link target', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const target = join(build, 'commands', 'ship.md')
+    unlinkSync(target)
+
+    const plan = fixture.service.prepareCreate(commands, 'ship', 'fresh ship')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isFile()).toBe(true)
+    expect(readFileSync(link, 'utf8')).toBe('fresh ship')
+    expect(existsSync(target)).toBe(false)
+  })
+
+  it('syncs a configured command to disk over a dangling file link as a regular file', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture({
+      desired: [desiredAt('claudeCommands', 'commands', 'ship.md', 'from config')]
+    })
+    const link = join(claudeHome, 'commands', 'ship.md')
+    unlinkSync(join(build, 'commands', 'ship.md'))
+
+    const plan = fixture.service.planSyncToDisk(commands)
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isFile()).toBe(true)
+    expect(readFileSync(link, 'utf8')).toBe('from config')
+    expect(existsSync(join(build, 'commands', 'ship.md'))).toBe(false)
+    expect(fixture.service.planSync(commands).status).toBe('synced')
+  })
+
+  it('creates a skill through a dangling skill-folder link by replacing it with a real folder', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'shared')
+    const missing = join(build, 'missing-shared')
+    symlinkSync(missing, link)
+
+    const plan = fixture.service.prepareCreate(commands, 'shared/new', 'x')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isDirectory()).toBe(true)
+    expect(readFileSync(join(link, 'new.md'), 'utf8')).toBe('x')
+    expect(existsSync(missing)).toBe(false)
+    const created = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'shared/new.md')!
+    expect(created.linkedFrom).toBeUndefined()
+  })
+
+  it('restores the target bytes and the removed link when persisting a delete through a file link fails', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const target = join(build, 'commands', 'ship.md')
+    fixture.desired.replaceDesiredScope.mockImplementation(() => { throw new Error('config unavailable') })
+    const plan = fixture.service.prepareDelete(commands, physicalId('claude', 'claudeCommands', 'ship.md'))
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true }), 'desired-state-failed')
+
+    expect(readFileSync(target, 'utf8')).toBe('ship')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(link)).toBe(target)
+    expect(readFileSync(link, 'utf8')).toBe('ship')
+    const restored = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'ship.md')!
+    expect(restored.linkedFrom).toBe(target)
   })
 
   it('deletes a skill inside a symlinked skill folder from the target and keeps the folder link', async () => {
