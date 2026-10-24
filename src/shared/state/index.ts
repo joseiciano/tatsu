@@ -113,7 +113,7 @@ export type {
 } from './repo-configs'
 export type { PRsState, PRsEvent, PRStatus, CheckStatus, PRReview } from './prs'
 export type { OnboardingState, OnboardingEvent, QuestStep } from './onboarding'
-export type { HooksState, HooksEvent, HooksConsent } from './hooks'
+export type { HooksState, HooksEvent, HooksConsent, CodexHookTrustSummary } from './hooks'
 export type {
   WorktreesState,
   WorktreesEvent,

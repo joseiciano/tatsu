@@ -61,6 +61,9 @@ export interface AgentModule {
   ): Record<string, string>
 }
 
+export { codexHomeDir, codexHookTrustReport } from './codex'
+export { hookEvents as codexHookEvents } from './codex'
+
 const agents: Record<AgentKind, AgentModule> = { claude, codex, opencode, pi }
 
 export function getAgent(kind: AgentKind): AgentModule {

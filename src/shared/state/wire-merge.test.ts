@@ -29,6 +29,13 @@ describe('mergeWireSnapshot', () => {
     expect(merged.settings.themeDark).toBe('dark')
   })
 
+  it('backfills hooks.codexTrust for an old server snapshot that only sends consent', () => {
+    const wire: WireSnapshotState = { hooks: { consent: 'accepted' } }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.hooks.consent).toBe('accepted')
+    expect(merged.hooks).toHaveProperty('codexTrust', initialState.hooks.codexTrust)
+  })
+
   it('fills in an entirely-missing slice from initialState', () => {
     const wire: WireSnapshotState = {}
     const merged = mergeWireSnapshot(wire)

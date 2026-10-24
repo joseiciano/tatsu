@@ -1,8 +1,17 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { parse } from 'smol-toml'
 import { log } from '../debug'
 import { makeHookScript } from '../hooks'
+import { resolveCodexHome } from '../folder-trust'
+import {
+  codexHookIdentityJson,
+  readCodexHookTrust,
+  type CodexHookGroup,
+  type CodexHookHandler,
+  type CodexHookTrustReport
+} from '../codex-hook-trust'
 import type { AgentSpawnOpts, HarnessMcpServerSpec } from './index'
 
 function shellQuote(s: string): string {
@@ -27,21 +36,30 @@ export const hookEvents = [
   'Stop'
 ]
 
-interface CodexHookEntry {
-  matcher?: string
-  hooks: { type: string; command: string; timeout?: number }[]
-}
+type CodexHookEntry = CodexHookGroup
 
 interface CodexHooksFile {
   hooks?: Record<string, CodexHookEntry[]>
 }
 
+export function codexHomeDir(): string {
+  return resolveCodexHome(process.env, homedir())
+}
+
 function globalHooksPath(): string {
-  return join(homedir(), '.codex', 'hooks.json')
+  return join(codexHomeDir(), 'hooks.json')
 }
 
 function hookScriptPath(): string {
-  return join(homedir(), '.codex', HOOK_SCRIPT_NAME)
+  return join(codexHomeDir(), HOOK_SCRIPT_NAME)
+}
+
+function sessionsDir(): string {
+  return join(codexHomeDir(), 'sessions')
+}
+
+function codexConfigPath(): string {
+  return join(codexHomeDir(), 'config.toml')
 }
 
 // Kept byte-stable on purpose: Codex skips a hook until the user trusts it
@@ -62,6 +80,17 @@ function readHooksFile(path: string): CodexHooksFile {
   }
 }
 
+function readHooksFileStrict(path: string): { ok: true; data: CodexHooksFile; existed: boolean } | { ok: false } {
+  if (!existsSync(path)) return { ok: true, data: {}, existed: false }
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'))
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false }
+    return { ok: true, data: parsed as CodexHooksFile, existed: true }
+  } catch {
+    return { ok: false }
+  }
+}
+
 function writeHooksFile(path: string, data: CodexHooksFile): void {
   const dir = join(path, '..')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -70,9 +99,17 @@ function writeHooksFile(path: string, data: CodexHooksFile): void {
 
 function writeHookScript(): void {
   const path = hookScriptPath()
+  const content = makeHookScript()
+  if (existsSync(path)) {
+    try {
+      if (readFileSync(path, 'utf-8') === content) return
+    } catch {
+      // unreadable: rewrite below
+    }
+  }
   const dir = join(path, '..')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(path, makeHookScript(), { mode: 0o755 })
+  writeFileSync(path, content, { mode: 0o755 })
 }
 
 function makeHarnessHookEntry(command: string): CodexHookEntry {
@@ -81,12 +118,28 @@ function makeHarnessHookEntry(command: string): CodexHookEntry {
   }
 }
 
-function isHarnessHookEntry(entry: CodexHookEntry): boolean {
-  return !!entry.hooks?.some(
-    (h) =>
-      typeof h.command === 'string' &&
-      (h.command.includes(HOOK_SCRIPT_NAME) || h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE))
+function isHarnessHookHandler(h: CodexHookHandler): boolean {
+  return (
+    typeof h.command === 'string' &&
+    (h.command.includes(HOOK_SCRIPT_NAME) || h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE))
   )
+}
+
+function isHarnessHookEntry(entry: CodexHookEntry): boolean {
+  return !!entry.hooks?.some(isHarnessHookHandler)
+}
+
+function isIdenticalHarnessEntry(event: string, entry: CodexHookEntry, desired: CodexHookEntry): boolean {
+  if (!Array.isArray(entry.hooks) || entry.hooks.length !== 1) return false
+  return codexHookIdentityJson(event, entry) === codexHookIdentityJson(event, desired)
+}
+
+export function codexHookTrustReport(): Promise<CodexHookTrustReport> {
+  return readCodexHookTrust({
+    hooksPath: globalHooksPath(),
+    configPath: codexConfigPath(),
+    isOwnedHandler: isHarnessHookHandler
+  })
 }
 
 function removeOldHarnessEntries(entries: CodexHookEntry[]): CodexHookEntry[] {
@@ -94,11 +147,19 @@ function removeOldHarnessEntries(entries: CodexHookEntry[]): CodexHookEntry[] {
 }
 
 function ensureCodexHooksEnabled(): void {
-  const configPath = join(homedir(), '.codex', 'config.toml')
+  const configPath = codexConfigPath()
   try {
     const content = existsSync(configPath) ? readFileSync(configPath, 'utf-8') : ''
-    if (content.includes('codex_hooks')) return
-    const line = 'codex_hooks = true'
+    let parsed: unknown
+    try {
+      parsed = parse(content)
+    } catch {
+      log('hooks', 'codex config.toml unparseable; flag not written')
+      return
+    }
+    const features = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>).features : undefined
+    if (features && typeof features === 'object' && ('hooks' in features || 'codex_hooks' in features)) return
+    const line = 'hooks = true'
     // Appending to EOF would land the key in whichever table comes last,
     // so insert it directly under an existing [features] header.
     const header = /^[ \t]*\[features\][ \t]*(#.*)?$/m.exec(content)
@@ -111,9 +172,9 @@ function ensureCodexHooksEnabled(): void {
       next = content + sep + '\n[features]\n' + line + '\n'
     }
     writeFileSync(configPath, next)
-    log('hooks', 'enabled codex_hooks in ~/.codex/config.toml')
+    log('hooks', `enabled [features] hooks in ${configPath}`)
   } catch (err) {
-    log('hooks', 'failed to enable codex_hooks', err instanceof Error ? err.message : err)
+    log('hooks', 'failed to enable [features] hooks', err instanceof Error ? err.message : err)
   }
 }
 
@@ -136,19 +197,52 @@ export function installHooks(): void {
   ensureCodexHooksEnabled()
   writeHookScript()
 
-  const data = readHooksFile(path)
-  if (!data.hooks) data.hooks = {}
+  const read = readHooksFileStrict(path)
+  if (!read.ok) {
+    log('hooks', 'codex hooks.json unreadable; not modified', { path })
+    return
+  }
+  const data = read.data
+  let changed = !read.existed
+  if (!data.hooks) {
+    data.hooks = {}
+    changed = true
+  }
 
   for (const event of Object.keys(data.hooks)) {
+    if (hookEvents.includes(event)) continue
+    const before = data.hooks[event].length
     data.hooks[event] = removeOldHarnessEntries(data.hooks[event])
+    if (data.hooks[event].length !== before) changed = true
   }
 
   for (const event of hookEvents) {
-    if (!data.hooks[event]) data.hooks[event] = []
-    data.hooks[event].push(makeHarnessHookEntry(makeCodexHookCommand(event)))
+    const desired = makeHarnessHookEntry(makeCodexHookCommand(event))
+    const arr = data.hooks[event] ?? []
+    if (!data.hooks[event]) {
+      data.hooks[event] = arr
+      changed = true
+    }
+    const owned = arr.map((entry, j) => (isHarnessHookEntry(entry) ? j : -1)).filter((j) => j !== -1)
+    let keep = owned.find((j) => isIdenticalHarnessEntry(event, arr[j], desired))
+    if (keep === undefined) {
+      if (owned.length > 0) {
+        keep = owned[0]
+        arr[keep] = desired
+      } else {
+        arr.push(desired)
+        keep = arr.length - 1
+      }
+      changed = true
+    }
+    const extras = owned.filter((j) => j !== keep)
+    if (extras.length > 0) {
+      data.hooks[event] = arr.filter((_, j) => !extras.includes(j))
+      changed = true
+    }
   }
 
-  writeHooksFile(path, data)
+  if (changed) writeHooksFile(path, data)
 }
 
 export function uninstallHooks(): void {
@@ -188,7 +282,6 @@ export function stripHooksFromWorktree(worktreePath: string): boolean {
 
 export function sessionFileExists(_cwd: string, sessionId: string): boolean {
   try {
-    const sessionsDir = join(homedir(), '.codex', 'sessions')
     const walkDir = (dir: string): boolean => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         if (entry.isDirectory()) {
@@ -199,7 +292,7 @@ export function sessionFileExists(_cwd: string, sessionId: string): boolean {
       }
       return false
     }
-    return walkDir(sessionsDir)
+    return walkDir(sessionsDir())
   } catch {
     return false
   }
@@ -207,7 +300,6 @@ export function sessionFileExists(_cwd: string, sessionId: string): boolean {
 
 export function latestSessionId(_cwd: string): string | null {
   try {
-    const sessionsDir = join(homedir(), '.codex', 'sessions')
     let bestId: string | null = null
     let bestMtime = -Infinity
     const walkDir = (dir: string): void => {
@@ -226,7 +318,7 @@ export function latestSessionId(_cwd: string): string | null {
         }
       }
     }
-    walkDir(sessionsDir)
+    walkDir(sessionsDir())
     return bestId
   } catch {
     return null

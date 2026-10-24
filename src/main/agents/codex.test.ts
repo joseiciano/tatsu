@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'child_process'
 
 const fsState: {
   files: Map<string, string>
   dirs: Map<string, { name: string; isDirectory: () => boolean }[]>
-} = { files: new Map(), dirs: new Map() }
+  writes: string[]
+  readdirs: string[]
+} = { files: new Map(), dirs: new Map(), writes: [], readdirs: [] }
 
 vi.mock('fs', () => ({
   existsSync: (p: string) => fsState.files.has(p),
@@ -13,6 +15,7 @@ vi.mock('fs', () => ({
     return fsState.files.get(p) as string
   },
   writeFileSync: (p: string, data: string) => {
+    fsState.writes.push(p)
     fsState.files.set(p, data)
   },
   appendFileSync: (p: string, data: string) => {
@@ -22,7 +25,11 @@ vi.mock('fs', () => ({
     fsState.files.delete(p)
   },
   mkdirSync: () => {},
-  readdirSync: (p: string) => fsState.dirs.get(p) ?? [],
+  readdirSync: (p: string) => {
+    fsState.readdirs.push(p)
+    return fsState.dirs.get(p) ?? []
+  },
+  realpathSync: (p: string) => p,
   statSync: () => ({ mtimeMs: 0 })
 }))
 
@@ -43,7 +50,10 @@ import {
   uninstallHooks,
   makeCodexHookCommand,
   buildSpawnArgs,
-  tomlValue
+  tomlValue,
+  codexHomeDir,
+  sessionFileExists,
+  latestSessionId
 } from './codex'
 import type { HarnessMcpServerSpec } from './index'
 
@@ -53,6 +63,13 @@ const SCRIPT_PATH = join(homedir(), '.codex', 'harness-hook.sh')
 beforeEach(() => {
   fsState.files.clear()
   fsState.dirs.clear()
+  fsState.writes.length = 0
+  fsState.readdirs.length = 0
+  vi.stubEnv('CODEX_HOME', '')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('codex hook install / dedup', () => {
@@ -220,33 +237,241 @@ describe('codex hook script', () => {
   })
 })
 
-describe('codex_hooks feature flag', () => {
+describe('installHooks positions (TEST-001)', () => {
+  type Entry = { matcher?: string; hooks: Record<string, unknown>[] }
+  const U: Entry = { hooks: [{ type: 'command', command: 'echo user', timeout: 10 }] }
+  const desired = (event: string): Entry => ({
+    hooks: [{ type: 'command', command: makeCodexHookCommand(event), timeout: 5 }]
+  })
+  const fullInstall = (): Record<string, Entry[]> =>
+    Object.fromEntries(hookEvents.map((e) => [e, [desired(e)]]))
+  const seed = (hooks: Record<string, Entry[]>) => {
+    fsState.files.set(HOOKS_PATH, JSON.stringify({ hooks }))
+  }
+  const readHooks = (): Record<string, Entry[]> =>
+    JSON.parse(fsState.files.get(HOOKS_PATH) as string).hooks
+
+  it('(a) a user hook pushed after Tatsu stays behind it and the next install does not rewrite hooks.json', () => {
+    installHooks()
+    const data = JSON.parse(fsState.files.get(HOOKS_PATH) as string)
+    data.hooks.Stop.push(U)
+    fsState.files.set(HOOKS_PATH, JSON.stringify(data, null, 2))
+    fsState.writes.length = 0
+
+    installHooks()
+
+    const stop = readHooks().Stop
+    expect(stop[0]).toEqual(desired('Stop'))
+    expect(stop[1]).toEqual(U)
+    expect(fsState.writes).not.toContain(HOOKS_PATH)
+  })
+
+  it('(b) a third-party hook ahead of Tatsu leaves the file byte-identical and unwritten', () => {
+    const hooks = fullInstall()
+    hooks.Stop = [U, desired('Stop')]
+    seed(hooks)
+    const before = fsState.files.get(HOOKS_PATH)
+
+    installHooks()
+
+    expect(fsState.files.get(HOOKS_PATH)).toBe(before)
+    expect(fsState.writes).not.toContain(HOOKS_PATH)
+  })
+
+  it('(c) a stale Tatsu entry is replaced in place, keeping the user hook at its index', () => {
+    seed({
+      Stop: [
+        { hooks: [{ type: 'command', command: makeCodexHookCommand('Stop'), timeout: 10 }] },
+        U
+      ]
+    })
+
+    installHooks()
+
+    expect(readHooks().Stop).toEqual([desired('Stop'), U])
+  })
+
+  it('(d) a legacy inline bash -c entry is replaced in place', () => {
+    seed({
+      Stop: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: "bash -c 'd=/tmp/harness-status; printf Stop >> \"$d/$h.ndjson\"'"
+            }
+          ]
+        },
+        U
+      ]
+    })
+
+    installHooks()
+
+    expect(readHooks().Stop).toEqual([desired('Stop'), U])
+  })
+
+  it('(e) duplicates collapse to the first Tatsu entry, user hook keeps its relative order', () => {
+    seed({ ...fullInstall(), Stop: [desired('Stop'), U, desired('Stop')] })
+
+    installHooks()
+
+    expect(readHooks().Stop).toEqual([desired('Stop'), U])
+  })
+
+  it('(f) an entry differing only by async: false counts as identical and is not rewritten', () => {
+    const hooks = fullInstall()
+    hooks.Stop = [
+      { hooks: [{ type: 'command', command: makeCodexHookCommand('Stop'), timeout: 5, async: false }] }
+    ]
+    seed(hooks)
+    const before = fsState.files.get(HOOKS_PATH)
+
+    installHooks()
+
+    expect(fsState.files.get(HOOKS_PATH)).toBe(before)
+    expect(fsState.writes).not.toContain(HOOKS_PATH)
+  })
+
+  it.each([
+    {
+      name: 'statusMessage on Stop',
+      event: 'Stop',
+      entry: (): Entry => ({
+        hooks: [
+          { type: 'command', command: makeCodexHookCommand('Stop'), timeout: 5, statusMessage: 'x' }
+        ]
+      })
+    },
+    {
+      name: "matcher '*' on PreToolUse",
+      event: 'PreToolUse',
+      entry: (): Entry => ({ matcher: '*', ...desired('PreToolUse') })
+    }
+  ])('(g) $name is replaced in place', ({ event, entry }) => {
+    seed({ ...fullInstall(), [event]: [entry(), U] })
+
+    installHooks()
+
+    expect(readHooks()[event]).toEqual([desired(event), U])
+  })
+
+  it('(h) an unparseable hooks.json is not overwritten, and the script is still written', () => {
+    fsState.files.set(HOOKS_PATH, '{not json')
+
+    expect(() => installHooks()).not.toThrow()
+
+    expect(fsState.files.get(HOOKS_PATH)).toBe('{not json')
+    expect(fsState.writes).not.toContain(HOOKS_PATH)
+    expect(fsState.files.get(SCRIPT_PATH)).toContain('#!/bin/bash')
+  })
+
+  it('(j) an up-to-date install writes neither hooks.json nor the script', () => {
+    installHooks()
+    fsState.writes.length = 0
+
+    installHooks()
+
+    expect(fsState.writes).not.toContain(HOOKS_PATH)
+    expect(fsState.writes).not.toContain(SCRIPT_PATH)
+  })
+})
+
+describe('codex hooks feature flag (TEST-002)', () => {
   const CONFIG_PATH = join(homedir(), '.codex', 'config.toml')
 
-  it('inserts the flag under an existing [features] table, not at EOF', () => {
+  it('(a) inserts hooks = true directly under an existing [features] table', () => {
     fsState.files.set(
       CONFIG_PATH,
       'model = "o3"\n\n[features]\nweb_search = true\n\n[mcp_servers.foo]\ncommand = "foo"\n'
     )
     installHooks()
     expect(fsState.files.get(CONFIG_PATH)).toBe(
-      'model = "o3"\n\n[features]\ncodex_hooks = true\nweb_search = true\n\n[mcp_servers.foo]\ncommand = "foo"\n'
+      'model = "o3"\n\n[features]\nhooks = true\nweb_search = true\n\n[mcp_servers.foo]\ncommand = "foo"\n'
     )
   })
 
-  it('appends a [features] table when none exists', () => {
+  it('(b) appends a [features] table when none exists', () => {
     fsState.files.set(CONFIG_PATH, 'model = "o3"')
     installHooks()
-    expect(fsState.files.get(CONFIG_PATH)).toBe(
-      'model = "o3"\n\n[features]\ncodex_hooks = true\n'
-    )
+    expect(fsState.files.get(CONFIG_PATH)).toBe('model = "o3"\n\n[features]\nhooks = true\n')
   })
 
-  it('leaves the file alone when the flag is already set', () => {
-    const content = '[features]\ncodex_hooks = false\n'
+  it.each([
+    { name: '(c) legacy codex_hooks = false', content: '[features]\ncodex_hooks = false\n' },
+    { name: '(d) hooks = false', content: '[features]\nhooks = false\n' },
+    { name: '(e) dotted features.hooks at top level', content: 'model = "o3"\nfeatures.hooks = true\n' },
+    { name: '(g) unparseable TOML', content: '[features' }
+  ])('$name: leaves config.toml alone', ({ content }) => {
     fsState.files.set(CONFIG_PATH, content)
-    installHooks()
+
+    expect(() => installHooks()).not.toThrow()
+
     expect(fsState.files.get(CONFIG_PATH)).toBe(content)
+    expect(fsState.writes).not.toContain(CONFIG_PATH)
+  })
+
+  it('(f) a hooks.state table and a codex_hooks comment do not count as the flag', () => {
+    const content =
+      '# codex_hooks\n[hooks.state."/h/.codex/hooks.json:stop:0:0"]\ntrusted_hash = "sha256:x"\n'
+    fsState.files.set(CONFIG_PATH, content)
+
+    installHooks()
+
+    expect(fsState.files.get(CONFIG_PATH)).toBe(content + '\n[features]\nhooks = true\n')
+  })
+
+  it('(h) a missing config.toml is created with the flag', () => {
+    installHooks()
+    expect(fsState.files.get(CONFIG_PATH)).toBe('\n[features]\nhooks = true\n')
+  })
+})
+
+describe('CODEX_HOME (TEST-014)', () => {
+  const H = '/codex-home'
+  const HOME_CODEX = join(homedir(), '.codex')
+
+  it('(a) codexHomeDir() falls back to ~/.codex when CODEX_HOME is empty and follows it when set', () => {
+    expect(codexHomeDir()).toBe(HOME_CODEX)
+    vi.stubEnv('CODEX_HOME', H)
+    expect(codexHomeDir()).toBe(H)
+  })
+
+  it('(b) installHooks() writes hooks.json and the script under CODEX_HOME and nothing under ~/.codex', () => {
+    vi.stubEnv('CODEX_HOME', H)
+
+    installHooks()
+
+    expect(fsState.files.get(join(H, 'harness-hook.sh'))).toContain('#!/bin/bash')
+    const data = JSON.parse(fsState.files.get(join(H, 'hooks.json')) as string)
+    for (const event of hookEvents) {
+      expect(data.hooks[event][0].hooks[0].command).toBe(`bash '${H}/harness-hook.sh' ${event}`)
+    }
+    expect(fsState.writes.filter((p) => p.startsWith(HOME_CODEX))).toEqual([])
+  })
+
+  it('(c) the feature flag goes to CODEX_HOME/config.toml', () => {
+    vi.stubEnv('CODEX_HOME', H)
+
+    installHooks()
+
+    expect(fsState.files.get(join(H, 'config.toml'))).toBe('\n[features]\nhooks = true\n')
+    expect(fsState.files.has(join(HOME_CODEX, 'config.toml'))).toBe(false)
+  })
+
+  it('(d) sessionFileExists and latestSessionId read CODEX_HOME/sessions', () => {
+    vi.stubEnv('CODEX_HOME', H)
+    const id = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'
+    const sessions = join(H, 'sessions')
+    fsState.dirs.set(sessions, [{ name: '2026', isDirectory: () => true }])
+    fsState.dirs.set(join(sessions, '2026'), [
+      { name: `rollout-2026-10-24T10-00-00-${id}.jsonl`, isDirectory: () => false }
+    ])
+
+    expect(sessionFileExists('/wt', id)).toBe(true)
+    expect(latestSessionId('/wt')).toBe(id)
+    expect(fsState.readdirs).toContain(sessions)
+    expect(fsState.readdirs).not.toContain(join(HOME_CODEX, 'sessions'))
   })
 })
 
