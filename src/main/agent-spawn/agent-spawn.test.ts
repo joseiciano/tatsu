@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
 import {
   agentSessionName,
@@ -11,6 +11,7 @@ import {
 import type { AgentSpawnConfig, AgentSpawnerDeps } from '.'
 import type { AgentKind, AgentModule, AgentSpawnOpts, HarnessMcpServerSpec } from '../agents'
 import * as opencode from '../agents/opencode'
+import { log } from '../debug'
 import type { Worktree } from '../../shared/state/worktrees'
 import { initialTerminals } from '../../shared/state/terminals'
 import type { PaneLeaf, PaneNode, TerminalSession, TerminalsState } from '../../shared/state/terminals'
@@ -153,6 +154,7 @@ describe('AgentSpawner.buildAgentCommand', () => {
     expect(buildSpawnArgs).toHaveBeenCalledTimes(1)
     expect(buildSpawnArgs.mock.calls[0][0]).toMatchInlineSnapshot(`
       {
+        "bashAllow": [],
         "command": "claude-beta",
         "cwd": "/r/repo",
         "initialPrompt": "do it",
@@ -169,6 +171,7 @@ describe('AgentSpawner.buildAgentCommand', () => {
           },
         },
         "model": "opus",
+        "permissionLevel": undefined,
         "sessionId": "sess-1",
         "sessionName": "repo/main",
         "systemPrompt": "SYS
@@ -658,5 +661,102 @@ describe('parseSpawnSpec (TEST-012b)', () => {
   it('round-trips a valid shell spec', () => {
     const spec = { kind: 'shell', terminalId: 's1', cwd: '/wt', command: 'npm test' }
     expect(parseSpawnSpec(spec)).toEqual(spec)
+  })
+})
+
+describe('permission level plumbing (TEST-008)', () => {
+  beforeEach(() => {
+    vi.mocked(log).mockClear()
+  })
+
+  const logLines = () => vi.mocked(log).mock.calls.map((c) => c.join(' '))
+
+  it('spawnAgentTerminal carries the level and the sanitized bashAllow into the agent opts', () => {
+    const { spawner, buildSpawnArgs } = build()
+
+    spawner.spawnAgentTerminal({
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      permissionLevel: 'edit',
+      bashAllow: ['npm test', 'bad,entry']
+    })
+
+    expect(buildSpawnArgs.mock.calls[0][0]).toMatchObject({ permissionLevel: 'edit', bashAllow: ['npm test'] })
+  })
+
+  it('logs the count of dropped bashAllow entries, not the entries', () => {
+    const { spawner } = build()
+
+    spawner.spawnAgentTerminal({
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      permissionLevel: 'edit',
+      bashAllow: ['npm test', 'bad,entry']
+    })
+
+    expect(log).toHaveBeenCalledWith('agent-spawn', expect.stringContaining('dropped 1'))
+    expect(logLines().some((l) => l.includes('bad,entry'))).toBe(false)
+  })
+
+  it.each([
+    { name: 'a requested level', permissionLevel: 'edit' as const, expected: 'perm=edit' },
+    { name: 'no level', permissionLevel: undefined, expected: 'perm=default' }
+  ])('the spawn log line reports $name', ({ permissionLevel, expected }) => {
+    const { spawner } = build()
+
+    spawner.spawnAgentTerminal({ terminalId: 't1', cwd: '/wt', agentKind: 'claude', permissionLevel })
+
+    const spawnLine = logLines().find((l) => l.includes('spawned id=t1'))
+    expect(spawnLine).toContain(expected)
+  })
+})
+
+describe('clients cannot set a permission level (TEST-009)', () => {
+  it('createOrAttach ignores a permissionLevel smuggled onto the spec', () => {
+    const { spawner, buildSpawnArgs } = build()
+
+    spawner.createOrAttach(
+      { kind: 'agent', terminalId: 't1', cwd: '/wt', agentKind: 'claude', permissionLevel: 'full' } as any,
+      'c1'
+    )
+
+    expect(buildSpawnArgs).toHaveBeenCalledTimes(1)
+    expect(buildSpawnArgs.mock.calls[0][0].permissionLevel).toBeUndefined()
+  })
+
+  it('buildAgentCommand with the legacy handler field list applies no level', () => {
+    const { spawner, buildSpawnArgs } = build()
+
+    spawner.buildAgentCommand({
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      sessionId: 's',
+      initialPrompt: 'go',
+      teleportSessionId: 'tele',
+      sessionName: 'repo/main',
+      modelOverride: 'opus'
+    })
+
+    expect(buildSpawnArgs.mock.calls[0][0].permissionLevel).toBeUndefined()
+  })
+
+  it('attach wins: a running PTY is not respawned for a request with a different level', () => {
+    const { spawner, buildSpawnArgs, createCalls } = build()
+    spawner.spawnAgentTerminal({ terminalId: 't1', cwd: '/wt', agentKind: 'claude', permissionLevel: 'read-only' })
+    buildSpawnArgs.mockClear()
+
+    const outcome = spawner.spawnAgentTerminal({
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      permissionLevel: 'full'
+    })
+
+    expect(outcome).toBe('attached')
+    expect(buildSpawnArgs).not.toHaveBeenCalled()
+    expect(createCalls).toHaveLength(1)
   })
 })

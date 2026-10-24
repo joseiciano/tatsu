@@ -1,4 +1,5 @@
 import type { AgentKind } from '../../shared/state/terminals'
+import type { PermissionLevel } from '../../shared/permission-level'
 import * as claude from './claude'
 import * as codex from './codex'
 import * as opencode from './opencode'
@@ -24,6 +25,8 @@ export interface AgentSpawnOpts {
   model?: string | null
   systemPrompt?: string
   tuiFullscreen?: boolean
+  permissionLevel?: PermissionLevel
+  bashAllow?: string[]
 }
 
 export interface AgentModule {

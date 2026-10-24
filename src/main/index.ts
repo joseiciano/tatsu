@@ -2304,7 +2304,17 @@ function registerIpcHandlers(): void {
       initialPrompt?: string; teleportSessionId?: string;
       sessionName?: string;
       modelOverride?: string
-    }): string => agentSpawner.buildAgentCommand({ ...opts, agentKind: toAgentKind(agentKind) })
+    }): string =>
+      agentSpawner.buildAgentCommand({
+        terminalId: opts.terminalId,
+        cwd: opts.cwd,
+        sessionId: opts.sessionId,
+        initialPrompt: opts.initialPrompt,
+        teleportSessionId: opts.teleportSessionId,
+        sessionName: opts.sessionName,
+        modelOverride: opts.modelOverride,
+        agentKind: toAgentKind(agentKind)
+      })
   )
 
   // Settings: GitHub token

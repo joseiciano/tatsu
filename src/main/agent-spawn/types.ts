@@ -1,4 +1,5 @@
 import type { AgentKind } from '../../shared/state/terminals'
+import type { PermissionLevel } from '../../shared/permission-level'
 import type {
   SpawnOutcome,
   TerminalAttachResult,
@@ -21,6 +22,8 @@ export interface AgentSpawnRequest {
   modelOverride?: string
   cols?: number
   rows?: number
+  permissionLevel?: PermissionLevel
+  bashAllow?: string[]
 }
 
 export interface ShellSpawnRequest {

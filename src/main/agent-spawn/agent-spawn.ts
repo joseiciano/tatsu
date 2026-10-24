@@ -6,6 +6,7 @@ import type {
   TerminalCreateResult,
   TerminalSpawnSpec
 } from '../../shared/terminal-spawn-types'
+import { sanitizeBashAllow } from '../../shared/permission-level'
 import { assertNeverAgentKind, toAgentKind } from '../agent-kind'
 import type { AgentModule, AgentSpawnOpts } from '../agents'
 import { getAgent as defaultGetAgent } from '../agents'
@@ -141,6 +142,12 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
       model = assertNeverAgentKind(kind)
     }
 
+    const bashAllow = sanitizeBashAllow(req.bashAllow)
+    const dropped = (req.bashAllow?.length ?? 0) - bashAllow.length
+    if (dropped > 0) log('agent-spawn', `dropped ${dropped} bashAllow entries id=${req.terminalId}`)
+    if (req.permissionLevel && kind === 'pi') {
+      log('agent-spawn', 'permissionLevel not supported for pi; spawning with defaults')
+    }
     const opts: AgentSpawnOpts = {
       command,
       cwd: req.cwd,
@@ -152,7 +159,9 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
       mcpServer,
       model,
       systemPrompt,
-      tuiFullscreen
+      tuiFullscreen,
+      permissionLevel: req.permissionLevel,
+      bashAllow
     }
     return { agent, kind, opts }
   }
@@ -178,10 +187,14 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     clientId: string | undefined,
     reqCols: number | undefined,
     reqRows: number | undefined,
+    perm: string,
     create: (cols: number, rows: number) => boolean
   ): SpawnOutcome {
     const finish = (outcome: SpawnOutcome, cols: number, rows: number): SpawnOutcome => {
-      log('agent-spawn', `${outcome} id=${terminalId} kind=${kind} cols=${cols} rows=${rows} client=${clientId ?? 'main'}`)
+      log(
+        'agent-spawn',
+        `${outcome} id=${terminalId} kind=${kind} cols=${cols} rows=${rows} client=${clientId ?? 'main'} perm=${perm}`
+      )
       return outcome
     }
     const cols = positive(reqCols, DEFAULT_SPAWN_COLS)
@@ -205,14 +218,14 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
   }
 
   function spawnAgentTerminal(req: AgentSpawnRequest, clientId?: string): SpawnOutcome {
-    return spawn(req.terminalId, req.agentKind, clientId, req.cols, req.rows, (cols, rows) => {
+    return spawn(req.terminalId, req.agentKind, clientId, req.cols, req.rows, req.permissionLevel ?? 'default', (cols, rows) => {
       const launch = buildAgentLaunch(req)
       return deps.pty.create(req.terminalId, req.cwd, '', ['-ilc', launch.command], launch.env, false, cols, rows)
     })
   }
 
   function spawnShellTerminal(req: ShellSpawnRequest, clientId?: string): SpawnOutcome {
-    return spawn(req.terminalId, 'shell', clientId, req.cols, req.rows, (cols, rows) =>
+    return spawn(req.terminalId, 'shell', clientId, req.cols, req.rows, 'default', (cols, rows) =>
       deps.pty.create(
         req.terminalId,
         req.cwd,
@@ -242,8 +255,25 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
   ): TerminalCreateResult {
     const outcome =
       spec.kind === 'agent'
-        ? spawnAgentTerminal({ ...spec, cols, rows }, clientId)
-        : spawnShellTerminal({ ...spec, cols, rows }, clientId)
+        ? spawnAgentTerminal(
+            {
+              terminalId: spec.terminalId,
+              cwd: spec.cwd,
+              agentKind: spec.agentKind,
+              sessionId: spec.sessionId,
+              initialPrompt: spec.initialPrompt,
+              teleportSessionId: spec.teleportSessionId,
+              sessionName: spec.sessionName,
+              modelOverride: spec.modelOverride,
+              cols,
+              rows
+            },
+            clientId
+          )
+        : spawnShellTerminal(
+            { terminalId: spec.terminalId, cwd: spec.cwd, command: spec.command, cols, rows },
+            clientId
+          )
     return { outcome, history: outcome === 'attached' ? deps.pty.getHistory(spec.terminalId) : '' }
   }
 
