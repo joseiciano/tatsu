@@ -62,6 +62,8 @@ export interface TemplateRenderResult {
   errors: TemplateRenderError[]
 }
 
+const BODY_ONLY = { frontmatter: false }
+
 const KIND_ORDER: Record<HarnessTemplateKind, number> = { agent: 0, skill: 1, command: 2 }
 const HARNESS_ORDER: Record<ManagedHarnessKind, number> = { claude: 0, codex: 1, opencode: 2 }
 const MARKER_VALUE = /^(agent|skill|command)\/(.+)$/
@@ -88,7 +90,7 @@ export function templateFragmentNames(
   for (const block of Object.values(template.harnesses)) {
     if (block) for (const name of block.fragments ?? []) names.add(name)
   }
-  for (const name of inlineFragmentNames(template.body)) names.add(name)
+  for (const name of inlineFragmentNames(template.body, BODY_ONLY)) names.add(name)
   return [...names].sort(lexicalCompare)
 }
 
@@ -185,7 +187,7 @@ function renderForHarness(
     return { error: { ...base, code: 'invalid-frontmatter', message: `The frontmatter cannot be written: ${reason}` } }
   }
 
-  const inline = expandInlineFragments(template.body, fragments)
+  const inline = expandInlineFragments(template.body, fragments, BODY_ONLY)
   if (inline.errors.length > 0) {
     const unknown = inline.errors.filter((error) => error.code === 'unknown-fragment')
     const code = unknown.length === inline.errors.length ? 'unknown-fragment' : 'inline-fragment'

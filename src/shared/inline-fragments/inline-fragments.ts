@@ -27,6 +27,12 @@ export interface InlineFragmentExpansion {
   errors: InlineFragmentError[]
 }
 
+export interface InlineFragmentOptions {
+  /** False for text that never has frontmatter, such as a template body,
+   *  so a leading `---` rule is read as body. Defaults to true. */
+  frontmatter?: boolean
+}
+
 export type InlineFragmentResolution = 'overwrite' | 'detach' | 'keep-edit'
 
 export interface InlineFragmentResolutionResult {
@@ -85,12 +91,12 @@ function frontmatterEnd(lines: string[]): number {
   return close === -1 ? 0 : close + 1
 }
 
-function scan(content: string): Scan {
+function scan(content: string, options: InlineFragmentOptions = {}): Scan {
   const bom = content.startsWith('\uFEFF') ? '\uFEFF' : ''
   const lines = normalizeNewlines(content.slice(bom.length)).split('\n')
   const tokens: Token[] = []
   const errors: InlineFragmentError[] = []
-  const bodyStart = frontmatterEnd(lines)
+  const bodyStart = options.frontmatter === false ? 0 : frontmatterEnd(lines)
   for (let i = 0; i < bodyStart; i += 1) tokens.push({ type: 'line', text: lines[i] })
 
   let fence: string | null = null
@@ -178,15 +184,15 @@ function join(bom: string, lines: string[]): string {
 
 function containsInlineFragments(content: string): boolean {
   if (!mentionsInlineFragments(content)) return false
-  const { tokens, errors } = scan(content)
+  const { tokens, errors } = scan(content, { frontmatter: false })
   return errors.length > 0 || tokens.some((token) => token.type !== 'line')
 }
 
 /** Lists the fragments a file names through placeholders or markers. */
-export function inlineFragmentNames(content: string): string[] {
+export function inlineFragmentNames(content: string, options: InlineFragmentOptions = {}): string[] {
   if (!mentionsInlineFragments(content)) return []
   const names = new Set<string>()
-  for (const token of scan(content).tokens) {
+  for (const token of scan(content, options).tokens) {
     if (token.type !== 'line') names.add(token.name)
   }
   return [...names].sort()
@@ -198,10 +204,11 @@ export function inlineFragmentNames(content: string): string[] {
  *  in `edited`. Frontmatter and fenced code blocks are never touched. */
 export function expandInlineFragments(
   content: string,
-  fragments: ReadonlyMap<string, string>
+  fragments: ReadonlyMap<string, string>,
+  options: InlineFragmentOptions = {}
 ): InlineFragmentExpansion {
   if (!mentionsInlineFragments(content)) return { content, fragments: [], edited: [], errors: [] }
-  const { bom, tokens, errors } = scan(content)
+  const { bom, tokens, errors } = scan(content, options)
   const names = new Set<string>()
   const edited = new Set<string>()
   const output: string[] = []

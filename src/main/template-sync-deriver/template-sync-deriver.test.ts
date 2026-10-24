@@ -204,6 +204,26 @@ describe('TemplateSyncDeriver', () => {
     expect(store.state.templateSyncNotice?.scopes).toEqual(['opencode:agents'])
   })
 
+  it('rescans scopes of a template that uses a changed fragment only through a body placeholder', () => {
+    const { store, service, flush } = setup()
+    const inlineUser = template('inline-user', {
+      kind: 'command',
+      body: 'Intro\n{{fragment:tone}}\n',
+      harnesses: { opencode: { frontmatter: {} } }
+    })
+    const fenced = template('fenced', { kind: 'skill', body: '```\n{{fragment:tone}}\n```\n' })
+    store.emit({
+      type: 'harnessConfig/templatesLoaded',
+      payload: { templates: [inlineUser, fenced], errors: [], loadedAt: 1 }
+    })
+    flush()
+    service.planSync.mockClear()
+
+    store.emit({ type: 'harnessConfig/fragmentChanged', payload: { name: 'tone', content: 'x', relativePath: 'fragments/tone.md', hash: 'h' } })
+    flush()
+    expect(service.planSync.mock.calls.map(([scope]) => harnessConfigScopeKey(scope))).toEqual(['opencode:commands'])
+  })
+
   it('rescans a removed template’s scopes and clears the notice once everything is in sync', () => {
     const statuses: Record<string, HarnessConfigSyncStatus> = { 'claude:agents': 'config-only' }
     const { store, flush } = setup(statuses)
