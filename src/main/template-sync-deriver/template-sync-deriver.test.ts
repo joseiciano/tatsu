@@ -237,4 +237,77 @@ describe('TemplateSyncDeriver', () => {
     flush()
     expect(store.state.templateSyncNotice).toBeNull()
   })
+
+  describe('stored files with inline fragments', () => {
+    const tone = { name: 'tone', content: 'x', relativePath: 'fragments/tone.md', hash: 'h' }
+    const keys = (calls: Array<[HarnessConfigScope]>): string[] => calls.map(([scope]) => harnessConfigScopeKey(scope)).sort()
+
+    function storedUsers(statuses: Record<string, HarnessConfigSyncStatus> = {}) {
+      const context = setup(statuses)
+      context.service.scopesForFragment.mockImplementation((name?: string): HarnessConfigScope[] => {
+        if (name === 'tone') return [{ agentKind: 'opencode', resourceType: 'skills' }]
+        if (name === undefined) {
+          return [
+            { agentKind: 'opencode', resourceType: 'skills' },
+            { agentKind: 'claude', resourceType: 'agents' }
+          ]
+        }
+        return []
+      })
+      return context
+    }
+
+    it.each([
+      ['fragmentChanged', { type: 'harnessConfig/fragmentChanged', payload: tone }],
+      ['fragmentRemoved', { type: 'harnessConfig/fragmentRemoved', payload: { name: 'tone' } }]
+    ] as const)('%s rescans the scopes of stored files using the fragment and lists the out-of-sync ones', (_label, event) => {
+      const { store, service, flush } = storedUsers({ 'opencode:skills': 'conflict' })
+      store.emit(event as HarnessConfigEvent)
+      flush()
+      expect(keys(service.planSync.mock.calls)).toEqual(['opencode:skills'])
+      expect(store.state.templateSyncNotice).toEqual({ scopes: ['opencode:skills'], changedAt: 500 })
+    })
+
+    it('does not rescan anything for a fragment no template or stored file uses', () => {
+      const { store, service, flush } = storedUsers()
+      store.emit({ type: 'harnessConfig/fragmentChanged', payload: { ...tone, name: 'style' } })
+      flush()
+      expect(service.planSync).not.toHaveBeenCalled()
+    })
+
+    it('fragmentsLoaded rescans every scope with a stored inline fragment without raising a notice', () => {
+      const { store, service, flush } = storedUsers({ 'opencode:skills': 'conflict' })
+      store.emit({ type: 'harnessConfig/fragmentsLoaded', payload: { fragments: [tone], errors: [], loadedAt: 1 } })
+      flush()
+      expect(keys(service.planSync.mock.calls)).toEqual(['claude:agents', 'opencode:skills'])
+      expect(store.state.templateSyncNotice).toBeNull()
+    })
+
+    it('compares a scope once when a template and a stored file both use the fragment', () => {
+      const { store, service, flush } = storedUsers()
+      const user = template('user', { kind: 'skill', fragments: ['tone'], harnesses: { opencode: { frontmatter: {} } } })
+      store.emit({ type: 'harnessConfig/templatesLoaded', payload: { templates: [user], errors: [], loadedAt: 1 } })
+      flush()
+      service.planSync.mockClear()
+
+      store.emit({ type: 'harnessConfig/fragmentChanged', payload: tone })
+      flush()
+      expect(keys(service.planSync.mock.calls)).toEqual(['opencode:skills'])
+    })
+
+    it('still rescans template scopes when listing stored-file scopes fails', () => {
+      const { store, service, flush } = storedUsers()
+      const user = template('user', { fragments: ['tone'] })
+      store.emit({ type: 'harnessConfig/templatesLoaded', payload: { templates: [user], errors: [], loadedAt: 1 } })
+      flush()
+      service.planSync.mockClear()
+      service.scopesForFragment.mockImplementation(() => {
+        throw new Error('desired state unreadable')
+      })
+
+      store.emit({ type: 'harnessConfig/fragmentChanged', payload: tone })
+      flush()
+      expect(keys(service.planSync.mock.calls)).toEqual(['claude:agents'])
+    })
+  })
 })
