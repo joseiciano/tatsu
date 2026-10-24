@@ -80,7 +80,8 @@ import {
   DEFAULT_PR_REVIEW_PROMPT
 } from '../shared/state/settings'
 import { watchStatusDir } from './hooks'
-import { getAgent, type AgentKind } from './agents'
+import { getAgent, codexHomeDir, codexHookTrustReport, codexHookEvents, type AgentKind } from './agents'
+import { startCodexHookTrustMonitor, summarizeCodexHookTrust } from './codex-hook-trust'
 import { AGENT_REGISTRY } from '../shared/agent-registry'
 import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
@@ -860,6 +861,8 @@ const autoSleepMonitor = new AutoSleepMonitor(store, panesFSM)
  *  supported agents. Called once when consent flips to 'accepted'. The
  *  hook command is env-gated on $HARNESS_TERMINAL_ID, so it no-ops for
  *  sessions started outside Harness. */
+let codexHookTrustMonitor: ReturnType<typeof startCodexHookTrustMonitor> | null = null
+
 function installHooksGlobally(): void {
   // installHooks() is idempotent — it strips any existing Harness entries
   // before writing a fresh one — so calling it unconditionally also
@@ -867,12 +870,14 @@ function installHooksGlobally(): void {
   for (const { kind } of AGENT_REGISTRY) {
     getAgent(kind).installHooks()
   }
+  void codexHookTrustMonitor?.refresh()
 }
 
 function uninstallHooksGlobally(): void {
   for (const { kind } of AGENT_REGISTRY) {
     getAgent(kind).uninstallHooks()
   }
+  void codexHookTrustMonitor?.refresh()
 }
 
 /** One-shot boot migration: for every non-main worktree that has a real
@@ -2451,6 +2456,11 @@ function registerIpcHandlers(): void {
     return true
   })
 
+  transport.onRequest('hooks:refreshCodexTrust', async () => {
+    await codexHookTrustMonitor?.refresh()
+    return true
+  })
+
   // shell:openExternal lives in desktop-shell.ts (Electron's `shell`
   // module). Web clients open links via `window.open` directly.
 
@@ -3217,6 +3227,11 @@ async function runBoot(): Promise<void> {
   // Seed hooks.consent from disk and migrate legacy per-worktree hooks
   // to a single user-scope install. Runs once per app install; migrated
   // state sticks via config.hooksMigratedToGlobal.
+  codexHookTrustMonitor = startCodexHookTrustMonitor({
+    watchDir: codexHomeDir(),
+    compute: async () => summarizeCodexHookTrust(await codexHookTrustReport(), codexHookEvents),
+    onChange: (summary) => store.dispatch({ type: 'hooks/codexTrustChanged', payload: summary })
+  })
   void (async () => {
     const agentModules = AGENT_REGISTRY.map((agent) => getAgent(agent.kind))
 
@@ -3535,6 +3550,7 @@ if (desktopShellMod && desktopEarly) {
       void worktreesFSM.refreshList()
     },
     onBeforeQuit: () => {
+      codexHookTrustMonitor?.stop()
       chatRuntimeRegistry.killAll()
     }
   })
@@ -3550,6 +3566,7 @@ if (desktopShellMod && desktopEarly) {
   // headless host can shut down cleanly. browserManager.destroyAll() is
   // still safe to call — the headless stub no-ops it.
   const shutdown = (): void => {
+    codexHookTrustMonitor?.stop()
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')

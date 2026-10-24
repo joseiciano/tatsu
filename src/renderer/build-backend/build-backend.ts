@@ -456,6 +456,7 @@ export function buildBackend(
       onLocalSignal('app:uiScaleReset', () => callback()),
 
     acceptHooks: () => req('hooks:accept'),
+    refreshCodexHookTrust: () => req('hooks:refreshCodexTrust'),
     declineHooks: () => req('hooks:decline'),
     uninstallHooks: () => req('hooks:uninstall'),
 

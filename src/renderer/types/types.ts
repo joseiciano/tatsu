@@ -511,6 +511,7 @@ export interface ElectronAPI {
   onUiScaleReset(callback: () => void): () => void
 
   acceptHooks(): Promise<boolean>
+  refreshCodexHookTrust(): Promise<boolean>
   declineHooks(): Promise<boolean>
   uninstallHooks(): Promise<boolean>
 

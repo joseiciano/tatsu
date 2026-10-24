@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect, useId } from 'react'
-import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { HARNESS_ISSUES_URL, HARNESS_RELEASES_URL, harnessReleaseNotesUrl } from '../../../shared/constants'
 import { useSettings, useUpdater, useRepoConfigs, useHooks } from '../../store'
@@ -469,7 +469,10 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
   const [scopeRepoRoot, setScopeRepoRoot] = useState<string | null>(null)
 
   // Hooks consent — drives the copy in the "Status hooks" card below.
-  const { consent: hooksConsent } = useHooks()
+  const { consent: hooksConsent, codexTrust } = useHooks()
+  useEffect(() => {
+    backend.refreshCodexHookTrust().catch(() => {})
+  }, [backend])
 
   // WS transport: wsInfo reflects the live server (null when off or not
   // yet started after enabling — the server only binds at app launch).
@@ -1763,6 +1766,12 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     entries that run <code className="bg-panel px-1 rounded">~/.codex/harness-hook.sh</code>.
                     You only need to do this once.
                   </p>
+                  {hooksConsent === 'accepted' && codexTrust?.state === 'needs-review' && (
+                    <p className="text-xs text-warning mb-3 flex items-center gap-1">
+                      <AlertTriangle className="icon-xs" />
+                      Codex hooks need review: run <code className="bg-panel px-1 rounded">/hooks</code>
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     {hooksConsent === 'accepted' ? (
                       <>
