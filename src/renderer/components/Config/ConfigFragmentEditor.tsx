@@ -9,6 +9,7 @@ export function ConfigFragmentEditor({
   content,
   onContentChange,
   usedBy,
+  usedByFiles,
   dirty,
   busy,
   error,
@@ -40,11 +41,20 @@ export function ConfigFragmentEditor({
         {dirty && <span className="text-xs text-warning shrink-0">Unsaved</span>}
       </div>
       <div className="px-3 py-1.5 text-xs text-faint border-b border-border" data-testid="fragment-usage">
-        {usedBy.length === 0 ? (
-          'Not used by any template yet.'
+        {usedBy.length === 0 && usedByFiles.length === 0 ? (
+          'Not used by any template or file yet.'
         ) : (
           <>
-            Used by {usedBy.length} template{usedBy.length === 1 ? '' : 's'}: {usedBy.join(', ')}
+            {usedBy.length > 0 && (
+              <div>
+                Used by {usedBy.length} template{usedBy.length === 1 ? '' : 's'}: {usedBy.join(', ')}
+              </div>
+            )}
+            {usedByFiles.length > 0 && (
+              <div>
+                Used in {usedByFiles.length} file{usedByFiles.length === 1 ? '' : 's'}: {usedByFiles.join(', ')}
+              </div>
+            )}
           </>
         )}
       </div>

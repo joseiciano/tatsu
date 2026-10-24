@@ -1,6 +1,7 @@
 import type {
   HarnessConfigComparison,
   HarnessConfigFileRef,
+  HarnessConfigFragmentResolution,
   HarnessConfigResourceType,
   HarnessConfigScope,
   HarnessConfigScopeKey,
@@ -271,6 +272,27 @@ export interface ConfigSyncReviewSections {
   /** Stored entries hidden by template output at the same path (Step 20). */
   shadowed: ConfigSyncFileRow[]
   renderErrors: ConfigSyncRenderErrorRow[]
+  fragmentErrors: ConfigSyncFragmentErrorRow[]
+  fragmentEdits: ConfigSyncFragmentEditRow[]
+}
+
+/** A stored file whose fragment placeholders cannot expand. Its disk
+ *  copy, when there is one, is held instead of synced or deleted. */
+export interface ConfigSyncFragmentErrorRow {
+  key: string
+  label: string
+  relativePath: string
+  message: string
+  held: ConfigSyncFileRow | null
+}
+
+/** A stored file with hand-edited fragment sections to resolve. */
+export interface ConfigSyncFragmentEditRow {
+  key: string
+  id: string
+  label: string
+  relativePath: string
+  fragments: string[]
 }
 
 /** A template that failed to render, with its earlier disk output that
@@ -312,6 +334,7 @@ export interface ConfigSyncDialogProps {
   /** Template-built ids the user chose to detach on adopt (REQ-006). */
   detachIds: ReadonlySet<string>
   onDetachChange: (id: string, detach: boolean) => void
+  onResolveFragmentEdit: (id: string, fragment: string, resolution: HarnessConfigFragmentResolution) => void
   onSyncToDisk: () => void
   onAdoptFromDisk: () => void
   onCancel: () => void
@@ -435,6 +458,8 @@ export interface ConfigFragmentEditorProps {
   onContentChange: (content: string) => void
   /** `<kind>/<name>` of every template that uses this fragment. */
   usedBy: readonly string[]
+  /** `<harness> <path>` of every stored file that uses this fragment. */
+  usedByFiles: readonly string[]
   dirty: boolean
   busy: boolean
   error: string | null

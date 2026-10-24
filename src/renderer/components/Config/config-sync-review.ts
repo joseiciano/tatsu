@@ -3,6 +3,8 @@ import type {
   HarnessConfigChangedRef,
   HarnessConfigComparison,
   HarnessConfigFileRef,
+  HarnessConfigFragmentEditEntry,
+  HarnessConfigFragmentErrorEntry,
   HarnessConfigRenderErrorEntry,
   HarnessConfigSyncPlan
 } from '../../../shared/state/harness-config'
@@ -76,6 +78,12 @@ export function configSyncReviewKey(review: ReviewLike): string {
       message: entry.message,
       held: [...entry.held].sort(compareRefByPathThenId).map(serializeRef)
     }))
+  const fragmentErrors = [...(review.fragmentErrors ?? [])]
+    .sort((left, right) => compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id))
+    .map((entry) => ({ id: entry.id, message: entry.message, held: entry.held ? serializeRef(entry.held) : null }))
+  const fragmentEdits = [...(review.fragmentEdits ?? [])]
+    .sort((left, right) => compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id))
+    .map((entry) => ({ id: entry.id, fragments: [...entry.fragments].sort() }))
 
   return JSON.stringify({
     scope: review.scope,
@@ -84,7 +92,9 @@ export function configSyncReviewKey(review: ReviewLike): string {
     configOnly,
     changed,
     shadowed,
-    renderErrors
+    renderErrors,
+    fragmentErrors,
+    fragmentEdits
   })
 }
 
@@ -121,13 +131,17 @@ export function buildReviewSections(
   configOnly: readonly HarnessConfigFileRef[],
   changed: readonly HarnessConfigChangedRef[],
   shadowed: readonly HarnessConfigFileRef[] = [],
-  renderErrors: readonly HarnessConfigRenderErrorEntry[] = []
+  renderErrors: readonly HarnessConfigRenderErrorEntry[] = [],
+  fragmentErrors: readonly HarnessConfigFragmentErrorEntry[] = [],
+  fragmentEdits: readonly HarnessConfigFragmentEditEntry[] = []
 ): ConfigSyncReviewSections {
   const sortedDiskOnly = [...diskOnly].sort(compareRefByPathThenId)
   const sortedConfigOnly = [...configOnly].sort(compareRefByPathThenId)
   const sortedChanged = [...changed].sort(compareChangedPair)
   const sortedShadowed = [...shadowed].sort(compareRefByPathThenId)
   const sortedErrors = [...renderErrors].sort((left, right) => compareText(left.templateRef, right.templateRef))
+  const byPath = (left: { relativePath: string; id: string }, right: { relativePath: string; id: string }): number =>
+    compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id)
 
   return {
     diskOnly: sortedDiskOnly.map((ref) => toFileRow(ref, 'Disk')),
@@ -143,6 +157,20 @@ export function buildReviewSections(
       templateRef: entry.templateRef,
       message: entry.message,
       held: [...entry.held].sort(compareRefByPathThenId).map((ref) => toFileRow(ref, 'Disk'))
+    })),
+    fragmentErrors: [...fragmentErrors].sort(byPath).map((entry) => ({
+      key: `FragmentError:${entry.id}`,
+      label: entry.label,
+      relativePath: entry.relativePath,
+      message: entry.message,
+      held: entry.held ? toFileRow(entry.held, 'Disk') : null
+    })),
+    fragmentEdits: [...fragmentEdits].sort(byPath).map((entry) => ({
+      key: `FragmentEdit:${entry.id}`,
+      id: entry.id,
+      label: entry.label,
+      relativePath: entry.relativePath,
+      fragments: [...entry.fragments].sort()
     }))
   }
 }
@@ -167,7 +195,9 @@ export function toConfigSyncReview(review: ReviewLike): ConfigSyncReview {
       review.configOnly,
       review.changed,
       review.shadowed,
-      review.renderErrors
+      review.renderErrors,
+      review.fragmentErrors,
+      review.fragmentEdits
     ),
     reviewKey: configSyncReviewKey(review),
     timestampLabel: formatUpdatedAt(reviewTimestamp(review))

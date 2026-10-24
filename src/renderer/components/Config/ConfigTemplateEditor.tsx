@@ -116,7 +116,10 @@ function FragmentPicker({
           Add
         </button>
       </div>
-      <span className="text-xs text-faint">Fragments are added after the body, in this order.</span>
+      <span className="text-xs text-faint">
+        Fragments are added after the body, in this order. To place one inside the body, put{' '}
+        <code>{'{{fragment:name}}'}</code> on a line of its own.
+      </span>
     </div>
   )
 }

@@ -11,6 +11,7 @@ import {
   templateTargets,
   validateTemplateTargets
 } from '../harness-templates'
+import { expandInlineFragments, inlineFragmentNames } from '../inline-fragments'
 import { sha256Hex } from '../sha256'
 import type {
   HarnessFragment,
@@ -19,7 +20,7 @@ import type {
   ManagedHarnessKind
 } from '../state/harness-config'
 
-export const RENDERER_VERSION = 2
+export const RENDERER_VERSION = 3
 
 export const TEMPLATE_MARKER_KEY = 'tatsu-template'
 
@@ -42,6 +43,7 @@ export interface RenderedResource {
 
 export type TemplateRenderErrorCode =
   | 'unknown-fragment'
+  | 'inline-fragment'
   | 'invalid-target'
   | 'duplicate-output'
   | 'invalid-frontmatter'
@@ -60,6 +62,8 @@ export interface TemplateRenderResult {
   errors: TemplateRenderError[]
 }
 
+const BODY_ONLY = { frontmatter: false }
+
 const KIND_ORDER: Record<HarnessTemplateKind, number> = { agent: 0, skill: 1, command: 2 }
 const HARNESS_ORDER: Record<ManagedHarnessKind, number> = { claude: 0, codex: 1, opencode: 2 }
 const MARKER_VALUE = /^(agent|skill|command)\/(.+)$/
@@ -75,6 +79,19 @@ function normalizeNewlines(value: string): string {
 
 function section(value: string): string {
   return normalizeNewlines(value).replace(/^\n+/, '').replace(/\s+$/, '')
+}
+
+/** Every fragment a template uses: its list, each harness block's list,
+ *  and the placeholders in its body. */
+export function templateFragmentNames(
+  template: Pick<RenderableTemplate, 'fragments' | 'harnesses' | 'body'>
+): string[] {
+  const names = new Set(template.fragments)
+  for (const block of Object.values(template.harnesses)) {
+    if (block) for (const name of block.fragments ?? []) names.add(name)
+  }
+  for (const name of inlineFragmentNames(template.body, BODY_ONLY)) names.add(name)
+  return [...names].sort(lexicalCompare)
 }
 
 export function templateMarker(kind: HarnessTemplateKind, name: string): string {
@@ -170,7 +187,14 @@ function renderForHarness(
     return { error: { ...base, code: 'invalid-frontmatter', message: `The frontmatter cannot be written: ${reason}` } }
   }
 
-  const sections = [section(template.body), ...fragmentNames.map((name) => section(fragments.get(name)!))]
+  const inline = expandInlineFragments(template.body, fragments, BODY_ONLY)
+  if (inline.errors.length > 0) {
+    const unknown = inline.errors.filter((error) => error.code === 'unknown-fragment')
+    const code = unknown.length === inline.errors.length ? 'unknown-fragment' : 'inline-fragment'
+    return { error: { ...base, code, message: inline.errors.map((error) => error.message).join('. ') } }
+  }
+
+  const sections = [section(inline.content), ...fragmentNames.map((name) => section(fragments.get(name)!))]
   if (template.kind === 'skill') {
     for (const reference of template.references) {
       sections.push(`## ${reference.fileName}\n\n${section(reference.content)}`)

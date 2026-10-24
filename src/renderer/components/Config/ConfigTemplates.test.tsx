@@ -27,7 +27,8 @@ const { backendApi, storeState } = vi.hoisted(() => {
     saveHarnessTemplate: vi.fn(),
     deleteHarnessTemplate: vi.fn(),
     saveHarnessFragment: vi.fn(),
-    deleteHarnessFragment: vi.fn()
+    deleteHarnessFragment: vi.fn(),
+    harnessFragmentUsage: vi.fn(async () => ({ ok: true, value: { files: [] } }))
   }
   const storeState: { source: HarnessTemplateSourceState | null } = { source: null }
   return { backendApi, storeState }
@@ -201,7 +202,7 @@ describe('ConfigTemplates', () => {
     click(buttonByText('Save'))
     expect(confirmSpy).toHaveBeenCalledTimes(1)
     const message = String(confirmSpy.mock.calls[0][0])
-    expect(message).toContain('used by 2 templates')
+    expect(message).toContain('used in 2 places')
     expect(message).toContain('- skill/a')
     expect(message).toContain('- skill/b')
     expect(backendApi.saveHarnessFragment).not.toHaveBeenCalled()

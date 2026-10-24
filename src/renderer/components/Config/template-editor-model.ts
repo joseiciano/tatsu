@@ -6,7 +6,11 @@ import {
   templateNameError,
   validateTemplateTargets
 } from '../../../shared/harness-templates'
-import { renderTemplates, type RenderableTemplate } from '../../../shared/harness-template-render'
+import {
+  renderTemplates,
+  templateFragmentNames,
+  type RenderableTemplate
+} from '../../../shared/harness-template-render'
 import type {
   HarnessFragment,
   HarnessTemplate,
@@ -229,14 +233,8 @@ export function renderTemplatePreview(
   return { resource, errors }
 }
 
-/** Every stored template that pulls in `fragmentName`, at the top level or
- *  through a harness block override. */
+/** Every stored template that pulls in `fragmentName`, at the top level,
+ *  through a harness block override, or as a placeholder in its body. */
 export function fragmentUsage(templates: readonly HarnessTemplate[], fragmentName: string): HarnessTemplate[] {
-  return templates.filter((template) => {
-    if (template.fragments.includes(fragmentName)) return true
-    return TEMPLATE_HARNESSES.some((harness) => {
-      const block = template.harnesses[harness]
-      return !!block && !!block.fragments?.includes(fragmentName)
-    })
-  })
+  return templates.filter((template) => templateFragmentNames(template).includes(fragmentName))
 }

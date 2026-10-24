@@ -47,10 +47,12 @@ import type {
   HarnessConfigPrepareDeleteRequest,
   HarnessConfigPrepareUpdateRequest,
   HarnessConfigReadRequest,
+  HarnessConfigResolveFragmentEditRequest,
   HarnessConfigScopeRequest,
   HarnessConfigSetRootRequest,
   HarnessFragmentDeleteRequest,
   HarnessFragmentSaveRequest,
+  HarnessFragmentUsageRequest,
   HarnessTemplateDeleteRequest,
   HarnessTemplateImportApplyRequest,
   HarnessTemplateImportPreviewRequest,
@@ -629,7 +631,10 @@ export function buildBackend(
     previewHarnessTemplateImport: (request: HarnessTemplateImportPreviewRequest) =>
       req('harnessConfig:previewImport', request),
     applyHarnessTemplateImport: (request: HarnessTemplateImportApplyRequest) =>
-      req('harnessConfig:applyImport', request)
+      req('harnessConfig:applyImport', request),
+    resolveHarnessFragmentEdit: (request: HarnessConfigResolveFragmentEditRequest) =>
+      req('harnessConfig:resolveFragmentEdit', request),
+    harnessFragmentUsage: (request: HarnessFragmentUsageRequest) => req('harnessConfig:fragmentUsage', request)
   }
 
   return api as ElectronAPI

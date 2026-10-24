@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useBackend } from '../../backend'
 import { useHarnessFragment, useHarnessTemplate, useHarnessTemplateSource } from '../../store'
+import { getAgentInfo } from '../../../shared/agent-registry'
 import { TEMPLATE_HARNESSES, templateNameError } from '../../../shared/harness-templates'
 import type { HarnessTemplate, HarnessTemplateKind, ManagedHarnessKind } from '../../../shared/state/harness-config'
 import { ConfigTemplateList } from './ConfigTemplateList'
@@ -335,6 +336,27 @@ export function ConfigTemplates({
     return name ? fragmentUsage(source.templates, name).map((template) => templateRefOf(template.kind, template.name)) : []
   }, [editing, fragmentName, source.templates])
 
+  const editedFragmentName = editing?.type === 'fragment' && editing.mode === 'edit' ? editing.name : null
+  const [fileUsage, setFileUsage] = useState<{ name: string; files: readonly string[] } | null>(null)
+  useEffect(() => {
+    if (!editedFragmentName) return
+    let cancelled = false
+    void backend
+      .harnessFragmentUsage({ name: editedFragmentName })
+      .then((response) => {
+        if (cancelled || !response.ok) return
+        const files = response.value.files.map(
+          (file) => `${getAgentInfo(file.agentKind).displayName} ${file.relativePath}`
+        )
+        setFileUsage({ name: editedFragmentName, files })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [backend, editedFragmentName, current?.hash])
+  const usedByFiles = fileUsage && fileUsage.name === editedFragmentName ? fileUsage.files : []
+
   const handleSaveFragment = useCallback(async () => {
     if (!editing || editing.type !== 'fragment' || busy) return
     const name = editing.mode === 'edit' ? editing.name : fragmentName.trim()
@@ -344,7 +366,10 @@ export function ConfigTemplates({
       return
     }
     const existing = source.fragments.find((entry) => entry.name === name)
-    const users = fragmentUsage(source.templates, name).map((template) => templateRefOf(template.kind, template.name))
+    const users = [
+      ...fragmentUsage(source.templates, name).map((template) => templateRefOf(template.kind, template.name)),
+      ...usedByFiles
+    ]
 
     if (editing.mode === 'create' && existing) {
       if (!window.confirm(`Fragment ${name} already exists. Replace it with this one?\n\n${BACKUP_NOTE}`)) return
@@ -355,7 +380,7 @@ export function ConfigTemplates({
       const list = users.map((ref) => `- ${ref}`).join('\n')
       if (
         !window.confirm(
-          `Fragment ${name} is used by ${users.length} templates:\n${list}\n\nSaving changes the output of every one of them. Save?`
+          `Fragment ${name} is used in ${users.length} places:\n${list}\n\nSaving changes every one of them. Save?`
         )
       ) {
         return
@@ -382,7 +407,7 @@ export function ConfigTemplates({
       setAwaitingEcho(true)
       setNotice(
         users.length > 0
-          ? `Saved ${response.value.relativePath}. Sync each harness scope to write the templates that use it.`
+          ? `Saved ${response.value.relativePath}. Sync each harness scope to write the templates and files that use it.`
           : `Saved ${response.value.relativePath}.`
       )
     } catch (err) {
@@ -390,15 +415,18 @@ export function ConfigTemplates({
     } finally {
       if (mountedRef.current) setBusy(false)
     }
-  }, [editing, busy, fragmentName, fragmentDraft, source.fragments, source.templates, outsideChange, backend])
+  }, [editing, busy, fragmentName, fragmentDraft, source.fragments, source.templates, usedByFiles, outsideChange, backend])
 
   const handleDeleteFragment = useCallback(async () => {
     if (!editing || editing.type !== 'fragment' || editing.mode !== 'edit' || busy) return
     const name = editing.name
-    const users = fragmentUsage(source.templates, name).map((template) => templateRefOf(template.kind, template.name))
+    const users = [
+      ...fragmentUsage(source.templates, name).map((template) => templateRefOf(template.kind, template.name)),
+      ...usedByFiles
+    ]
     const warning =
       users.length > 0
-        ? `\n\nThese templates use it and will fail to render until you remove it from them:\n${users.map((ref) => `- ${ref}`).join('\n')}`
+        ? `\n\nThese templates and files use it and are left out of sync until you remove it from them:\n${users.map((ref) => `- ${ref}`).join('\n')}`
         : ''
     if (!window.confirm(`Delete fragment ${name}?${warning}\n\nTatsu backs up the file first.`)) return
     setBusy(true)
@@ -419,7 +447,7 @@ export function ConfigTemplates({
     } finally {
       if (mountedRef.current) setBusy(false)
     }
-  }, [editing, busy, source.templates, backend])
+  }, [editing, busy, source.templates, usedByFiles, backend])
 
   const handleResetFragment = useCallback(() => {
     if (currentFragment) loadFragment(currentFragment.name, currentFragment.content, currentFragment.hash)
@@ -484,6 +512,7 @@ export function ConfigTemplates({
         content={fragmentDraft}
         onContentChange={setFragmentDraft}
         usedBy={usedBy}
+        usedByFiles={usedByFiles}
         dirty={dirty}
         busy={busy}
         error={error}

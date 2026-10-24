@@ -145,6 +145,14 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
     scopesForRootKeys: vi.fn(() => [] as HarnessConfigScope[]),
     scopesForTemplates: vi.fn(() => [] as HarnessConfigScope[]),
     templateShadows: vi.fn(() => []),
+    scopesForFragment: vi.fn(() => [] as HarnessConfigScope[]),
+    filesUsingFragment: vi.fn(() => []),
+    resolveFragmentEdit: vi.fn(async (scope: HarnessConfigScope, id: string, fragment: string, resolution) => ({
+      scope,
+      id,
+      fragment,
+      resolution
+    })),
     ...overrides
   }
 }
@@ -1137,5 +1145,90 @@ describe('template import channels (Step 22)', () => {
     }
     expect(result.error.code).toBe('invalid-request')
     expect(readListing).not.toHaveBeenCalled()
+  })
+})
+
+describe('inline fragment channels', () => {
+  const AGENTS_SCOPE: HarnessConfigScope = { agentKind: 'claude', resourceType: 'agents' }
+  const RESOLVE = { scope: AGENTS_SCOPE, id: 'ref-1', fragment: 'tone', resolution: 'keep-edit', confirmed: true }
+
+  it('resolveFragmentEdit settles the edit and then publishes a fresh comparison for the scope', async () => {
+    const fresh = makeComparison({ scope: AGENTS_SCOPE, status: 'config-only' })
+    const { transport, store, service } = setup({ planSync: vi.fn(() => fresh) })
+    const result = (await transport.call('harnessConfig:resolveFragmentEdit', RESOLVE)) as { ok: boolean; value: unknown }
+
+    expect(result).toEqual({
+      ok: true,
+      value: { scope: AGENTS_SCOPE, id: 'ref-1', fragment: 'tone', resolution: 'keep-edit' }
+    })
+    expect(service.resolveFragmentEdit).toHaveBeenCalledWith(AGENTS_SCOPE, 'ref-1', 'tone', 'keep-edit')
+    expect(service.planSync).toHaveBeenCalledWith(AGENTS_SCOPE)
+    expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toEqual([
+      { type: 'harnessConfig/comparisonLoaded', payload: fresh }
+    ])
+    expect(store.eventsOfType('harnessConfig/syncApplied')).toEqual([])
+  })
+
+  it.each([
+    ['an unknown resolution', { ...RESOLVE, resolution: 'merge' }],
+    ['a missing resolution', { scope: AGENTS_SCOPE, id: 'ref-1', fragment: 'tone', confirmed: true }],
+    ['an empty fragment name', { ...RESOLVE, fragment: '' }],
+    ['an empty id', { ...RESOLVE, id: '' }],
+    ['an extra field', { ...RESOLVE, content: 'Be terse.' }],
+    ['an unmanaged scope', { ...RESOLVE, scope: { agentKind: 'pi', resourceType: 'agents' } }]
+  ])('resolveFragmentEdit rejects %s without calling the service', async (_label, payload) => {
+    const { transport, store, service } = setup()
+    const result = (await transport.call('harnessConfig:resolveFragmentEdit', payload)) as { ok: boolean; error: { code: string } }
+    expect(result.ok).toBe(false)
+    expect(result.error.code).toBe('invalid-request')
+    expect(service.resolveFragmentEdit).not.toHaveBeenCalled()
+    expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toEqual([])
+  })
+
+  it('resolveFragmentEdit requires an explicit confirmation', async () => {
+    const { transport, service } = setup()
+    const result = (await transport.call('harnessConfig:resolveFragmentEdit', { ...RESOLVE, confirmed: false })) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unconfirmed-plan' }) })
+    expect(service.resolveFragmentEdit).not.toHaveBeenCalled()
+  })
+
+  it('resolveFragmentEdit surfaces a service refusal and publishes no comparison', async () => {
+    const { transport, store } = setup({
+      resolveFragmentEdit: vi.fn(async () => {
+        throw new HarnessConfigError('stale-plan', 'No edited section of fragment "tone" remains in this file')
+      })
+    })
+    const result = await transport.call('harnessConfig:resolveFragmentEdit', RESOLVE)
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'stale-plan', message: 'No edited section of fragment "tone" remains in this file' }
+    })
+    expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toEqual([])
+  })
+
+  it('fragmentUsage returns the files using the named fragment', async () => {
+    const files = [
+      { id: 'ref-1', agentKind: 'claude' as const, resourceType: 'agents' as const, label: 'reviewer', relativePath: 'reviewer.md' }
+    ]
+    const filesUsingFragment = vi.fn((name: string) => (name === 'tone' ? files : []))
+    const { transport } = setup({ filesUsingFragment })
+    expect(await transport.call('harnessConfig:fragmentUsage', { name: 'tone' })).toEqual({ ok: true, value: { files } })
+    expect(await transport.call('harnessConfig:fragmentUsage', { name: 'style' })).toEqual({ ok: true, value: { files: [] } })
+  })
+
+  it.each([
+    ['an empty name', { name: '' }],
+    ['a non-string name', { name: 1 }],
+    ['an extra field', { name: 'tone', scope: SKILLS_SCOPE }],
+    ['a missing name', {}]
+  ])('fragmentUsage rejects %s', async (_label, payload) => {
+    const { transport, service } = setup()
+    const result = (await transport.call('harnessConfig:fragmentUsage', payload)) as { ok: boolean; error: { code: string } }
+    expect(result.ok).toBe(false)
+    expect(result.error.code).toBe('invalid-request')
+    expect(service.filesUsingFragment).not.toHaveBeenCalled()
   })
 })
