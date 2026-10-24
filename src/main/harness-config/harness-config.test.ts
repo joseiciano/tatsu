@@ -1518,7 +1518,24 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(draft.name).toBe('deploy-now')
     expect(draft.relativePath).toBe('deploy-now/SKILL.md')
     expect(draft.content).toBe(
-      '# deploy-now\n\nUse this skill when the user requests the `Deploy Now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
+      '---\nname: deploy-now\ndescription: Run the deploy-now command\n---\n\n# deploy-now\n\nUse this skill when the user requests the `Deploy Now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
+    )
+  })
+
+  it('generates a skill draft that carries the command description as front matter', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'commands', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots.commands, 'run-tests.md', '---\ndescription: Run the test suite\n---\n\nRun the tests.\n')
+    const source = fixture.service.scan(scope)[0]
+    const draft = fixture.service.prepareSkillFromCommand(scope, source.id) as AnyRecord
+    expect(draft.content).toBe(
+      '---\nname: run-tests\ndescription: Run the test suite\n---\n\n# run-tests\n\nUse this skill when the user requests the `run-tests` command behavior.\n\n<!-- Converted by Tatsu from opencode commands run-tests.md -->\n'
     )
   })
 
@@ -1603,7 +1620,7 @@ describe('sync/adopt direction and conversion preparation', () => {
     expect(first.name).toBe('frontend-review')
     expect(first.relativePath).toBe('frontend-review/SKILL.md')
     expect(first.content).toBe(
-      '# frontend-review\n\nUse this skill when the user requests the `review` command behavior.\n\n<!-- Converted by Tatsu from claude commands frontend/review.md -->\n'
+      '---\nname: frontend-review\ndescription: Run the frontend-review command\n---\n\n# frontend-review\n\nUse this skill when the user requests the `review` command behavior.\n\n<!-- Converted by Tatsu from claude commands frontend/review.md -->\n'
     )
     put(fixture.roots['claude-skills'], 'frontend-review/SKILL.md', first.content as string)
 
