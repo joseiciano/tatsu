@@ -150,10 +150,11 @@ This ticket adds the helper and its tests only. Consumers (Phase 2 runner pause,
 
 - GOAL-001: The Codex lookup in REQ-009 matches a real binary, or the ticket records why it couldn't be checked.
 
-- [ ] **TASK-001**: Reuse the Codex install from ticket 05 TASK-001 (the milestone's single install); do not install separately. If that install has not happened, use the fallback below. With `codex` (≥ 0.129.0) available:
+- [x] **TASK-001**: Reuse the Codex install from ticket 05 TASK-001 (the milestone's single install); do not install separately. If that install has not happened, use the fallback below. With `codex` (≥ 0.129.0) available:
   - In a scratch dir, create `main/` (`git init`, one commit) and `git -C main worktree add ../wt`. With `CODEX_HOME` pointing at a temp copy of `~/.codex` (never edit the real one), set `[projects."<real main>"] trust_level = "trusted"` and start `codex` in `wt/`; record whether it asks to trust the folder. Repeat with only the scratch dir's parent trusted (tests parent inheritance), and with `trust_level = "untrusted"` on `wt`.
   - Record results in the commit message. If behaviour differs from REQ-009, change REQ-009's implementation and tests to match and note it in the gap-8 closing line.
   - If Codex can't be run, implement REQ-009 as written and note "Codex rules from source, unverified" in the commit and the gap-8 line.
+  Result (2026-10-24): Codex is not installed on the dev machine (ticket 05 TASK-001 has not run). Fallback taken: REQ-009 is implemented as written from the `openai/codex` source read above; the rules table is "Codex rules from source, unverified" and is re-checked after ticket 06 Phase 0 (Task 21) once Codex is installed.
 
 ### Implementation Phase 2: Helper
 
