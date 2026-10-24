@@ -11,6 +11,7 @@ import {
 import type { AgentSpawnConfig, AgentSpawnerDeps } from '.'
 import type { AgentKind, AgentModule, AgentSpawnOpts, HarnessMcpServerSpec } from '../agents'
 import * as claude from '../agents/claude'
+import * as codex from '../agents/codex'
 import * as opencode from '../agents/opencode'
 import * as pi from '../agents/pi'
 import { log } from '../debug'
@@ -337,6 +338,16 @@ describe('AgentSpawner.buildAgentLaunch (TEST-012)', () => {
     expect(buildSpawnArgs.mock.calls[0][0].mcpServer).toEqual(SPEC)
   })
 
+  it('codex (real module): command carries the harness-control -c overrides, env is its vars plus HARNESS_MCP_CONFIG', () => {
+    const { spawner } = build({ realAgents: { codex: codex as unknown as AgentModule }, writeMcpConfig: MCP_PATH })
+
+    const { command, env } = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'codex' })
+
+    expect(command).toContain(`-c 'mcp_servers.harness-control.command=`)
+    expect(command).toContain(`-c 'mcp_servers.harness-control.args=["/r/b.js","--config","/c.json"]'`)
+    expect(env).toEqual({ WHO: 'codex', HARNESS_MCP_CONFIG: '/c.json' })
+  })
+
   it('pi: no MCP file, no HARNESS_MCP_CONFIG, no MCP opts', () => {
     const { spawner, buildSpawnArgs, writeMcpConfig } = build({ writeMcpConfig: MCP_PATH })
 
@@ -355,6 +366,17 @@ describe('AgentSpawner.buildAgentLaunch (TEST-012)', () => {
 
       expect(buildSpawnArgs.mock.calls[0][0].mcpServer).toBeNull()
       expect(env).toEqual({ WHO: 'claude' })
+    })
+
+    it('codex (real module): command has no overrides and env has no HARNESS_MCP_CONFIG', () => {
+      const { spawner } = build({
+        realAgents: { codex: codex as unknown as AgentModule },
+        writeMcpConfig: () => null
+      })
+
+      const launch = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'codex' })
+
+      expect(launch).toEqual({ command: 'codex', env: { WHO: 'codex' } })
     })
 
     it('opencode: env has neither OPENCODE_CONFIG_CONTENT nor HARNESS_MCP_CONFIG', () => {

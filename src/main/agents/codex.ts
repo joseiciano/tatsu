@@ -3,7 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { log } from '../debug'
 import { makeHookScript } from '../hooks'
-import type { AgentSpawnOpts } from './index'
+import type { AgentSpawnOpts, HarnessMcpServerSpec } from './index'
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
@@ -233,11 +233,29 @@ export function latestSessionId(_cwd: string): string | null {
   }
 }
 
+export function tomlValue(v: string | string[] | Record<string, string>): string {
+  if (typeof v === 'string') return JSON.stringify(v).replace(/\u007f/g, '\\u007f')
+  if (Array.isArray(v)) return `[${v.map(tomlValue).join(',')}]`
+  return `{${Object.entries(v)
+    .map(([k, val]) => `${/^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(k)}=${tomlValue(val)}`)
+    .join(',')}}`
+}
+
+export function codexMcpOverrides(server: HarnessMcpServerSpec): string {
+  const pairs = [
+    `mcp_servers.harness-control.command=${tomlValue(server.command)}`,
+    `mcp_servers.harness-control.args=${tomlValue(server.args)}`,
+    `mcp_servers.harness-control.env=${tomlValue(server.env)}`
+  ]
+  return pairs.map((p) => ` -c ${shellQuote(p)}`).join('')
+}
+
 export function buildSpawnArgs(opts: AgentSpawnOpts): string {
-  // Codex MCP is configured globally via ~/.codex/config.toml, not per-terminal
-  // flags. The mcpConfigPath is unused here but the MCP server was already
-  // registered by the prepareMcpForTerminal IPC call.
+  // Token stays in the 0600 per-terminal file; argv only carries its path.
   let cmd = opts.command
+  if (opts.mcpServer && !opts.command.includes('mcp_servers.harness-control')) {
+    cmd += codexMcpOverrides(opts.mcpServer)
+  }
   if (opts.model && !opts.command.includes('--model') && !opts.command.includes('-m ')) {
     cmd += ` --model ${shellQuote(opts.model)}`
   }
