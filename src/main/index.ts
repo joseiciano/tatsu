@@ -18,7 +18,8 @@ import { getOrCreateWsToken, rotateWsToken } from './ws-token'
 import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
-import { detectRuntime } from './paths'
+import { detectRuntime, isPackaged } from './paths'
+import { devPermissionOverride } from './dev-permission-override'
 import { fixPathFromLoginShell } from './path-fix'
 import { parseCliFlags, USAGE, type CliFlags } from './cli-args'
 import { PlaywrightBrowserManager } from './browser-manager-playwright'
@@ -770,7 +771,8 @@ const panesFSM = new PanesFSM(store, {
       sessionName: agentSessionName(wt, state.settings.nameClaudeSessions),
       modelOverride: tab.model,
       cols: size.cols,
-      rows: size.rows
+      rows: size.rows,
+      ...devPermissionOverride(detectRuntime() === 'electron' && !isPackaged(), process.env)
     })
   }
 })
