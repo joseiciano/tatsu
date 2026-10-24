@@ -1961,7 +1961,7 @@ describe('harness-config symlink-aware inventory', () => {
     const { fixture, claudeHome } = dotfilesFixture()
     const result = fixture.service.readFile(physicalId('claude', 'claudeAgents', 'reviewer.md')) as AnyRecord
     expect(result.content).toBe('reviewer')
-    expect(result.ref.absolutePath).toBe(join(claudeHome, 'agents', 'reviewer.md'))
+    expect((result.ref as FileRef).absolutePath).toBe(join(claudeHome, 'agents', 'reviewer.md'))
   })
 
   it('inventories symlinked skill folders and command files with linkedFrom set', () => {
@@ -2088,13 +2088,13 @@ describe('harness-config symlink-aware inventory', () => {
     const { fixture, claudeHome, build } = dotfilesFixture({ override: true })
     expect(fixture.service.scan(agents)[0].linkedFrom).toBeUndefined()
     const plan = fixture.service.prepareCreate(agents, 'new-agent', 'new')
-    expect(plan.resource.absolutePath).toBe(join(claudeHome, 'agents', 'new-agent.md'))
+    expect((plan.resource as FileRef).absolutePath).toBe(join(claudeHome, 'agents', 'new-agent.md'))
     const result = await fixture.service.applyPlan({ scope: agents, planId: plan.planId, confirmed: true })
     const written = join(build, 'agents', 'new-agent.md')
     expect(lstatSync(written).isFile()).toBe(true)
     expect(readFileSync(written, 'utf8')).toBe('new')
     expect(lstatSync(join(claudeHome, 'agents')).isSymbolicLink()).toBe(true)
-    expect(result.resultingRefs.map((ref: FileRef) => [ref.relativePath, ref.absolutePath, ref.linkedFrom])).toEqual([
+    expect((result.resultingRefs as FileRef[]).map((ref) => [ref.relativePath, ref.absolutePath, ref.linkedFrom])).toEqual([
       ['new-agent.md', join(claudeHome, 'agents', 'new-agent.md'), undefined],
       ['reviewer.md', join(claudeHome, 'agents', 'reviewer.md'), undefined]
     ])
