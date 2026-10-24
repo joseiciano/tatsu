@@ -580,6 +580,53 @@ describe('harness-config hashes, identities, aliases, and reads', () => {
       hash: hashBytes(Buffer.from('safe-changed'))
     })
   })
+
+  it('reads an OpenCode agent while a Claude skills root holds a skills-prefixed folder', async () => {
+    const fixture = makeFixture()
+    const claudeSkills = { agentKind: 'claude', resourceType: 'skills' }
+    const opencodeAgents = { agentKind: 'opencode', resourceType: 'agents' }
+    addResolver(fixture, claudeSkills, 'skills', /(?:^|\/)SKILL\.md$/)
+    addResolver(fixture, opencodeAgents, 'opencode-agents', /\.md$/)
+    put(fixture.roots.skills, 'skills-used/SKILL.md', 'skill')
+    put(fixture.roots['opencode-agents'], 'reviewer.md', 'agent')
+
+    const [agent] = fixture.service.scan(opencodeAgents)
+    const [skill] = fixture.service.scan(claudeSkills)
+    expect(await fixture.service.readFile(agent.id)).toMatchObject({ content: 'agent' })
+    expect(await fixture.service.readFile(skill.id)).toMatchObject({ content: 'skill' })
+  })
+
+  it('reads from a healthy scope when an earlier scope fails to scan, and reports that failure for unknown ids', async () => {
+    let unreadable = ''
+    const fixture = makeFixture({
+      fs: {
+        readFileSync: (path: string, ...rest: unknown[]) => {
+          if (path === unreadable) throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
+          return (readFileSync as (...args: unknown[]) => unknown)(path, ...rest)
+        }
+      }
+    })
+    const claudeSkills = { agentKind: 'claude', resourceType: 'skills' }
+    const opencodeAgents = { agentKind: 'opencode', resourceType: 'agents' }
+    addResolver(fixture, claudeSkills, 'skills', /(?:^|\/)SKILL\.md$/)
+    addResolver(fixture, opencodeAgents, 'opencode-agents', /\.md$/)
+    unreadable = put(fixture.roots.skills, 'locked/SKILL.md', 'locked')
+    put(fixture.roots['opencode-agents'], 'reviewer.md', 'agent')
+    const [agent] = fixture.service.scan(opencodeAgents)
+
+    expect(await fixture.service.readFile(agent.id)).toMatchObject({ content: 'agent' })
+    await rejectsCode(() => fixture.service.readFile('missing-id'), 'read-failed')
+  })
+
+  it('skips a walked entry with an unsafe name and still inventories the rest of the scope', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    writeFileSync(join(fixture.roots.agents, 'a\\b.md'), 'unsafe')
+    put(fixture.roots.agents, 'ok.md', 'ok')
+
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toEqual(['ok.md'])
+  })
 })
 
 describe('scoped comparison and non-mutating actionable plans', () => {
@@ -916,16 +963,40 @@ describe('confirmation, staleness, and path security', () => {
     expect(readdirSync(fixture.roots.agents)).toEqual(['target.md'])
   })
 
-  it('rejects persisted traversal and prefix-sibling paths rather than trusting config refs', async () => {
+  it('rejects persisted traversal paths rather than trusting config refs', async () => {
     const fixture = makeFixture({
       desired: [{ id: physicalId('claude', 'agents', '../outside.md'), agentKind: 'claude', resourceType: 'agents', relativePath: '../outside.md', content: 'x', hash: hashBytes('x'), updatedAt: NOW }]
     })
     const scope = { agentKind: 'claude', resourceType: 'agents' }
     addResolver(fixture, scope, 'agents', /\.md$/)
     await rejectsCode(() => fixture.service.planSync(scope), 'unsafe-path')
+  })
 
-    fixture.desired.resources = [{ id: physicalId('claude', 'agents', 'agents-sibling/evil.md'), agentKind: 'claude', resourceType: 'agents', relativePath: 'agents-sibling/evil.md', content: 'x', hash: hashBytes('x'), updatedAt: NOW }]
-    await rejectsCode(() => fixture.service.planSync(scope), 'unsafe-path')
+  it('treats a child folder named like the root plus a dash as managed content', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    put(fixture.roots.agents, 'agents-sibling/helper.md', 'child')
+    const [ref] = fixture.service.scan(scope)
+    expect(ref.relativePath).toBe('agents-sibling/helper.md')
+    expect(await fixture.service.readFile(ref.id)).toMatchObject({ content: 'child' })
+
+    fixture.desired.resources = [refToDesired(ref, 'child')]
+    expect(fixture.service.planSync(scope).status).toBe('synced')
+  })
+
+  it('treats a link into a real prefix-sibling folder as managed elsewhere and refuses to write through it', async () => {
+    const fixture = makeFixture({ fs: makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) }) })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const sibling = join(fixture.root, 'agents-backup')
+    const siblingFile = put(sibling, 'evil.md', 'sibling')
+    symlinkSync(sibling, join(fixture.roots.agents, 'backup'))
+
+    const ref = fixture.service.scan(scope).find((entry: FileRef) => entry.relativePath === 'backup/evil.md')!
+    expect(ref.linkedFrom).toBe(realpathSync.native(sibling))
+    await rejectsCode(() => fixture.service.prepareUpdate(scope, ref.id, 'overwrite'), 'linked-resource')
+    expect(readFileSync(siblingFile, 'utf8')).toBe('sibling')
   })
 
   it('rejects target and ancestor symlink escapes for direct mutations', async () => {

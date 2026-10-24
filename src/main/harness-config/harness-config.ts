@@ -413,11 +413,19 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof id !== 'string' || id.length === 0) {
         throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
       }
+      const desired = this.loadDesired()
+      let scopeError: HarnessConfigError | undefined
       for (const scope of this.availableScopes()) {
+        let entry: DiskEntry | undefined
         try {
-          const desired = this.loadDesired()
-          const entry = this.scanDisk(scope, desired).find((candidate) => candidate.ref.id === id)
-          if (!entry) continue
+          entry = this.scanDisk(scope, desired).find((candidate) => candidate.ref.id === id)
+        } catch (error) {
+          if (!(error instanceof HarnessConfigError)) throw error
+          if (error.code !== 'unsupported-scope') scopeError ??= error
+          continue
+        }
+        if (!entry) continue
+        try {
           const target = this.resolveCandidate(entry.descriptor, entry.ref.relativePath, true, 'read')
           let bytes: Buffer
           try {
@@ -437,7 +445,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           throw error
         }
       }
-      throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
+      throw scopeError ?? new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
     })
   }
 
@@ -585,7 +593,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
       const relativePath = descriptor.nameToRelativePath(name)
       this.assertDiscoverableDepth(descriptor, relativePath)
-      const validated = this.validateRelativePath(relativePath, descriptor, this.resolveRoot(descriptor))
+      const validated = this.validateRelativePath(relativePath, descriptor)
       if (this.linkedTargetFor(descriptor, validated)) this.rejectLinked()
       const target = this.resolveCandidate(descriptor, relativePath, false)
       const state = this.snapshot(scope)
@@ -944,7 +952,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return descriptor.pattern.test(relativePath)
   }
 
-  private validateRelativePath(value: string, descriptor: HarnessConfigResourceResolver, root?: string): string {
+  private validateRelativePath(value: string, descriptor: HarnessConfigResourceResolver): string {
     if (
       typeof value !== 'string' ||
       value.length === 0 ||
@@ -960,13 +968,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path is unsafe')
     }
-    // Reject sibling-prefix confusion: a first segment named "<root-basename>-…"
-    // (e.g. "agents-backup/", "agents-helper/" beside an "agents" root) is the shape
-    // of a sibling directory masquerading as managed content. TEST-006 requires
-    // rejecting prefix-sibling paths rather than trusting config-supplied refs.
-    if (root && segments[0].startsWith(`${basename(root)}-`)) {
-      throw new HarnessConfigError('unsafe-path', 'The harness resource path is unsafe')
-    }
     if (!this.descriptorMatches(descriptor, normalized)) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path is outside the managed entrypoint')
     }
@@ -980,7 +981,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     mode: ContainmentMode = 'write'
   ): { root: string; relativePath: string; absolutePath: string } {
     const root = this.resolveRoot(descriptor)
-    const relativePath = this.validateRelativePath(suppliedRelativePath, descriptor, root)
+    const relativePath = this.validateRelativePath(suppliedRelativePath, descriptor)
     const absolutePath = resolve(root, ...relativePath.split('/'))
     if (absolutePath !== root && !absolutePath.startsWith(root + sep)) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path escapes its known root')
@@ -1314,7 +1315,13 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const walked: WalkEntry[] = []
       this.walk(root, '', 0, descriptor, walked, new Set([root]))
       for (const { relativePath, linkedFrom } of walked) {
-        const target = this.resolveCandidate(descriptor, relativePath, true, 'read')
+        let target: { root: string; relativePath: string; absolutePath: string }
+        try {
+          target = this.resolveCandidate(descriptor, relativePath, true, 'read')
+        } catch (error) {
+          if (error instanceof HarnessConfigError && error.code === 'unsafe-path') continue
+          throw error
+        }
         let info: Stats
         try {
           info = this.fs.statSync(target.absolutePath)
@@ -1683,11 +1690,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       label: source.ref.label
     })
     const destinationRoot = this.resolveRoot(descriptor)
-    const destinationPath = this.validateRelativePath(
-      descriptor.nameToRelativePath(destinationName),
-      descriptor,
-      destinationRoot
-    )
+    const destinationPath = this.validateRelativePath(descriptor.nameToRelativePath(destinationName), descriptor)
     let existingTarget
     try {
       existingTarget = this.fs.lstatSync(resolve(destinationRoot, ...destinationPath.split('/')))
