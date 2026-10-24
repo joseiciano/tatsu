@@ -176,6 +176,12 @@ function join(bom: string, lines: string[]): string {
   return bom + lines.join('\n')
 }
 
+function containsInlineFragments(content: string): boolean {
+  if (!mentionsInlineFragments(content)) return false
+  const { tokens, errors } = scan(content)
+  return errors.length > 0 || tokens.some((token) => token.type !== 'line')
+}
+
 /** Lists the fragments a file names through placeholders or markers. */
 export function inlineFragmentNames(content: string): string[] {
   if (!mentionsInlineFragments(content)) return []
@@ -208,7 +214,7 @@ export function expandInlineFragments(
       errors.push({ code: 'unknown-fragment', name, line, message: `Unknown fragment "${name}" on line ${line}` })
       return null
     }
-    if (mentionsInlineFragments(value) && !nested.has(name)) {
+    if (containsInlineFragments(value) && !nested.has(name)) {
       nested.add(name)
       errors.push({
         code: 'nested-fragment',
