@@ -19,6 +19,7 @@ import type {
   JsonClaudeMessageBlock
 } from '../../shared/state/json-claude'
 import type { AgentKind } from '../../shared/state/terminals'
+import { cloneBreakdown, emptyBreakdown, type SessionUsage } from '../../shared/state/costs'
 import { RuntimeMissingError } from './runtime-path-resolver'
 import { ACP_AUTH_REQUIRED, AcpRequestError } from './acp-stdio-client'
 import {
@@ -107,6 +108,12 @@ interface AcpRuntimeSession {
    *  `model` select when the agent exposes one. */
   modes: Array<{ id: string; name: string }> | null
   configOptions: Array<{ id: string; currentValue?: unknown }> | null
+  /** The `model` config option's current value, kept in step with
+   *  `config_option_update` so cost records name the model in use. */
+  currentModel: string | null
+  /** Cumulative session cost in USD from `usage_update`; null until the
+   *  agent reports one (Codex sends none). */
+  sessionCost: number | null
   /** Set while `session/load` replays history as session/update
    *  notifications. `silent` drops the replay when the slice already holds
    *  the entries (same app run); otherwise user chunks are collected into
@@ -145,6 +152,26 @@ export function acpModeFor(
   const ids = new Set(modes.map((m) => m.id))
   const wanted = mode === 'plan' ? ['read-only', 'plan'] : ['agent', 'default', 'auto']
   return wanted.find((id) => ids.has(id))
+}
+
+/** Inverse of `acpModeFor` for `current_mode_update`. The agent's mode is
+ *  kept when it is what Tatsu's current mode maps to (so `acceptEdits` is
+ *  not demoted to `default` by the echo of its own `set_mode`); otherwise a
+ *  read-only-style mode means plan and anything else means default. */
+export function permissionModeForAcp(
+  modeId: string,
+  current: JsonClaudePermissionMode,
+  modes: Array<{ id: string; name: string }>
+): JsonClaudePermissionMode {
+  if (acpModeFor(current, modes) === modeId) return current
+  return modeId === 'read-only' || modeId === 'plan' ? 'plan' : 'default'
+}
+
+export function currentModelOf(
+  configOptions: Array<{ id: string; currentValue?: unknown }> | null
+): string | null {
+  const value = configOptions?.find((o) => o.id === 'model')?.currentValue
+  return typeof value === 'string' && value ? value : null
 }
 
 export function parseModes(raw: unknown): Array<{ id: string; name: string }> | null {
@@ -386,6 +413,10 @@ export class AcpStdioRuntime implements ChatRuntime {
   ): void {
     session.modes = parseModes(result?.modes)
     session.configOptions = parseConfigOptions(result?.configOptions)
+    session.currentModel = currentModelOf(session.configOptions)
+    // A cost reported during a `session/load` replay was filed before the
+    // session id and model were known; re-file it under the right key.
+    this._publishCost(sessionId, session)
     this._updateCapabilities(sessionId, session, {
       canSetPermissionMode: session.modes !== null && session.modes.length > 0
     })
@@ -444,6 +475,8 @@ export class AcpStdioRuntime implements ChatRuntime {
       capabilities: defaultAcpStdioCapabilities(),
       modes: null,
       configOptions: null,
+      currentModel: null,
+      sessionCost: null,
       replay: null
     }
   }
@@ -1002,12 +1035,27 @@ export class AcpStdioRuntime implements ChatRuntime {
     if (!update || typeof update !== 'object') return
 
     const su = update.sessionUpdate
-    // A silent replay (slice already holds the transcript) drops the
-    // history but still takes the agent's command/mode/config updates.
-    if (session.replay?.silent) {
-      if (su === 'available_commands_update') this._handleAvailableCommands(sessionId, session, update)
-      return
+    // Session metadata is independent of the transcript, so it is taken
+    // during a replay (silent or not) as well as live.
+    switch (su) {
+      case 'available_commands_update':
+        this._handleAvailableCommands(sessionId, session, update)
+        return
+      case 'current_mode_update':
+        this._handleCurrentMode(sessionId, session, update)
+        return
+      case 'config_option_update':
+        this._handleConfigOptions(sessionId, session, update)
+        return
+      case 'session_info_update':
+        this._handleSessionInfo(sessionId, update)
+        return
+      case 'usage_update':
+        this._handleUsage(sessionId, session, update)
+        return
     }
+    // A silent replay (slice already holds the transcript) drops the history.
+    if (session.replay?.silent) return
     if (session.replay && su === 'user_message_chunk') {
       if (session.replay.userText) {
         session.replay.userText += this._extractText(update.content)
@@ -1037,15 +1085,6 @@ export class AcpStdioRuntime implements ChatRuntime {
         break
       case 'plan':
         this._handlePlan(sessionId, session, update)
-        break
-      case 'available_commands_update':
-        this._handleAvailableCommands(sessionId, session, update)
-        break
-      case 'current_mode_update':
-      case 'config_option_update':
-      case 'session_info_update':
-      case 'usage_update':
-        // Not surfaced by the current jsonClaude slice — tolerate + ignore.
         break
       default:
         console.warn(`[acp-stdio] ${sessionId} unknown session/update variant: ${su}`)
@@ -1106,6 +1145,64 @@ export class AcpStdioRuntime implements ChatRuntime {
       payload: { sessionId, slashCommands: names }
     })
     this._updateCapabilities(sessionId, session, { hasSlashCommands: names.length > 0 })
+  }
+
+  private _handleSessionInfo(sessionId: string, update: any): void {
+    const title = typeof update.title === 'string' ? update.title.trim() : ''
+    if (!title) return
+    this.store.dispatch({ type: 'jsonClaude/sessionTitleChanged', payload: { sessionId, title } })
+  }
+
+  private _handleCurrentMode(sessionId: string, session: AcpRuntimeSession, update: any): void {
+    if (typeof update.currentModeId !== 'string' || !session.modes) return
+    const current =
+      this.store.getSnapshot().state.jsonClaude.sessions[sessionId]?.permissionMode ?? 'default'
+    const next = permissionModeForAcp(update.currentModeId, current, session.modes)
+    if (next === current) return
+    this.store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId, mode: next } })
+  }
+
+  private _handleConfigOptions(sessionId: string, session: AcpRuntimeSession, update: any): void {
+    const options = parseConfigOptions(update.configOptions)
+    if (!options) return
+    session.configOptions = options
+    const model = currentModelOf(options)
+    if (model === session.currentModel) return
+    session.currentModel = model
+    this._publishCost(sessionId, session)
+  }
+
+  /** `usage_update` carries the context window fill plus, for agents that
+   *  price their own calls (OpenCode), the cumulative session cost. Only
+   *  the cost is recorded: `used` is a window fill, not a token total. */
+  private _handleUsage(sessionId: string, session: AcpRuntimeSession, update: any): void {
+    const cost = update.cost
+    if (!cost || typeof cost.amount !== 'number' || !Number.isFinite(cost.amount)) return
+    if (typeof cost.currency === 'string' && cost.currency.toUpperCase() !== 'USD') return
+    if (session.sessionCost === cost.amount) return
+    session.sessionCost = cost.amount
+    this._publishCost(sessionId, session)
+  }
+
+  /** Mirror the agent-reported session cost into the costs slice as a
+   *  single-model tally with no token counts, so the Costs panel sums it
+   *  alongside Claude sessions. `transcriptPath` is a synthetic key because
+   *  the panel dedups sessions by it. */
+  private _publishCost(sessionId: string, session: AcpRuntimeSession): void {
+    if (session.sessionCost === null) return
+    const model = session.currentModel ?? this.agentKind
+    const usage: SessionUsage = {
+      sessionId,
+      transcriptPath: `acp:${this.agentKind}:${session.acpSessionId ?? sessionId}`,
+      byModel: {
+        [model]: { messages: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: session.sessionCost }
+      },
+      breakdown: cloneBreakdown(emptyBreakdown),
+      currentModel: session.currentModel,
+      updatedAt: Date.now()
+    }
+    this.store.dispatch({ type: 'costs/usageUpdated', payload: { terminalId: sessionId, usage } })
+    this._updateCapabilities(sessionId, session, { hasCostTracking: true })
   }
 
   /** ACP `plan` updates carry the same shape as Claude's TodoWrite input,

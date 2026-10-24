@@ -696,6 +696,57 @@ describe('PanesFSM.setTabAgentSessionId', () => {
   })
 })
 
+describe('PanesFSM.setTabLabel', () => {
+  it('sets the tab label, keeps a user rename, and persists the updated panes', () => {
+    const store = new Store()
+    const persisted: Record<string, PaneNode>[] = []
+    const fsm = new PanesFSM(store, {
+      persist: (panes) => persisted.push(panes),
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null
+    })
+    const wtPath = '/wt/set-label'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'chat-1', type: 'json-claude', label: 'Chat', customLabel: 'Mine', sessionId: 'chat-1', agentKind: 'opencode' }
+      ],
+      activeTabId: 'chat-1'
+    })
+
+    fsm.setTabLabel(wtPath, 'chat-1', 'Fix the parser')
+
+    const tab = (store.getSnapshot().state.terminals.panes[wtPath] as PaneLeaf).tabs[0]
+    expect(tab.label).toBe('Fix the parser')
+    expect(tab.customLabel).toBe('Mine')
+    const last = persisted.at(-1)?.[wtPath] as PaneLeaf | undefined
+    expect(last?.tabs[0].label).toBe('Fix the parser')
+  })
+
+  it('does not persist when the tab is unknown', () => {
+    const store = new Store()
+    const persist = vi.fn()
+    const fsm = new PanesFSM(store, {
+      persist,
+      getRepoRootForWorktree: () => undefined,
+      getLatestClaudeSessionId: async () => null
+    })
+    const wtPath = '/wt/set-label-missing'
+    seedLeaf(store, wtPath, {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [{ id: 'chat-1', type: 'json-claude', label: 'Chat', sessionId: 'chat-1', agentKind: 'opencode' }],
+      activeTabId: 'chat-1'
+    })
+
+    fsm.setTabLabel(wtPath, 'missing', 'Fix the parser')
+    fsm.setTabLabel('/wt/unknown', 'chat-1', 'Fix the parser')
+
+    expect(persist).not.toHaveBeenCalled()
+  })
+})
+
 describe('PanesFSM.ensureInitialized per-agent default tab type', () => {
   it('creates a json-claude tab for opencode when its default type is json', () => {
     const store = new Store()

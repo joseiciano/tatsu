@@ -231,3 +231,8 @@ export type TerminalsEvent =
       type: 'terminals/tabRenamed'
       payload: { worktreePath: string; tabId: string; label: string }
     }
+  | {
+      /** Replaces the auto-derived `label`; a user `customLabel` still wins. */
+      type: 'terminals/tabLabelChanged'
+      payload: { worktreePath: string; tabId: string; label: string }
+    }

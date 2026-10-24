@@ -914,6 +914,18 @@ store.subscribe((event) => {
   panesFSM.setTabAgentSessionId(hit.worktreePath, hit.tab.id, agentSessionId)
 })
 
+// ACP agents title their own sessions; mirror the title onto the tab label.
+// The renderer prefers a user rename (`customLabel`) over `label`.
+store.subscribe((event) => {
+  if (event.type !== 'jsonClaude/sessionTitleChanged') return
+  const { sessionId, title } = event.payload
+  const trimmed = title.trim()
+  if (!trimmed) return
+  const hit = findJsonClaudeTab(sessionId)
+  if (!hit || hit.tab.label === trimmed) return
+  panesFSM.setTabLabel(hit.worktreePath, hit.tab.id, trimmed)
+})
+
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
   getWorktreeSetupCmd: () => config.worktreeSetupCommand || '',

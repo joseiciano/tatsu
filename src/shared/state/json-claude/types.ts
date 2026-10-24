@@ -170,6 +170,10 @@ export interface JsonClaudeSession {
   /** ACP agents: the agent-assigned session id (OpenCode `ses_*`, Codex
    *  thread id). Set after `session/new`; reused for `session/load`. */
   agentSessionId?: string
+  /** ACP agents: the agent's own title for the session, from
+   *  `session_info_update`. Mirrored onto the tab label while the user
+   *  has not renamed the tab. */
+  title?: string
   state: JsonClaudeSessionState
   exitCode: number | null
   exitReason: string | null
@@ -290,6 +294,10 @@ export type JsonClaudeEvent =
   | {
       type: 'jsonClaude/agentSessionIdChanged'
       payload: { sessionId: string; agentSessionId: string }
+    }
+  | {
+      type: 'jsonClaude/sessionTitleChanged'
+      payload: { sessionId: string; title: string }
     }
   | {
       type: 'jsonClaude/sessionStateChanged'

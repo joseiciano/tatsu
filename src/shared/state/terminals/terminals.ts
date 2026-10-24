@@ -333,6 +333,27 @@ export function terminalsReducer(
       if (!mutated) return state
       return { ...state, panes: { ...state.panes, [worktreePath]: updated } }
     }
+    case 'terminals/tabLabelChanged': {
+      const { worktreePath, tabId } = event.payload
+      const label = event.payload.label.trim()
+      if (label === '') return state
+      const tree = state.panes[worktreePath]
+      if (!tree) return state
+      let mutated = false
+      const updated = mapLeaves(tree, (leaf) => {
+        const i = leaf.tabs.findIndex((t) => t.id === tabId)
+        if (i === -1) return leaf
+        const tab = leaf.tabs[i]
+        if (tab.label === label) return leaf
+        mutated = true
+        return {
+          ...leaf,
+          tabs: [...leaf.tabs.slice(0, i), { ...tab, label }, ...leaf.tabs.slice(i + 1)]
+        }
+      })
+      if (!mutated) return state
+      return { ...state, panes: { ...state.panes, [worktreePath]: updated } }
+    }
     case 'terminals/tabRenamed': {
       const { worktreePath, tabId, label } = event.payload
       const tree = state.panes[worktreePath]

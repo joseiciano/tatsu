@@ -751,6 +751,68 @@ describe('terminalsReducer', () => {
     expect(next).toBe(start)
   })
 
+  it('tabLabelChanged sets the trimmed label on the matching tab only and keeps customLabel', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        { id: 't1', type: 'json-claude', label: 'Chat', customLabel: 'Mine' },
+        { id: 't2', type: 'json-claude', label: 'Chat' }
+      ],
+      activeTabId: 't1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabLabelChanged',
+      payload: { worktreePath: '/wt/a', tabId: 't1', label: '  Fix the parser  ' }
+    })
+    const tabs = getLeaves(next.panes['/wt/a'])[0].tabs
+    expect(tabs[0].label).toBe('Fix the parser')
+    expect(tabs[0].customLabel).toBe('Mine')
+    expect(tabs[1]).toBe((tree as PaneLeaf).tabs[1])
+  })
+
+  it('tabLabelChanged keeps untouched leaves by reference in a split', () => {
+    const other = leaf('p2', ['t9'])
+    const tree: PaneNode = {
+      type: 'split',
+      id: 's1',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [leaf('p1', ['t1']), other]
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabLabelChanged',
+      payload: { worktreePath: '/wt/a', tabId: 't1', label: 'Titled' }
+    })
+    const [first, second] = getLeaves(next.panes['/wt/a'])
+    expect(first.tabs[0].label).toBe('Titled')
+    expect(second).toBe(other)
+  })
+
+  it('tabLabelChanged is a no-op for an unknown worktree or tab, an unchanged label, or a blank label', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 't1', type: 'json-claude', label: 'Chat' }],
+      activeTabId: 't1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const cases = [
+      { name: 'unknown worktree', worktreePath: '/wt/missing', tabId: 't1', label: 'X' },
+      { name: 'unknown tab', worktreePath: '/wt/a', tabId: 'missing', label: 'X' },
+      { name: 'unchanged label', worktreePath: '/wt/a', tabId: 't1', label: 'Chat' },
+      { name: 'unchanged after trim', worktreePath: '/wt/a', tabId: 't1', label: ' Chat ' },
+      { name: 'empty label', worktreePath: '/wt/a', tabId: 't1', label: '' },
+      { name: 'whitespace label', worktreePath: '/wt/a', tabId: 't1', label: '   ' }
+    ]
+    for (const c of cases) {
+      const { name, ...payload } = c
+      expect(apply(start, { type: 'terminals/tabLabelChanged', payload }), name).toBe(start)
+    }
+  })
+
   it('tabRenamed sets a customLabel on the matching tab', () => {
     const tree: PaneNode = {
       type: 'leaf',

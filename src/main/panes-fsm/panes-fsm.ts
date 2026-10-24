@@ -516,6 +516,20 @@ export class PanesFSM {
     this.opts.persist(this.buildPersistPayload())
   }
 
+  /** Replace a tab's auto-derived label (an ACP agent's session title).
+   *  Leaves any user rename (`customLabel`) in place. */
+  setTabLabel(wtPath: string, tabId: string, label: string): void {
+    const tree = this.getTree(wtPath)
+    if (!tree) return
+    const leaf = findLeafByTabId(tree, tabId)
+    if (!leaf) return
+    this.store.dispatch({
+      type: 'terminals/tabLabelChanged',
+      payload: { worktreePath: wtPath, tabId, label }
+    })
+    this.opts.persist(this.buildPersistPayload())
+  }
+
   renameTab(wtPath: string, tabId: string, label: string): void {
     const tree = this.getTree(wtPath)
     if (!tree) return

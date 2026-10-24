@@ -59,8 +59,12 @@ Done on branch `acp-support` (rebased on main, which added the Pi agent):
   (`agentSessionId` on tabs + slice, `session/load` replay, conversion
   carries the id both ways), permission mode via `session/set_mode`, model
   via `session/set_config_option`, `acceptEdits` auto-allows `edit` calls.
-- Phase 7 (partial) — `available_commands_update` → slash commands;
-  `plan` → the TodoWrite card.
+- Phase 7 — `available_commands_update` → slash commands; `plan` → the
+  TodoWrite card; `session_info_update` → tab label (a user rename still
+  wins); `current_mode_update` → the permission-mode chip;
+  `config_option_update` → the model in use; `usage_update` → the
+  session's cumulative USD cost in the costs slice (OpenCode; Codex
+  reports none). All four are also taken during a `session/load` replay.
 
 - Phase 8 (partial) — `settings.experimentalChatAgentsEnabled` (default
   off) gates every OpenCode/Codex chat entry point: default tab type,
@@ -68,9 +72,8 @@ Done on branch `acp-support` (rebased on main, which added the Pi agent):
   per-agent Interface toggles in Settings; the switch lives under
   Settings → Experimental → Chat agents.
 
-Not done — see Phases 7, 8:
+Not done — see Phase 8:
 
-- `session_info_update` → tab title; `usage_update` cost (see below).
 - A signed + notarized build has not yet run with the new layout
   (dispatch `build-mac.yml` from this branch, install the DMG, open a
   chat tab per agent with the flag on).
@@ -359,9 +362,9 @@ runtime). Required behavior for OpenCode and Codex:
 |---|---|
 | `available_commands_update` | Done: `jsonClaude/slashCommandsChanged` with the command names, `hasSlashCommands` capability; the renderer sends `/name args` as prompt text (verify each agent accepts prefixed text). |
 | `plan` | Done: entries become a synthetic `TodoWrite` tool_use block with an empty result, so the existing TodoWrite card renders them. |
-| `usage_update` | Open: OpenCode sends `cost.amount` in USD, Codex sends `usage: null`. `SessionUsage` wants per-model tokens; add a lighter "session cost only" path to the costs slice for agents that report a total, or keep `hasCostTracking: false`. |
-| `session_info_update` | Support: title → tab label when the user has not renamed the tab. |
-| `current_mode_update`, `config_option_update` | Support (see Model selection). |
+| `usage_update` | Done: `cost.amount` (USD only) becomes a `costs/usageUpdated` record keyed by the tab, as a single-model tally with no token counts and a synthetic `transcriptPath` (`acp:<agent>:<acpSessionId>`); `hasCostTracking` flips on with the first cost. Codex sends no cost, so nothing is recorded for it. `used`/`size` (context fill) are not recorded. |
+| `session_info_update` | Done: `jsonClaude/sessionTitleChanged` → `terminals/tabLabelChanged` on the tab; `customLabel` still wins in the renderer. |
+| `current_mode_update`, `config_option_update` | Done: the mode maps back through `permissionModeForAcp` (an echo of Tatsu's own `set_mode` is a no-op); the `model` option's current value names the model on the cost record. |
 | `fs/*`, `terminal/*` client methods | Keep advertising none. Agents fall back to their own fs/terminal. Revisit only if an agent refuses to run tools without them. |
 
 ## Non-goals
@@ -416,7 +419,7 @@ runtime). Required behavior for OpenCode and Codex:
 5. Open: run a signed + notarized build once and open a chat tab per
    agent (dispatch `build-mac.yml` from this branch).
 
-### Phase 7 — ACP updates: slash commands, plan, session title
+### Phase 7 — ACP updates: slash commands, plan, session title, mode, model, cost — done
 
 ### Phase 8 — Release gate and docs
 
@@ -427,10 +430,8 @@ runtime). Required behavior for OpenCode and Codex:
   convert/switch affordances.
 - Open: verify in a signed build, flip the default, delete the flag one
   release later.
-- Update `AGENTS.md`: chat tabs route through `ChatRuntimeRegistry` to
-  `ClaudeAcpRuntime` (SDK) or `AcpStdioRuntime` (OpenCode, Codex); list
-  `acp-stdio.ts`, `acp-stdio-client.ts`, `runtime-path-resolver.ts`;
-  note the pnpm/electron-builder optional-package rule and the smoke
+- Done: `AGENTS.md` documents the runtime routing, the chat-runtimes
+  files, the pnpm/electron-builder optional-package rule, and the smoke
   scripts.
 
 ## Test matrix

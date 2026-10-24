@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { AcpStdioRuntime, acpModeFor, defaultAcpStdioCapabilities, parseAuthMethods } from './acp-stdio'
+import {
+  AcpStdioRuntime,
+  acpModeFor,
+  currentModelOf,
+  defaultAcpStdioCapabilities,
+  parseAuthMethods,
+  permissionModeForAcp
+} from './acp-stdio'
 import { ACP_AUTH_REQUIRED, AcpRequestError } from './acp-stdio-client'
 import { RuntimeMissingError } from './runtime-path-resolver'
 import { Store } from '../store'
@@ -1256,6 +1263,44 @@ describe('acpModeFor', () => {
   }
 })
 
+describe('permissionModeForAcp', () => {
+  const CODEX = [
+    { id: 'read-only', name: 'Read Only' },
+    { id: 'agent', name: 'Agent' },
+    { id: 'agent-full-access', name: 'Agent (full access)' }
+  ]
+  const cases: Array<{ name: string; modeId: string; current: 'plan' | 'default' | 'acceptEdits'; modes: Array<{ id: string; name: string }>; expected: string }> = [
+    { name: 'acceptEdits survives the echo of its own agent mode', modeId: 'agent', current: 'acceptEdits', modes: CODEX, expected: 'acceptEdits' },
+    { name: 'acceptEdits becomes plan on read-only', modeId: 'read-only', current: 'acceptEdits', modes: CODEX, expected: 'plan' },
+    { name: 'plan survives the echo of read-only', modeId: 'read-only', current: 'plan', modes: CODEX, expected: 'plan' },
+    { name: 'plan becomes default on agent', modeId: 'agent', current: 'plan', modes: CODEX, expected: 'default' },
+    { name: 'default becomes plan on an agent plan mode', modeId: 'plan', current: 'default', modes: [{ id: 'plan', name: 'Plan' }, { id: 'build', name: 'Build' }], expected: 'plan' },
+    { name: 'acceptEdits becomes default on a mode it does not map to', modeId: 'agent-full-access', current: 'acceptEdits', modes: CODEX, expected: 'default' },
+    { name: 'plan becomes default on an unrecognised mode', modeId: 'build', current: 'plan', modes: [{ id: 'plan', name: 'Plan' }, { id: 'build', name: 'Build' }], expected: 'default' }
+  ]
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(permissionModeForAcp(c.modeId, c.current, c.modes)).toBe(c.expected)
+    })
+  }
+})
+
+describe('currentModelOf', () => {
+  const cases: Array<{ name: string; options: Array<{ id: string; currentValue?: unknown }> | null; expected: string | null }> = [
+    { name: 'reads the model option value', options: [{ id: 'effort', currentValue: 'low' }, { id: 'model', currentValue: 'gpt-5' }], expected: 'gpt-5' },
+    { name: 'null for no options', options: null, expected: null },
+    { name: 'null without a model option', options: [{ id: 'effort', currentValue: 'low' }], expected: null },
+    { name: 'null for an empty model value', options: [{ id: 'model', currentValue: '' }], expected: null },
+    { name: 'null for a non-string model value', options: [{ id: 'model', currentValue: 5 }], expected: null },
+    { name: 'null for a missing model value', options: [{ id: 'model' }], expected: null }
+  ]
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(currentModelOf(c.options)).toBe(c.expected)
+    })
+  }
+})
+
 describe('AcpStdioRuntime permission mode + model sync', () => {
   const CODEX_MODES = {
     availableModes: [
@@ -1497,6 +1542,215 @@ describe('AcpStdioRuntime session continuity (session/load)', () => {
     expect(fake.requests[3].params.sessionId).toBe('acp-sess-1')
     expect(slice(store).agentSessionId).toBe('acp-sess-1')
     expect(slice(store).state).toBe('running')
+  })
+})
+
+describe('AcpStdioRuntime session metadata updates', () => {
+  const CODEX_MODES = {
+    availableModes: [
+      { id: 'read-only', name: 'Read Only' },
+      { id: 'agent', name: 'Agent' },
+      { id: 'agent-full-access', name: 'Agent (full access)' }
+    ],
+    currentModeId: 'agent'
+  }
+  const LOADABLE = { protocolVersion: 1, agentCapabilities: { loadSession: true } }
+  const modelOption = (value: string) => [{ id: 'model', type: 'select', currentValue: value }]
+  const usd = (amount: unknown) => ({ sessionUpdate: 'usage_update', used: 1000, size: 200000, cost: { amount, currency: 'USD' } })
+
+  function usageOf(events: StateEvent[]): any[] {
+    return eventsOf(events, 'costs/usageUpdated').map((e: any) => e.payload)
+  }
+
+  async function started(newResult: any = { sessionId: 'acp-sess-1' }) {
+    const seeded = seed()
+    seeded.fake.newResult = newResult
+    seeded.runtime.send('s1', 'hi')
+    await tick()
+    return seeded
+  }
+
+  describe('session_info_update', () => {
+    it('dispatches the trimmed title for the tab session', async () => {
+      const { store, events, fake } = await started()
+      fake.pushUpdate({ sessionUpdate: 'session_info_update', title: '  Fix the parser  ' })
+      expect(eventsOf(events, 'jsonClaude/sessionTitleChanged').map((e: any) => e.payload)).toEqual([
+        { sessionId: 's1', title: 'Fix the parser' }
+      ])
+      expect(store.getSnapshot().state.jsonClaude.sessions['s1'].title).toBe('Fix the parser')
+    })
+
+    const blankCases = [
+      { name: 'an empty title', title: '' },
+      { name: 'a whitespace title', title: '   ' },
+      { name: 'a non-string title', title: 42 },
+      { name: 'no title', title: undefined }
+    ]
+    for (const c of blankCases) {
+      it(`dispatches nothing for ${c.name}`, async () => {
+        const { events, fake } = await started()
+        fake.pushUpdate({ sessionUpdate: 'session_info_update', title: c.title })
+        expect(eventsOf(events, 'jsonClaude/sessionTitleChanged')).toEqual([])
+      })
+    }
+  })
+
+  describe('current_mode_update', () => {
+    function modeChanges(events: StateEvent[]) {
+      return eventsOf(events, 'jsonClaude/permissionModeChanged').map((e: any) => e.payload)
+    }
+
+    it('moves the slice to plan when the agent switches itself to read-only', async () => {
+      const { store, events, fake } = await started({ sessionId: 'acp-sess-1', modes: CODEX_MODES })
+      fake.pushUpdate({ sessionUpdate: 'current_mode_update', currentModeId: 'read-only' })
+      expect(modeChanges(events)).toEqual([{ sessionId: 's1', mode: 'plan' }])
+      expect(store.getSnapshot().state.jsonClaude.sessions['s1'].permissionMode).toBe('plan')
+    })
+
+    it('moves the slice out of plan when the agent switches to agent', async () => {
+      const { store, events, fake, runtime } = seed()
+      store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId: 's1', mode: 'plan' } })
+      fake.newResult = { sessionId: 'acp-sess-1', modes: CODEX_MODES }
+      runtime.send('s1', 'hi')
+      await tick()
+      const before = modeChanges(events).length
+      fake.pushUpdate({ sessionUpdate: 'current_mode_update', currentModeId: 'agent' })
+      expect(modeChanges(events).slice(before)).toEqual([{ sessionId: 's1', mode: 'default' }])
+    })
+
+    it('dispatches nothing when the agent echoes the mode Tatsu set', async () => {
+      const { store, events, fake, runtime } = seed()
+      store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId: 's1', mode: 'plan' } })
+      fake.newResult = { sessionId: 'acp-sess-1', modes: CODEX_MODES }
+      runtime.send('s1', 'hi')
+      await tick()
+      const before = modeChanges(events).length
+      fake.pushUpdate({ sessionUpdate: 'current_mode_update', currentModeId: 'read-only' })
+      expect(modeChanges(events).slice(before)).toEqual([])
+    })
+
+    it('keeps acceptEdits when the agent echoes agent', async () => {
+      const { store, events, fake, runtime } = seed()
+      store.dispatch({ type: 'jsonClaude/permissionModeChanged', payload: { sessionId: 's1', mode: 'acceptEdits' } })
+      fake.newResult = { sessionId: 'acp-sess-1', modes: CODEX_MODES }
+      runtime.send('s1', 'hi')
+      await tick()
+      const before = modeChanges(events).length
+      fake.pushUpdate({ sessionUpdate: 'current_mode_update', currentModeId: 'agent' })
+      expect(modeChanges(events).slice(before)).toEqual([])
+      expect(store.getSnapshot().state.jsonClaude.sessions['s1'].permissionMode).toBe('acceptEdits')
+    })
+
+    it('dispatches nothing when the agent returned no modes at session/new', async () => {
+      const { events, fake } = await started()
+      fake.pushUpdate({ sessionUpdate: 'current_mode_update', currentModeId: 'read-only' })
+      expect(modeChanges(events)).toEqual([])
+    })
+  })
+
+  describe('usage_update', () => {
+    it('records the session cost under the current model and turns on cost tracking', async () => {
+      const { events, fake, runtime } = await started({ sessionId: 'acp-sess-1', configOptions: modelOption('gpt-5') })
+      fake.pushUpdate(usd(0.25))
+      const usage = usageOf(events)
+      expect(usage).toHaveLength(1)
+      expect(usage[0].terminalId).toBe('s1')
+      expect(usage[0].usage).toMatchObject({
+        sessionId: 's1',
+        transcriptPath: 'acp:opencode:acp-sess-1',
+        currentModel: 'gpt-5',
+        byModel: { 'gpt-5': { messages: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.25 } }
+      })
+      expect(Object.keys(usage[0].usage.byModel)).toEqual(['gpt-5'])
+      expect(runtime.getCapabilities('s1').hasCostTracking).toBe(true)
+    })
+
+    it('files the cost under the agent kind when the agent names no model', async () => {
+      const { events, fake } = await started()
+      fake.pushUpdate(usd(0.1))
+      const [{ usage }] = usageOf(events)
+      expect(usage.currentModel).toBeNull()
+      expect(Object.keys(usage.byModel)).toEqual(['opencode'])
+      expect(usage.byModel.opencode.cost).toBe(0.1)
+    })
+
+    it('replaces the cost with each larger cumulative amount and skips a repeat', async () => {
+      const { events, fake } = await started()
+      fake.pushUpdate(usd(0.1))
+      fake.pushUpdate(usd(0.1))
+      fake.pushUpdate(usd(0.35))
+      expect(usageOf(events).map((p) => p.usage.byModel.opencode.cost)).toEqual([0.1, 0.35])
+    })
+
+    const ignoredCases = [
+      { name: 'cost is null (Codex)', update: { sessionUpdate: 'usage_update', used: 10, size: 100, cost: null } },
+      { name: 'cost is absent', update: { sessionUpdate: 'usage_update', used: 10, size: 100 } },
+      { name: 'the currency is not USD', update: { sessionUpdate: 'usage_update', used: 10, size: 100, cost: { amount: 1, currency: 'EUR' } } },
+      { name: 'the amount is NaN', update: usd(Number.NaN) },
+      { name: 'the amount is infinite', update: usd(Number.POSITIVE_INFINITY) },
+      { name: 'the amount is a string', update: usd('0.5') }
+    ]
+    for (const c of ignoredCases) {
+      it(`records nothing when ${c.name}`, async () => {
+        const { events, fake, runtime } = await started()
+        fake.pushUpdate(c.update)
+        expect(usageOf(events)).toEqual([])
+        expect(runtime.getCapabilities('s1').hasCostTracking).toBe(false)
+      })
+    }
+  })
+
+  describe('config_option_update', () => {
+    it('re-files the reported cost under the newly selected model', async () => {
+      const { events, fake } = await started({ sessionId: 'acp-sess-1', configOptions: modelOption('gpt-5') })
+      fake.pushUpdate(usd(0.4))
+      fake.pushUpdate({ sessionUpdate: 'config_option_update', configOptions: modelOption('gpt-5-mini') })
+      const usage = usageOf(events)
+      expect(usage).toHaveLength(2)
+      expect(usage[1].usage.currentModel).toBe('gpt-5-mini')
+      expect(usage[1].usage.byModel).toEqual({
+        'gpt-5-mini': { messages: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.4 }
+      })
+    })
+
+    it('names the new model on costs reported after the switch', async () => {
+      const { events, fake } = await started({ sessionId: 'acp-sess-1', configOptions: modelOption('gpt-5') })
+      fake.pushUpdate({ sessionUpdate: 'config_option_update', configOptions: modelOption('gpt-5-mini') })
+      fake.pushUpdate(usd(0.2))
+      const [{ usage }] = usageOf(events)
+      expect(usage.currentModel).toBe('gpt-5-mini')
+      expect(Object.keys(usage.byModel)).toEqual(['gpt-5-mini'])
+    })
+
+    it('records nothing to costs before any cost was reported', async () => {
+      const { events, fake } = await started({ sessionId: 'acp-sess-1', configOptions: modelOption('gpt-5') })
+      fake.pushUpdate({ sessionUpdate: 'config_option_update', configOptions: modelOption('gpt-5-mini') })
+      expect(usageOf(events)).toEqual([])
+    })
+
+    it('records nothing when the model is unchanged', async () => {
+      const { events, fake } = await started({ sessionId: 'acp-sess-1', configOptions: modelOption('gpt-5') })
+      fake.pushUpdate(usd(0.4))
+      fake.pushUpdate({ sessionUpdate: 'config_option_update', configOptions: modelOption('gpt-5') })
+      expect(usageOf(events)).toHaveLength(1)
+    })
+  })
+
+  it('takes a session title pushed during a silent session/load replay', async () => {
+    const { store, events, fake, runtime } = seed({ agentSessionId: 'prev-acp', initResult: LOADABLE })
+    store.dispatch({
+      type: 'jsonClaude/entryAppended',
+      payload: { sessionId: 's1', entry: { entryId: 'prior', kind: 'user', text: 'prior', timestamp: 0 } }
+    })
+    fake.responders['session/load'] = () => {
+      fake.pushUpdate({ sessionUpdate: 'session_info_update', title: 'Earlier work' }, 'prev-acp')
+      return Promise.resolve({})
+    }
+    runtime.send('s1', 'continue')
+    await tick()
+    expect(eventsOf(events, 'jsonClaude/sessionTitleChanged').map((e: any) => e.payload)).toEqual([
+      { sessionId: 's1', title: 'Earlier work' }
+    ])
   })
 })
 

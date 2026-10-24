@@ -112,6 +112,44 @@ describe('jsonClaudeReducer', () => {
     ).toBe(state)
   })
 
+  it('sessionTitleChanged sets the title on a known session', () => {
+    const next = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/sessionTitleChanged',
+      payload: { sessionId: SID, title: 'Fix the parser' }
+    })
+    expect(next.sessions[SID].title).toBe('Fix the parser')
+    expect(next.sessions[SID].worktreePath).toBe(WT)
+  })
+
+  it('sessionTitleChanged returns the same state when unchanged or the session is unknown', () => {
+    const state = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/sessionTitleChanged',
+      payload: { sessionId: SID, title: 'Fix the parser' }
+    })
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/sessionTitleChanged',
+        payload: { sessionId: SID, title: 'Fix the parser' }
+      })
+    ).toBe(state)
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/sessionTitleChanged',
+        payload: { sessionId: 'unknown', title: 'Fix the parser' }
+      })
+    ).toBe(state)
+  })
+
+  it('sessionStarted preserves an existing title across re-attach', () => {
+    const titled = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/sessionTitleChanged',
+      payload: { sessionId: SID, title: 'Fix the parser' }
+    })
+    const next = seedSession(titled)
+    expect(next.sessions[SID].title).toBe('Fix the parser')
+    expect(next.sessions[SID].state).toBe('connecting')
+  })
+
   it('sessionStateChanged updates state + exit info', () => {
     let state = seedSession(initialJsonClaude)
     state = jsonClaudeReducer(state, {
