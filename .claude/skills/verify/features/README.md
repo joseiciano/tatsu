@@ -6,7 +6,7 @@ what end state proves it works. Journeys reuse `scripts/browser.mjs`.
 
 | Feature | File | Scripted journey |
 |---|---|---|
-| Config page inventory | [config-inventory.md](config-inventory.md) | `journeys/prefixed-skill-read.mjs` (proven: a `skills-used` Claude skill lists and opens, and an Opencode agent opens beside it), `journeys/linked-root-path.mjs` (proven: files in a symlinked Opencode agents folder and the symlinked `linked-skill` show at the configured path, save through to the link target, and keep the link) |
+| Config page inventory | [config-inventory.md](config-inventory.md) | `journeys/prefixed-skill-read.mjs` (proven: a `skills-used` Claude skill lists and opens, and an Opencode agent opens beside it), `journeys/linked-root-path.mjs` (proven: files in a symlinked Opencode agents folder and the symlinked `linked-skill` show at the configured path, save through to the link target, and keep the link), `journeys/linked-command-delete.mjs` (proven: deleting a linked command removes its target and the link, and the name can be created again as a regular file) |
 | Skill ↔ command conversion | [skill-command-conversion.md](skill-command-conversion.md) | `journeys/convert-skill-to-command.mjs`, `journeys/convert-command-to-skill.mjs` (proven: both directions for Opencode, Claude "already available" notice) |
 | Sync Tatsu config with disk | [config-sync.md](config-sync.md) | `journeys/config-sync-adopt.mjs`, `journeys/config-edit-and-sync.mjs` (proven: Adopt, editor Save, Sync to disk over an outside edit) |
 | Config folders in Settings | [config-folders-settings.md](config-folders-settings.md) | `journeys/config-folders.mjs` (proven: both entry points, relative-path rejection, override, reset) |

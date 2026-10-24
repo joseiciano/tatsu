@@ -9,7 +9,9 @@ import {
   renameSync,
   statSync,
   unlinkSync,
-  writeFileSync
+  writeFileSync,
+  readlinkSync,
+  symlinkSync
 } from 'fs'
 import type { Stats } from 'fs'
 import { homedir } from 'os'
@@ -273,6 +275,8 @@ type MutationOutcome = {
   applied: HarnessConfigAppliedOperation
   existed: boolean
   before?: Buffer
+  target: string
+  removedLink?: { path: string; linkTarget: string }
 }
 type ScopeRenderError = { templateRef: string; message: string }
 type StoredFragmentError = { resource: HarnessConfigDesiredResource; message: string }
@@ -323,7 +327,9 @@ const nodeFilesystem: HarnessConfigFilesystem = {
   unlinkSync,
   mkdirSync,
   existsSync,
-  realpathSync: (path) => realpathSync.native(path)
+  realpathSync: (path) => realpathSync.native(path),
+  readlinkSync: (path) => readlinkSync(path),
+  symlinkSync: (target, path) => symlinkSync(target, path)
 }
 
 function sha256(value: string | Buffer): string {
@@ -766,7 +772,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           await this.persistDirectMutation(scope, plan.direction, outcome)
         } catch (error) {
           try {
-            this.rollback(scope, outcome)
+            this.rollback(outcome)
           } catch (rollbackError) {
             this.logFailure('rollback', rollbackError)
           }
@@ -1124,6 +1130,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         }
         throw new HarnessConfigError('unsafe-path', 'Unable to verify the harness resource path', { cause: error })
       }
+      if (info.isSymbolicLink() && !mustExist && this.isBrokenLink(cursor)) return base
       let real: string
       try {
         real = resolve(this.fs.realpathSync(cursor))
@@ -1187,7 +1194,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       try {
         const info = this.fs.lstatSync(existing)
         if (info.isSymbolicLink()) {
-          throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the harness resource path unsafe')
+          if (mustExist || !this.isBrokenLink(existing)) {
+            throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the harness resource path unsafe')
+          }
+          existing = dirname(existing)
+          continue
         }
         break
       } catch (error) {
@@ -2003,6 +2014,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const existed = this.fs.existsSync(target.absolutePath)
     let before: Buffer | undefined
     if (existed) before = this.createBackup(target.absolutePath)
+    const outcome: MutationOutcome = { operation, applied: this.appliedSummary(operation), existed, before, target: target.absolutePath }
 
     if (operation.type === 'delete') {
       try {
@@ -2010,13 +2022,59 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       } catch (error) {
         throw new HarnessConfigError('delete-failed', 'Unable to delete the harness resource', { cause: error })
       }
+      const link = resolve(target.root, ...operation.relativePath.split('/'))
+      if (link !== target.absolutePath && this.isBrokenLink(link)) {
+        try {
+          outcome.removedLink = { path: link, linkTarget: this.fs.readlinkSync(link) }
+          this.fs.unlinkSync(link)
+        } catch (error) {
+          throw new HarnessConfigError('delete-failed', 'Unable to remove the link to the deleted resource', { cause: error })
+        }
+      }
     } else {
       if (operation.type === 'create' && existed) {
         throw new HarnessConfigError('collision', 'A harness resource already exists at that destination')
       }
+      this.removeBrokenLinks(target.root, operation.relativePath)
       this.atomicWrite(target.absolutePath, Buffer.from(operation.content ?? '', 'utf8'))
     }
-    return { operation, applied: this.appliedSummary(operation), existed, before }
+    return outcome
+  }
+
+  private isBrokenLink(path: string): boolean {
+    try {
+      if (!this.fs.lstatSync(path).isSymbolicLink()) return false
+    } catch {
+      return false
+    }
+    try {
+      this.fs.statSync(path)
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  /** A write replaces any broken symlink on its path with the real file or
+   *  folder it creates; live links are followed. */
+  private removeBrokenLinks(root: string, relativePath: string): void {
+    let cursor = root
+    for (const segment of relativePath.split('/')) {
+      const next = join(cursor, segment)
+      if (this.isBrokenLink(next)) {
+        try {
+          this.fs.unlinkSync(next)
+        } catch (error) {
+          throw new HarnessConfigError('write-failed', 'Unable to remove a broken symbolic link', { cause: error })
+        }
+        return
+      }
+      try {
+        cursor = resolve(this.fs.realpathSync(next))
+      } catch {
+        return
+      }
+    }
   }
 
   private createBackup(target: string): Buffer {
@@ -2113,15 +2171,18 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     })))
   }
 
-  private rollback(scope: HarnessConfigScope, outcome: MutationOutcome): void {
-    const descriptor = this.operationDescriptor(scope, outcome.operation)
-    const target = this.resolveCandidate(descriptor, outcome.operation.relativePath, false)
+  private rollback(outcome: MutationOutcome): void {
+    const target = outcome.target
     if (!outcome.existed) {
-      if (this.fs.existsSync(target.absolutePath)) this.fs.unlinkSync(target.absolutePath)
+      if (this.fs.existsSync(target)) this.fs.unlinkSync(target)
       return
     }
     if (!outcome.before) throw new Error('Backup bytes are unavailable for rollback')
-    this.atomicWrite(target.absolutePath, outcome.before)
+    this.atomicWrite(target, outcome.before)
+    const link = outcome.removedLink
+    if (link && !this.fs.existsSync(link.path) && !this.isBrokenLink(link.path)) {
+      this.fs.symlinkSync(link.linkTarget, link.path)
+    }
   }
 
   private withPartialResult(error: unknown, applied: HarnessConfigAppliedOperation[]): HarnessConfigError {
