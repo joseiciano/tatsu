@@ -1,13 +1,13 @@
 ---
 goal: Keep Tatsu's Codex hook entries at stable positions in ~/.codex/hooks.json, report their /hooks trust status read-only through the hooks slice, show "Codex hooks need review: run /hooks" in Settings, and write the Codex feature flag as [features] hooks
 date_created: 2026-10-02
-status: 'Planned'
+status: 'Completed'
 tags: [feature, bug, codex, hooks, trust, milestone-1, dynamic-workflows]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 Milestone 1, Item 8. Closes gap 9 ("Codex skips untrusted hooks") and gap 4 ("Codex hooks flag name drift") in `plans/dynamic-workflows/dynamic-workflows.md`, "Gaps found". Size M. No dependencies (soft dependency on ticket 07, see DEP-001).
 
@@ -235,7 +235,7 @@ Flag: `features/src/lib.rs` `FeatureSpec { id: CodexHooks, key: "hooks", stage: 
 
 - GOAL-002: `smol-toml` and `codexConfigPath()` are available.
 
-- [ ] **TASK-002**: Works in either landing order with ticket 07 (DEP-001). Check each item on the current base branch and do only what is missing:
+- [x] **TASK-002**: Works in either landing order with ticket 07 (DEP-001). Check each item on the current base branch and do only what is missing:
   - `smol-toml` not in `package.json` `dependencies` → `pnpm add smol-toml@^1.9.0`. `'smol-toml'` not in `RUNTIME_PACKAGES` in `scripts/pack-headless.mjs:139` → add it (headless externalizes runtime deps; only that list is copied into the tarball).
   - `src/main/folder-trust/` absent → create it with `index.ts` (`export * from './folder-trust'`), `folder-trust.ts` containing only `resolveCodexHome(env = process.env, homeDir = homedir())` and `codexConfigPath(env = process.env, homeDir = homedir())` per ticket 07 REQ-004, and `folder-trust.test.ts` with ticket 07 TEST-009's `resolveCodexHome` / `codexConfigPath` assertions.
   - Package present but without `resolveCodexHome` / `codexConfigPath` → add only the missing function(s) and their assertions; leave the rest of the file alone. Package present with both → no change.
@@ -245,42 +245,42 @@ Flag: `features/src/lib.rs` `FeatureSpec { id: CodexHooks, key: "hooks", stage: 
 
 - GOAL-003: `src/main/codex-hook-trust/` and the `hooks` slice implement REQ-006 to REQ-009 and REQ-012.
 
-- [ ] **TASK-003**: `src/shared/state/hooks/hooks.ts`, `hooks/index.ts`, `src/shared/state/index.ts:109`: REQ-009. Add reducer tests (TEST-010) and the wire-merge test (TEST-011).
-- [ ] **TASK-004**: Create `src/main/codex-hook-trust/codex-hook-trust.ts` and `index.ts` per REQ-006, REQ-007, REQ-008, REQ-012. Private helpers: `canonicalJson(value)`, `identityEventName(event)`, `readStoredState(configPath)`.
-- [ ] **TASK-005**: Create `codex-hook-trust.test.ts` with TEST-003 to TEST-009 and TEST-015.
+- [x] **TASK-003**: `src/shared/state/hooks/hooks.ts`, `hooks/index.ts`, `src/shared/state/index.ts:109`: REQ-009. Add reducer tests (TEST-010) and the wire-merge test (TEST-011).
+- [x] **TASK-004**: Create `src/main/codex-hook-trust/codex-hook-trust.ts` and `index.ts` per REQ-006, REQ-007, REQ-008, REQ-012. Private helpers: `canonicalJson(value)`, `identityEventName(event)`, `readStoredState(configPath)`.
+- [x] **TASK-005**: Create `codex-hook-trust.test.ts` with TEST-003 to TEST-009 and TEST-015.
 
 ### Implementation Phase 4: installHooks and flag
 
 - GOAL-004: `codex.ts` implements REQ-001 to REQ-005 and REQ-010.
 
-- [ ] **TASK-006**: In `src/main/agents/codex.ts`:
+- [x] **TASK-006**: In `src/main/agents/codex.ts`:
   - Replace the loop at `:142-149` with REQ-001; add `isIdenticalHarnessEntry` (REQ-002) using `codexHookIdentityJson` from `../codex-hook-trust`.
   - Add `readHooksFileStrict` (REQ-003), the conditional `writeHookScript` (REQ-004), the new `ensureCodexHooksEnabled` (REQ-005), and the exports in REQ-010.
   - Replace every `homedir()` use with `codexHomeDir()` (REQ-010): `globalHooksPath` (`:39-40`), `hookScriptPath` (`:43-44`), `ensureCodexHooksEnabled` (`:97`, log `:114`), and `sessionFileExists` (`:191`) / `latestSessionId` (`:210`) via `sessionsDir()`. Afterwards `rg -n "homedir\(\)" src/main/agents/codex.ts` matches only `codexHomeDir`. Make `CodexHookEntry` structurally compatible with `CodexHookGroup` (or replace it with the imported type).
   - Add the re-exports to `src/main/agents/index.ts`.
   - Update `codex.test.ts` (TEST-001, TEST-002, TEST-014).
-- [ ] **TASK-007**: `pnpm typecheck`, `pnpm build`, `npx vitest run`. Commit `Keep Codex hook entries in place and report their /hooks trust` (Phase 3 + Phase 4 + any TASK-002 changes; include TASK-001 results), push.
+- [x] **TASK-007**: `pnpm typecheck`, `pnpm build`, `npx vitest run`. Commit `Keep Codex hook entries in place and report their /hooks trust` (Phase 3 + Phase 4 + any TASK-002 changes; include TASK-001 results), push.
 
 ### Implementation Phase 5: Main wiring and Settings
 
 - GOAL-005: Every client sees the trust summary; Settings shows the review line.
 
-- [ ] **TASK-008**: `src/main/index.ts`: REQ-011 (`watchDir: codexHomeDir()`, TEST-016).
-- [ ] **TASK-009**: Renderer: REQ-013.
-- [ ] **TASK-010**: `pnpm typecheck`, `pnpm build`, `npx vitest run`; if TASK-002 changed `package.json` or `pack-headless.mjs`, also `pnpm build:headless && bash scripts/smoke-headless.sh`. Run TEST-013 (manual). Commit `Show Codex hook trust status in Settings`, push.
+- [x] **TASK-008**: `src/main/index.ts`: REQ-011 (`watchDir: codexHomeDir()`, TEST-016).
+- [x] **TASK-009**: Renderer: REQ-013.
+- [x] **TASK-010**: `pnpm typecheck`, `pnpm build`, `npx vitest run`; if TASK-002 changed `package.json` or `pack-headless.mjs`, also `pnpm build:headless && bash scripts/smoke-headless.sh`. Run TEST-013 (manual). Commit `Show Codex hook trust status in Settings`, push.
 
 ### Implementation Phase 6: Audit
 
 - GOAL-006: The read-only rule holds in code.
 
-- [ ] **TASK-011**: `rg -n "trusted_hash|hooks\.state" src/` returns matches only in `src/main/codex-hook-trust/` (reads) and its test fixtures. `rg -n "writeFile|appendFile|rename" src/main/codex-hook-trust/codex-hook-trust.ts` returns nothing.
-- [ ] **TASK-012**: `rg -n "codex_hooks" src/` returns only the REQ-005 read check and tests.
+- [x] **TASK-011**: `rg -n "trusted_hash|hooks\.state" src/` returns matches only in `src/main/codex-hook-trust/` (reads) and its test fixtures. `rg -n "writeFile|appendFile|rename" src/main/codex-hook-trust/codex-hook-trust.ts` returns nothing.
+- [x] **TASK-012**: `rg -n "codex_hooks" src/` returns only the REQ-005 read check and tests.
 
 ### Implementation Phase 7: Close gaps 9 and 4 in the plan
 
 - GOAL-007: The plan records both gaps as closed.
 
-- [ ] **TASK-013**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
+- [x] **TASK-013**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
   - Gap 9 (line starting `9. **Codex skips untrusted hooks.**`): replace the sentence starting `Remaining work:` with `Closed in <TASK-007 hash>..<TASK-010 hash>: \`installHooks\` keeps each Tatsu entry at its index and skips unchanged writes; \`src/main/codex-hook-trust\` computes each entry's key and hash read-only and feeds \`hooks.codexTrust\`, which Settings shows as "Codex hooks need review: run /hooks". Hash rules <verified on codex <ver> | from source, unverified>. Tatsu never writes \`trusted_hash\`.`
   - Gap 4 (line starting `4. **Codex hooks flag name drift.**`): append `Closed in <TASK-007 hash>: the flag is written as \`[features] hooks = true\` only when neither \`hooks\` nor \`codex_hooks\` is set; detection parses the TOML instead of a substring.`
   - "Codex hook trust (2026-10-02)" subsection, first line: if TASK-001 ran, replace `not yet checked against a running binary` with `checked against codex <ver> via \`hooks/list\` and \`/hooks\``, and correct any rule TASK-001 changed. In the "Consequences for Tatsu" bullet about position, append ` Fixed: \`installHooks\` now keeps entries in place.`
