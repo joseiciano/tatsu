@@ -1,13 +1,13 @@
 ---
 goal: Contingent follow-up to ticket 05. If Codex rejects the -c mcp_servers overrides, give Codex terminal tabs the harness-control MCP server through a per-terminal CODEX_HOME, once the user has decided how to handle hook trust
 date_created: 2026-10-02
-status: 'Contingent' # 'Skipped' if ticket 05 TASK-001 passed; 'Descoped' if the Phase 0 decision says so; else 'Planned' → 'Completed'
+status: 'Skipped' # ticket 05 TASK-001 gate (a)-(c) passed on codex-cli 0.164.0 (2026-10-24, commit 72e6d9c); (d) pending a Codex re-login
 tags: [feature, mcp, codex, agents, milestone-1, dynamic-workflows, contingent]
 ---
 
 # Introduction
 
-![Status: Contingent](https://img.shields.io/badge/status-Contingent-lightgrey)
+![Status: Skipped](https://img.shields.io/badge/status-Skipped-lightgrey)
 
 > **Do not start unless ticket 05 TASK-001 failed. Otherwise mark Skipped.**
 
@@ -69,7 +69,7 @@ This ticket:
 
 - GOAL-001: The gate failure is confirmed on the latest Codex, and the user has chosen how to handle hook trust. No code changes.
 
-- [ ] **TASK-001**: REQ-001. Link ticket 05's gate evidence (Codex version, failed check). If the gate passed, set `status: 'Skipped'` and stop.
+- [x] **TASK-001**: REQ-001. Link ticket 05's gate evidence (Codex version, failed check). If the gate passed, set `status: 'Skipped'` and stop. **Gate passed** (ticket 05 TASK-001 result, commit 72e6d9c): codex-cli 0.164.0 accepted the `-c mcp_servers.harness-control.*` overrides in `mcp list`, `mcp get --json` and before `resume`, and spawned the bridge with `--config`. Skipped.
 - [ ] **TASK-002**: REQ-002. If (a)–(c) failed, re-run ticket 05 TEST-014 on the latest Codex. Gate passes → follow REQ-002 and stop.
 - [ ] **TASK-003**: Confirm the stop condition on the installed binary: run TEST-001 with a hand-made per-terminal home (no code needed: `mkdir`, symlinks, `config.toml` copy). Record whether Tatsu's hooks are `trusted`.
 - [ ] **TASK-004**: If option 4 is on the table, investigate it (REQ-003 (4)) and record the result.
@@ -87,7 +87,7 @@ This ticket:
 
 - GOAL-003: The plan records the outcome for Codex MCP.
 
-- [ ] **TASK-009**: Set this ticket's front matter `status`: `'Completed'` (Phase 1 merged), `'Skipped'` (gate passed, TASK-001 or TASK-002) or `'Descoped'` (decision option 3). Same commit as TASK-010.
+- [x] **TASK-009**: Set this ticket's front matter `status`: `'Completed'` (Phase 1 merged), `'Skipped'` (gate passed, TASK-001 or TASK-002) or `'Descoped'` (decision option 3). Same commit as TASK-010.
 - [ ] **TASK-010**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
   - Gap 2: append `Codex closed in <hash>: per-terminal \`CODEX_HOME\` (ticket 09), because <failed check> on codex <ver>; hook trust: <decision>.` or, if descoped, `Codex: descoped (ticket 09), no per-run MCP mechanism on codex <ver>.`
   - "Harness research" table, row "Per-run MCP injection", Codex cell: record the mechanism that shipped and the Codex version, or the failure.
