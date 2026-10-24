@@ -108,18 +108,21 @@ export class CostTracker {
   }
 
   private handleStop(ev: StopEvent): void {
+    if (ev.transcriptPath === null) return
     this.lastStops.set(ev.terminalId, ev)
     if (this.interestedClients.size === 0) return
     this.parseAndDispatchStop(ev)
   }
 
   private parseAndDispatchStop(ev: StopEvent): void {
+    const transcriptPath = ev.transcriptPath
+    if (transcriptPath === null) return
     try {
-      const entry = this.parseIncremental(ev.sessionId, ev.transcriptPath)
+      const entry = this.parseIncremental(ev.sessionId, transcriptPath)
       if (!entry || Object.keys(entry.byModel).length === 0) return
       const usage: SessionUsage = {
         sessionId: ev.sessionId,
-        transcriptPath: ev.transcriptPath,
+        transcriptPath,
         byModel: entry.byModel,
         breakdown: entry.breakdown,
         currentModel: entry.currentModel,
@@ -132,7 +135,7 @@ export class CostTracker {
     } catch (err) {
       log(
         'cost-tracker',
-        `failed to ingest ${ev.transcriptPath}: ${err instanceof Error ? err.message : err}`
+        `failed to ingest ${transcriptPath}: ${err instanceof Error ? err.message : err}`
       )
     }
   }

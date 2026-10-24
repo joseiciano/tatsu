@@ -36,9 +36,13 @@ export interface PendingTool {
 // a global user-scope install is safe.
 //
 // POSIX only — no jq, no python. The bash reads stdin into a shell var,
-// defaults empty to `null`, then emits a single printf writing one line to
-// the append-mode file. A single write(2) under PIPE_BUF (4096 bytes) is
-// guaranteed atomic vs. other O_APPEND writers on POSIX.
+// defaults empty to `null`, then printf appends one line to the file.
+// Lines often exceed PIPE_BUF (4096 bytes): Stop carries
+// last_assistant_message and PreToolUse carries whole file contents, so a
+// line can land in several write(2) calls. That is safe because each
+// terminal's file has a single writer, the one agent running in that
+// terminal, and the reader in tailLog holds a partial trailing line until
+// its newline arrives.
 export function makeHookCommand(event: string): string {
   const inner =
     `h="${'$HARNESS_TERMINAL_ID'}"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; ` +
@@ -125,9 +129,8 @@ function deriveStatus(terminalId: string, ev: HookEvent): StatusUpdate | null {
 // Per-terminal byte offset into the NDJSON log. Tail from here on each
 // fs.watch firing; advance to EOF after successful read.
 const offsets = new Map<string, number>()
-// Left-over partial line from the last read (in case a write lands
-// between our read and the newline flush). Keyed by terminal id.
-const residual = new Map<string, string>()
+// Bytes after the last newline from the previous read: a line still being written. Kept as bytes so a multi-byte character split across reads decodes intact.
+const residual = new Map<string, Buffer>()
 // Terminals whose session ID has already been discovered and dispatched.
 // Prevents repeated dispatches on every subsequent hook event.
 const sessionIdDiscovered = new Set<string>()
@@ -135,16 +138,15 @@ const sessionIdDiscovered = new Set<string>()
 export interface StopEvent {
   terminalId: string
   sessionId: string
-  transcriptPath: string
+  transcriptPath: string | null
+  lastAssistantMessage: string | null
   ts: number
 }
 
 type StopListener = (ev: StopEvent) => void
 const stopListeners = new Set<StopListener>()
 
-/** Subscribe to Stop hook events with their raw payload (notably
- *  transcript_path). Used by CostTracker to know when to re-tail a
- *  session jsonl. Returns an unsubscribe fn. */
+/** Subscribe to Stop hook events: session id, transcript_path when the agent has one, and the turn's final assistant message. Used by CostTracker to re-tail a session jsonl. Returns an unsubscribe fn. */
 export function onStopEvent(listener: StopListener): () => void {
   stopListeners.add(listener)
   return () => {
@@ -154,12 +156,18 @@ export function onStopEvent(listener: StopListener): () => void {
 
 function emitStopIfRelevant(terminalId: string, ev: HookEvent): void {
   if (ev.event !== 'Stop') return
-  const p = ev.payload as Record<string, unknown> | null
-  if (!p) return
+  const p = ev.payload
+  if (!p || typeof p !== 'object') return
   const sessionId = p.session_id
-  const transcriptPath = p.transcript_path
-  if (typeof sessionId !== 'string' || typeof transcriptPath !== 'string') return
-  const payload: StopEvent = { terminalId, sessionId, transcriptPath, ts: ev.ts }
+  if (typeof sessionId !== 'string' || !sessionId) return
+  const transcriptPath = typeof p.transcript_path === 'string' && p.transcript_path ? p.transcript_path : null
+  const lastAssistantMessage =
+    typeof p.last_assistant_message === 'string' && p.last_assistant_message ? p.last_assistant_message : null
+  log(
+    'hooks',
+    `stop terminal=${terminalId} transcript=${transcriptPath ? 'yes' : 'no'} lastMessageChars=${lastAssistantMessage?.length ?? 0}`
+  )
+  const payload: StopEvent = { terminalId, sessionId, transcriptPath, lastAssistantMessage, ts: ev.ts }
   for (const l of stopListeners) {
     try {
       l(payload)
@@ -169,7 +177,20 @@ function emitStopIfRelevant(terminalId: string, ev: HookEvent): void {
   }
 }
 
-function tailLog(terminalId: string, store: Store): void {
+export function splitNdjson(pending: Buffer, chunk: Buffer): { lines: string[]; rest: Buffer } {
+  const data = pending.length ? Buffer.concat([pending, chunk]) : chunk
+  const lines: string[] = []
+  let start = 0
+  let nl = data.indexOf(0x0a, start)
+  while (nl !== -1) {
+    lines.push(data.toString('utf-8', start, nl))
+    start = nl + 1
+    nl = data.indexOf(0x0a, start)
+  }
+  return { lines, rest: Buffer.from(data.subarray(start)) }
+}
+
+export function tailLog(terminalId: string, store: Store): void {
   const path = join(STATUS_DIR, `${terminalId}.ndjson`)
   let fd: number
   try {
@@ -188,14 +209,16 @@ function tailLog(terminalId: string, store: Store): void {
     if (size === off) return
     const len = size - off
     const buf = Buffer.alloc(len)
-    readSync(fd, buf, 0, len, off)
-    offsets.set(terminalId, size)
+    let n = 0
+    while (n < len) {
+      const r = readSync(fd, buf, n, len - n, off + n)
+      if (r === 0) break
+      n += r
+    }
+    offsets.set(terminalId, off + n)
 
-    const text = (residual.get(terminalId) ?? '') + buf.toString('utf-8')
-    const lines = text.split('\n')
-    // Last chunk may be a partial line; stash it for next read.
-    const tail = lines.pop() ?? ''
-    if (tail) residual.set(terminalId, tail)
+    const { lines, rest } = splitNdjson(residual.get(terminalId) ?? Buffer.alloc(0), buf.subarray(0, n))
+    if (rest.length) residual.set(terminalId, rest)
     else residual.delete(terminalId)
 
     for (const line of lines) {
