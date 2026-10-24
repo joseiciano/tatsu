@@ -31,7 +31,11 @@ await withApp(process.argv[2], 'convert-command-to-skill', async ({ page, state,
   copyFileSync(target, join(state.EVIDENCE, 'run-tests.SKILL.md'))
   const text = readFileSync(target, 'utf8')
   log(`written ${target}:\n${text}`)
-  // Step 10 REQ-005/REQ-007: a fixed pointer body, never the command's own body.
+  // Step 10 REQ-005/REQ-007: discoverable front matter plus a pointer body,
+  // never the command's own body.
+  if (!text.startsWith('---\nname: run-tests\ndescription: Run the test suite\n---\n')) {
+    throw new Error('skill is missing name/description front matter from the command')
+  }
   if (!text.includes('requests the `run-tests` command behavior')) throw new Error('skill does not point back at the command')
   if (text.includes('Run the project tests')) throw new Error('skill embeds the source command body')
   if (!text.trimEnd().endsWith('<!-- Converted by Tatsu from opencode commands run-tests.md -->')) {

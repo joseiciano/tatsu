@@ -49,10 +49,10 @@ The end state that proves it works:
 - Run: skill → command and command → skill for Opencode, and the Claude
   notice "Already available as a command at hello/SKILL.md" (no draft opens,
   no file is written). Codex and nested-name conversions are unproven.
-- Command → skill writes exactly the Step 10 REQ-005 template: a `# <name>`
-  heading, a pointer sentence, and the marker. It has no `name`/`description`
-  front matter and never copies the command body (REQ-007). Assert that
-  shape, not the command's description.
+- Command → skill writes exactly the Step 10 REQ-005 template: `name` and
+  `description` front matter (the command's description, or
+  `Run the <name> command`), a `# <name>` heading, a pointer sentence, and the
+  marker. It never copies the command body (REQ-007).
 - On the Commands tab both Claude and Opencode list `run-tests`, so there are
   two `Create skill from run-tests` buttons; index 1 is Opencode.
 - `Create command` appears both as row actions and as the submit button. Use
