@@ -126,3 +126,10 @@ Shortest path to the plan's phase 2 (Claude + shell linear runner): 3 → 4 → 
 - Items 1-8 are merged. Item 9 is merged, or recorded as Skipped because the Item 5 gate passed, or Descoped by decision. `pnpm typecheck`, `pnpm build` and `npx vitest run` pass.
 - Claude, Codex and opencode tabs each show correct status, can reach `harness-control` over MCP, and can be spawned from main with a permission level that never shows an interactive prompt. Pi tabs spawn, resume and report status exactly as before the milestone (checked by hand once after Item 4 and once after Item 6).
 - The plan's "Gaps found" section is updated to mark each gap closed, with the commit that closed it.
+
+## Status (2026-10-24, branch `dynamic-workflows`)
+
+- Items 1, 3, 4, 7, 8 Completed; Item 2 closed by `d4759f6` plus the guard test in `634b999`; Item 9 Skipped (the Item 5 gate passed on codex-cli 0.164.0). Items 5 and 6 In progress: all code landed, the Codex real-tab checks (ticket 05 TEST-013, ticket 06 TEST-013) wait for a Codex re-login.
+- `pnpm typecheck`, `pnpm build`, `npx vitest run` and the headless smoke pass on `1881875`.
+- Pi check: covered by tests only (Pi spawns get `mcpConfigPath: null`, `piEnvVars`, and an identical command and env at every permission level); the by-hand Pi tab check after Items 4 and 6 was not run.
+- Every manual `pnpm dev` check in the tickets is recorded as not run in the commit messages.
