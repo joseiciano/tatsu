@@ -1,13 +1,13 @@
 ---
 goal: Give Codex and opencode terminal tabs the per-terminal harness-control MCP server (Codex through -c mcp_servers overrides behind a Phase 0 gate, opencode through OPENCODE_CONFIG_CONTENT) and fix the stale Codex MCP comment
 date_created: 2026-10-02
-status: 'Planned' # 'Completed' only per TASK-001's rule: if Phase 0 (d) can't run, stays 'In progress'; a failed gate hands Codex to ticket 09
+status: 'In progress' # (d) and TEST-013 pending a Codex re-login (codex-cli 0.164.0); everything else landed
 tags: [feature, mcp, codex, opencode, agents, milestone-1, dynamic-workflows]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: In progress](https://img.shields.io/badge/status-In%20progress-yellow)
 
 Milestone 1, Item 5 (closes gap 2 in `plans/dynamic-workflows/dynamic-workflows.md` "Gaps found"). Size M. Goal table dependency: Items 1 and 4. **Ticket 04 must be merged first** (`src/main/agent-spawn/` is where REQ-004 lands, see DEP-002). Only the Phase 0 spikes (TASK-001, TASK-002) may run in parallel with ticket 04; they change no code.
 
@@ -172,33 +172,33 @@ This ticket completes Item 5. `complete_step` itself and the runner are Phase 2 
 
 - GOAL-002: The bridge runs from `--config`, the per-terminal file is `0600`, and `AgentSpawnOpts` carries `mcpServer`.
 
-- [ ] **TASK-003**: Implement REQ-001 in `resources/mcp-bridge.js`.
-- [ ] **TASK-004**: Implement REQ-002 in `src/main/mcp-config/mcp-config.ts` and its barrel; add `HarnessMcpServerSpec`, `mcpServer` and `spawnEnv?` to `src/main/agents/index.ts` (REQ-003).
-- [ ] **TASK-005**: Add TEST-001 to TEST-003 (bridge) and TEST-004 (mcp-config). Verify, commit (`Let the MCP bridge load its env from the per-terminal config file`), push.
+- [x] **TASK-003**: Implement REQ-001 in `resources/mcp-bridge.js`.
+- [x] **TASK-004**: Implement REQ-002 in `src/main/mcp-config/mcp-config.ts` and its barrel; add `HarnessMcpServerSpec`, `mcpServer` and `spawnEnv?` to `src/main/agents/index.ts` (REQ-003).
+- [x] **TASK-005**: Add TEST-001 to TEST-003 (bridge) and TEST-004 (mcp-config). Verify, commit (`Let the MCP bridge load its env from the per-terminal config file`), push.
 
 ### Implementation Phase 2: Codex via -c overrides (primary path)
 
 - GOAL-003: A Codex tab started through `agent-spawn` launches with `harness-control`.
 
-- [ ] **TASK-006**: Implement REQ-005 in `src/main/agents/codex.ts`, including the comment fix.
-- [ ] **TASK-007**: Implement REQ-004 in `src/main/agent-spawn/agent-spawn.ts` (`buildAgentSpawnOpts`, `buildAgentLaunch`, `agentEnv`, required `mcpServerSpec` dep, `inheritedEnv` dep) and add the `mcpServerSpec` wiring line to the `createAgentSpawner({...})` call in `src/main/index.ts`. Requires ticket 04 merged.
-- [ ] **TASK-008**: Add TEST-005 to TEST-008 and TEST-012. Run TEST-013 (Codex manual). Verify, commit (`Wire harness-control MCP into Codex tabs via -c overrides`), push.
+- [x] **TASK-006**: Implement REQ-005 in `src/main/agents/codex.ts`, including the comment fix.
+- [x] **TASK-007**: Implement REQ-004 in `src/main/agent-spawn/agent-spawn.ts` (`buildAgentSpawnOpts`, `buildAgentLaunch`, `agentEnv`, required `mcpServerSpec` dep, `inheritedEnv` dep) and add the `mcpServerSpec` wiring line to the `createAgentSpawner({...})` call in `src/main/index.ts`. Requires ticket 04 merged.
+- [x] **TASK-008**: Add TEST-005 to TEST-008 and TEST-012. Run TEST-013 (Codex manual). Verify, commit (`Wire harness-control MCP into Codex tabs via -c overrides`), push.
 
 ### Implementation Phase 3: opencode via OPENCODE_CONFIG_CONTENT
 
 - GOAL-004: An opencode tab started through `agent-spawn` has `harness-control` and keeps the user's global MCP servers.
 
-- [ ] **TASK-009**: Implement REQ-006 in `src/main/agents/opencode.ts` (`buildOpencodeConfig`, `spawnEnv`) and export `spawnEnv` so the module satisfies `AgentModule.spawnEnv`.
-- [ ] **TASK-010**: Add TEST-009 to TEST-011. Run TEST-013 (opencode manual).
-- [ ] **TASK-011**: Verify, commit (`Wire harness-control MCP into opencode tabs via OPENCODE_CONFIG_CONTENT`), push.
+- [x] **TASK-009**: Implement REQ-006 in `src/main/agents/opencode.ts` (`buildOpencodeConfig`, `spawnEnv`) and export `spawnEnv` so the module satisfies `AgentModule.spawnEnv`.
+- [x] **TASK-010**: Add TEST-009 to TEST-011. Run TEST-013 (opencode manual).
+- [x] **TASK-011**: Verify, commit (`Wire harness-control MCP into opencode tabs via OPENCODE_CONFIG_CONTENT`), push.
 
 ### Implementation Phase 4: Close gap 2 in the plan
 
 - GOAL-006: The plan records gap 2 as closed (for opencode only if the Codex gate failed) and the Codex research row as verified or failed.
 
-- [ ] **TASK-015**: Run TEST-018 (regressions) and TEST-019.
-- [ ] **TASK-016**: Set this ticket's front matter `status` per TASK-001's status rule: `'Completed'` if Phase 0 (d) and TEST-013 ran, or if the gate failed and ticket 09 was activated; `'In progress'` while (d) is pending. Same commit as TASK-017.
-- [ ] **TASK-017**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
+- [x] **TASK-015**: Run TEST-018 (regressions) and TEST-019.
+- [x] **TASK-016**: Set this ticket's front matter `status` per TASK-001's status rule: `'Completed'` if Phase 0 (d) and TEST-013 ran, or if the gate failed and ticket 09 was activated; `'In progress'` while (d) is pending. Same commit as TASK-017.
+- [x] **TASK-017**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
   - Gap 2 (line starting `2. **MCP only reaches Claude.**`): append `Closed in <Phase 2 hash>..<Phase 3 hash>: Codex gets \`harness-control\` through \`-c mcp_servers.harness-control.*\`, opencode through \`OPENCODE_CONFIG_CONTENT\` merged with the user's config. The bridge reads its token from the 0600 per-terminal file (\`--config\`), never from argv.` If the gate failed, close gap 2 for opencode only and append `Codex: gate failed at <check> (codex <ver>), see ticket 09.`
   - "Harness research" table, row "Per-run MCP injection", Codex cell: replace the `-c mcp_servers.*` entry with the gate result and Codex version, e.g. `` `-c mcp_servers.*` (**verified**, codex <ver>) `` or `` `-c mcp_servers.*` (failed at <check>, codex <ver>; see ticket 09) ``.
   - "Unverified:" line under the table: remove `Codex \`-c mcp_servers.*\` per-run override;` (or replace with what is still pending).
