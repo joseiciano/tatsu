@@ -243,7 +243,7 @@ Rows marked **verified** were checked against Claude Code 2.1.286 and opencode 1
 | Headless | `claude -p --output-format stream-json` | `codex exec --json` | `opencode run --format json` |
 | Typed headless "done" event | yes (`result`) | yes (`turn.completed` / `turn.failed`) | **no**: process exit without `error` |
 | Schema-validated output | `--json-schema` → `structured_output` | `--output-schema` (JSON as final message text) | **CLI: no** (server/SDK only) |
-| Per-run MCP injection | `--mcp-config` | `-c mcp_servers.*` (unverified) or `CODEX_HOME` | `OPENCODE_CONFIG_CONTENT` env var (**verified**; merges with the user's global config) |
+| Per-run MCP injection | `--mcp-config` | `-c mcp_servers.*` (unverified until the ticket 05 gate runs; if it fails, see ticket 09) | `OPENCODE_CONFIG_CONTENT` env var (**verified**; merges with the user's global config) |
 | Resume | `--resume <id>` | `codex resume <id>` / `codex exec resume <id>` | `--session <id>` |
 | ACP | adapter `@agentclientprotocol/claude-agent-acp` | adapter `@agentclientprotocol/codex-acp` | native `opencode acp` |
 | Folder trust prompt | yes, inherited from a trusted parent (gap 8) | per-project `trust_level` in `config.toml` | none |
@@ -428,7 +428,7 @@ The same contract holds for a future headless driver, since the MCP tool works t
    1. Rewrite the opencode plugin to the documented ESM format (fixes opencode status detection today).
    2. Main-side agent spawn with create-or-attach.
    3. Parse `last_assistant_message` in `hooks.ts` (and emit it from the opencode plugin).
-   4. MCP parity: opencode via `OPENCODE_CONFIG_CONTENT`; Codex via `-c mcp_servers.harness-control.*`, falling back to a per-terminal `CODEX_HOME` that carries over `auth.json` and `config.toml`.
+   4. MCP parity: opencode via `OPENCODE_CONFIG_CONTENT`; Codex via `-c mcp_servers.harness-control.*`; see Item 9 if the gate fails.
    5. Permission levels per the mapping table, including the `harness-step` opencode agent.
    6. Claude/Codex folder-trust check helper.
    7. Bridge `agentKind` fix (enum and the check at `mcp-bridge.js:468-473`).

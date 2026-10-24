@@ -16,10 +16,15 @@ Status as of 2026-10-02: every gap is still open. Two are partly done: the `[fea
 | 2 | Fix the bridge's `agentKind` | 6 | XS | none |
 | 3 | Hook payloads: `last_assistant_message` and line atomicity | 7 | S | 1 |
 | 4 | Main-side agent spawn with create-or-attach | 1 | L | none |
-| 5 | MCP for Codex and opencode | 2 | M | 1 |
-| 6 | Permission levels | 5 | M | 4 |
+| 5 | MCP for Codex and opencode | 2 | M | 1, 4 |
+| 6 | Permission levels | 5 | M | 4, 5 |
 | 7 | Folder-trust check helper | 8 | S | none |
 | 8 | Codex hook trust and flag name | 9, 4 | M | none |
+| 9 | Codex per-terminal CODEX_HOME fallback (contingent, only if Item 5's gate fails) | 2 | S | 5, 8 |
+
+Item 5 needs Item 4 only for its opencode phase (the spawner's `agentEnv`); its Codex phases can land first. Item 6 extends the spawner from 4 and the opencode config builder and Codex command from 5. Item 8 reuses Item 7's `codexConfigPath()` and `smol-toml` if 7 has landed, but does not wait for it.
+
+Implementation order: 1, 2 and 7 (any order) → 3 → 4 → 5 → 6, with 8 anywhere after 7, and 9 (contingent) after 5 and 8.
 
 ### 1. Rewrite the opencode plugin
 
@@ -34,7 +39,7 @@ Status as of 2026-10-02: every gap is still open. Two are partly done: the `[fea
 
 ### 2. Fix the bridge's `agentKind`
 
-- **Today:** `resources/mcp-bridge.js:110` advertises `enum: ['claude', 'codex']`, and `:468-473` rejects anything else, while the server accepts `opencode`. The label at `:485` only knows Claude and Codex.
+- **Today:** `resources/mcp-bridge.js:110` advertises `enum: ['claude', 'codex']`, and `:467-474` rejects anything else, while the server accepts `opencode`. The label at `:485` only knows Claude and Codex.
 - **Done when:** `create_worktree` accepts `opencode` through the bridge, and the enum, the validation and the label all agree with the server's list.
 
 ### 3. Hook payloads
@@ -53,15 +58,16 @@ Status as of 2026-10-02: every gap is still open. Two are partly done: the `[fea
   - `pty:create` becomes create-or-attach: if the PTY already exists, the renderer joins it and replays its history instead of spawning a second one, then resizes to its layout.
   - Background and headless tabs start without being opened.
   - Existing tab behaviour is unchanged: control-taken, resize, restart and sleeping panes.
+  - UI-initiated tabs stay renderer-spawned; main spawns only for `create_worktree` with an `initialPrompt`/`teleportSessionId` and the Phase 2 runner (via a `fromMain` option).
 
 ### 5. MCP for Codex and opencode
 
 - **Today:** only Claude gets `--mcp-config` (`claude.ts:172`). The comment at `codex.ts:237` says Codex is configured globally through `~/.codex/config.toml`, but nothing writes it. opencode has no MCP wiring.
 - **Done when:**
   - opencode gets the `harness-control` server per terminal through `OPENCODE_CONFIG_CONTENT`. This merges with the user's global config and is verified working.
-  - Codex gets it per terminal through `-c mcp_servers.harness-control.*`. If that override doesn't work, fall back to a per-terminal `CODEX_HOME` that carries over `auth.json` and `config.toml`.
+  - Codex gets it per terminal through `-c mcp_servers.harness-control.*`; if the Phase 0 gate fails, see Item 9.
   - The stale comment in `codex.ts` is corrected.
-  - A Codex tab and an opencode tab can both call a `harness-control` tool.
+  - An opencode tab and, if the gate passed, a Codex tab can call a `harness-control` tool.
 - **Verify first:** the Codex `-c mcp_servers.*` per-run override. Codex isn't installed on the dev machine yet.
 
 ### 6. Permission levels
@@ -79,6 +85,7 @@ Status as of 2026-10-02: every gap is still open. Two are partly done: the `[fea
 - **Done when:**
   - A read-only helper reports whether a worktree path, or one of its parents, is trusted for Claude and for Codex.
   - Tatsu never writes `~/.claude.json` or Codex trust itself.
+  - Codex paths come from a single `codexHomeDir()` that honours `CODEX_HOME` (realpath'd; the default `~/.codex` is not realpath'd), so "`config.toml`" here means `<codexHomeDir()>/config.toml`.
   - Unit tests cover a trusted path, a trusted parent, an untrusted path and a missing config file.
 
 ### 8. Codex hook trust and flag name
@@ -90,7 +97,17 @@ Status as of 2026-10-02: every gap is still open. Two are partly done: the `[fea
   - Settings shows "Codex hooks need review: run /hooks" when any entry isn't trusted. The same helper will feed the launch-sheet readiness check later.
   - The flag is written as `[features] hooks` (keep reading `codex_hooks` for existing installs).
   - Tatsu never writes `trusted_hash` without an explicit opt-in.
+  - Codex paths come from a single `codexHomeDir()` that honours `CODEX_HOME` (realpath'd; the default `~/.codex` is not realpath'd); `~/.codex` above means that dir.
 - **Verify first:** the computed hash against a real Codex binary (≥ 0.129.0), for example with `codex app-server` `hooks/list`.
+
+### 9. Codex per-terminal CODEX_HOME fallback (contingent)
+
+- **Today:** nothing; this item exists only if Item 5's Phase 0 gate fails (Codex rejects the `-c mcp_servers.*` overrides). Source at `rust-v0.129.0` and `rust-v0.160.0` expects the gate to pass, so the expected outcome is Skipped.
+- **Blocker:** Codex canonicalizes `$CODEX_HOME`, so hook trust keys (`<home>/hooks.json:…`) change under a per-terminal home and Tatsu's hooks become untrusted. The only escapes are writing `trusted_hash` or `--dangerously-bypass-hook-trust` (≥ 0.131.0), both needing Item 8's opt-in. Ticket 09 Phase 0 asks the user to decide before any code.
+- **Done when:** one of
+  - Codex gets `harness-control` through a per-terminal `CODEX_HOME` (symlinked `auth.json` and `sessions/`, `config.toml` copy plus the server table), with hook trust handled as the user decided; or
+  - it is recorded as Skipped (the Item 5 gate passed) or Descoped (decision), with gap 2's Codex status noted in the plan.
+- **Verify first:** whether a newer Codex passes the Item 5 gate.
 
 ## Out of scope
 
@@ -100,6 +117,6 @@ Status as of 2026-10-02: every gap is still open. Two are partly done: the `[fea
 
 ## Milestone done when
 
-- All eight items are merged, with `pnpm typecheck`, `pnpm build` and `npx vitest run` passing.
+- Items 1-8 are merged. Item 9 is merged, or recorded as Skipped because the Item 5 gate passed, or Descoped by decision. `pnpm typecheck`, `pnpm build` and `npx vitest run` pass.
 - Claude, Codex and opencode tabs each show correct status, can reach `harness-control` over MCP, and can be spawned from main with a permission level that never shows an interactive prompt.
 - The plan's "Gaps found" section is updated to mark each gap closed, with the commit that closed it.
