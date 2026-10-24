@@ -2301,57 +2301,6 @@ describe('harness-config symlink-aware inventory', () => {
   })
 })
 
-describe('harness-config template provenance', () => {
-  it('reads templateRef from rendered files in both marker forms', () => {
-    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-template-ref-'))
-    const claudeSkills = join(fixtureRoot, 'claude-skills')
-    const opencodeCommands = join(fixtureRoot, 'opencode-commands')
-    const fixture = makeFixture({
-      root: fixtureRoot,
-      roots: { claudeSkills, opencodeCommands },
-      deps: { homeDir: join(fixtureRoot, 'home'), env: { HOME: join(fixtureRoot, 'home') } }
-    })
-    const { resources, errors } = renderTemplates(
-      [
-        {
-          kind: 'skill',
-          name: 'deploy',
-          description: 'Deploys',
-          fragments: [],
-          body: 'Deploy it.',
-          harnesses: { claude: { frontmatter: {} } },
-          references: []
-        },
-        {
-          kind: 'command',
-          name: 'fix-ci',
-          description: 'Fixes CI',
-          fragments: [],
-          body: 'Fix it.',
-          harnesses: { opencode: { frontmatter: {} } },
-          references: []
-        }
-      ],
-      []
-    )
-    expect(errors).toEqual([])
-    const roots: Record<string, string> = { claude: claudeSkills, opencode: opencodeCommands }
-    for (const resource of resources) put(roots[resource.agentKind], resource.relativePath, resource.content)
-    put(claudeSkills, 'manual/SKILL.md', '---\nname: manual\n---\nHand written.\n')
-
-    const skills = fixture.service.scan({ agentKind: 'claude', resourceType: 'skills' })
-    expect(skills.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
-      ['deploy/SKILL.md', 'skill/deploy'],
-      ['manual/SKILL.md', undefined]
-    ])
-    expect(skills[1]).not.toHaveProperty('templateRef')
-    expect(skills[0].hash).toBe(resources.find((resource) => resource.agentKind === 'claude')?.hash)
-
-    const commands = fixture.service.scan({ agentKind: 'opencode', resourceType: 'commands' })
-    expect(commands.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([['fix-ci.md', 'command/fix-ci']])
-  })
-})
-
 describe('harness-config template sync', () => {
   type TemplateSeed = Parameters<typeof renderTemplates>[0][number] & { hash?: string }
   type FragmentSeed = { name: string; content: string; hash?: string }
@@ -2621,6 +2570,83 @@ describe('harness-config template sync', () => {
     expect(backups).toHaveLength(1)
     expect(readFileSync(join(fixture.roots.claudeAgents, backups[0]), 'utf8')).toBe('old reviewer')
     expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+  })
+
+  it('attributes a disk file to the template whose rendered path it sits at, not to any marker in its content', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    const rendered = readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')
+    expect(rendered).not.toContain('tatsu-template')
+    put(fixture.roots.claudeAgents, 'manual.md', '---\nname: manual\n---\nHand written.\n')
+    put(fixture.roots.claudeAgents, 'legacy.md', '---\nname: legacy\ntatsu-template: agent/reviewer\n---\nOld output.\n')
+
+    const scanned = fixture.service.scan(claudeAgents)
+    expect(scanned.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
+      ['legacy.md', undefined],
+      ['manual.md', undefined],
+      ['reviewer.md', 'agent/reviewer']
+    ])
+    expect(scanned[0]).not.toHaveProperty('templateRef')
+    expect(scanned[1]).not.toHaveProperty('templateRef')
+
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+    expect(fixture.service.scan(claudeAgents).find((ref: FileRef) => ref.relativePath === 'reviewer.md')?.templateRef).toBe(
+      'agent/reviewer'
+    )
+  })
+
+  it('reports templateRef on readFile for template output and not for a hand-written file', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+
+    const output = await fixture.service.readFile(physicalId('claude', 'claudeAgents', 'reviewer.md'))
+    expect(output).toMatchObject({ ref: { templateRef: 'agent/reviewer' }, content: renderedFor(fixture, 'claude').content })
+    const manual = await fixture.service.readFile(physicalId('claude', 'claudeAgents', 'manual.md'))
+    expect(manual).toMatchObject({ content: 'manual agent' })
+    expect(manual.ref).not.toHaveProperty('templateRef')
+  })
+
+  it('attributes a shared path to the template that renders there over one that fails to render', () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'existing')
+    setTemplates(fixture, [
+      agentTemplate({ fragments: ['missing'], harnesses: { claude: { frontmatter: {} } } }),
+      agentTemplate({ name: 'alpha', harnesses: { claude: { name: 'reviewer', frontmatter: {} } } })
+    ])
+    expect(fixture.service.scan(claudeAgents).map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
+      ['reviewer.md', 'agent/alpha']
+    ])
+  })
+
+  it('holds earlier output written at a block-overridden name when the template stops rendering', async () => {
+    const fixture = makeTemplateFixture()
+    const renamed = { claude: { name: 'critic', frontmatter: {} } }
+    setTemplates(fixture, [agentTemplate({ harnesses: renamed })])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [agentTemplate({ harnesses: renamed, fragments: ['missing'] })])
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.diskOnly).toEqual([])
+    expect(comparison.renderErrors?.map((entry) => [entry.templateRef, entry.held.map((ref) => ref.relativePath)])).toEqual([
+      ['agent/reviewer', ['critic.md']]
+    ])
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'critic.md'))).toBe(true)
+  })
+
+  it('KNOWN GAP: treats output at a block-overridden name as disk-only once the template file no longer parses', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate({ harnesses: { claude: { name: 'critic', frontmatter: {} } } })])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [])
+    fixture.source.errors = [{ relativePath: 'agents/reviewer.md', message: 'Invalid frontmatter' }]
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.diskOnly.map((ref) => [ref.relativePath, ref.templateRef])).toEqual([['critic.md', undefined]])
+    expect(comparison.renderErrors).toBeUndefined()
   })
 
   it('lists the scopes a template lands in, including the Claude commands alias', () => {

@@ -160,6 +160,7 @@ describe('ConfigTemplates', () => {
 
     expect(previewText()).toContain('Claude Code')
     expect(previewText()).not.toContain('Opencode')
+    expect(previewText()).toContain('name: reviewer')
     click(container.querySelector('#template-harness-opencode'))
     const opencodeTab = Array.from(container.querySelectorAll('[data-testid="template-preview"] button')).find(
       (b) => b.textContent !== 'Claude Code'
@@ -167,7 +168,8 @@ describe('ConfigTemplates', () => {
     expect(opencodeTab).toBeTruthy()
     click(opencodeTab!)
     await flush()
-    expect(previewText()).toContain('<!-- tatsu-template: agent/reviewer -->')
+    expect(previewText()).toContain('description: Ship it')
+    expect(previewText()).not.toContain('name: reviewer')
     expect(onDirtyChange).toHaveBeenLastCalledWith(true)
   })
 

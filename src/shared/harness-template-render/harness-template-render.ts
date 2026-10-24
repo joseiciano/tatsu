@@ -1,4 +1,4 @@
-import { CORE_SCHEMA, dump, load } from 'js-yaml'
+import { CORE_SCHEMA, dump } from 'js-yaml'
 
 import {
   resourcePathForName,
@@ -7,7 +7,6 @@ import {
 } from '../agent-registry'
 import {
   TEMPLATE_KIND_RESOURCE_TYPE,
-  templateNameError,
   templateTargets,
   validateTemplateTargets
 } from '../harness-templates'
@@ -19,9 +18,10 @@ import type {
   ManagedHarnessKind
 } from '../state/harness-config'
 
-export const RENDERER_VERSION = 2
+export const RENDERER_VERSION = 3
 
-export const TEMPLATE_MARKER_KEY = 'tatsu-template'
+/** Frontmatter key that files rendered before RENDERER_VERSION 3 carried. */
+export const LEGACY_TEMPLATE_MARKER_KEY = 'tatsu-template'
 
 export type RenderableTemplate = Pick<
   HarnessTemplate,
@@ -62,8 +62,7 @@ export interface TemplateRenderResult {
 
 const KIND_ORDER: Record<HarnessTemplateKind, number> = { agent: 0, skill: 1, command: 2 }
 const HARNESS_ORDER: Record<ManagedHarnessKind, number> = { claude: 0, codex: 1, opencode: 2 }
-const MARKER_VALUE = /^(agent|skill|command)\/(.+)$/
-const MARKER_COMMENT = /^<!--\s*tatsu-template:\s*(\S(?:.*\S)?)\s*-->$/
+const LEGACY_MARKER_COMMENT = /^<!--\s*tatsu-template:\s*\S(?:.*\S)?\s*-->$/
 
 function lexicalCompare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
@@ -77,37 +76,17 @@ function section(value: string): string {
   return normalizeNewlines(value).replace(/^\n+/, '').replace(/\s+$/, '')
 }
 
-export function templateMarker(kind: HarnessTemplateKind, name: string): string {
+export function templateRefOf(kind: HarnessTemplateKind, name: string): string {
   return `${kind}/${name}`
 }
 
-/** Reads the provenance marker from a rendered file, in either form. */
-export function readTemplateRef(content: string): string | null {
-  const lines = normalizeNewlines(content.replace(/^\uFEFF/, '')).split('\n')
-  let bodyStart = 0
-  let candidate: unknown = null
-  if (lines[0] === '---') {
-    const close = lines.indexOf('---', 1)
-    if (close !== -1) {
-      bodyStart = close + 1
-      try {
-        const data = load(lines.slice(1, close).join('\n'), { schema: CORE_SCHEMA })
-        if (data && typeof data === 'object' && !Array.isArray(data)) {
-          candidate = (data as Record<string, unknown>)[TEMPLATE_MARKER_KEY] ?? null
-        }
-      } catch {
-        candidate = null
-      }
-    }
-  }
-  if (candidate === null) {
-    const match = MARKER_COMMENT.exec(lines[bodyStart] ?? '')
-    if (match) candidate = match[1]
-  }
-  if (typeof candidate !== 'string') return null
-  const match = MARKER_VALUE.exec(candidate)
-  if (!match || templateNameError(match[2]) !== null) return null
-  return candidate
+/** Files rendered before RENDERER_VERSION 3 carried a provenance comment on
+ *  the first body line; drop it when such a file is imported. */
+export function stripLegacyTemplateMarker(body: string): string {
+  const lines = normalizeNewlines(body).split('\n')
+  const first = lines.findIndex((line) => line.trim().length > 0)
+  if (first === -1 || !LEGACY_MARKER_COMMENT.test(lines[first].trim())) return body
+  return [...lines.slice(0, first), ...lines.slice(first + 1)].join('\n')
 }
 
 function serializeFrontmatter(data: Record<string, unknown>): string {
@@ -147,20 +126,12 @@ function renderForHarness(
     }
   }
 
-  if (Object.prototype.hasOwnProperty.call(block.frontmatter, TEMPLATE_MARKER_KEY)) {
-    return {
-      error: { ...base, code: 'invalid-frontmatter', message: `${TEMPLATE_MARKER_KEY} is reserved for Tatsu` }
-    }
-  }
-
-  const marker = templateMarker(template.kind, template.name)
   const frontmatter: Record<string, unknown> = {}
   if (output.frontmatterName) frontmatter.name = outputName
   if (template.description.length > 0 || 'description' in block.frontmatter) {
     frontmatter.description = template.description
   }
   for (const [key, value] of Object.entries(block.frontmatter)) frontmatter[key] = value
-  if (output.marker === 'frontmatter') frontmatter[TEMPLATE_MARKER_KEY] = marker
 
   let yaml: string
   try {
@@ -177,8 +148,7 @@ function renderForHarness(
     }
   }
   const body = sections.filter((part) => part.length > 0).join('\n\n')
-  const head = output.marker === 'comment' ? `<!-- ${TEMPLATE_MARKER_KEY}: ${marker} -->\n` : ''
-  const content = `---\n${yaml}---\n${head}${body}${body.length > 0 ? '\n' : ''}`
+  const content = `---\n${yaml}---\n${body}${body.length > 0 ? '\n' : ''}`
   return {
     resource: {
       templateName: template.name,
@@ -247,7 +217,7 @@ export function renderTemplates(
     for (const resource of claimants) {
       const others = claimants
         .filter((other) => other !== resource)
-        .map((other) => templateMarker(other.templateKind, other.templateName))
+        .map((other) => templateRefOf(other.templateKind, other.templateName))
       addError({
         templateKind: resource.templateKind,
         templateName: resource.templateName,
