@@ -1,13 +1,13 @@
 ---
 goal: Add a read-only main-side helper that reports whether a worktree path is trusted by Claude Code (~/.claude.json) and by Codex (~/.codex/config.toml), without ever writing either file
 date_created: 2026-10-02
-status: 'Planned'
+status: 'Completed'
 tags: [feature, trust, claude, codex, milestone-1, dynamic-workflows]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 Milestone 1, Item 7 (closes gap 8 in `plans/dynamic-workflows/dynamic-workflows.md` "Gaps found"). Size M. No dependencies.
 
@@ -160,36 +160,36 @@ This ticket adds the helper and its tests only. Consumers (Phase 2 runner pause,
 
 - GOAL-002: `src/main/folder-trust/` implements REQ-001 to REQ-011.
 
-- [ ] **TASK-002**: Works in either landing order with ticket 08 (its TASK-002 may have done part of this). Check the current base branch and do only what is missing: `smol-toml` not in `package.json` `dependencies` → `pnpm add smol-toml@^1.9.0` (zero dependencies; ships CJS `dist/index.cjs` and ESM). `'smol-toml'` not in `RUNTIME_PACKAGES` in `scripts/pack-headless.mjs` (`:139`) → add it, because the headless build externalizes runtime deps and only that list is copied into the tarball. The Electron build needs nothing extra (`externalizeDepsPlugin` + electron-builder ship `dependencies`).
-- [ ] **TASK-003**: If `src/main/folder-trust/folder-trust.ts` already exists holding only `resolveCodexHome` / `codexConfigPath` (created by ticket 08 TASK-002), extend that file and its test in place, keeping one definition of each function. Otherwise create `src/main/folder-trust/folder-trust.ts` with the exports in REQ-002 (`env` and `homeDir` stay injectable parameters on `resolveCodexHome`, `codexConfigPath` and `claudeGlobalConfigPath`; only the defaults read `process.env` / `homedir()`) and private helpers `resolvePath`, `findGitLayout`, `claudeCanonicalRoot`, `codexRepoRoot`, `parentChain(start, stopAt | null)`, `keyLookup(map, candidate)` (REQ-005 matching), `isTruthyEnv`, `readClaudeProjects`, `readCodexProjects`. Imports: `readFile, realpath, lstat` from `fs/promises`; `existsSync, realpathSync` from `fs`; `homedir` from `os`; `dirname, basename, join, resolve` from `path`; `parse` from `smol-toml`; `log` from `../debug`.
+- [x] **TASK-002**: Works in either landing order with ticket 08 (its TASK-002 may have done part of this). Check the current base branch and do only what is missing: `smol-toml` not in `package.json` `dependencies` → `pnpm add smol-toml@^1.9.0` (zero dependencies; ships CJS `dist/index.cjs` and ESM). `'smol-toml'` not in `RUNTIME_PACKAGES` in `scripts/pack-headless.mjs` (`:139`) → add it, because the headless build externalizes runtime deps and only that list is copied into the tarball. The Electron build needs nothing extra (`externalizeDepsPlugin` + electron-builder ship `dependencies`).
+- [x] **TASK-003**: If `src/main/folder-trust/folder-trust.ts` already exists holding only `resolveCodexHome` / `codexConfigPath` (created by ticket 08 TASK-002), extend that file and its test in place, keeping one definition of each function. Otherwise create `src/main/folder-trust/folder-trust.ts` with the exports in REQ-002 (`env` and `homeDir` stay injectable parameters on `resolveCodexHome`, `codexConfigPath` and `claudeGlobalConfigPath`; only the defaults read `process.env` / `homedir()`) and private helpers `resolvePath`, `findGitLayout`, `claudeCanonicalRoot`, `codexRepoRoot`, `parentChain(start, stopAt | null)`, `keyLookup(map, candidate)` (REQ-005 matching), `isTruthyEnv`, `readClaudeProjects`, `readCodexProjects`. Imports: `readFile, realpath, lstat` from `fs/promises`; `existsSync, realpathSync` from `fs`; `homedir` from `os`; `dirname, basename, join, resolve` from `path`; `parse` from `smol-toml`; `log` from `../debug`.
   - Read helpers return `{ ok: true; projects: Record<string, unknown> } | { ok: false; status: 'untrusted' | 'unknown'; reason: TrustReason }`.
-- [ ] **TASK-004**: Create `src/main/folder-trust/index.ts`: `export * from './folder-trust'`.
+- [x] **TASK-004**: Create `src/main/folder-trust/index.ts`: `export * from './folder-trust'`.
 
 ### Implementation Phase 3: Tests
 
 - GOAL-003: `folder-trust.test.ts` covers TEST-001 to TEST-010.
 
-- [ ] **TASK-005**: Fixture helpers inside the test file:
+- [x] **TASK-005**: Fixture helpers inside the test file:
   - `makeRepo(root, name)`: creates `<root>/<name>/.git/` directory (contents irrelevant beyond existence) and returns its realpath.
   - `makeWorktree(mainGitDir, wtPath, id)`: creates `<mainGitDir>/worktrees/<id>/commondir` containing `../..\n`, and `<wtPath>/.git` file containing `gitdir: <mainGitDir>/worktrees/<id>\n`.
   - `makeBare(root, name)`: creates `<root>/<name>/` with `HEAD` and `worktrees/`; a worktree of it uses `commondir` `../..` from `<bare>/worktrees/<id>`.
   - `writeClaude(path, projects)`: writes `{ numStartups: 1, oauthAccount: { emailAddress: 'x@example.com' }, projects }`.
   - `writeCodex(path, entries: Record<string, string>)`: writes `[projects."<key>"]\ntrust_level = "<v>"\n` per entry, preceded by an unrelated `[features]\nhooks = true\n` table.
-- [ ] **TASK-006**: Implement TEST-001 to TEST-010 with `describe('checkClaudeFolderTrust')`, `describe('checkCodexFolderTrust')`, `describe('config paths')`. Each test passes `env: {}` unless it is testing env.
+- [x] **TASK-006**: Implement TEST-001 to TEST-010 with `describe('checkClaudeFolderTrust')`, `describe('checkCodexFolderTrust')`, `describe('config paths')`. Each test passes `env: {}` unless it is testing env.
 
 ### Implementation Phase 4: Verify and commit
 
 - GOAL-004: CI-equivalent checks pass and the real machine agrees with the helper.
 
-- [ ] **TASK-007**: Run `pnpm typecheck`, `pnpm build`, `npx vitest run`, and `pnpm build:headless && bash scripts/smoke-headless.sh` (TASK-002 touched the headless tarball list). All pass.
-- [ ] **TASK-008**: Run TEST-011 (manual; needs the dev machine with tmux and an interactive, logged-in `claude`). An unattended implementer may skip it and write `TEST-011 not run` in the commit message.
-- [ ] **TASK-009**: Commit (`Add read-only Claude/Codex folder-trust helper`), push.
+- [x] **TASK-007**: Run `pnpm typecheck`, `pnpm build`, `npx vitest run`, and `pnpm build:headless && bash scripts/smoke-headless.sh` (TASK-002 touched the headless tarball list). All pass.
+- [x] **TASK-008**: Run TEST-011 (manual; needs the dev machine with tmux and an interactive, logged-in `claude`). An unattended implementer may skip it and write `TEST-011 not run` in the commit message.
+- [x] **TASK-009**: Commit (`Add read-only Claude/Codex folder-trust helper`), push.
 
 ### Implementation Phase 5: Close gap 8 in the plan
 
 - GOAL-005: The plan records gap 8 as closed and states the verified trust rules.
 
-- [ ] **TASK-010**: After the TASK-009 code commit, edit `plans/dynamic-workflows/dynamic-workflows.md` (re-grep the lines; numbers below are from 2026-10-03). `<hash>` is the hash from TASK-009 (the code commit).
+- [x] **TASK-010**: After the TASK-009 code commit, edit `plans/dynamic-workflows/dynamic-workflows.md` (re-grep the lines; numbers below are from 2026-10-03). `<hash>` is the hash from TASK-009 (the code commit).
   - Gap 8 (line starting `8. **Claude folder trust blocks unattended spawns.**`, ~69): replace `Trust carries down from a trusted parent folder.` with `Claude trusts a path when its canonical repo root, or the path or a parent up to its git toplevel, is trusted; a trusted parent does not cover a nested git repo.` Then append `Closed in <hash>: \`src/main/folder-trust\` reports read-only whether a path is trusted for Claude (\`projects[...].hasTrustDialogAccepted\` on the canonical repo root, or the path and its parents up to the git toplevel) and Codex (\`[projects."<path>"] trust_level\` on the path or its root git project). Tatsu never writes either file. Codex rules <verified on <ver> | from source, unverified>.`
   - "Harness research" table, row `Folder trust prompt` (~249): Claude cell becomes `yes; trusted if the canonical repo root (main checkout for worktrees) or the cwd/its parents up to the git toplevel is trusted (gap 8)`; Codex cell becomes `per-project \`trust_level\` in \`config.toml\`, checked on the cwd then its root git project`.
   - "Permissions & trust", bullet `**Claude folder trust**` (~372): replace `whether the worktree path or one of its parents is trusted` with `whether the worktree path is trusted, using each CLI's own rule (\`src/main/folder-trust\`)`.
