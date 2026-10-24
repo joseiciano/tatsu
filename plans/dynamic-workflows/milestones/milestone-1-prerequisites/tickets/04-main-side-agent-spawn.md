@@ -1,13 +1,13 @@
 ---
 goal: Move agent terminal spawning into a main-side helper, make terminal creation create-or-attach with ordered history replay, and let main start the agent tabs it creates (opt-in `fromMain`) so background and headless tabs run without being opened
 date_created: 2026-10-02
-status: 'Planned'
+status: 'Completed'
 tags: [feature, architecture, pty, terminals, headless, milestone-1, dynamic-workflows]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 Milestone 1, Item 4 (closes gap 1 in `plans/dynamic-workflows/dynamic-workflows.md` "Gaps found"). Size L. No dependencies. Item 6 (permission levels) depends on this ticket.
 
@@ -268,44 +268,44 @@ Main is single-threaded and every path below is synchronous, so "check `hasTermi
 
 - GOAL-001: `src/main/agent-spawn/` exists and is tested. The existing `agent:buildSpawnArgs` and `pty:create` handlers produce the same commands and roster events as before, for all four agent kinds. No user-visible change except REQ-018's prompt placement.
 
-- [ ] **TASK-000b**: Apply REQ-018 in `src/main/agents/claude.ts` (`--` form, or the generated-session-id fallback in `buildAgentSpawnOpts` during TASK-003) and update `claude.test.ts` (TEST-024).
-- [ ] **TASK-001**: Create `src/shared/terminal-spawn-types/` with the types in REQ-001.
-- [ ] **TASK-002**: Change `PtyManager.create` to return `boolean` (REQ-009): `return true` at the attach early-return (`:142`) and just before the method's closing brace (`:245`), `return false` in the spawn `catch` (`:173`). Grep tests for typed `PtyManager` fakes (`grep -rn "PtyManager" src --include='*.test.ts*'`) and update any whose `create` is typed or implemented as returning `void`.
-- [ ] **TASK-003**: Create `src/main/agent-spawn/` with `constants.ts`, `types.ts`, `agent-spawn.ts`, `index.ts` per REQ-002 to REQ-008. `index.ts` exports `createAgentSpawner`, `resolveSpawnSize`, `agentSessionName`, `parseSpawnSpec`, `DEFAULT_SPAWN_COLS`, `DEFAULT_SPAWN_ROWS`, and the types.
-- [ ] **TASK-004**: In `src/main/index.ts`, construct `agentSpawner` (REQ-010) and replace the body of the `agent:buildSpawnArgs` handler (`:2273-2323`) with a call to `agentSpawner.buildAgentCommand` (REQ-011). Leave `pty:create` as is for now. Remove imports from `index.ts` that become unused (`buildClaudeLaunchSettings` if nothing else uses it).
-- [ ] **TASK-005**: Write `src/main/agent-spawn/agent-spawn.test.ts`, TEST-001 to TEST-008. Run `pnpm typecheck`, `pnpm build`, `npx vitest run`. Commit (`Extract agent terminal spawning into a main-side agent-spawn helper`) and push.
+- [x] **TASK-000b**: Apply REQ-018 in `src/main/agents/claude.ts` (`--` form, or the generated-session-id fallback in `buildAgentSpawnOpts` during TASK-003) and update `claude.test.ts` (TEST-024).
+- [x] **TASK-001**: Create `src/shared/terminal-spawn-types/` with the types in REQ-001.
+- [x] **TASK-002**: Change `PtyManager.create` to return `boolean` (REQ-009): `return true` at the attach early-return (`:142`) and just before the method's closing brace (`:245`), `return false` in the spawn `catch` (`:173`). Grep tests for typed `PtyManager` fakes (`grep -rn "PtyManager" src --include='*.test.ts*'`) and update any whose `create` is typed or implemented as returning `void`.
+- [x] **TASK-003**: Create `src/main/agent-spawn/` with `constants.ts`, `types.ts`, `agent-spawn.ts`, `index.ts` per REQ-002 to REQ-008. `index.ts` exports `createAgentSpawner`, `resolveSpawnSize`, `agentSessionName`, `parseSpawnSpec`, `DEFAULT_SPAWN_COLS`, `DEFAULT_SPAWN_ROWS`, and the types.
+- [x] **TASK-004**: In `src/main/index.ts`, construct `agentSpawner` (REQ-010) and replace the body of the `agent:buildSpawnArgs` handler (`:2273-2323`) with a call to `agentSpawner.buildAgentCommand` (REQ-011). Leave `pty:create` as is for now. Remove imports from `index.ts` that become unused (`buildClaudeLaunchSettings` if nothing else uses it).
+- [x] **TASK-005**: Write `src/main/agent-spawn/agent-spawn.test.ts`, TEST-001 to TEST-008. Run `pnpm typecheck`, `pnpm build`, `npx vitest run`. Commit (`Extract agent terminal spawning into a main-side agent-spawn helper`) and push.
 
 ### Implementation Phase 2: Create-or-attach transport surface
 
 - GOAL-002: Clients can attach (live/dead + history) and create-or-attach through requests. Old renderers keep working.
 
-- [ ] **TASK-006**: Add the `terminal:attach` and `pty:createOrAttach` request handlers (REQ-010). Leave the legacy `pty:create` signal handler's behaviour as it is (REQ-011).
-- [ ] **TASK-007**: Add `attachTerminal` and `createOrAttachTerminal` to `ElectronAPI` and `build-backend.ts` (REQ-012). Add the `@deprecated` JSDoc to `createTerminal` and `buildAgentSpawnArgs` in `types.ts`.
-- [ ] **TASK-008**: Extend `agent-spawn.test.ts` with TEST-009 to TEST-012 and TEST-012b. Verify, commit (`Add terminal:attach and pty:createOrAttach requests`), push.
+- [x] **TASK-006**: Add the `terminal:attach` and `pty:createOrAttach` request handlers (REQ-010). Leave the legacy `pty:create` signal handler's behaviour as it is (REQ-011).
+- [x] **TASK-007**: Add `attachTerminal` and `createOrAttachTerminal` to `ElectronAPI` and `build-backend.ts` (REQ-012). Add the `@deprecated` JSDoc to `createTerminal` and `buildAgentSpawnArgs` in `types.ts`.
+- [x] **TASK-008**: Extend `agent-spawn.test.ts` with TEST-009 to TEST-012 and TEST-012b. Verify, commit (`Add terminal:attach and pty:createOrAttach requests`), push.
 
 ### Implementation Phase 3: Renderer attach-first mount flow
 
 - GOAL-003: XTerminal attaches before it ever spawns, never loses or duplicates bytes around the history replay, never shows "session restored" or resets modes on a live PTY, and only spawns through `pty:createOrAttach`.
 
-- [ ] **TASK-009**: Create `src/renderer/terminal-attach/` (REQ-013) with TEST-013, TEST-013b and TEST-014.
-- [ ] **TASK-010**: Rewrite the XTerminal mount flow (REQ-014). Keep `pendingSpawnRef` and the visible effect's deferred-spawn branch (`:665-673`); they now only matter for PTYs that aren't running. Keep the `exited` overlay wiring (`:438-442`).
-- [ ] **TASK-011**: Run the manual checks TEST-019 (a)–(f) on desktop. Verify, commit (`Attach to running terminals before spawning and replay history in order`), push.
+- [x] **TASK-009**: Create `src/renderer/terminal-attach/` (REQ-013) with TEST-013, TEST-013b and TEST-014.
+- [x] **TASK-010**: Rewrite the XTerminal mount flow (REQ-014). Keep `pendingSpawnRef` and the visible effect's deferred-spawn branch (`:665-673`); they now only matter for PTYs that aren't running. Keep the `exited` overlay wiring (`:438-442`).
+- [x] **TASK-011**: Run the manual checks TEST-019 (a)–(f) on desktop. Verify, commit (`Attach to running terminals before spawning and replay history in order`), push.
 
 ### Implementation Phase 4: Start main-created agent tabs from main
 
 - GOAL-004: An agent tab main creates with `fromMain` (a new worktree with an `initialPrompt` or teleport session) starts in main the moment it enters the slice, with or without a client, and gets its session name. UI-initiated tabs stay renderer-spawned. Restored tabs don't start.
 
-- [ ] **TASK-012**: Add `startAgentTab` to `PanesFSMOptions`, add `fromMain` / `worktree` to the `ensureInitialized` opts and `opts.fromMain` to `addTab`, and call `startAgentTab` from the two places in REQ-015.
-- [ ] **TASK-012b**: Add `repoRoot` and `branch` to the `onWorktreeCreated` params and pass them from `finishCreate` (REQ-017). Update any `onWorktreeCreated` fake in `src/main/worktrees-fsm/*.test.ts`.
-- [ ] **TASK-013**: Wire `startAgentTab` in `src/main/index.ts` and pass `fromMain` + `worktree` at the `onWorktreeCreated` and `worktrees:externalCreate` `ensureInitialized` calls (REQ-016). Leave `drainBootInit`, the `listChanged` subscriber, `panes:addTab` and `panes:ensureInitialized` unchanged.
-- [ ] **TASK-014**: Extend `src/main/panes-fsm/panes-fsm.test.ts` with TEST-015 to TEST-018, TEST-015b and TEST-022, and the worktrees-fsm test with TEST-023.
-- [ ] **TASK-015**: Run TEST-019 (g)–(l) and TEST-020 (headless). Verify, commit (`Start main-created agent tabs from main so background and headless tabs run unopened`), push.
+- [x] **TASK-012**: Add `startAgentTab` to `PanesFSMOptions`, add `fromMain` / `worktree` to the `ensureInitialized` opts and `opts.fromMain` to `addTab`, and call `startAgentTab` from the two places in REQ-015.
+- [x] **TASK-012b**: Add `repoRoot` and `branch` to the `onWorktreeCreated` params and pass them from `finishCreate` (REQ-017). Update any `onWorktreeCreated` fake in `src/main/worktrees-fsm/*.test.ts`.
+- [x] **TASK-013**: Wire `startAgentTab` in `src/main/index.ts` and pass `fromMain` + `worktree` at the `onWorktreeCreated` and `worktrees:externalCreate` `ensureInitialized` calls (REQ-016). Leave `drainBootInit`, the `listChanged` subscriber, `panes:addTab` and `panes:ensureInitialized` unchanged.
+- [x] **TASK-014**: Extend `src/main/panes-fsm/panes-fsm.test.ts` with TEST-015 to TEST-018, TEST-015b and TEST-022, and the worktrees-fsm test with TEST-023.
+- [x] **TASK-015**: Run TEST-019 (g)–(l) and TEST-020 (headless). Verify, commit (`Start main-created agent tabs from main so background and headless tabs run unopened`), push.
 
 ### Implementation Phase 5: Close gap 1 in the plan
 
 - GOAL-005: The plan records gap 1 as closed.
 
-- [ ] **TASK-016**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
+- [x] **TASK-016**: Edit `plans/dynamic-workflows/dynamic-workflows.md`:
   - Gap 1 ("Gaps found", the line starting `1. **Agent spawn is renderer-driven (blocker).**`): append `Closed in <Phase 1 hash>..<Phase 4 hash>: \`src/main/agent-spawn/\` builds and spawns agent terminals with no renderer (default 120×30, or a sibling tab's size), \`pty:createOrAttach\` / \`terminal:attach\` make terminal creation create-or-attach with ordered history replay, and agent tabs main creates with \`fromMain\` (prompted or teleported new worktrees) start from main. UI-initiated tabs are still spawned by the renderer at their fitted size, and tabs restored from disk still start on first view.`
   - "Architecture", bullet "**Main-side spawn**": replace its text after the bold label with `\`src/main/agent-spawn/\` (\`createAgentSpawner\`): \`spawnAgentTerminal\` / \`spawnShellTerminal\` for main callers (the runner, later \`create_worktree\`), \`createOrAttach\` / \`attach\` behind \`pty:createOrAttach\` / \`terminal:attach\` for clients. A running PTY always wins: the client joins and replays its history. Main spawns at a sibling tab's size or 120×30 and the tab resizes when it mounts. Permission levels plug into \`AgentSpawnRequest.permissionLevel\`.`
   - Commit that edit separately (`Mark workflows gap 1 closed`) and push.
