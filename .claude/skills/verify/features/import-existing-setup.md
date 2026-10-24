@@ -53,5 +53,8 @@ The end state that proves it works:
 
 - The seed has no agents, fragments, or references folders, so those preview
   sections stay empty. Add fixtures to `seed.sh` before proving them.
-- No scripted journey yet. The selectors above come from source and have not
-  been run.
+- Run: `journeys/import-existing-setup.mjs`. Import asks a `window.confirm`
+  ("Import 2 templates and fragments…"), which `browser.mjs` accepts. Output
+  is `skills/deploy-check/TEMPLATE.md` and `commands/pr-summary.md` under the
+  template source folder; the import source and the sandbox HOME stay
+  byte-identical.

@@ -40,8 +40,17 @@ The end state that proves it works:
 
 ## Gotchas
 
-- Not run yet. Commit-on-Enter or blur, persistence, and the rejection of
-  relative paths come from source.
+- Run: `journeys/config-folders.mjs`. Enter commits, a relative path shows
+  "Choose an absolute folder path" and is not persisted, the override lands
+  in `DATA_DIR/config.json` and rescans Skills, and Reset restores `hello`.
+  Commit-on-blur comes from source.
+- Entry point 1 is unproven: with no repository open, Cmd+, does not open
+  Settings in the web client, and the Command Center needs a repository.
+  The journey deletes `$SANDBOX_HOME/.agents/skills` so it can use entry point 2.
+- When Settings opens at Config folders, the left nav highlights **GitHub**
+  instead of **Config folders** (see `config-folders-02-relative-rejected.png`).
+- Nine inputs have `Reset <label> to default` buttons and several labels
+  repeat (`Skills` three times). Scope the Reset click to the input's row.
 - Entry point 2 needs an unavailable root. Delete one sandbox root (for example
   `rm -r $SANDBOX_HOME/.agents/skills`) before launch. The seed creates all of
   them by default.

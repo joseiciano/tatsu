@@ -52,5 +52,10 @@ The end state that proves it works:
 - Body and fragment text are Monaco editors, not `<textarea>`. Use
   `page.keyboard`, and wait for the preview to update before asserting.
 - The template source folder is in `DATA_DIR`, not `HOME`. Check both after a sync.
-- No scripted journey yet. The selectors above come from source and have not
-  been run.
+- Run: `journeys/template-render-sync.mjs`. The template lands at
+  `DATA_DIR/harness-config-source/skills/greet/TEMPLATE.md`; the rendered
+  `SKILL.md` carries `tatsu-template: skill/greet` in its frontmatter; the row
+  offers `Edit template skill/greet`. Harness checkboxes are
+  `#template-harness-<claude|codex|opencode>`; the create button is `Create`
+  (exact). The body editor is the first `.monaco-editor` on the page.
+- Fragments, reordering, delete, and the outside-change prompt are unproven.
