@@ -168,6 +168,7 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "smol-toml": "^1.9.0",
     "ws": "^8.20.0"
   },
   "devDependencies": {

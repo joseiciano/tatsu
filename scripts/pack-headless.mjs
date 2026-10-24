@@ -136,7 +136,7 @@ async function copyClaudeBinary(platform, libDir) {
 // `require('node-pty')` and `require('ws')` in the bundled main.js
 // resolve through plain Node lookup at runtime. We ship them as a real
 // node_modules tree next to main.js so resolution Just Works.
-const RUNTIME_PACKAGES = ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk']
+const RUNTIME_PACKAGES = ['node-pty', 'ws', '@anthropic-ai/claude-agent-sdk', 'smol-toml']
 
 async function copyRuntimePackages(libDir) {
   const destRoot = join(libDir, 'node_modules')
