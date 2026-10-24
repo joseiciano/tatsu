@@ -46,8 +46,15 @@ The end state that proves it works:
 
 ## Gotchas
 
-- Only skill → command for Opencode has run. Command → skill and the Claude
-  "already available" notice come from source and are unproven.
+- Run: skill → command and command → skill for Opencode, and the Claude
+  notice "Already available as a command at hello/SKILL.md" (no draft opens,
+  no file is written). Codex and nested-name conversions are unproven.
+- Command → skill writes exactly the Step 10 REQ-005 template: a `# <name>`
+  heading, a pointer sentence, and the marker. It has no `name`/`description`
+  front matter and never copies the command body (REQ-007). Assert that
+  shape, not the command's description.
+- On the Commands tab both Claude and Opencode list `run-tests`, so there are
+  two `Create skill from run-tests` buttons; index 1 is Opencode.
 - `Create command` appears both as row actions and as the submit button. Use
   `{ name: 'Create command', exact: true }` for the submit button; row actions
   are labeled `Create command from <name>`.

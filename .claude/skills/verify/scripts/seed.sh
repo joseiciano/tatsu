@@ -39,3 +39,16 @@ IMPORT="$SCRATCH/import-source"
 skill "$IMPORT/skills" deploy-check "Check a deploy is healthy." "Hit the health endpoint and report."
 mkdir -p "$IMPORT/commands"
 printf -- '---\ndescription: Summarize a PR\n---\n\nSummarize the open pull request.\n' > "$IMPORT/commands/pr-summary.md"
+
+# Full import source: agents built from shared fragments, a skill that links
+# a shared reference, and a second skills folder (Add skill folder).
+FULL="$SCRATCH/import-full"
+mkdir -p "$FULL/agents" "$FULL/agents-shared" "$FULL/references" "$FULL/skills/deploy" "$FULL/skills-extra/lint"
+printf -- '---\nname: triager\ndescription: Triages bug reports\nshared: [house-style, safety]\nclaude:\n  model: opus\n---\nSort incoming bugs by severity.\n' \
+  > "$FULL/agents/triager.md"
+printf -- 'Write plainly.\n' > "$FULL/agents-shared/house-style.md"
+printf -- 'Never run destructive commands.\n' > "$FULL/agents-shared/safety.md"
+printf -- '# Checklist\n\n- tests pass\n' > "$FULL/references/checklist.md"
+printf -- '---\nname: deploy\ndescription: Deploy the app\n---\nRun the deploy script. See [checklist](../../references/checklist.md).\n' \
+  > "$FULL/skills/deploy/SKILL.md"
+printf -- '---\nname: lint\ndescription: Lint the repo\n---\nRun the linter.\n' > "$FULL/skills-extra/lint/SKILL.md"

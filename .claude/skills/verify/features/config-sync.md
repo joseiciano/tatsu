@@ -48,8 +48,12 @@ The end state that proves it works:
   Badges flip to `Synced` (including `linked-skill`, which keeps `Managed
   elsewhere`), `DATA_DIR/config.json` gains the resources, and `~/.claude`
   plus the dotfiles target stay byte-identical. Sync to disk is proven for a
-  template by `journeys/template-render-sync.mjs`; syncing an edited plain
-  resource is still unproven.
+  template by `journeys/template-render-sync.mjs`, and for a plain resource by
+  `journeys/config-edit-and-sync.mjs`: an outside edit shows as
+  `Content changed (1)` and Sync to disk restores Tatsu's version.
+- Saving a resource in the Config editor writes the disk file (after a backup
+  confirm) **and** stores it in Tatsu, so the row turns `Synced` at once.
+  Pressing `Sync <Harness>` on an all-synced scope shows a notice, not a dialog.
 - Plans go stale when a root changes (Step 16). Re-open the dialog after
   changing Config folders.
 - Hash both files before and after an action. Don't trust the badge alone.

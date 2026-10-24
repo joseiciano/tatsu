@@ -25,11 +25,26 @@ await withApp(process.argv[2], 'config-folders', async ({ page, state, shot, log
   await helloRows().first().waitFor()
   log(`hello rows before: ${await helloRows().count()}`)
 
+  // Entry point 1: Cmd+, from the Config page replaces Config with Settings.
+  await page.keyboard.press('Meta+Comma')
+  await page.getByRole('tablist', { name: 'Resource type' }).waitFor({ state: 'detached', timeout: 5000 })
+  await page.getByRole('button', { name: 'Config folders' }).first().click()
+  await page.locator('#config-folder-claudeSkills').waitFor()
+  await shot('settings-via-hotkey')
+  await page.keyboard.press('Escape')
+
+  // Entry point 2: the unavailable-root link opens Settings at the section,
+  // with its heading in view rather than scrolled under the top edge.
   const openFolders = async () => {
     if (!(await page.getByRole('tablist', { name: 'Resource type' }).isVisible())) await openConfig(page)
     await page.getByRole('tab', { name: 'Skills' }).click()
     await page.getByRole('button', { name: 'Set config folders in Settings' }).first().click()
     await page.locator('#config-folder-claudeSkills').waitFor()
+    const heading = page.getByRole('heading', { name: 'Config folders', level: 2 })
+    const box = await heading.boundingBox()
+    const top = await heading.evaluate((el) => el.closest('.overflow-y-auto').getBoundingClientRect().top)
+    log(`Config folders heading top ${box?.y} vs scroll container top ${top}`)
+    if (!box || box.y < top) throw new Error('Config folders heading is scrolled out of view')
   }
   await openFolders()
   const input = page.locator('#config-folder-claudeSkills')

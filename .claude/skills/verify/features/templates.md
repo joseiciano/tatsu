@@ -58,4 +58,9 @@ The end state that proves it works:
   offers `Edit template skill/greet`. Harness checkboxes are
   `#template-harness-<claude|codex|opencode>`; the create button is `Create`
   (exact). The body editor is the first `.monaco-editor` on the page.
-- Fragments, reordering, delete, and the outside-change prompt are unproven.
+- Run: `journeys/template-fragments.mjs`. Fragments render after the body in
+  list order; `Move <name> up` reorders both the preview and `TEMPLATE.md`;
+  editing a template whose file changed on disk asks "changed in the source
+  folder since you opened it"; deletes leave `*.x-backup-<timestamp>` files.
+- `Create fragment` and the template editor both use a `Create` button and
+  `.monaco-editor` index 0; only one editor is open at a time.
