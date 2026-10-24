@@ -1,7 +1,8 @@
 // Shared Playwright session for verify journeys. Import from a journey:
 //   import { withApp, readState } from '../browser.mjs'
 // Uses the repo's playwright-core with system Chrome (no bundled Chromium).
-import { appendFileSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { appendFileSync, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
 
@@ -28,8 +29,9 @@ export async function withApp(stateFile, journey, fn) {
     executablePath: process.env.HARNESS_PLAYWRIGHT_BROWSER || undefined,
     headless: process.env.VERIFY_HEADED !== '1'
   })
+  let page
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
+    page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
     page.on('dialog', async (d) => {
       log(`dialog ${d.type()}: ${d.message()} -> accept`)
       await d.accept()
@@ -47,9 +49,38 @@ export async function withApp(stateFile, journey, fn) {
   } catch (err) {
     log(`FAIL ${err instanceof Error ? err.message : String(err)}`)
     process.exitCode = 1
+    if (page) {
+      await page.screenshot({ path: join(dir, `${journey}-FAIL.png`) }).catch(() => {})
+      const tree = await page.locator('body').ariaSnapshot().catch((e) => `ariaSnapshot failed: ${e}`)
+      writeFileSync(join(dir, `${journey}-FAIL-aria.txt`), tree)
+    }
   } finally {
     await browser.close()
   }
+}
+
+// Path -> sha256 (or "-> target" for symlinks) for every entry under root.
+// Compare two calls to prove an action left a tree byte-identical.
+export function hashTree(root) {
+  const out = {}
+  const walk = (p, rel) => {
+    const st = lstatSync(p)
+    if (st.isSymbolicLink()) out[rel] = `-> ${readlinkSync(p)}`
+    else if (st.isDirectory()) for (const e of readdirSync(p).sort()) walk(join(p, e), rel ? `${rel}/${e}` : e)
+    else out[rel] = createHash('sha256').update(readFileSync(p)).digest('hex')
+  }
+  if (existsSync(root)) walk(root, '')
+  return out
+}
+
+export function diffTrees(before, after) {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+  return [...keys].filter((k) => before[k] !== after[k]).sort()
+}
+
+export async function waitForFile(page, file, timeoutMs = 5000) {
+  for (let t = 0; t < timeoutMs && !existsSync(file); t += 100) await page.waitForTimeout(100)
+  if (!existsSync(file)) throw new Error(`${file} was not written`)
 }
 
 // Every journey reaches Config from the fresh-data-dir onboarding screen.

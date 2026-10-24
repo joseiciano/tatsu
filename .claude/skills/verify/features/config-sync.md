@@ -44,8 +44,12 @@ The end state that proves it works:
 
 ## Gotchas
 
-- Not run yet. The claim that Adopt writes `DATA_DIR/config.json`, and the
-  dialog flow, come from source.
+- Run: `journeys/config-sync-adopt.mjs` proves Adopt for Claude skills.
+  Badges flip to `Synced` (including `linked-skill`, which keeps `Managed
+  elsewhere`), `DATA_DIR/config.json` gains the resources, and `~/.claude`
+  plus the dotfiles target stay byte-identical. Sync to disk is proven for a
+  template by `journeys/template-render-sync.mjs`; syncing an edited plain
+  resource is still unproven.
 - Plans go stale when a root changes (Step 16). Re-open the dialog after
   changing Config folders.
 - Hash both files before and after an action. Don't trust the badge alone.
