@@ -81,7 +81,8 @@ function setup(statuses: Record<string, HarnessConfigSyncStatus> = {}) {
         }
       }
       return [...scopes.values()]
-    })
+    }),
+    scopesForFragment: vi.fn((_name?: string): HarnessConfigScope[] => [])
   }
   const deriver = createTemplateSyncDeriver({
     store,

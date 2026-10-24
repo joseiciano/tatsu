@@ -32,6 +32,8 @@ import type {
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
@@ -64,6 +66,8 @@ export type {
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
@@ -709,6 +713,9 @@ export interface ElectronAPI {
   applyHarnessTemplateImport(
     request: HarnessTemplateImportApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessTemplateImportApplyResult>>
+  resolveHarnessFragmentEdit(
+    request: HarnessConfigResolveFragmentEditRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigResolveFragmentEditResult>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the

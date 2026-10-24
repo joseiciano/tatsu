@@ -13,9 +13,11 @@ import type {
   HarnessConfigConversionResult,
   HarnessConfigErrorCode,
   HarnessConfigFileRef,
+  HarnessConfigFragmentResolution,
   HarnessConfigMutationDirection,
   HarnessConfigMutationPlan,
   HarnessConfigReadFileResult,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigRootKey,
   HarnessConfigScope,
   HarnessConfigSyncPlan,
@@ -175,6 +177,8 @@ export interface HarnessConfigServiceDeps {
   ) => TemplateRenderResult
   /** Removes `agentKind` from the template's targets (adopt "Detach"). */
   detachTemplateTarget?: (templateRef: string, agentKind: ManagedHarnessKind) => void | Promise<void>
+  /** Stores a fragment in the template source folder (resolve "keep edit"). */
+  saveFragment?: (name: string, content: string) => void | Promise<void>
   filesystem?: HarnessConfigFilesystem
   log?: (category: string, message: string, data?: unknown) => void
   formatErr?: (error: unknown) => string
@@ -198,4 +202,13 @@ export interface HarnessConfigService {
   scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[]
   /** Stored entries this template would hide if saved (REQ-002). */
   templateShadows(template: RenderableTemplate): HarnessConfigShadowedEntry[]
+  /** Supported scopes with a stored file that uses `name` as an inline
+   *  fragment, or any inline fragment when `name` is omitted. */
+  scopesForFragment(name?: string): HarnessConfigScope[]
+  resolveFragmentEdit(
+    scope: HarnessConfigScope,
+    id: string,
+    fragment: string,
+    resolution: HarnessConfigFragmentResolution
+  ): Promise<HarnessConfigResolveFragmentEditResult>
 }

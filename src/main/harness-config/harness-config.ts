@@ -20,6 +20,9 @@ import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
   type HarnessConfigFileRef,
+  type HarnessConfigFragmentErrorEntry,
+  type HarnessConfigFragmentResolution,
+  type HarnessConfigResolveFragmentEditResult,
   type HarnessConfigRootKey,
   type HarnessConfigScope,
   type HarnessConfigSyncDirection,
@@ -36,6 +39,11 @@ import {
   type TemplateRenderResult
 } from '../../shared/harness-template-render'
 import { classifyTemplateSourcePath, TEMPLATE_KIND_RESOURCE_TYPE, templateTargets } from '../../shared/harness-templates'
+import {
+  expandInlineFragments,
+  inlineFragmentNames,
+  resolveInlineFragmentEdit
+} from '../../shared/inline-fragments'
 import type { HarnessTemplate } from '../../shared/state/harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
@@ -260,6 +268,8 @@ type MutationOutcome = {
   before?: Buffer
 }
 type ScopeRenderError = { templateRef: string; message: string }
+type StoredFragmentError = { resource: HarnessConfigDesiredResource; message: string }
+type StoredFragmentEdit = { resource: HarnessConfigDesiredResource; fragments: string[] }
 
 type SnapshotState = {
   scope: HarnessConfigScope
@@ -268,6 +278,8 @@ type SnapshotState = {
   shadowed: HarnessConfigDesiredResource[]
   renderErrors: ScopeRenderError[]
   sourceErrors: ScopeRenderError[]
+  fragmentErrors: StoredFragmentError[]
+  fragmentEdits: StoredFragmentEdit[]
   diskFingerprint: string
   configFingerprint: string
   resolverIdentity: string
@@ -280,6 +292,8 @@ type ScopeTemplateState = {
   shadowed: HarnessConfigDesiredResource[]
   renderErrors: ScopeRenderError[]
   sourceErrors: ScopeRenderError[]
+  fragmentErrors: StoredFragmentError[]
+  fragmentEdits: StoredFragmentEdit[]
   templateFingerprint: string
 }
 
@@ -353,7 +367,7 @@ function cloneRef(ref: HarnessConfigFileRef): HarnessConfigFileRef {
 
 type ReviewFields = Pick<
   HarnessConfigSyncPlan,
-  'status' | 'diskOnly' | 'configOnly' | 'changed' | 'shadowed' | 'renderErrors'
+  'status' | 'diskOnly' | 'configOnly' | 'changed' | 'shadowed' | 'renderErrors' | 'fragmentErrors' | 'fragmentEdits'
 >
 
 function cloneReviewFields(comparison: HarnessConfigComparison): ReviewFields {
@@ -367,6 +381,14 @@ function cloneReviewFields(comparison: HarnessConfigComparison): ReviewFields {
   if (comparison.renderErrors) {
     fields.renderErrors = comparison.renderErrors.map((entry) => ({ ...entry, held: entry.held.map(cloneRef) }))
   }
+  if (comparison.fragmentErrors) {
+    fields.fragmentErrors = comparison.fragmentErrors.map((entry) =>
+      entry.held ? { ...entry, held: cloneRef(entry.held) } : { ...entry }
+    )
+  }
+  if (comparison.fragmentEdits) {
+    fields.fragmentEdits = comparison.fragmentEdits.map((entry) => ({ ...entry, fragments: [...entry.fragments] }))
+  }
   return fields
 }
 
@@ -379,6 +401,10 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private readonly attemptedPlanIds = new Set<string>()
   private tempSequence = 0
   private renderCache: { source: HarnessConfigTemplateSource; result: TemplateRenderResult } | null = null
+  private fragmentCache: {
+    fragments: HarnessConfigTemplateSource['fragments']
+    contents: ReadonlyMap<string, string>
+  } | null = null
 
   constructor(deps: HarnessConfigServiceDeps = {}) {
     this.deps = deps
@@ -579,6 +605,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof content !== 'string') {
         throw new HarnessConfigError('write-failed', 'Harness resource content must be text')
       }
+      content = this.expandForWrite(content)
       const descriptor = this.getDescriptor(scope)
       this.validateLogicalName(name)
       if (!descriptor.nameToRelativePath) {
@@ -617,6 +644,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof content !== 'string') {
         throw new HarnessConfigError('write-failed', 'Harness resource content must be text')
       }
+      content = this.expandForWrite(content)
       const state = this.snapshot(scope)
       const entry = state.disk.find(({ ref }) => ref.id === id)
       if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
@@ -829,6 +857,64 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
     }
     return scopes
+  }
+
+  /** Sweeps every stored file; fragment saves are rare user actions, so
+   *  the cost is paid once per save, not per streaming event. */
+  scopesForFragment(name?: string): HarnessConfigScope[] {
+    return this.guard('scopesForFragment', () => {
+      const stored = this.loadDesired().filter((resource) => {
+        const names = inlineFragmentNames(resource.content)
+        return name === undefined ? names.length > 0 : names.includes(name)
+      })
+      if (stored.length === 0) return []
+      return this.availableScopes().filter((scope) => this.desiredForScope(scope, stored).length > 0)
+    })
+  }
+
+  async resolveFragmentEdit(
+    scope: HarnessConfigScope,
+    id: string,
+    fragment: string,
+    resolution: HarnessConfigFragmentResolution
+  ): Promise<HarnessConfigResolveFragmentEditResult> {
+    return this.guardAsync('resolveFragmentEdit', async () => {
+      const descriptor = this.getDescriptor(scope)
+      const canonicalScope: HarnessConfigScope = {
+        agentKind: scope.agentKind,
+        resourceType: descriptor.canonicalResourceType ?? scope.resourceType
+      }
+      const current = this.desiredForScope(canonicalScope, this.loadDesired())
+      const index = current.findIndex((resource) => resource.id === id)
+      if (index === -1) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
+      const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
+      const fragments = this.fragmentContents(source)
+      const fragmentContent = fragments.get(fragment)
+      if (fragmentContent === undefined) {
+        throw new HarnessConfigError('invalid-fragment', `Unknown fragment "${fragment}"`)
+      }
+      const stored = current[index]
+      if (!expandInlineFragments(stored.content, fragments).edited.includes(fragment)) {
+        throw new HarnessConfigError('stale-plan', `No edited section of fragment "${fragment}" remains in this file`)
+      }
+      const result = resolveInlineFragmentEdit(stored.content, fragment, resolution, fragmentContent)
+      if (resolution === 'keep-edit') {
+        if (!this.deps.saveFragment) {
+          throw new HarnessConfigError('desired-state-failed', 'Saving fragments is unavailable')
+        }
+        // Fragment first: if storing the file then fails, the section
+        // still reads as edited instead of being reset to the old text.
+        await this.deps.saveFragment(fragment, result.fragmentContent ?? '')
+      }
+      const updated: HarnessConfigDesiredResource = {
+        ...stored,
+        content: result.content,
+        hash: sha256(Buffer.from(result.content, 'utf8')),
+        updatedAt: this.clock()
+      }
+      await this.replaceDesired(canonicalScope, [...current.slice(0, index), updated, ...current.slice(index + 1)])
+      return { scope: cloneScope(scope), id, fragment, resolution }
+    })
   }
 
   scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[] {
@@ -1161,8 +1247,14 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       shadowed: templates.shadowed,
       renderErrors: templates.renderErrors,
       sourceErrors: templates.sourceErrors,
+      fragmentErrors: templates.fragmentErrors,
+      fragmentEdits: templates.fragmentEdits,
       diskFingerprint: this.diskFingerprint(disk),
-      configFingerprint: this.configFingerprint([...templates.desired, ...templates.shadowed]),
+      configFingerprint: this.configFingerprint([
+        ...templates.desired,
+        ...templates.shadowed,
+        ...templates.fragmentErrors.map(({ resource }) => resource)
+      ]),
       resolverIdentity: this.resolverIdentity(scope),
       templateFingerprint: templates.templateFingerprint
     }
@@ -1226,7 +1318,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     }
     const renderedIds = new Set(rendered.map((resource) => resource.id))
     const shadowed = stored.filter((resource) => renderedIds.has(resource.id))
-    const desired = [...stored.filter((resource) => !renderedIds.has(resource.id)), ...rendered].sort(
+    const plain = this.expandStoredFragments(
+      stored.filter((resource) => !renderedIds.has(resource.id)),
+      source
+    )
+    const desired = [...plain.resources, ...rendered].sort(
       (a, b) => lexicalCompare(a.id, b.id) || lexicalCompare(a.relativePath, b.relativePath)
     )
 
@@ -1261,7 +1357,60 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         return [name, fragment ? fragment.hash ?? sha256(fragment.content) : null]
       })
     ]))
-    return { desired, rendered, shadowed, renderErrors, sourceErrors, templateFingerprint }
+    return {
+      desired,
+      rendered,
+      shadowed,
+      renderErrors,
+      sourceErrors,
+      fragmentErrors: plain.errors,
+      fragmentEdits: plain.edits,
+      templateFingerprint
+    }
+  }
+
+  private fragmentContents(source: HarnessConfigTemplateSource): ReadonlyMap<string, string> {
+    const cached = this.fragmentCache
+    if (cached && cached.fragments === source.fragments) return cached.contents
+    const contents = new Map(source.fragments.map((fragment) => [fragment.name, fragment.content]))
+    this.fragmentCache = { fragments: source.fragments, contents }
+    return contents
+  }
+
+  /** Stored files carry their fragment sections as written; each compare
+   *  refreshes sections whose fragment changed. A file whose placeholders
+   *  cannot expand contributes nothing to Tatsu config until fixed. */
+  private expandStoredFragments(
+    resources: HarnessConfigDesiredResource[],
+    source: HarnessConfigTemplateSource
+  ): { resources: HarnessConfigDesiredResource[]; errors: StoredFragmentError[]; edits: StoredFragmentEdit[] } {
+    const fragments = this.fragmentContents(source)
+    const expanded: HarnessConfigDesiredResource[] = []
+    const errors: StoredFragmentError[] = []
+    const edits: StoredFragmentEdit[] = []
+    for (const resource of resources) {
+      const expansion = expandInlineFragments(resource.content, fragments)
+      if (expansion.errors.length > 0) {
+        errors.push({ resource, message: expansion.errors.map(({ message }) => message).join('. ') })
+        continue
+      }
+      if (expansion.edited.length > 0) edits.push({ resource, fragments: expansion.edited })
+      expanded.push(
+        expansion.content === resource.content
+          ? resource
+          : { ...resource, content: expansion.content, hash: sha256(Buffer.from(expansion.content, 'utf8')) }
+      )
+    }
+    return { resources: expanded, errors, edits }
+  }
+
+  private expandForWrite(content: string): string {
+    const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
+    const expansion = expandInlineFragments(content, this.fragmentContents(source))
+    if (expansion.errors.length > 0) {
+      throw new HarnessConfigError('invalid-fragment', expansion.errors.map(({ message }) => message).join('. '))
+    }
+    return expansion.content
   }
 
   /** REQ-007: a template file that no longer parses is missing from the
@@ -1500,9 +1649,15 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     // back from disk-only, so sync to disk never deletes it.
     const erroredRefs = new Set([...state.renderErrors, ...state.sourceErrors].map(({ templateRef }) => templateRef))
     const held = new Map<string, DiskEntry[]>()
+    const fragmentErrorIds = new Set(state.fragmentErrors.map(({ resource }) => resource.id))
+    const fragmentHeld = new Map<string, DiskEntry>()
     const diskOnly: DiskEntry[] = []
     for (const entry of state.disk) {
       if (configById.has(entry.ref.id)) continue
+      if (fragmentErrorIds.has(entry.ref.id)) {
+        fragmentHeld.set(entry.ref.id, entry)
+        continue
+      }
       const templateRef = entry.ref.templateRef
       if (templateRef && erroredRefs.has(templateRef)) held.set(templateRef, [...(held.get(templateRef) ?? []), entry])
       else diskOnly.push(entry)
@@ -1518,7 +1673,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       return desired && desired.ref.hash !== disk.ref.hash ? [{ disk, config: desired }] : []
     })
     let status = comparisonStatus(diskOnly, configOnly, changed)
-    if (status === 'synced' && renderErrors.length > 0) status = 'conflict'
+    const needsAttention = renderErrors.length > 0 || state.fragmentErrors.length > 0 || state.fragmentEdits.length > 0
+    if (status === 'synced' && needsAttention) status = 'conflict'
     const comparison: HarnessConfigComparison = {
       scope: cloneScope(scope),
       status,
@@ -1535,6 +1691,27 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         templateRef,
         message,
         held: (held.get(templateRef) ?? []).map(({ ref }) => cloneRef(ref))
+      }))
+    }
+    if (state.fragmentErrors.length > 0) {
+      comparison.fragmentErrors = state.fragmentErrors.map(({ resource, message }) => {
+        const entry: HarnessConfigFragmentErrorEntry = {
+          id: resource.id,
+          label: resource.label,
+          relativePath: resource.relativePath,
+          message
+        }
+        const disk = fragmentHeld.get(resource.id)
+        if (disk) entry.held = cloneRef(disk.ref)
+        return entry
+      })
+    }
+    if (state.fragmentEdits.length > 0) {
+      comparison.fragmentEdits = state.fragmentEdits.map(({ resource, fragments }) => ({
+        id: resource.id,
+        label: resource.label,
+        relativePath: resource.relativePath,
+        fragments: [...fragments]
       }))
     }
     const heldIds = [...held.values()].flatMap((entries) => entries.map(({ ref }) => ref.id))

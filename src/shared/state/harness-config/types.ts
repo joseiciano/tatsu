@@ -69,6 +69,26 @@ export interface HarnessConfigRenderErrorEntry {
   held: HarnessConfigFileRef[]
 }
 
+/** A stored file whose fragment placeholders or markers cannot be
+ *  expanded. It contributes nothing to Tatsu config until fixed, and
+ *  `held` is its disk copy, which sync to disk leaves alone. */
+export interface HarnessConfigFragmentErrorEntry {
+  id: string
+  label: string
+  relativePath: string
+  message: string
+  held?: HarnessConfigFileRef
+}
+
+/** A stored file with a fragment section that was edited by hand, so it
+ *  no longer follows its fragment until the edit is resolved. */
+export interface HarnessConfigFragmentEditEntry {
+  id: string
+  label: string
+  relativePath: string
+  fragments: string[]
+}
+
 export type HarnessConfigSyncDirection = 'sync-to-disk' | 'adopt-from-disk'
 
 export type HarnessConfigSyncStatus = 'synced' | 'disk-only' | 'config-only' | 'conflict'
@@ -88,6 +108,8 @@ export interface HarnessConfigComparison {
   /** Stored entries hidden by a template that renders to the same path. */
   shadowed?: HarnessConfigFileRef[]
   renderErrors?: HarnessConfigRenderErrorEntry[]
+  fragmentErrors?: HarnessConfigFragmentErrorEntry[]
+  fragmentEdits?: HarnessConfigFragmentEditEntry[]
 }
 
 export interface HarnessConfigSyncPlan {
@@ -102,6 +124,8 @@ export interface HarnessConfigSyncPlan {
   fingerprint: string
   shadowed?: HarnessConfigFileRef[]
   renderErrors?: HarnessConfigRenderErrorEntry[]
+  fragmentErrors?: HarnessConfigFragmentErrorEntry[]
+  fragmentEdits?: HarnessConfigFragmentEditEntry[]
   /** Adopt only: template-built ids whose disk content is stored as a
    *  plain entry while that harness is removed from the template. */
   detach?: string[]
@@ -132,6 +156,7 @@ export type HarnessConfigErrorCode =
   | 'invalid-template'
   | 'invalid-target'
   | 'template-shadows'
+  | 'invalid-fragment'
 
 export interface HarnessConfigAppliedOperation {
   type: 'create' | 'overwrite' | 'delete' | 'adopt' | 'detach'
@@ -215,6 +240,26 @@ export interface HarnessConfigAdoptRequest {
   /** Template-built ids to detach; every other template-built id keeps
    *  its template and is skipped (Step 20 REQ-006). */
   detach?: string[]
+}
+
+/** How a hand-edited fragment section is settled: restore the fragment
+ *  text, keep the text but drop the markers, or save the edit as the
+ *  fragment so every file using it follows. */
+export type HarnessConfigFragmentResolution = 'overwrite' | 'detach' | 'keep-edit'
+
+export interface HarnessConfigResolveFragmentEditRequest {
+  scope: HarnessConfigScope
+  id: string
+  fragment: string
+  resolution: HarnessConfigFragmentResolution
+  confirmed: true
+}
+
+export interface HarnessConfigResolveFragmentEditResult {
+  scope: HarnessConfigScope
+  id: string
+  fragment: string
+  resolution: HarnessConfigFragmentResolution
 }
 
 export interface HarnessConfigReadRequest {
