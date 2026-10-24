@@ -152,7 +152,7 @@ This ticket completes Item 5. `complete_step` itself and the runner are Phase 2 
 
 - GOAL-001: The Codex decision gate (REQ-008) is decided with evidence, and opencode MCP via `OPENCODE_CONFIG_CONTENT` is confirmed on 1.18.30. No code changes.
 
-- [ ] **TASK-001**: Codex gate. Codex is not installed on the dev machine.
+- [x] **TASK-001** (a)-(c) passed, (d) pending: Codex gate. Codex is not installed on the dev machine.
   - Install: `brew install codex` (or `npm i -g @openai/codex`). Require `codex --version` ≥ 0.129.0 (the version range Item 8 targets). Log in with `codex login` for (d).
   - Make a stub config: `node -e` or a hand-written `$SCRATCH/h.json` in the REQ-001 shape, pointing at a running Tatsu dev instance's control server (port and token from `writeMcpConfigForTerminal` output under `<userData>/mcp-configs/`, any existing file). Do not paste the token into any committed file or log.
   - (a) `codex -c 'mcp_servers.harness-control.command="<node or electron path>"' -c 'mcp_servers.harness-control.args=["<repo>/resources/mcp-bridge.js","--config","<h.json>"]' -c 'mcp_servers.harness-control.env={ELECTRON_RUN_AS_NODE="1"}' mcp list` lists `harness-control`. (Run (a) after Phase 1 so the bridge accepts `--config`; until then pass `HARNESS_PORT`/`HARNESS_TOKEN` in the `env` table for this local check only.)
@@ -161,10 +161,12 @@ This ticket completes Item 5. `complete_step` itself and the runner are Phase 2 
   - (d) Start the TUI with the overrides, run `/mcp`: `harness-control` is connected and lists its tools. Ask "call the harness-control list_repos tool"; it returns the repo list (approve the tool call if Codex prompts; unattended approval is Item 6).
   - Record the result (version, which of (a)–(d) passed) for TASK-017. All pass → primary path (Phase 2). Any fail → skip the Codex half of Phase 2 (TASK-006 and the Codex cases of TEST-006 to TEST-008; TASK-007 still lands because opencode needs it), record the failing check, and activate ticket 09 (`09-codex-home-fallback.md`); opencode (Phase 3) goes ahead.
   - **Status rule:** if Codex cannot be installed or logged in, run (a)–(c) without login (they don't need auth), implement the primary path, mark (d) and TEST-013 as pending in the plan edit, and withhold `Completed`: the ticket status stays `In progress` (front matter, TASK-016).
-- [ ] **TASK-002**: opencode check (1.18.30 is at `/opt/homebrew/bin/opencode`):
+  - **Result (2026-10-24, codex-cli 0.164.0, scratch `CODEX_HOME`, `h.json` pointing at a stub control server):** (a) `codex <overrides> mcp list` lists `harness-control` with the node command, `mcp-bridge.js --config <h.json>` args and `ELECTRON_RUN_AS_NODE` env, status enabled. (b) `mcp get harness-control --json` prints `transport.command`, `args` and `env` exactly as given (dotted key with `-`, inline array and inline table all parsed). (c) `codex <overrides> resume --help` accepts the flags before `resume`. (d) **pending**: `codex exec` with the overrides plus `-c mcp_servers.harness-control.default_tools_approval_mode="approve"` spawned the bridge, which read port and token from the file and called `GET /scope` on the stub with `Authorization: Bearer <token>` and `X-Harness-Terminal-Id` (the spawn path works), but the model turn failed with 401 because the Codex login token could not be refreshed; re-run (d) after `codex login`.
+- [x] **TASK-002** (`mcp list` part): opencode check (1.18.30 is at `/opt/homebrew/bin/opencode`):
   - `OPENCODE_CONFIG_CONTENT='{"mcp":{"harness-control":{"type":"local","command":["<node>","<repo>/resources/mcp-bridge.js","--config","<h.json>"],"environment":{"ELECTRON_RUN_AS_NODE":"1"},"enabled":true}}}' opencode mcp list` shows `harness-control` connected **and** the MCP servers from `~/.config/opencode/opencode.json(c)` (merge, not replace).
   - In the TUI with the same env, ask it to call `list_repos`; it succeeds. Note the tool name opencode shows (expected `harness-control_list_repos`).
   - Confirm `OPENCODE_CONFIG_CONTENT` set in the user's `~/.zshrc` would override ours (login shell, `zsh -ilc`); record as RISK-003 evidence only.
+  - **Result (2026-10-24, opencode 1.18.30):** `OPENCODE_CONFIG_CONTENT` with the `mcp.harness-control` entry → `opencode mcp list` shows `harness-control connected` next to the user's own `cloudflare-observability` server (merge, not replace). The TUI tool call and the `~/.zshrc` check were not run (unattended).
 
 ### Implementation Phase 1: Bridge and shared spec
 
