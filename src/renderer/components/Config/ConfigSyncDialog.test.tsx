@@ -112,7 +112,7 @@ describe('ConfigSyncDialog templates', () => {
     expect(html).toContain('Hidden by a template')
   })
 
-  it('tells the user to remove a link before template output can be written (REQ-008)', () => {
+  it('lists template output behind a link without telling the user to remove the link first (REQ-008)', () => {
     const linked = toConfigSyncReview({
       ...comparison,
       diskOnly: [],
@@ -120,7 +120,9 @@ describe('ConfigSyncDialog templates', () => {
       configOnly: [templateRef({ linkedFrom: '/dotfiles/skills' })]
     })
     const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: linked })} />)
-    expect(html).toContain('Remove the link')
+    expect(html).toContain('/dotfiles/skills')
+    expect(html).not.toContain('Remove the link')
+    expect(html).not.toContain("can't write this template output")
   })
 })
 
@@ -224,20 +226,19 @@ describe('ConfigSyncDialog', () => {
     expect(html).toContain('aria-label="Close"')
   })
 
-  it('lists managed-elsewhere entries as excluded from sync to disk', () => {
+  it('lists linked entries with their source and says sync to disk writes through them', () => {
     const plain = renderToStaticMarkup(<ConfigSyncDialog {...baseProps()} />)
-    expect(plain).not.toContain('Excluded from sync to disk')
-    expect(plain).not.toContain('Managed elsewhere')
+    expect(plain).not.toContain('Linked')
 
     const linkedReview = toConfigSyncReview({
       ...comparison,
       diskOnly: [ref({ id: 'linked-1', relativePath: 'deploy/SKILL.md', linkedFrom: '/dotfiles/output/deploy' })]
     })
     const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: linkedReview })} />)
-    expect(html).toContain('Managed elsewhere')
-    expect(html).toContain('/dotfiles/output/deploy')
-    expect(html).toContain('Excluded from sync to disk')
-    expect(html).toContain('excluded from sync to disk, so Tatsu never writes through them')
+    expect(html).toContain('title="Linked from /dotfiles/output/deploy"')
+    expect(html).toContain('Sync to disk writes through the link')
+    expect(html).not.toContain('Excluded from sync to disk')
+    expect(html).not.toContain('Managed elsewhere')
   })
 
   it('changes the review key when only linkedFrom differs', () => {

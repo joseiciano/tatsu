@@ -10,7 +10,8 @@ resource. Pi is listed as deferred.
 - The agent filter `#config-agent-filter` has the options All, Claude, Codex, and Opencode.
 - Search (`Search resources` / `Search templates`) has a `Clear search` button.
 - Badges include `Disk only` (on disk, not in Tatsu config) and `Synced`.
-  A symlinked resource is marked `Managed elsewhere`; it is read-only (Step 17).
+  A symlinked resource is marked `Linked`. It is editable, and writes land in the
+  link's target while the link stays in place (`journeys/linked-root-path.mjs`).
 - Claude skills also appear under Commands, because Claude serves skills as slash commands.
 - When a harness root is missing, the group shows "The resolver known root is
   unavailable" with a `Set config folders in Settings` link.
@@ -35,14 +36,14 @@ await page.locator('#config-agent-filter').selectOption({ label: 'Opencode' })
 The end state that proves it works:
 
 - Every seed fixture appears in its harness group with `Disk only`.
-- `linked-skill` shows `Managed elsewhere`.
+- `linked-skill` shows `Linked`.
 - No group shows the unavailable-root message, because the seed creates all eight roots.
 - Deleting a root folder under `SANDBOX_HOME` before launch makes that group show the message.
 
 ## Gotchas
 
 - Run so far: entry point 1, the tabs, the seeded rows with `Disk only`,
-  `Managed elsewhere` on `linked-skill`, Claude skills listed under Commands,
+  `Linked` on `linked-skill`, Claude skills listed under Commands,
   the Codex Commands note, and the unavailable-root link (via
   `journeys/config-folders.mjs`). The agent filter, search, and entry
   points 2 and 3 come from source.

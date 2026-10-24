@@ -168,7 +168,7 @@ export function ConfigEditor({
         <div className="flex items-start gap-1.5 px-3 py-1.5 text-xs text-faint border-b border-border">
           <Link2 className="icon-xs shrink-0 mt-0.5" />
           <span className="min-w-0 break-all">
-            Read-only. Linked from {linkedFrom}. {LINKED_RESOURCE_EXPLANATION}
+            Linked from {linkedFrom}. {LINKED_RESOURCE_EXPLANATION}
           </span>
         </div>
       )}
@@ -195,7 +195,6 @@ export function ConfigEditor({
           type="button"
           disabled={!canDelete || busy}
           onClick={onDelete}
-          title={linkedFrom ? 'Managed elsewhere; delete it at its source' : undefined}
           aria-label="Delete resource"
           className="mr-auto px-2 py-1.5 text-xs text-danger hover:bg-surface-hover rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1"
         >

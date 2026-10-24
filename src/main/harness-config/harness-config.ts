@@ -491,12 +491,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return this.guard('planSyncToDisk', () => {
       const state = this.buildComparison(scope)
       const operations: DiskOperation[] = []
-      let excluded = 0
       for (const entry of state.configOnly) {
-        if (entry.ref.linkedFrom) {
-          excluded += 1
-          continue
-        }
         operations.push({
           type: 'create',
           id: entry.ref.id,
@@ -506,10 +501,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         })
       }
       for (const pair of state.changed) {
-        if (pair.disk.ref.linkedFrom || pair.config.ref.linkedFrom) {
-          excluded += 1
-          continue
-        }
         operations.push({
           type: 'overwrite',
           id: pair.config.ref.id,
@@ -519,10 +510,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         })
       }
       for (const entry of state.diskOnly) {
-        if (entry.ref.linkedFrom) {
-          excluded += 1
-          continue
-        }
         operations.push({
           type: 'delete',
           id: entry.ref.id,
@@ -530,7 +517,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
         })
       }
-      if (excluded > 0 && operations.length === 0) this.rejectLinked()
       operations.sort((a, b) => lexicalCompare(a.relativePath, b.relativePath) || lexicalCompare(a.type, b.type))
       const generatedAt = this.clock()
       const fingerprint = this.planFingerprint(state)
@@ -628,8 +614,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
       const relativePath = descriptor.nameToRelativePath(name)
       this.assertDiscoverableDepth(descriptor, relativePath)
-      const validated = this.validateRelativePath(relativePath, descriptor)
-      if (this.linkedTargetFor(descriptor, validated)) this.rejectLinked()
+      this.validateRelativePath(relativePath, descriptor)
       const target = this.resolveCandidate(descriptor, relativePath, false)
       const state = this.snapshot(scope)
       if (this.fs.existsSync(target.absolutePath) || state.disk.some(({ ref }) => ref.relativePath === target.relativePath)) {
@@ -663,7 +648,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const state = this.snapshot(scope)
       const entry = state.disk.find(({ ref }) => ref.id === id)
       if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
-      if (entry.ref.linkedFrom) this.rejectLinked()
       const ref = {
         ...cloneRef(entry.ref),
         hash: sha256(Buffer.from(content, 'utf8')),
@@ -679,7 +663,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const state = this.snapshot(scope)
       const entry = state.disk.find(({ ref }) => ref.id === id)
       if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
-      if (entry.ref.linkedFrom) this.rejectLinked()
       return this.storeMutationPlan(scope, 'delete', cloneRef(entry.ref), undefined, state, entry.descriptor)
     }, 'write-failed')
   }
@@ -1054,8 +1037,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     } catch (error) {
       throw new HarnessConfigError('unsupported-scope', 'The resolver known root is unavailable', { cause: error })
     }
-    // A Step 16 override is the user's opt-in to write at the root's real
-    // location; without one, a symlinked root is managed elsewhere (REQ-003b).
+    // Without a Step 16 override, a symlinked root reports where it links from.
     return rootIsLink && configured === undefined ? { root, lexicalRoot, rootLinkedFrom: root } : { root, lexicalRoot }
   }
 
@@ -1100,19 +1082,22 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (absolutePath !== root && !absolutePath.startsWith(root + sep)) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path escapes its known root')
     }
-    if (mode === 'read') this.assertReadContainment(root, relativePath, mustExist)
-    else this.assertRealContainment(root, absolutePath, mustExist)
-    return { root, relativePath, absolutePath, displayPath: resolve(lexicalRoot, ...relativePath.split('/')) }
+    const displayPath = resolve(lexicalRoot, ...relativePath.split('/'))
+    const base = this.assertReadContainment(root, relativePath, mustExist)
+    if (mode === 'read') return { root, relativePath, absolutePath, displayPath }
+    const writePath = this.realWriteTarget(root, relativePath)
+    this.assertRealContainment(base, writePath, mustExist)
+    return { root, relativePath, absolutePath: writePath, displayPath }
   }
 
   private isWithin(base: string, candidate: string): boolean {
     return candidate === base || candidate.startsWith(base + sep)
   }
 
-  /** Read-mode containment (Step 17 REQ-005): each symlink component below
-   *  the root moves the allowed base to that link's real target, and every
-   *  existing component must resolve inside the current base. */
-  private assertReadContainment(root: string, relativePath: string, mustExist: boolean): void {
+  /** Containment (Step 17 REQ-005): each symlink component below the root
+   *  moves the allowed base to that link's real target, and every existing
+   *  component must resolve inside the current base. Returns the final base. */
+  private assertReadContainment(root: string, relativePath: string, mustExist: boolean): string {
     let base: string
     try {
       base = resolve(this.fs.realpathSync(root))
@@ -1132,7 +1117,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           if (mustExist) {
             throw new HarnessConfigError('unknown-resource', 'The requested harness resource is no longer present')
           }
-          return
+          return base
         }
         if (code === 'ENOTDIR') {
           throw new HarnessConfigError('unsafe-path', 'The harness resource path crosses a non-directory', { cause: error })
@@ -1156,12 +1141,29 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         throw new HarnessConfigError('unsafe-path', 'The harness resource path escapes its known root')
       }
     }
+    return base
   }
 
-  /** Real path that makes a resource managed elsewhere (REQ-003): the
-   *  symlinked root when no override is set, else the first live symlink
-   *  component below the root. Broken links return undefined so the write
-   *  containment check rejects them as unsafe. */
+  /** Where a write lands once every existing component is resolved, so a
+   *  write through a symlink changes the link's target and leaves the link in
+   *  place instead of replacing it with a regular file. */
+  private realWriteTarget(root: string, relativePath: string): string {
+    const segments = relativePath.split('/')
+    let cursor = root
+    for (let index = 0; index < segments.length; index += 1) {
+      const next = join(cursor, segments[index])
+      try {
+        cursor = resolve(this.fs.realpathSync(next))
+      } catch {
+        return join(cursor, ...segments.slice(index))
+      }
+    }
+    return cursor
+  }
+
+  /** Real path a resource is linked from, shown as linkedFrom: the symlinked
+   *  root when no override is set, else the first live symlink component below
+   *  the root. Broken links return undefined. */
   private linkedTargetFor(descriptor: HarnessConfigResourceResolver, relativePath: string): string | undefined {
     const { root, rootLinkedFrom } = this.resolveRootInfo(descriptor)
     if (rootLinkedFrom) return rootLinkedFrom
@@ -1177,13 +1179,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
     }
     return undefined
-  }
-
-  private rejectLinked(): never {
-    throw new HarnessConfigError(
-      'linked-resource',
-      'This harness resource is managed elsewhere through a symbolic link and cannot be changed here'
-    )
   }
 
   private assertRealContainment(root: string, candidate: string, mustExist: boolean): void {
@@ -1973,7 +1968,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const seen = new Set<string>()
     for (const operation of operations) {
       const descriptor = this.operationDescriptor(scope, operation)
-      if (this.linkedTargetFor(descriptor, operation.relativePath)) this.rejectLinked()
       const target = this.resolveCandidate(descriptor, operation.relativePath, operation.type !== 'create')
       if (seen.has(target.absolutePath)) {
         throw new HarnessConfigError('collision', 'The plan contains more than one operation for a target')
