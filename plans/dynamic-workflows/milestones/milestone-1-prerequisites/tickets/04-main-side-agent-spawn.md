@@ -261,7 +261,8 @@ Main is single-threaded and every path below is synchronous, so "check `hasTermi
 
 - GOAL-000: REQ-018's fix is chosen from evidence on the installed Claude.
 
-- [ ] **TASK-000**: In a Claude-trusted scratch repo, run `claude -p --mcp-config /dev/null -- 'say PONG'` and `claude -p --mcp-config /dev/null 'say PONG'` (any readable JSON file works in place of `/dev/null`; use `echo '{"mcpServers":{}}' > m.json`). Record whether `--` makes the first form answer PONG while the second fails with "MCP config file not found". Choose the REQ-018 fix accordingly and note the Claude version in the Phase 1 commit message.
+- [x] **TASK-000**: In a Claude-trusted scratch repo, run `claude -p --mcp-config /dev/null -- 'say PONG'` and `claude -p --mcp-config /dev/null 'say PONG'` (any readable JSON file works in place of `/dev/null`; use `echo '{"mcpServers":{}}' > m.json`). Record whether `--` makes the first form answer PONG while the second fails with "MCP config file not found". Choose the REQ-018 fix accordingly and note the Claude version in the Phase 1 commit message.
+  Result (2026-10-24, Claude 2.1.302, `command claude`): `claude -p --mcp-config m.json -- 'say PONG'` printed `PONG`; `claude -p --mcp-config m.json 'say PONG'` failed with `MCP config file not found: …/say PONG`. REQ-018 ships the `--` form.
 
 ### Implementation Phase 1: Main spawn helper (behaviour-preserving)
 
