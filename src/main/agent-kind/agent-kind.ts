@@ -6,3 +6,7 @@ export function toAgentKind(value: string | undefined): AgentKind {
   if (value === 'pi') return 'pi'
   return 'claude'
 }
+
+export function assertNeverAgentKind(kind: never): never {
+  throw new Error(`Unsupported agent kind: ${kind}`)
+}

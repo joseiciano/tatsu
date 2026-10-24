@@ -127,7 +127,7 @@ export class PtyManager {
     isShell: boolean = false,
     cols: number = 120,
     rows: number = 30
-  ): void {
+  ): boolean {
     log('pty', `create id=${id} cmd=${command} args=${JSON.stringify(args)} cwd=${cwd} cols=${cols} rows=${rows}`)
     if (this.ptys.has(id)) {
       // A PTY for this id is already running — most likely a second
@@ -139,7 +139,7 @@ export class PtyManager {
       // history it already loaded via getTerminalHistory replays the
       // scrollback up to the join point.
       log('pty', `create id=${id} no-op — PTY already exists, treating as attach`)
-      return
+      return true
     }
 
     const env = {
@@ -170,7 +170,7 @@ export class PtyManager {
         type: 'terminals/statusChanged',
         payload: { id, status: 'idle', pendingTool: null }
       })
-      return
+      return false
     }
 
     // Shells spawned with an exec-mode flag (`-c`, `-ilc`, `-lc`, `-ic`) run
@@ -242,6 +242,7 @@ export class PtyManager {
         payload: { id, active: true, processName: firstWord }
       })
     }
+    return true
   }
 
   /** Raw PTY scrollback for `id`, or empty string if none. */

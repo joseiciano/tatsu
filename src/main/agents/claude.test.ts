@@ -62,6 +62,21 @@ describe('buildSpawnArgs', () => {
     expect(result).toContain('--append-system-prompt')
     expect(result).toContain("'\\''")
   })
+
+  it('separates the initial prompt from the variadic --mcp-config with -- (REQ-018)', () => {
+    const result = buildSpawnArgs({ ...base, mcpConfigPath: '/c.json', initialPrompt: 'say hi' })
+    expect(result).toMatch(/ --mcp-config '\/c\.json' -- 'say hi'$/)
+  })
+
+  it('places the initial prompt after -- following --session-id for a new session (REQ-018)', () => {
+    const result = buildSpawnArgs({
+      ...base,
+      mcpConfigPath: '/c.json',
+      initialPrompt: 'say hi',
+      sessionId: 'abc'
+    })
+    expect(result).toMatch(/ --session-id abc -- 'say hi'$/)
+  })
 })
 
 describe('hook install / dedup', () => {

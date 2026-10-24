@@ -81,7 +81,6 @@ import {
 import { watchStatusDir } from './hooks'
 import { getAgent, type AgentKind } from './agents'
 import { AGENT_REGISTRY } from '../shared/agent-registry'
-import { buildClaudeLaunchSettings } from './claude-launch'
 import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
 import { CostTracker } from './cost-tracker'
@@ -97,15 +96,12 @@ import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
 import { toAgentKind } from './agent-kind'
+import { createAgentSpawner } from './agent-spawn'
 
 // Runtime detection — Electron sets process.versions.electron, plain
 // Node leaves it undefined. The mode picks itself; there's no env-var
 // override to fight with.
 const runtime = detectRuntime()
-
-function assertNeverAgentKind(kind: never): never {
-  throw new Error(`Unsupported agent kind: ${kind}`)
-}
 
 // Boot the local backend. The HARNESS_REMOTE_URL "process-wide remote"
 // path was removed in Tier 1 — the chip strip / add-backend modal is
@@ -568,6 +564,12 @@ const prPoller = new PRPoller(store, {
 const announcementsPoller = new AnnouncementsPoller(store)
 
 ptyManager.setStore(store)
+const agentSpawner = createAgentSpawner({
+  pty: ptyManager,
+  store,
+  getConfig: () => config,
+  writeMcpConfig: (terminalId) => writeMcpConfigForTerminal(terminalId, resolveCallerScope(terminalId))
+})
 ptyManager.setSendSignal((channel, ...args) => transport.sendSignal(channel, ...args))
 ptyManager.setPerfMonitor(perfMonitor)
 perfMonitor.start(store, () => ptyManager.getActivePtyCount())
@@ -2276,51 +2278,7 @@ function registerIpcHandlers(): void {
       initialPrompt?: string; teleportSessionId?: string;
       sessionName?: string;
       modelOverride?: string
-    }): string => {
-      const kind = toAgentKind(agentKind)
-      const agent = getAgent(kind)
-      const command = kind === 'claude'
-        ? (config.claudeCommand || agent.defaultCommand)
-        : kind === 'codex'
-          ? (config.codexCommand || agent.defaultCommand)
-          : kind === 'opencode'
-            ? (config.opencodeCommand || agent.defaultCommand)
-            : kind === 'pi'
-              ? (config.piCommand || agent.defaultCommand)
-              : assertNeverAgentKind(kind)
-      const mcpConfigPath = kind === 'pi'
-        ? null
-        : writeMcpConfigForTerminal(
-            opts.terminalId,
-            resolveCallerScope(opts.terminalId)
-          )
-
-      const override = opts.modelOverride && opts.modelOverride.trim() ? opts.modelOverride.trim() : undefined
-      let systemPrompt: string | undefined
-      let tuiFullscreen: boolean | undefined
-      let model: string | null
-      if (kind === 'claude') {
-        const launch = buildClaudeLaunchSettings({
-          cwd: opts.cwd,
-          worktrees: store.getSnapshot().state.worktrees.list,
-          config,
-          modelOverride: override
-        })
-        systemPrompt = launch.systemPrompt
-        tuiFullscreen = launch.tuiFullscreen
-        model = launch.model ?? null
-      } else if (kind === 'codex') {
-        model = override || config.codexModel || null
-      } else if (kind === 'opencode') {
-        model = override || config.opencodeModel || null
-      } else if (kind === 'pi') {
-        model = override || config.piModel || null
-      } else {
-        model = assertNeverAgentKind(kind)
-      }
-
-      return agent.buildSpawnArgs({ ...opts, command, mcpConfigPath, model, systemPrompt, tuiFullscreen })
-    }
+    }): string => agentSpawner.buildAgentCommand({ ...opts, agentKind: toAgentKind(agentKind) })
   )
 
   // Settings: GitHub token
