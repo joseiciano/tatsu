@@ -13,6 +13,7 @@ import {
   type CodexHookTrustReport
 } from '../codex-hook-trust'
 import type { AgentSpawnOpts, HarnessMcpServerSpec } from './index'
+import type { PermissionLevel } from '../../shared/permission-level'
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
@@ -342,11 +343,30 @@ export function codexMcpOverrides(server: HarnessMcpServerSpec): string {
   return pairs.map((p) => ` -c ${shellQuote(p)}`).join('')
 }
 
+export function codexPermissionFlags(level: PermissionLevel | undefined): string {
+  if (!level) return ''
+  const sandbox = level === 'read-only' ? 'read-only' : level === 'edit' ? 'workspace-write' : 'danger-full-access'
+  return ` --sandbox ${sandbox} --ask-for-approval never`
+}
+
+const CODEX_PERMISSION_FLAGS =
+  /(^|\s)(--sandbox|-s|--ask-for-approval|-a|--full-auto|--dangerously-bypass-approvals-and-sandbox|--yolo|--approve-for-me|--not-so-yolo)(\s|=|$)/
+
 export function buildSpawnArgs(opts: AgentSpawnOpts): string {
   // Token stays in the 0600 per-terminal file; argv only carries its path.
   let cmd = opts.command
   if (opts.mcpServer && !opts.command.includes('mcp_servers.harness-control')) {
     cmd += codexMcpOverrides(opts.mcpServer)
+  }
+  if (opts.permissionLevel) {
+    if (CODEX_PERMISSION_FLAGS.test(opts.command)) {
+      log('agent-spawn', 'codex command already sets sandbox/approval; permissionLevel not applied')
+    } else {
+      if (opts.mcpServer) {
+        cmd += ` -c ${shellQuote('mcp_servers.harness-control.default_tools_approval_mode="approve"')}`
+      }
+      cmd += codexPermissionFlags(opts.permissionLevel)
+    }
   }
   if (opts.model && !opts.command.includes('--model') && !opts.command.includes('-m ')) {
     cmd += ` --model ${shellQuote(opts.model)}`

@@ -875,6 +875,42 @@ describe('buildAgentLaunch with real agent modules per permission level (TEST-01
     })
   })
 
+  describe('codex', () => {
+    const realAgents = { codex: codex as unknown as AgentModule }
+
+    it.each([
+      { level: 'read-only' as const, sandbox: 'read-only' },
+      { level: 'edit' as const, sandbox: 'workspace-write' },
+      { level: 'full' as const, sandbox: 'danger-full-access' }
+    ])('$level adds the MCP approve override and the mapping-table flags before the prompt', ({ level, sandbox }) => {
+      const { spawner } = build({ realAgents, writeMcpConfig: MCP_PATH })
+
+      const { command, env } = spawner.buildAgentLaunch({
+        terminalId: 't1',
+        cwd: '/wt',
+        agentKind: 'codex',
+        initialPrompt: 'go',
+        permissionLevel: level,
+        bashAllow: ['git status']
+      })
+
+      expect(command).toContain(
+        `-c 'mcp_servers.harness-control.default_tools_approval_mode="approve"' --sandbox ${sandbox} --ask-for-approval never 'go'`
+      )
+      expect(env).toEqual({ ...ENV.codexEnvVars, HARNESS_MCP_CONFIG: '/c.json' })
+    })
+
+    it('no level adds neither sandbox/approval flags nor the approve override', () => {
+      const { spawner } = build({ realAgents, writeMcpConfig: MCP_PATH })
+
+      const { command } = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'codex', initialPrompt: 'go' })
+
+      expect(command).not.toContain('--sandbox')
+      expect(command).not.toContain('--ask-for-approval')
+      expect(command).not.toContain('default_tools_approval_mode')
+    })
+  })
+
   describe('pi', () => {
     const realAgents = { pi: pi as unknown as AgentModule }
     const NOT_SUPPORTED = 'permissionLevel not supported for pi; spawning with defaults'

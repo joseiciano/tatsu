@@ -34,7 +34,7 @@ vi.mock('fs', () => ({
 }))
 
 vi.mock('../debug', () => ({
-  log: () => {}
+  log: vi.fn()
 }))
 
 vi.mock('../hooks', () => ({
@@ -43,6 +43,7 @@ vi.mock('../hooks', () => ({
 
 import { homedir } from 'os'
 import { join } from 'path'
+import { log } from '../debug'
 import {
   hooksInstalled,
   installHooks,
@@ -50,6 +51,7 @@ import {
   uninstallHooks,
   makeCodexHookCommand,
   buildSpawnArgs,
+  codexPermissionFlags,
   tomlValue,
   codexHomeDir,
   sessionFileExists,
@@ -641,5 +643,112 @@ describe('codex buildSpawnArgs MCP overrides', () => {
       const out = buildSpawnArgs({ command, cwd: '/wt', model: 'm', mcpServer: SPEC })
       expect(out).toBe(`${command} --model 'm'`)
     })
+  })
+
+  describe('TEST-005: permission level', () => {
+    const APPROVE = ` -c 'mcp_servers.harness-control.default_tools_approval_mode="approve"'`
+    const EDIT_FLAGS = ' --sandbox workspace-write --ask-for-approval never'
+    const GUARD_LOG = 'already sets sandbox/approval'
+
+    beforeEach(() => {
+      vi.mocked(log).mockClear()
+    })
+
+    const guardLogged = () =>
+      vi.mocked(log).mock.calls.some((c) => c.join(' ').includes(GUARD_LOG))
+
+    it('fresh spawn: MCP overrides, then the approve override, then sandbox/approval, then --model and the prompt', () => {
+      const out = buildSpawnArgs({
+        command: 'codex',
+        cwd: '/wt',
+        model: 'm',
+        initialPrompt: 'p',
+        mcpServer: SPEC,
+        permissionLevel: 'edit'
+      })
+      expect(out).toBe(`codex${OVERRIDES}${APPROVE}${EDIT_FLAGS} --model 'm' 'p'`)
+      expect(guardLogged()).toBe(false)
+    })
+
+    it('the approve override reaches Codex as a single -c value', () => {
+      const out = buildSpawnArgs({ command: 'codex', cwd: '/wt', mcpServer: SPEC, permissionLevel: 'read-only' })
+      expect(shellArgv(out).slice(-6)).toEqual([
+        '-c',
+        'mcp_servers.harness-control.default_tools_approval_mode="approve"',
+        '--sandbox',
+        'read-only',
+        '--ask-for-approval',
+        'never'
+      ])
+    })
+
+    it('resume: the permission flags sit before resume <id>', () => {
+      seedSession(SESSION_ID)
+      const out = buildSpawnArgs({
+        command: 'codex',
+        cwd: '/wt',
+        sessionId: SESSION_ID,
+        mcpServer: SPEC,
+        permissionLevel: 'edit'
+      })
+      expect(out).toBe(`codex${OVERRIDES}${APPROVE}${EDIT_FLAGS} resume ${SESSION_ID}`)
+    })
+
+    it('without an MCP server there is no default_tools_approval_mode override', () => {
+      const out = buildSpawnArgs({
+        command: 'codex',
+        cwd: '/wt',
+        model: 'm',
+        initialPrompt: 'p',
+        mcpServer: null,
+        permissionLevel: 'full'
+      })
+      expect(out).toBe("codex --sandbox danger-full-access --ask-for-approval never --model 'm' 'p'")
+    })
+
+    it.each([
+      { name: '--full-auto', command: 'codex --full-auto' },
+      { name: '-s read-only', command: 'codex -s read-only' },
+      { name: '-a never', command: 'codex -a never' },
+      { name: '--yolo', command: 'codex --yolo' },
+      { name: '--sandbox read-only', command: 'codex --sandbox read-only' },
+      { name: '--sandbox=read-only', command: 'codex --sandbox=read-only' }
+    ])('a command with $name gets no permission flags and logs why', ({ command }) => {
+      const out = buildSpawnArgs({
+        command,
+        cwd: '/wt',
+        model: 'm',
+        initialPrompt: 'p',
+        mcpServer: null,
+        permissionLevel: 'full'
+      })
+      expect(out).toBe(`${command} --model 'm' 'p'`)
+      expect(guardLogged()).toBe(true)
+    })
+
+    it.each(['read-only', 'edit', 'full'] as const)(
+      '%s with an MCP server and a command that already sets --sandbox: --sandbox appears once',
+      (level) => {
+        const out = buildSpawnArgs({
+          command: 'codex --sandbox read-only',
+          cwd: '/wt',
+          mcpServer: SPEC,
+          permissionLevel: level
+        })
+        expect(shellArgv(out).filter((a) => a === '--sandbox')).toHaveLength(1)
+        expect(shellArgv(out)).not.toContain('--ask-for-approval')
+      }
+    )
+  })
+})
+
+describe('codexPermissionFlags (TEST-004)', () => {
+  it.each([
+    { level: 'read-only' as const, expected: ' --sandbox read-only --ask-for-approval never' },
+    { level: 'edit' as const, expected: ' --sandbox workspace-write --ask-for-approval never' },
+    { level: 'full' as const, expected: ' --sandbox danger-full-access --ask-for-approval never' },
+    { level: undefined, expected: '' }
+  ])('$level', ({ level, expected }) => {
+    expect(codexPermissionFlags(level)).toBe(expected)
   })
 })
