@@ -1,9 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
-import { createAgentSpawner, DEFAULT_SPAWN_COLS, DEFAULT_SPAWN_ROWS } from '.'
+import {
+  agentSessionName,
+  createAgentSpawner,
+  DEFAULT_SPAWN_COLS,
+  DEFAULT_SPAWN_ROWS,
+  parseSpawnSpec,
+  resolveSpawnSize
+} from '.'
 import type { AgentSpawnConfig, AgentSpawnerDeps } from '.'
 import type { AgentKind, AgentModule, AgentSpawnOpts } from '../agents'
 import type { Worktree } from '../../shared/state/worktrees'
+import { initialTerminals } from '../../shared/state/terminals'
+import type { PaneLeaf, PaneNode, TerminalSession, TerminalsState } from '../../shared/state/terminals'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -326,5 +335,185 @@ describe('AgentSpawner.spawnShellTerminal (TEST-008)', () => {
     expect(outcome).toBe('spawned')
     expect(createCalls).toEqual([['s1', '/wt/sub', '', args, undefined, true, 80, 24]])
     expect(buildSpawnArgs).not.toHaveBeenCalled()
+  })
+})
+
+describe('AgentSpawner.attach (TEST-009)', () => {
+  it('reports a dead terminal with its history and touches neither roster nor PTY', () => {
+    const { spawner, store, createCalls } = build()
+    const before = store.getSnapshot().state.terminals.sessions
+
+    expect(spawner.attach('t1', 'c1')).toEqual({ alive: false, history: HISTORY })
+    expect(store.getSnapshot().state.terminals.sessions).toBe(before)
+    expect(createCalls).toHaveLength(0)
+  })
+
+  it('a client attaching to a running PTY with no session becomes controller', () => {
+    const { spawner, running, session, createCalls } = build()
+    running.add('t1')
+
+    expect(spawner.attach('t1', 'c1')).toEqual({ alive: true, history: HISTORY })
+    expect(session('t1')?.controllerClientId).toBe('c1')
+    expect(createCalls).toHaveLength(0)
+  })
+
+  it('on a main-spawned PTY the first client takes control and the next spectates', () => {
+    const { spawner, session } = build()
+    spawner.spawnAgentTerminal({ terminalId: 't1', cwd: '/wt', agentKind: 'claude' })
+    expect(session('t1')?.controllerClientId).toBeNull()
+
+    spawner.attach('t1', 'c1')
+    spawner.attach('t1', 'c2')
+
+    expect(session('t1')).toEqual({
+      controllerClientId: 'c1',
+      spectatorClientIds: ['c2'],
+      size: { cols: DEFAULT_SPAWN_COLS, rows: DEFAULT_SPAWN_ROWS }
+    })
+  })
+})
+
+describe('AgentSpawner.createOrAttach (TEST-010)', () => {
+  it('spawns a missing agent terminal with empty history and gives the client control', () => {
+    const { spawner, createCalls, session } = build()
+
+    const result = spawner.createOrAttach(
+      { kind: 'agent', terminalId: 't1', cwd: '/wt', agentKind: 'claude' },
+      'c1',
+      90,
+      40
+    )
+
+    expect(result).toEqual({ outcome: 'spawned', history: '' })
+    expect(createCalls).toHaveLength(1)
+    expect(createCalls[0][5]).toBe(false)
+    expect(session('t1')).toEqual({ controllerClientId: 'c1', spectatorClientIds: [], size: { cols: 90, rows: 40 } })
+  })
+
+  it('spawns a shell spec as a shell PTY', () => {
+    const { spawner, createCalls, buildSpawnArgs } = build()
+
+    const result = spawner.createOrAttach({ kind: 'shell', terminalId: 's1', cwd: '/wt', command: 'ls' }, 'c1', 80, 24)
+
+    expect(result).toEqual({ outcome: 'spawned', history: '' })
+    expect(createCalls).toEqual([['s1', '/wt', '', ['-ilc', 'ls'], undefined, true, 80, 24]])
+    expect(buildSpawnArgs).not.toHaveBeenCalled()
+  })
+
+  it('attaches to a running PTY, replays its history and ignores the new spec', () => {
+    const { spawner, createCalls, buildSpawnArgs, session } = build()
+    spawner.createOrAttach({ kind: 'agent', terminalId: 't1', cwd: '/wt', agentKind: 'claude' }, 'c1', 90, 40)
+    buildSpawnArgs.mockClear()
+
+    const result = spawner.createOrAttach(
+      { kind: 'agent', terminalId: 't1', cwd: '/wt', agentKind: 'codex', initialPrompt: 'other' },
+      'c2',
+      50,
+      10
+    )
+
+    expect(result).toEqual({ outcome: 'attached', history: HISTORY })
+    expect(buildSpawnArgs).not.toHaveBeenCalled()
+    expect(createCalls).toHaveLength(1)
+    expect(session('t1')?.spectatorClientIds).toEqual(['c2'])
+  })
+})
+
+describe('resolveSpawnSize (TEST-011)', () => {
+  const WT = '/wt'
+
+  function leaf(id: string, tabIds: string[]): PaneLeaf {
+    return {
+      type: 'leaf',
+      id,
+      tabs: tabIds.map((tabId) => ({ id: tabId, type: 'agent', label: tabId })),
+      activeTabId: tabIds[0]
+    }
+  }
+
+  function sized(cols: number, rows: number): TerminalSession {
+    return { controllerClientId: 'c1', spectatorClientIds: [], size: { cols, rows } }
+  }
+
+  function stateWith(tree: PaneNode, sessions: Record<string, TerminalSession>): TerminalsState {
+    return { ...initialTerminals, panes: { [WT]: tree }, sessions }
+  }
+
+  const tree: PaneNode = {
+    type: 'split',
+    id: 'root',
+    direction: 'horizontal',
+    ratio: 0.5,
+    children: [leaf('other-leaf', ['far']), leaf('own-leaf', ['target', 'unsized', 'sibling'])]
+  }
+
+  it('a sized sibling in the same leaf beats a sized tab in an earlier leaf, ignoring the target itself', () => {
+    const state = stateWith(tree, {
+      target: sized(200, 60),
+      unsized: { controllerClientId: null, spectatorClientIds: [], size: null },
+      sibling: sized(100, 50),
+      far: sized(80, 24)
+    })
+    expect(resolveSpawnSize(state, WT, 'target')).toEqual({ cols: 100, rows: 50 })
+  })
+
+  it('falls back to a sized tab in another leaf when no sibling is sized', () => {
+    const state = stateWith(tree, { target: sized(200, 60), far: sized(80, 24) })
+    expect(resolveSpawnSize(state, WT, 'target')).toEqual({ cols: 80, rows: 24 })
+  })
+
+  it.each([
+    { name: 'no sized sessions', state: stateWith(tree, {}) },
+    { name: 'only the target is sized', state: stateWith(tree, { target: sized(200, 60) }) },
+    { name: 'no pane tree for the worktree', state: { ...initialTerminals, sessions: { far: sized(80, 24) } } }
+  ])('uses the default spawn size with $name', ({ state }) => {
+    expect(resolveSpawnSize(state, WT, 'target')).toEqual({ cols: DEFAULT_SPAWN_COLS, rows: DEFAULT_SPAWN_ROWS })
+  })
+})
+
+describe('agentSessionName (TEST-012)', () => {
+  it.each([
+    { name: 'enabled with a worktree', wt: { repoRoot: '/a/b/repo', branch: 'feat' }, enabled: true, expected: 'repo/feat' },
+    { name: 'repoRoot with no slash', wt: { repoRoot: 'repo', branch: 'feat' }, enabled: true, expected: 'repo/feat' },
+    { name: 'disabled', wt: { repoRoot: '/a/b/repo', branch: 'feat' }, enabled: false, expected: undefined },
+    { name: 'no worktree', wt: undefined, enabled: true, expected: undefined }
+  ])('$name', ({ wt, enabled, expected }) => {
+    expect(agentSessionName(wt, enabled)).toBe(expected)
+  })
+})
+
+describe('parseSpawnSpec (TEST-012b)', () => {
+  const valid = { kind: 'agent', terminalId: 't1', cwd: '/wt', agentKind: 'claude' }
+
+  it.each([
+    { name: 'unknown kind', raw: { ...valid, kind: 'bogus' } },
+    { name: 'missing kind', raw: { terminalId: 't1', cwd: '/wt' } },
+    { name: 'empty terminalId', raw: { ...valid, terminalId: '' } },
+    { name: 'empty cwd', raw: { ...valid, cwd: '' } },
+    { name: 'non-string terminalId', raw: { ...valid, terminalId: 42 } },
+    { name: 'non-string cwd', raw: { ...valid, cwd: ['/wt'] } },
+    { name: 'null', raw: null },
+    { name: 'a string', raw: 'agent' }
+  ])('rejects $name', ({ raw }) => {
+    expect(parseSpawnSpec(raw)).toBeNull()
+  })
+
+  it('maps an unknown agentKind to the claude fallback and keeps the agent fields', () => {
+    expect(
+      parseSpawnSpec({ ...valid, agentKind: 'gpt-9', sessionId: 's', initialPrompt: 'go', modelOverride: 'opus' })
+    ).toEqual({
+      kind: 'agent',
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      sessionId: 's',
+      initialPrompt: 'go',
+      modelOverride: 'opus'
+    })
+  })
+
+  it('round-trips a valid shell spec', () => {
+    const spec = { kind: 'shell', terminalId: 's1', cwd: '/wt', command: 'npm test' }
+    expect(parseSpawnSpec(spec)).toEqual(spec)
   })
 })

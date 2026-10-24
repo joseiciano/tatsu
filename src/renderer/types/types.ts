@@ -160,6 +160,13 @@ export interface ChangedFile {
 import type { PerfMetrics, PerfSample } from '../../shared/perf-types'
 export type { PerfMetrics, PerfSample }
 
+import type {
+  TerminalSpawnSpec,
+  TerminalAttachResult,
+  TerminalCreateResult
+} from '../../shared/terminal-spawn-types'
+export type { TerminalSpawnSpec, TerminalAttachResult, TerminalCreateResult }
+
 import type { CheckStatus, PRReview, PRStatus } from '../../shared/state/prs'
 export type { CheckStatus, PRReview, PRStatus }
 
@@ -451,6 +458,7 @@ export interface ElectronAPI {
   clearTerminalHistory(id: string): Promise<boolean>
   agentSessionFileExists(cwd: string, sessionId: string, agentKind?: AgentKind): Promise<boolean>
   getLatestAgentSessionId(cwd: string, agentKind?: AgentKind): Promise<string | null>
+  /** @deprecated legacy renderer path; use pty:createOrAttach */
   buildAgentSpawnArgs(agentKind: string, opts: {
     terminalId: string; cwd: string; sessionId?: string;
     initialPrompt?: string; teleportSessionId?: string;
@@ -529,6 +537,7 @@ export interface ElectronAPI {
   browserType(tabId: string, text: string, key?: string): Promise<boolean>
   browserScroll(tabId: string, dx: number, dy: number): Promise<boolean>
 
+  /** @deprecated legacy renderer path; use pty:createOrAttach */
   createTerminal(
     id: string,
     cwd: string,
@@ -538,6 +547,12 @@ export interface ElectronAPI {
     cols?: number,
     rows?: number
   ): void
+  attachTerminal(id: string): Promise<TerminalAttachResult>
+  createOrAttachTerminal(
+    spec: TerminalSpawnSpec,
+    cols?: number,
+    rows?: number
+  ): Promise<TerminalCreateResult>
   writeTerminal(id: string, data: string): void
   resizeTerminal(id: string, cols: number, rows: number): void
   killTerminal(id: string): void

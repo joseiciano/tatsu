@@ -96,7 +96,7 @@ import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
 import { toAgentKind } from './agent-kind'
-import { createAgentSpawner } from './agent-spawn'
+import { createAgentSpawner, parseSpawnSpec } from './agent-spawn'
 
 // Runtime detection — Electron sets process.versions.electron, plain
 // Node leaves it undefined. The mode picks itself; there's no env-var
@@ -2529,6 +2529,13 @@ function registerIpcHandlers(): void {
       }
     }
   )
+
+  transport.onRequest('terminal:attach', (ctx, id: string) => agentSpawner.attach(id, ctx.clientId))
+
+  transport.onRequest('pty:createOrAttach', (ctx, raw: unknown, cols?: number, rows?: number) => {
+    const spec = parseSpawnSpec(raw)
+    return spec ? agentSpawner.createOrAttach(spec, ctx.clientId, cols, rows) : { outcome: 'failed', history: '' }
+  })
 
   transport.onSignal('pty:write', (ctx, id: string, data: string) => {
     const session = store.getSnapshot().state.terminals.sessions[id]

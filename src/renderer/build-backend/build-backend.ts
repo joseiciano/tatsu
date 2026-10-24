@@ -38,7 +38,7 @@ import type {
   LocalTransportHandle,
   StateEventListener
 } from '../../shared/transport/transport'
-import type { ElectronAPI } from '../types'
+import type { ElectronAPI, TerminalSpawnSpec } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
 import type {
   HarnessConfigApplyRequest,
@@ -493,6 +493,9 @@ export function buildBackend(
       cols?: number,
       rows?: number
     ) => sig('pty:create', id, cwd, cmd, args, agentKind, cols, rows),
+    attachTerminal: (id: string) => req('terminal:attach', id),
+    createOrAttachTerminal: (spec: TerminalSpawnSpec, cols?: number, rows?: number) =>
+      req('pty:createOrAttach', spec, cols, rows),
     writeTerminal: (id: string, data: string) => sig('pty:write', id, data),
     resizeTerminal: (id: string, cols: number, rows: number) =>
       sig('pty:resize', id, cols, rows),
