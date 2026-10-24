@@ -47,6 +47,7 @@ import {
   sessionFileExists,
   latestSessionId,
   stripHooksFromWorktree,
+  makePluginContent,
   PLUGIN_PATH
 } from './opencode'
 
@@ -172,5 +173,31 @@ describe('hook install / dedup', () => {
 describe('stripHooksFromWorktree', () => {
   it('returns false (no legacy per-worktree opencode path)', () => {
     expect(stripHooksFromWorktree('/tmp/test')).toBe(false)
+  })
+})
+
+describe('makePluginContent', () => {
+  it('starts with the Harness signature line and exports the HarnessStatus factory', () => {
+    const content = makePluginContent()
+    expect(content.split('\n')[0]).toBe('// harness-opencode-plugin')
+    expect(content).toContain('export const HarnessStatus = async')
+  })
+
+  it('has exactly one export and no CommonJS', () => {
+    const content = makePluginContent()
+    expect(content.match(/\bexport\b/g) ?? []).toHaveLength(1)
+    expect(content.match(/^export /gm) ?? []).toHaveLength(1)
+    expect(content).not.toMatch(/\brequire\s*\(/)
+    expect(content).not.toContain('module.exports')
+  })
+
+  it('uses the opencode 1.18 hook and bus-event shapes', () => {
+    const content = makePluginContent()
+    expect(content).toContain("'tool.execute.before'")
+    expect(content).toContain("'tool.execute.after'")
+    expect(content).toContain('client.session.messages')
+    expect(content).toContain('properties')
+    expect(content).toContain('sessionID')
+    expect(content).not.toContain('ev.payload')
   })
 })
