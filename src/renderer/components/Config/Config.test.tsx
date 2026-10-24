@@ -576,7 +576,7 @@ describe('Config template sync (Step 20)', () => {
     await flush()
 
     const notice = container.querySelector('[role="status"]')
-    expect(notice?.textContent).toContain('Template changes put these scopes out of sync with disk')
+    expect(notice?.textContent).toContain('Template or fragment changes put these scopes out of sync with disk')
     expect(notice?.textContent).toContain('Review Claude Code · Agents')
     expect(notice?.textContent).not.toContain('OpenCode')
 

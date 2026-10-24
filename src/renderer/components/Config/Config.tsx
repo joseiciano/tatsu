@@ -1421,7 +1421,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
           role="status"
           className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-border bg-app/30 text-xs text-dim"
         >
-          <span className="text-fg-bright">Template changes put these scopes out of sync with disk:</span>
+          <span className="text-fg-bright">Template or fragment changes put these scopes out of sync with disk:</span>
           {templateNoticeScopes.map((entry) => (
             <button
               key={entry.key}
