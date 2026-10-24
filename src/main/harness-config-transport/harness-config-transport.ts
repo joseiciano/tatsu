@@ -41,6 +41,7 @@ import type {
   HarnessConfigScope,
   HarnessConfigScopeRequest,
   HarnessConfigSyncPlan,
+  HarnessFragmentUsageResult,
   ManagedHarnessKind
 } from '../../shared/state/harness-config'
 
@@ -115,7 +116,8 @@ const CHANNEL = {
   deleteFragment: 'harnessConfig:deleteFragment',
   previewImport: 'harnessConfig:previewImport',
   applyImport: 'harnessConfig:applyImport',
-  resolveFragmentEdit: 'harnessConfig:resolveFragmentEdit'
+  resolveFragmentEdit: 'harnessConfig:resolveFragmentEdit',
+  fragmentUsage: 'harnessConfig:fragmentUsage'
 } as const
 
 type MutationChannel =
@@ -689,6 +691,12 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     return result
   }
 
+  async function handleFragmentUsage(raw: unknown): Promise<HarnessFragmentUsageResult> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['name'])
+    return { files: service.filesUsingFragment(parseNonEmptyString(obj.name, 'name')) }
+  }
+
   function requireTemplateImport(): HarnessTemplateImportLike {
     if (!deps.templateImport) {
       throw new HarnessConfigError('unsupported-scope', 'Importing templates is unavailable')
@@ -809,4 +817,5 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   register(CHANNEL.previewImport, handlePreviewImport)
   register(CHANNEL.applyImport, handleApplyImport)
   register(CHANNEL.resolveFragmentEdit, handleResolveFragmentEdit)
+  register(CHANNEL.fragmentUsage, handleFragmentUsage)
 }

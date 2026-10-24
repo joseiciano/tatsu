@@ -5,8 +5,11 @@ import type {
   ConfigSyncChangedRow,
   ConfigSyncDialogProps,
   ConfigSyncFileRow,
+  ConfigSyncFragmentEditRow,
+  ConfigSyncFragmentErrorRow,
   ConfigSyncRenderErrorRow
 } from './types'
+import type { HarnessConfigFragmentResolution } from '../../../shared/state/harness-config'
 
 const STATUS_LABEL: Record<string, string> = {
   synced: 'Synced',
@@ -223,6 +226,88 @@ function RenderErrorSection({
   )
 }
 
+function FragmentErrorSection({
+  rows,
+  scopeLabel
+}: {
+  rows: readonly ConfigSyncFragmentErrorRow[]
+  scopeLabel: string
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="text-xs font-semibold text-danger uppercase tracking-wide">
+        Fragment errors <span className="text-faint normal-case font-normal">({rows.length})</span>
+      </h3>
+      {rows.map((row) => (
+        <div key={row.key} className="flex flex-col gap-1.5 rounded border border-danger/40 p-1.5">
+          <div className="text-xs text-fg-bright">{row.label}</div>
+          <span className="text-xs text-dim break-all">{row.relativePath}</span>
+          <div className="text-xs text-danger break-words">{row.message}</div>
+          <div className="text-xs text-dim">
+            This file is left out of sync until its fragment placeholders are fixed.{' '}
+            {row.held ? 'Its disk copy stays as it is: sync to disk leaves it alone.' : 'It is not on disk yet.'}
+          </div>
+          {row.held && <FileRowView row={row.held} scopeLabel={scopeLabel} />}
+        </div>
+      ))}
+    </section>
+  )
+}
+
+const FRAGMENT_RESOLUTIONS: ReadonlyArray<{ resolution: HarnessConfigFragmentResolution; label: string; hint: string }> = [
+  { resolution: 'overwrite', label: 'Use fragment', hint: 'Replace the edited text with the fragment' },
+  { resolution: 'keep-edit', label: 'Save edit to fragment', hint: 'Every file using the fragment gets this text' },
+  { resolution: 'detach', label: 'Detach', hint: 'Keep the text here as plain text, no longer linked to the fragment' }
+]
+
+function FragmentEditSection({
+  rows,
+  disabled,
+  onResolve
+}: {
+  rows: readonly ConfigSyncFragmentEditRow[]
+  disabled: boolean
+  onResolve: (id: string, fragment: string, resolution: HarnessConfigFragmentResolution) => void
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="text-xs font-semibold text-fg-bright uppercase tracking-wide">
+        Edited fragment sections <span className="text-faint normal-case font-normal">({rows.length})</span>
+      </h3>
+      {rows.map((row) => (
+        <div key={row.key} className="flex flex-col gap-1.5 rounded border border-border/60 p-1.5">
+          <div className="text-xs text-fg-bright">{row.label}</div>
+          <span className="text-xs text-dim break-all">{row.relativePath}</span>
+          {row.fragments.map((fragment) => (
+            <div key={fragment} className="flex flex-col gap-1">
+              <span className="text-xs text-dim">
+                The <span className="text-fg-bright">{fragment}</span> section was edited by hand, so it no
+                longer follows the fragment.
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {FRAGMENT_RESOLUTIONS.map((option) => (
+                  <button
+                    key={option.resolution}
+                    type="button"
+                    title={option.hint}
+                    disabled={disabled}
+                    onClick={() => onResolve(row.id, fragment, option.resolution)}
+                    className="px-2 py-1 text-xs rounded bg-app/40 hover:bg-app/60 text-fg-bright border border-border cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </section>
+  )
+}
+
 /** Scoped conflict review + confirmed-apply dialog (Step 9). Stays
  *  presentational: every backend call, plan, and race guard lives in
  *  `Config.tsx` (REQ-010). This component only renders the supplied
@@ -239,6 +324,7 @@ export function ConfigSyncDialog({
   actionNotice,
   detachIds,
   onDetachChange,
+  onResolveFragmentEdit,
   onSyncToDisk,
   onAdoptFromDisk,
   onCancel
@@ -417,6 +503,12 @@ export function ConfigSyncDialog({
             onDetachChange={onDetachChange}
           />
           <RenderErrorSection rows={review.sections.renderErrors} scopeLabel={scopeLabel} />
+          <FragmentErrorSection rows={review.sections.fragmentErrors} scopeLabel={scopeLabel} />
+          <FragmentEditSection
+            rows={review.sections.fragmentEdits}
+            disabled={mutationsDisabled}
+            onResolve={onResolveFragmentEdit}
+          />
           {review.sections.shadowed.length > 0 && (
             <DiffSection
               title="Hidden by a template"

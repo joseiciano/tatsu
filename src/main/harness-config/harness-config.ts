@@ -21,6 +21,7 @@ import {
   type HarnessConfigComparison,
   type HarnessConfigFileRef,
   type HarnessConfigFragmentErrorEntry,
+  type HarnessConfigFragmentFileUse,
   type HarnessConfigFragmentResolution,
   type HarnessConfigResolveFragmentEditResult,
   type HarnessConfigRootKey,
@@ -870,6 +871,26 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (stored.length === 0) return []
       return this.availableScopes().filter((scope) => this.desiredForScope(scope, stored).length > 0)
     })
+  }
+
+  filesUsingFragment(name: string): HarnessConfigFragmentFileUse[] {
+    return this.guard('filesUsingFragment', () =>
+      this.loadDesired()
+        .filter((resource) => inlineFragmentNames(resource.content).includes(name))
+        .map((resource) => ({
+          id: resource.id,
+          agentKind: resource.agentKind,
+          resourceType: resource.canonicalResourceType ?? resource.resourceType,
+          label: resource.label,
+          relativePath: resource.relativePath
+        }))
+        .sort(
+          (a, b) =>
+            lexicalCompare(a.agentKind, b.agentKind) ||
+            lexicalCompare(a.resourceType, b.resourceType) ||
+            lexicalCompare(a.relativePath, b.relativePath)
+        )
+    )
   }
 
   async resolveFragmentEdit(

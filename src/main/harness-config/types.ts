@@ -13,6 +13,7 @@ import type {
   HarnessConfigConversionResult,
   HarnessConfigErrorCode,
   HarnessConfigFileRef,
+  HarnessConfigFragmentFileUse,
   HarnessConfigFragmentResolution,
   HarnessConfigMutationDirection,
   HarnessConfigMutationPlan,
@@ -205,6 +206,8 @@ export interface HarnessConfigService {
   /** Supported scopes with a stored file that uses `name` as an inline
    *  fragment, or any inline fragment when `name` is omitted. */
   scopesForFragment(name?: string): HarnessConfigScope[]
+  /** Stored files that use the fragment, sorted by harness and path. */
+  filesUsingFragment(name: string): HarnessConfigFragmentFileUse[]
   resolveFragmentEdit(
     scope: HarnessConfigScope,
     id: string,

@@ -146,6 +146,7 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
     scopesForTemplates: vi.fn(() => [] as HarnessConfigScope[]),
     templateShadows: vi.fn(() => []),
     scopesForFragment: vi.fn(() => [] as HarnessConfigScope[]),
+    filesUsingFragment: vi.fn(() => []),
     resolveFragmentEdit: vi.fn(async (scope: HarnessConfigScope, id: string, fragment: string, resolution) => ({
       scope,
       id,

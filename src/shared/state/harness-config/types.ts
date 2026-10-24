@@ -262,6 +262,24 @@ export interface HarnessConfigResolveFragmentEditResult {
   resolution: HarnessConfigFragmentResolution
 }
 
+/** A stored file that uses a fragment through a placeholder or a
+ *  marked section. */
+export interface HarnessConfigFragmentFileUse {
+  id: string
+  agentKind: ManagedHarnessKind
+  resourceType: HarnessConfigResourceType
+  label: string
+  relativePath: string
+}
+
+export interface HarnessFragmentUsageRequest {
+  name: string
+}
+
+export interface HarnessFragmentUsageResult {
+  files: HarnessConfigFragmentFileUse[]
+}
+
 export interface HarnessConfigReadRequest {
   scope: HarnessConfigScope
   id: string
