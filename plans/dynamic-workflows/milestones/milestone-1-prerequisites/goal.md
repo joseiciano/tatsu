@@ -6,14 +6,18 @@ Close the gaps listed in `../../dynamic-workflows.md` under "Gaps found" so the 
 
 Each item ships on its own and improves today's tabs. 1, 2 and 3 fix behaviour that is broken now, independent of workflows.
 
-Status as of 2026-10-02: every gap is still open. Two are partly done: the `[features]` placement for gap 4 (`156d4a1`), and the stable hook script plus the Settings and banner text for gap 9 (`7edfc85`).
+Status as of 2026-10-24: gap 6 was already closed by `d4759f6` (2026-09-25) before this milestone was written, so Item 2 is reduced to a guard test. Two gaps are partly done: the `[features]` placement for gap 4 (`156d4a1`), and the stable hook script plus the Settings and banner text for gap 9 (`7edfc85`). Everything else is open.
+
+**Pi.** Tatsu also ships a Pi tab harness (`src/main/agents/pi.ts`, `config.piCommand` / `piEnvVars` / `piModel`, `pi` branches in `agent:buildSpawnArgs` and `pty:create`). Pi is not a workflow step harness in this milestone, but every spawn path Items 4-6 move must keep its `pi` branch (command, env, model, no MCP, no permission level) and end in `assertNeverAgentKind`, so Pi tabs behave exactly as today.
+
+**One Codex install.** Codex is not on the dev machine. Ticket 05 TASK-001 is the single `brew install codex` / `codex login` plus scratch-`CODEX_HOME` session; tickets 06 (TASK-003), 07 (TASK-001) and 08 (TASK-001) reuse it instead of installing again. Each still records "Codex not verified" if that install never happens.
 
 ## Items
 
 | # | Item | Gap | Size | Depends on |
 |---|---|---|---|---|
 | 1 | Rewrite the opencode plugin to the documented ESM format | 3 | S | none |
-| 2 | Fix the bridge's `agentKind` | 6 | XS | none |
+| 2 | Guard the bridge's `agentKind` list against `AGENT_REGISTRY` (fix itself landed in `d4759f6`) | 6 | XS | none |
 | 3 | Hook payloads: `last_assistant_message` and line atomicity | 7 | S | 1 |
 | 4 | Main-side agent spawn with create-or-attach | 1 | L | none |
 | 5 | MCP for Codex and opencode | 2 | M | 1, 4 |
@@ -26,6 +30,8 @@ Item 5 needs Item 4 only for its opencode phase (the spawner's `agentEnv`); its 
 
 Implementation order: 1, 2 and 7 (any order) → 3 → 4 → 5 → 6, with 8 anywhere after 7, and 9 (contingent) after 5 and 8.
 
+Shortest path to the plan's phase 2 (Claude + shell linear runner): 3 → 4 → 7 → 6 (Claude part only; its Phase 1 and the Claude half of Phase 2 do not need ticket 05). Items 1, 5, 8 and 9 can run in parallel with phase 1/2 work and gate phase 3 (Codex and opencode steps).
+
 ### 1. Rewrite the opencode plugin
 
 - **Today:** `makePluginContent()` in `src/main/agents/opencode.ts:47` emits CommonJS `module.exports = { onEvent }` and reads `ev.payload.session.id`. Under opencode 1.18.30 it writes nothing, so opencode status detection is broken.
@@ -37,10 +43,10 @@ Implementation order: 1, 2 and 7 (any order) → 3 → 4 → 5 → 6, with 8 any
   - `opencode.test.ts` covers the generated content.
 - **Verify first:** which permission-prompt event 1.18 emits (`permission.updated` in the SDK types vs `permission.asked` in the current plugin).
 
-### 2. Fix the bridge's `agentKind`
+### 2. Guard the bridge's `agentKind` list
 
-- **Today:** `resources/mcp-bridge.js:110` advertises `enum: ['claude', 'codex']`, and `:467-474` rejects anything else, while the server accepts `opencode`. The label at `:485` only knows Claude and Codex.
-- **Done when:** `create_worktree` accepts `opencode` through the bridge, and the enum, the validation and the label all agree with the server's list.
+- **Today:** `resources/mcp-bridge.js` already derives the enum, the validation and the label from one `AGENT_KIND_LABELS` list (`claude`, `codex`, `opencode`, `pi`) since `d4759f6`, and `mcp-bridge.test.js` covers all four. The list is a hand copy of `AGENT_REGISTRY` (the bridge cannot import from `src/`), and nothing fails if the two drift. The bridge also does not `trim().toLowerCase()` like `parseAgentKind`.
+- **Done when:** the bridge normalises `agentKind` like the server, a bridge test asserts the `tools/list` enum equals `AGENT_REGISTRY.map((a) => a.kind)`, and a control-server test asserts `parseAgentKind` accepts every registry kind.
 
 ### 3. Hook payloads
 
@@ -118,5 +124,5 @@ Implementation order: 1, 2 and 7 (any order) → 3 → 4 → 5 → 6, with 8 any
 ## Milestone done when
 
 - Items 1-8 are merged. Item 9 is merged, or recorded as Skipped because the Item 5 gate passed, or Descoped by decision. `pnpm typecheck`, `pnpm build` and `npx vitest run` pass.
-- Claude, Codex and opencode tabs each show correct status, can reach `harness-control` over MCP, and can be spawned from main with a permission level that never shows an interactive prompt.
+- Claude, Codex and opencode tabs each show correct status, can reach `harness-control` over MCP, and can be spawned from main with a permission level that never shows an interactive prompt. Pi tabs spawn, resume and report status exactly as before the milestone (checked by hand once after Item 4 and once after Item 6).
 - The plan's "Gaps found" section is updated to mark each gap closed, with the commit that closed it.
