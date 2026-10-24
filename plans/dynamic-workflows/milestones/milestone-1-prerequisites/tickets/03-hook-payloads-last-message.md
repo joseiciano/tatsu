@@ -1,13 +1,13 @@
 ---
 goal: Parse last_assistant_message from every agent's Stop line, emit Stops without a transcript path, and make the NDJSON hook reader byte-safe for lines larger than PIPE_BUF
 date_created: 2026-10-02
-status: 'Planned'
+status: 'Completed'
 tags: [bug, hooks, claude, codex, opencode, milestone-1, dynamic-workflows]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Completed](https://img.shields.io/badge/status-Completed-brightgreen)
 
 Milestone 1, Item 3 (closes gap 7 in `plans/dynamic-workflows/dynamic-workflows.md` "Gaps found"). Depends on Item 1 (`01-opencode-plugin-esm.md`).
 
@@ -85,7 +85,7 @@ This ticket completes Item 3. The runner that consumes `lastAssistantMessage` is
 
 - GOAL-001: `tailLog` never splits or corrupts a line, whatever its size or where a read boundary falls.
 
-- [ ] **TASK-001**: In `src/main/hooks/hooks.ts`, add `splitNdjson` (REQ-006) above `tailLog`:
+- [x] **TASK-001**: In `src/main/hooks/hooks.ts`, add `splitNdjson` (REQ-006) above `tailLog`:
   ```ts
   export function splitNdjson(pending: Buffer, chunk: Buffer): { lines: string[]; rest: Buffer } {
     const data = pending.length ? Buffer.concat([pending, chunk]) : chunk
@@ -101,8 +101,8 @@ This ticket completes Item 3. The runner that consumes `lastAssistantMessage` is
   }
   ```
   `Buffer.from(subarray)` copies the tail so the residual doesn't pin the whole read buffer.
-- [ ] **TASK-002**: Change `residual` to `Map<string, Buffer>` and replace its comment (REQ-009).
-- [ ] **TASK-003**: Export `tailLog` (REQ-007) and replace `hooks.ts:189-199` with:
+- [x] **TASK-002**: Change `residual` to `Map<string, Buffer>` and replace its comment (REQ-009).
+- [x] **TASK-003**: Export `tailLog` (REQ-007) and replace `hooks.ts:189-199` with:
   ```ts
   const len = size - off
   const buf = Buffer.alloc(len)
@@ -119,13 +119,13 @@ This ticket completes Item 3. The runner that consumes `lastAssistantMessage` is
   else residual.delete(terminalId)
   ```
   This removes the old `text`, `lines` and `tail` locals (`:194-199`, including the `// Last chunk may be a partial line` comment) and the single `readSync` / `offsets.set(terminalId, size)` pair, so `lines` is declared only once. `const len`, `Buffer.alloc(len)` and the `if (size === off) return` early return above them stay as they are. The loop from `:201` is unchanged.
-- [ ] **TASK-004**: Replace the comment at `hooks.ts:38-41` with the text in REQ-008.
+- [x] **TASK-004**: Replace the comment at `hooks.ts:38-41` with the text in REQ-008.
 
 ### Implementation Phase 2: Stop payload parsing
 
 - GOAL-002: Every `Stop` line with a session id reaches `onStopEvent` listeners with its final message, and `CostTracker` ignores the ones it can't use.
 
-- [ ] **TASK-005**: Update `StopEvent` (REQ-001) and rewrite `emitStopIfRelevant` (REQ-002, REQ-005):
+- [x] **TASK-005**: Update `StopEvent` (REQ-001) and rewrite `emitStopIfRelevant` (REQ-002, REQ-005):
   ```ts
   function emitStopIfRelevant(terminalId: string, ev: HookEvent): void {
     if (ev.event !== 'Stop') return
@@ -147,8 +147,8 @@ This ticket completes Item 3. The runner that consumes `lastAssistantMessage` is
     }
   }
   ```
-- [ ] **TASK-006**: Update the JSDoc on `onStopEvent` (`hooks.ts:145-147`) to: `/** Subscribe to Stop hook events: session id, transcript_path when the agent has one, and the turn's final assistant message. Used by CostTracker to re-tail a session jsonl. Returns an unsubscribe fn. */`
-- [ ] **TASK-007**: In `src/main/cost-tracker/cost-tracker.ts`, apply REQ-004:
+- [x] **TASK-006**: Update the JSDoc on `onStopEvent` (`hooks.ts:145-147`) to: `/** Subscribe to Stop hook events: session id, transcript_path when the agent has one, and the turn's final assistant message. Used by CostTracker to re-tail a session jsonl. Returns an unsubscribe fn. */`
+- [x] **TASK-007**: In `src/main/cost-tracker/cost-tracker.ts`, apply REQ-004:
   - `handleStop`: first line `if (ev.transcriptPath === null) return`.
   - `parseAndDispatchStop`: first lines `const transcriptPath = ev.transcriptPath` and `if (transcriptPath === null) return`. Use `transcriptPath` instead of `ev.transcriptPath` at `:118`, `:122` and `:135`.
   - Run `pnpm typecheck` and fix any other `StopEvent` construction it reports, in source and test files alike (`tsconfig` project references cover `*.test.ts`). Today the only producer is `emitStopIfRelevant` and the only consumer is `CostTracker`. `src/main/cost-tracker/cost-tracker.test.ts` builds no `StopEvent` objects (it drives `CostTracker` through a mocked `fs.readFileSync` and never calls `handleStop`), and `grep -rn StopEvent src` finds no test that does, so no test fixture needs `lastAssistantMessage`. If one appears before this lands, add `lastAssistantMessage: null` to it.
@@ -157,13 +157,13 @@ This ticket completes Item 3. The runner that consumes `lastAssistantMessage` is
 
 - GOAL-003: Unit tests pin the reader and the Stop parsing. CI checks pass. The plan records gap 7 as closed.
 
-- [ ] **TASK-008**: Extend `src/main/hooks/hooks.test.ts` with TEST-001 to TEST-009 and TEST-012.
+- [x] **TASK-008**: Extend `src/main/hooks/hooks.test.ts` with TEST-001 to TEST-009 and TEST-012.
   - Import `splitNdjson`, `tailLog`, `onStopEvent`, `cleanupTerminalLog`, `type StopEvent` from `'.'`, and `type { Store } from '../store'`.
   - Fake store: `const dispatch = vi.fn(); const store = { dispatch } as unknown as Store`.
   - For `tailLog` tests, use `id = 'vitest-hooks-' + randomUUID()` (from `crypto`), `mkdirSync('/tmp/harness-status', { recursive: true })`, write with `appendFileSync`, call `tailLog(id, store)` after each write, and call `cleanupTerminalLog(id)` in `afterEach`. It deletes the file and all per-terminal maps.
   - Capture Stops with `const stops: StopEvent[] = []; const off = onStopEvent((e) => stops.push(e))` and call `off()` in `afterEach`.
   - For TEST-012, wrap `fs.readSync` with a pass-through mock that caps each read, following the `vi.mock('fs', ...)` pattern in `src/main/cost-tracker/cost-tracker.test.ts`: `const fsCap = vi.hoisted(() => ({ maxRead: Infinity }))`, then `vi.mock('fs', async () => { const actual = await vi.importActual<typeof import('fs')>('fs'); return { ...actual, readSync: (fd: number, buf: Buffer, offset: number, length: number, position: number) => actual.readSync(fd, buf, offset, Math.min(length, fsCap.maxRead), position) } })`. Reset `fsCap.maxRead = Infinity` in `afterEach` so the other tests do full reads.
-- [ ] **TASK-009**: Run `pnpm typecheck`, `pnpm build`, `npx vitest run`, then TEST-010 ((c) only once Item 1 is merged, DEP-001). Commit the code and tests with a message such as `Parse last_assistant_message from Stop hooks and keep split NDJSON lines intact`, then push. After that, edit `plans/dynamic-workflows/dynamic-workflows.md`:
+- [x] **TASK-009**: Run `pnpm typecheck`, `pnpm build`, `npx vitest run`, then TEST-010 ((c) only once Item 1 is merged, DEP-001). Commit the code and tests with a message such as `Parse last_assistant_message from Stop hooks and keep split NDJSON lines intact`, then push. After that, edit `plans/dynamic-workflows/dynamic-workflows.md`:
   - Gap 7 ("Gaps found", the line starting `7. **Hook line atomicity.**`): append the following, where `<short hash>` is the short hash of the code commit above (`git rev-parse --short HEAD` right after that commit), not of the plan-edit commit: `Closed in <short hash>: the comment now says lines can exceed PIPE_BUF and why that is safe, the reader buffers partial lines as bytes, and every Stop's last_assistant_message reaches onStopEvent.`
   - "Existing primitives", row "Final assistant message": replace `Only \`src/main/hooks/hooks.ts\` parsing is missing.` with `\`hooks.ts\` parses it (and opencode's plugin-emitted value) into \`StopEvent.lastAssistantMessage\`.`
   - Commit that edit separately and push.
