@@ -20,7 +20,7 @@ vi.mock('fs', () => ({
 }))
 
 vi.mock('../debug', () => ({
-  log: () => {}
+  log: vi.fn()
 }))
 
 vi.mock('child_process', () => ({
@@ -39,7 +39,11 @@ vi.mock('child_process', () => ({
 
 import { homedir } from 'os'
 import { join } from 'path'
+import { log } from '../debug'
+import type { AgentSpawnOpts, HarnessMcpServerSpec } from './index'
 import {
+  buildOpencodeConfig,
+  spawnEnv,
   buildSpawnArgs,
   hooksInstalled,
   installHooks,
@@ -53,7 +57,21 @@ import {
 
 beforeEach(() => {
   fsState.files.clear()
+  vi.mocked(log).mockClear()
 })
+
+const SPEC: HarnessMcpServerSpec = {
+  command: '/bin/el',
+  args: ['/r/b.js', '--config', '/c.json'],
+  env: { ELECTRON_RUN_AS_NODE: '1' }
+}
+
+const HARNESS_CONTROL = {
+  type: 'local',
+  command: ['/bin/el', '/r/b.js', '--config', '/c.json'],
+  environment: { ELECTRON_RUN_AS_NODE: '1' },
+  enabled: true
+}
 
 describe('buildSpawnArgs', () => {
   const base = { command: 'opencode', cwd: '/tmp/test' }
@@ -101,6 +119,101 @@ describe('buildSpawnArgs', () => {
   it('shell-quotes values with single quotes', () => {
     const result = buildSpawnArgs({ ...base, initialPrompt: "it's a test" })
     expect(result).toBe("opencode --prompt 'it'\\''s a test'")
+  })
+
+  it('ignores mcpServer: argv is unchanged and never carries harness-control (TEST-011)', () => {
+    const inputs: AgentSpawnOpts[] = [
+      base,
+      { ...base, model: 'openai/gpt-4' },
+      { ...base, command: 'opencode --model foo', model: 'openai/gpt-4' },
+      { ...base, command: 'opencode -m foo', model: 'openai/gpt-4' },
+      { ...base, sessionId: 'existing-session-id' },
+      { ...base, sessionId: 'new-session-id', initialPrompt: 'hello world' },
+      { ...base, sessionId: 'existing-session-id', initialPrompt: 'continue' },
+      { ...base, model: 'openai/gpt-4', initialPrompt: 'hello' },
+      { ...base, initialPrompt: "it's a test" }
+    ]
+    for (const input of inputs) {
+      const withServer = buildSpawnArgs({ ...input, mcpConfigPath: '/c.json', mcpServer: SPEC })
+      expect(withServer).toBe(buildSpawnArgs(input))
+      expect(withServer).not.toContain('harness-control')
+    }
+  })
+})
+
+describe('buildOpencodeConfig (TEST-009)', () => {
+  const opts: AgentSpawnOpts = { command: 'opencode', cwd: '/w', mcpServer: SPEC }
+
+  it('adds harness-control next to existing mcp servers and keeps every other key', () => {
+    const base = { mcp: { other: { type: 'remote', url: 'u' } }, theme: 'x' }
+    expect(buildOpencodeConfig(opts, base)).toEqual({
+      mcp: { other: { type: 'remote', url: 'u' }, 'harness-control': HARNESS_CONTROL },
+      theme: 'x'
+    })
+  })
+
+  it('does not mutate the base config', () => {
+    const base = { mcp: { other: { type: 'remote', url: 'u' } }, theme: 'x' }
+    buildOpencodeConfig(opts, base)
+    expect(base).toEqual({ mcp: { other: { type: 'remote', url: 'u' } }, theme: 'x' })
+  })
+
+  it('adds an mcp section when the base has none', () => {
+    expect(buildOpencodeConfig(opts, { theme: 'x' })).toEqual({
+      theme: 'x',
+      mcp: { 'harness-control': HARNESS_CONTROL }
+    })
+  })
+
+  it('returns the base contents unchanged when mcpServer is null', () => {
+    const base = { mcp: { other: { type: 'remote', url: 'u' } }, theme: 'x' }
+    expect(buildOpencodeConfig({ ...opts, mcpServer: null }, base)).toEqual(base)
+  })
+})
+
+describe('spawnEnv (TEST-010)', () => {
+  const opts: AgentSpawnOpts = { command: 'opencode', cwd: '/w', mcpServer: SPEC }
+  const parsed = (env: Record<string, string>) => JSON.parse(env.OPENCODE_CONFIG_CONTENT)
+
+  it('with no user value emits a config holding only harness-control', () => {
+    const env = spawnEnv(opts, {}, {})
+    expect(Object.keys(env)).toEqual(['OPENCODE_CONFIG_CONTENT'])
+    expect(parsed(env)).toEqual({ mcp: { 'harness-control': HARNESS_CONTROL } })
+  })
+
+  it('merges a user value from the configured env vars', () => {
+    const env = spawnEnv(opts, { OPENCODE_CONFIG_CONTENT: '{"model":"m"}' }, {})
+    expect(parsed(env)).toEqual({ model: 'm', mcp: { 'harness-control': HARNESS_CONTROL } })
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it('merges a user value from the inherited env when the configured env vars have none', () => {
+    const env = spawnEnv(opts, {}, { OPENCODE_CONFIG_CONTENT: '{"model":"m"}' })
+    expect(parsed(env)).toEqual({ model: 'm', mcp: { 'harness-control': HARNESS_CONTROL } })
+  })
+
+  it('prefers the configured env var over the inherited one', () => {
+    const env = spawnEnv(
+      opts,
+      { OPENCODE_CONFIG_CONTENT: '{"model":"configured"}' },
+      { OPENCODE_CONFIG_CONTENT: '{"model":"inherited"}' }
+    )
+    expect(parsed(env).model).toBe('configured')
+  })
+
+  it.each([
+    { name: 'invalid JSON', raw: '{not json' },
+    { name: 'a JSON array', raw: '[1,2]' },
+    { name: 'a JSON string', raw: '"s"' },
+    { name: 'JSON null', raw: 'null' }
+  ])('drops $name, keeps only our section and logs', ({ raw }) => {
+    const env = spawnEnv(opts, { OPENCODE_CONFIG_CONTENT: raw }, {})
+    expect(parsed(env)).toEqual({ mcp: { 'harness-control': HARNESS_CONTROL } })
+    expect(log).toHaveBeenCalledWith('mcp', expect.any(String))
+  })
+
+  it('returns no env when mcpServer is null and there is no user value', () => {
+    expect(spawnEnv({ ...opts, mcpServer: null }, {}, {})).toEqual({})
   })
 })
 

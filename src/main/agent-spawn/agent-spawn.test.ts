@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
 import {
   agentSessionName,
@@ -9,7 +9,8 @@ import {
   resolveSpawnSize
 } from '.'
 import type { AgentSpawnConfig, AgentSpawnerDeps } from '.'
-import type { AgentKind, AgentModule, AgentSpawnOpts } from '../agents'
+import type { AgentKind, AgentModule, AgentSpawnOpts, HarnessMcpServerSpec } from '../agents'
+import * as opencode from '../agents/opencode'
 import type { Worktree } from '../../shared/state/worktrees'
 import { initialTerminals } from '../../shared/state/terminals'
 import type { PaneLeaf, PaneNode, TerminalSession, TerminalsState } from '../../shared/state/terminals'
@@ -59,11 +60,17 @@ const DEFAULT_COMMANDS: Record<AgentKind, string> = {
   pi: 'pi'
 }
 
-function fakeAgents() {
+function fakeAgents(real: Partial<Record<AgentKind, AgentModule>> = {}) {
   const buildSpawnArgs = vi.fn((_opts: AgentSpawnOpts) => 'AGENT_CMD')
   const getAgent = (kind: AgentKind): AgentModule =>
-    ({ defaultCommand: DEFAULT_COMMANDS[kind], buildSpawnArgs }) as unknown as AgentModule
+    real[kind] ?? ({ defaultCommand: DEFAULT_COMMANDS[kind], buildSpawnArgs } as unknown as AgentModule)
   return { getAgent, buildSpawnArgs }
+}
+
+const SPEC: HarnessMcpServerSpec = {
+  command: '/bin/el',
+  args: ['/r/b.js', '--config', '/c.json'],
+  env: { ELECTRON_RUN_AS_NODE: '1' }
 }
 
 const ENV: Pick<
@@ -81,11 +88,13 @@ function build(
     config?: AgentSpawnConfig
     createSucceeds?: boolean
     writeMcpConfig?: (terminalId: string) => string | null
+    realAgents?: Partial<Record<AgentKind, AgentModule>>
+    inheritedEnv?: Readonly<Record<string, string | undefined>>
   } = {}
 ) {
   const store = new Store()
   const { pty, createCalls, running } = fakePty({ createSucceeds: overrides.createSucceeds })
-  const { getAgent, buildSpawnArgs } = fakeAgents()
+  const { getAgent, buildSpawnArgs } = fakeAgents(overrides.realAgents)
   const writeMcpConfig = vi.fn(
     overrides.writeMcpConfig ?? ((terminalId: string) => `/tmp/mcp-${terminalId}.json`)
   )
@@ -95,6 +104,8 @@ function build(
     store,
     getConfig: () => config,
     writeMcpConfig,
+    mcpServerSpec: () => SPEC,
+    inheritedEnv: overrides.inheritedEnv ?? {},
     getAgent
   })
   const session = (id: string) => store.getSnapshot().state.terminals.sessions[id]
@@ -146,6 +157,17 @@ describe('AgentSpawner.buildAgentCommand', () => {
         "cwd": "/r/repo",
         "initialPrompt": "do it",
         "mcpConfigPath": "/tmp/mcp-t1.json",
+        "mcpServer": {
+          "args": [
+            "/r/b.js",
+            "--config",
+            "/c.json",
+          ],
+          "command": "/bin/el",
+          "env": {
+            "ELECTRON_RUN_AS_NODE": "1",
+          },
+        },
         "model": "opus",
         "sessionId": "sess-1",
         "sessionName": "repo/main",
@@ -213,13 +235,17 @@ describe('AgentSpawner.buildAgentCommand', () => {
       expect(buildSpawnArgs.mock.calls[0][0].mcpConfigPath).toBeNull()
     })
 
-    it('spawnAgentTerminal passes each kind its own env vars', () => {
-      for (const kind of ['claude', 'codex', 'opencode', 'pi'] as const) {
+    it('spawnAgentTerminal passes each kind its own env vars, plus HARNESS_MCP_CONFIG except for pi', () => {
+      for (const kind of ['claude', 'codex', 'opencode'] as const) {
         const { spawner, createCalls } = build()
         spawner.spawnAgentTerminal({ terminalId: `t-${kind}`, cwd: '/wt', agentKind: kind })
         expect(createCalls).toHaveLength(1)
-        expect(createCalls[0][4]).toEqual({ WHO: kind })
+        expect(createCalls[0][4]).toEqual({ WHO: kind, HARNESS_MCP_CONFIG: `/tmp/mcp-t-${kind}.json` })
       }
+
+      const { spawner, createCalls } = build()
+      spawner.spawnAgentTerminal({ terminalId: 't-pi', cwd: '/wt', agentKind: 'pi' })
+      expect(createCalls[0][4]).toEqual({ WHO: 'pi' })
     })
   })
 
@@ -231,6 +257,114 @@ describe('AgentSpawner.buildAgentCommand', () => {
   })
 })
 
+describe('AgentSpawner.buildAgentLaunch (TEST-012)', () => {
+  const MCP_PATH = () => '/c.json'
+  const opencodeConfig = (env: Record<string, string>) => JSON.parse(env.OPENCODE_CONFIG_CONTENT)
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  describe('opencode (real module)', () => {
+    const realAgents = { opencode: opencode as unknown as AgentModule }
+    const req = { terminalId: 't1', cwd: '/wt', agentKind: 'opencode' as const }
+
+    it('env carries the configured vars, HARNESS_MCP_CONFIG and an OPENCODE_CONFIG_CONTENT with harness-control', () => {
+      const { spawner, writeMcpConfig } = build({ realAgents, writeMcpConfig: MCP_PATH })
+
+      const { env } = spawner.buildAgentLaunch(req)
+
+      expect(writeMcpConfig).toHaveBeenCalledTimes(1)
+      expect(env).toEqual({
+        WHO: 'opencode',
+        HARNESS_MCP_CONFIG: '/c.json',
+        OPENCODE_CONFIG_CONTENT: expect.any(String)
+      })
+      expect(opencodeConfig(env).mcp['harness-control']).toEqual({
+        type: 'local',
+        command: ['/bin/el', '/r/b.js', '--config', '/c.json'],
+        environment: { ELECTRON_RUN_AS_NODE: '1' },
+        enabled: true
+      })
+    })
+
+    it('merges a user OPENCODE_CONFIG_CONTENT from the inherited env', () => {
+      const { spawner } = build({
+        realAgents,
+        writeMcpConfig: MCP_PATH,
+        inheritedEnv: { OPENCODE_CONFIG_CONTENT: '{"model":"m"}' }
+      })
+
+      const config = opencodeConfig(spawner.buildAgentLaunch(req).env)
+
+      expect(config.model).toBe('m')
+      expect(config.mcp['harness-control']).toBeDefined()
+    })
+
+    it('reads the injected inherited env, not the test process env', () => {
+      vi.stubEnv('OPENCODE_CONFIG_CONTENT', '{"model":"from-process"}')
+      const { spawner } = build({ realAgents, writeMcpConfig: MCP_PATH, inheritedEnv: {} })
+
+      const config = opencodeConfig(spawner.buildAgentLaunch(req).env)
+
+      expect(config).not.toHaveProperty('model')
+    })
+
+    it('spawnAgentTerminal hands pty.create the command and env from buildAgentLaunch', () => {
+      const { spawner, createCalls } = build({ realAgents, writeMcpConfig: MCP_PATH })
+      const launch = spawner.buildAgentLaunch(req)
+
+      spawner.spawnAgentTerminal(req)
+
+      expect(createCalls).toHaveLength(1)
+      expect(createCalls[0][3]).toEqual(['-ilc', launch.command])
+      expect(createCalls[0][4]).toEqual(launch.env)
+      expect(opencodeConfig(createCalls[0][4] as Record<string, string>).mcp['harness-control']).toBeDefined()
+    })
+  })
+
+  it('claude: env is its vars plus HARNESS_MCP_CONFIG, and the module gets the MCP server spec', () => {
+    const { spawner, buildSpawnArgs } = build({ writeMcpConfig: MCP_PATH })
+
+    const launch = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'claude' })
+
+    expect(launch).toEqual({ command: 'AGENT_CMD', env: { WHO: 'claude', HARNESS_MCP_CONFIG: '/c.json' } })
+    expect(buildSpawnArgs.mock.calls[0][0].mcpServer).toEqual(SPEC)
+  })
+
+  it('pi: no MCP file, no HARNESS_MCP_CONFIG, no MCP opts', () => {
+    const { spawner, buildSpawnArgs, writeMcpConfig } = build({ writeMcpConfig: MCP_PATH })
+
+    const { env } = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'pi' })
+
+    expect(writeMcpConfig).not.toHaveBeenCalled()
+    expect(env).toEqual({ WHO: 'pi' })
+    expect(buildSpawnArgs.mock.calls[0][0]).toMatchObject({ mcpConfigPath: null, mcpServer: null })
+  })
+
+  describe('writeMcpConfig returning null', () => {
+    it('claude: mcpServer is null and env has no HARNESS_MCP_CONFIG', () => {
+      const { spawner, buildSpawnArgs } = build({ writeMcpConfig: () => null })
+
+      const { env } = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'claude' })
+
+      expect(buildSpawnArgs.mock.calls[0][0].mcpServer).toBeNull()
+      expect(env).toEqual({ WHO: 'claude' })
+    })
+
+    it('opencode: env has neither OPENCODE_CONFIG_CONTENT nor HARNESS_MCP_CONFIG', () => {
+      const { spawner } = build({
+        realAgents: { opencode: opencode as unknown as AgentModule },
+        writeMcpConfig: () => null
+      })
+
+      const { env } = spawner.buildAgentLaunch({ terminalId: 't1', cwd: '/wt', agentKind: 'opencode' })
+
+      expect(env).toEqual({ WHO: 'opencode' })
+    })
+  })
+})
+
 describe('AgentSpawner.spawnAgentTerminal', () => {
   it('main spawn with no client starts at the default size with no controller (TEST-004)', () => {
     const { spawner, createCalls, session } = build()
@@ -239,7 +373,16 @@ describe('AgentSpawner.spawnAgentTerminal', () => {
 
     expect(outcome).toBe('spawned')
     expect(createCalls).toEqual([
-      ['t1', '/wt', '', ['-ilc', 'AGENT_CMD'], ENV.claudeEnvVars, false, DEFAULT_SPAWN_COLS, DEFAULT_SPAWN_ROWS]
+      [
+        't1',
+        '/wt',
+        '',
+        ['-ilc', 'AGENT_CMD'],
+        { ...ENV.claudeEnvVars, HARNESS_MCP_CONFIG: '/tmp/mcp-t1.json' },
+        false,
+        DEFAULT_SPAWN_COLS,
+        DEFAULT_SPAWN_ROWS
+      ]
     ])
     expect(session('t1')).toEqual({
       controllerClientId: null,

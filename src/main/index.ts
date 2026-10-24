@@ -88,7 +88,7 @@ import { getAllSessionCosts } from './cost-aggregator'
 import { getClaudeAuthStatus } from './claude-auth'
 import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing'
 import { startControlServer } from './control-server'
-import { writeMcpConfigForTerminal, pruneMcpConfigs } from './mcp-config'
+import { writeMcpConfigForTerminal, pruneMcpConfigs, harnessMcpServerSpec } from './mcp-config'
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
@@ -568,7 +568,8 @@ const agentSpawner = createAgentSpawner({
   pty: ptyManager,
   store,
   getConfig: () => config,
-  writeMcpConfig: (terminalId) => writeMcpConfigForTerminal(terminalId, resolveCallerScope(terminalId))
+  writeMcpConfig: (terminalId) => writeMcpConfigForTerminal(terminalId, resolveCallerScope(terminalId)),
+  mcpServerSpec: (configPath) => harnessMcpServerSpec(configPath)
 })
 ptyManager.setSendSignal((channel, ...args) => transport.sendSignal(channel, ...args))
 ptyManager.setPerfMonitor(perfMonitor)

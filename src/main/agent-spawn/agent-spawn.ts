@@ -7,6 +7,7 @@ import type {
   TerminalSpawnSpec
 } from '../../shared/terminal-spawn-types'
 import { assertNeverAgentKind, toAgentKind } from '../agent-kind'
+import type { AgentModule, AgentSpawnOpts } from '../agents'
 import { getAgent as defaultGetAgent } from '../agents'
 import { buildClaudeLaunchSettings } from '../claude-launch'
 import { log } from '../debug'
@@ -23,12 +24,18 @@ function positive(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback
 }
 
-function agentEnv(kind: AgentKind, config: AgentSpawnConfig): Record<string, string> | undefined {
-  if (kind === 'claude') return config.claudeEnvVars
-  if (kind === 'codex') return config.codexEnvVars
-  if (kind === 'opencode') return config.opencodeEnvVars
-  if (kind === 'pi') return config.piEnvVars
-  return assertNeverAgentKind(kind)
+function configuredEnv(kind: AgentKind, config: AgentSpawnConfig): Record<string, string> {
+  const vars =
+    kind === 'claude'
+      ? config.claudeEnvVars
+      : kind === 'codex'
+        ? config.codexEnvVars
+        : kind === 'opencode'
+          ? config.opencodeEnvVars
+          : kind === 'pi'
+            ? config.piEnvVars
+            : assertNeverAgentKind(kind)
+  return { ...(vars ?? {}) }
 }
 
 export function resolveSpawnSize(
@@ -93,7 +100,7 @@ export function parseSpawnSpec(raw: unknown): TerminalSpawnSpec | null {
 export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
   const getAgent = deps.getAgent ?? defaultGetAgent
 
-  function buildAgentCommand(req: AgentSpawnRequest): string {
+  function buildAgentSpawnOpts(req: AgentSpawnRequest): { agent: AgentModule; kind: AgentKind; opts: AgentSpawnOpts } {
     const config = deps.getConfig()
     const kind = req.agentKind
     const agent = getAgent(kind)
@@ -108,6 +115,7 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
               ? config.piCommand || agent.defaultCommand
               : assertNeverAgentKind(kind)
     const mcpConfigPath = kind === 'pi' ? null : deps.writeMcpConfig(req.terminalId)
+    const mcpServer = mcpConfigPath ? deps.mcpServerSpec(mcpConfigPath) : null
 
     const override = req.modelOverride && req.modelOverride.trim() ? req.modelOverride.trim() : undefined
     let systemPrompt: string | undefined
@@ -133,7 +141,7 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
       model = assertNeverAgentKind(kind)
     }
 
-    return agent.buildSpawnArgs({
+    const opts: AgentSpawnOpts = {
       command,
       cwd: req.cwd,
       sessionId: req.sessionId,
@@ -141,10 +149,27 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
       teleportSessionId: req.teleportSessionId,
       sessionName: req.sessionName,
       mcpConfigPath,
+      mcpServer,
       model,
       systemPrompt,
       tuiFullscreen
-    })
+    }
+    return { agent, kind, opts }
+  }
+
+  function agentEnv(kind: AgentKind, agent: AgentModule, opts: AgentSpawnOpts): Record<string, string> {
+    const base = configuredEnv(kind, deps.getConfig())
+    const mcp: Record<string, string> = opts.mcpConfigPath ? { HARNESS_MCP_CONFIG: opts.mcpConfigPath } : {}
+    return { ...base, ...mcp, ...(agent.spawnEnv?.(opts, base, deps.inheritedEnv ?? process.env) ?? {}) }
+  }
+
+  function buildAgentLaunch(req: AgentSpawnRequest): { command: string; env: Record<string, string> } {
+    const { agent, kind, opts } = buildAgentSpawnOpts(req)
+    return { command: agent.buildSpawnArgs(opts), env: agentEnv(kind, agent, opts) }
+  }
+
+  function buildAgentCommand(req: AgentSpawnRequest): string {
+    return buildAgentLaunch(req).command
   }
 
   function spawn(
@@ -180,18 +205,10 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
   }
 
   function spawnAgentTerminal(req: AgentSpawnRequest, clientId?: string): SpawnOutcome {
-    return spawn(req.terminalId, req.agentKind, clientId, req.cols, req.rows, (cols, rows) =>
-      deps.pty.create(
-        req.terminalId,
-        req.cwd,
-        '',
-        ['-ilc', buildAgentCommand(req)],
-        agentEnv(req.agentKind, deps.getConfig()),
-        false,
-        cols,
-        rows
-      )
-    )
+    return spawn(req.terminalId, req.agentKind, clientId, req.cols, req.rows, (cols, rows) => {
+      const launch = buildAgentLaunch(req)
+      return deps.pty.create(req.terminalId, req.cwd, '', ['-ilc', launch.command], launch.env, false, cols, rows)
+    })
   }
 
   function spawnShellTerminal(req: ShellSpawnRequest, clientId?: string): SpawnOutcome {
@@ -230,5 +247,5 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     return { outcome, history: outcome === 'attached' ? deps.pty.getHistory(spec.terminalId) : '' }
   }
 
-  return { buildAgentCommand, spawnAgentTerminal, spawnShellTerminal, attach, createOrAttach }
+  return { buildAgentCommand, buildAgentLaunch, spawnAgentTerminal, spawnShellTerminal, attach, createOrAttach }
 }

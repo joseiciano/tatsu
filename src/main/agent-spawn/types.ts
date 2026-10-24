@@ -5,7 +5,7 @@ import type {
   TerminalCreateResult,
   TerminalSpawnSpec
 } from '../../shared/terminal-spawn-types'
-import type { AgentModule } from '../agents'
+import type { AgentModule, HarnessMcpServerSpec } from '../agents'
 import type { ClaudeLaunchConfig } from '../claude-launch'
 import type { PtyManager } from '../pty-manager'
 import type { Store } from '../store'
@@ -50,11 +50,14 @@ export interface AgentSpawnerDeps {
   store: Pick<Store, 'dispatch' | 'getSnapshot'>
   getConfig: () => AgentSpawnConfig
   writeMcpConfig: (terminalId: string) => string | null
+  mcpServerSpec: (configPath: string) => HarnessMcpServerSpec
+  inheritedEnv?: Readonly<Record<string, string | undefined>>
   getAgent?: (kind: AgentKind) => AgentModule
 }
 
 export interface AgentSpawner {
   buildAgentCommand(req: AgentSpawnRequest): string
+  buildAgentLaunch(req: AgentSpawnRequest): { command: string; env: Record<string, string> }
   spawnAgentTerminal(req: AgentSpawnRequest, clientId?: string): SpawnOutcome
   spawnShellTerminal(req: ShellSpawnRequest, clientId?: string): SpawnOutcome
   attach(terminalId: string, clientId?: string): TerminalAttachResult

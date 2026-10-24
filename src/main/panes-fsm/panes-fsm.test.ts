@@ -577,6 +577,7 @@ describe('PanesFSM main-side agent start', () => {
         store,
         getConfig: () => ({}),
         writeMcpConfig: () => '/mcp.json',
+        mcpServerSpec: (configPath) => ({ command: '/bin/el', args: ['/r/b.js', '--config', configPath], env: {} }),
         getAgent: () => ({ defaultCommand: 'claude', buildSpawnArgs }) as unknown as AgentModule
       })
       const outcomes: string[] = []

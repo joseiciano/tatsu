@@ -203,6 +203,52 @@ export function latestSessionId(_cwd: string): string | null {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function buildOpencodeConfig(
+  opts: AgentSpawnOpts,
+  base: Record<string, unknown>
+): Record<string, unknown> {
+  const config: Record<string, unknown> = { ...base }
+  const server = opts.mcpServer
+  if (server) {
+    config.mcp = {
+      ...(isPlainObject(base.mcp) ? base.mcp : {}),
+      'harness-control': {
+        type: 'local',
+        command: [server.command, ...server.args],
+        environment: server.env,
+        enabled: true
+      }
+    }
+  }
+  return config
+}
+
+export function spawnEnv(
+  opts: AgentSpawnOpts,
+  baseEnv: Record<string, string>,
+  inheritedEnv: Readonly<Record<string, string | undefined>>
+): Record<string, string> {
+  const raw = baseEnv.OPENCODE_CONFIG_CONTENT ?? inheritedEnv.OPENCODE_CONFIG_CONTENT
+  let base: Record<string, unknown> = {}
+  if (raw !== undefined) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      parsed = undefined
+    }
+    if (isPlainObject(parsed)) base = parsed
+    else log('mcp', 'ignoring non-object OPENCODE_CONFIG_CONTENT')
+  }
+  const config = buildOpencodeConfig(opts, base)
+  if (raw === undefined && JSON.stringify(config) === JSON.stringify(base)) return {}
+  return { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) }
+}
+
 export function buildSpawnArgs(opts: AgentSpawnOpts): string {
   let cmd = opts.command
 
