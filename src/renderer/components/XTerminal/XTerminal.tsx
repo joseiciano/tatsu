@@ -11,6 +11,8 @@ import { getBackend, useBackend } from '../../backend'
 import { scaleSpec, type UiScale } from '../../../shared/state/settings'
 import { Eye, X, Sparkles } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
+import { createAttachStream } from '../../terminal-attach'
+import type { TerminalAttachResult, TerminalCreateResult, TerminalSpawnSpec } from '../../types'
 
 function ClaudeLoader() {
   return (
@@ -441,6 +443,22 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
       })
     }
 
+    const stream = createAttachStream((d) => {
+      terminal.write(sanitizeTerminalData(d))
+      setLoading(false)
+    })
+    cleanupData = backend.onTerminalData((id, data) => {
+      if (id === terminalId) stream.push(data)
+    })
+    terminal.onData((data) => {
+      // Spectators silently drop input. Main also enforces this, but
+      // gating here avoids the round-trip + any suggestion the keystroke
+      // "took" (we don't echo back since xterm's local echo is off).
+      if (!isControllerRef.current) return
+      backend.writeTerminal(terminalId, data)
+    })
+    let legacy = false
+
     const buildAgentArg = async (): Promise<string> => {
       return backend.buildAgentSpawnArgs(agentKind || 'claude', {
         terminalId,
@@ -452,6 +470,24 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
         modelOverride
       })
     }
+
+    const resolveShellCwd = (): string =>
+      shellCwd ? (shellCwd.startsWith('/') ? shellCwd : `${cwd}/${shellCwd}`) : cwd
+
+    const buildSpec = (): TerminalSpawnSpec =>
+      type === 'agent'
+        ? {
+            kind: 'agent',
+            terminalId,
+            cwd,
+            agentKind: agentKind || 'claude',
+            sessionId,
+            initialPrompt,
+            teleportSessionId,
+            sessionName,
+            modelOverride
+          }
+        : { kind: 'shell', terminalId, cwd: resolveShellCwd(), command: shellCommand }
 
     const spawnPty = async (): Promise<void> => {
       if (disposed) return
@@ -468,22 +504,6 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
       }
       pendingSpawnRef.current = null
 
-      // Empty string falls through to env.SHELL in pty-manager — picks up the
-      // user's actual shell instead of hardcoding zsh on bash-only systems.
-      const shell = ''
-      const agentArg = type === 'agent' ? await buildAgentArg() : ''
-      if (disposed) return
-      const args =
-        type === 'agent'
-          ? ['-ilc', agentArg]
-          : shellCommand
-            ? ['-ilc', shellCommand]
-            : ['-il']
-      const spawnCwd = shellCwd
-        ? shellCwd.startsWith('/')
-          ? shellCwd
-          : `${cwd}/${shellCwd}`
-        : cwd
       // Pass the renderer's fitted dimensions so the PTY spawns at the
       // right grid size instead of main's fallback 120x30.
       let spawnCols: number | undefined
@@ -498,52 +518,92 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
       } catch {
         // fall back to main's defaults
       }
-      backend.createTerminal(terminalId, spawnCwd, shell, args, type === 'agent' ? agentKind : undefined, spawnCols, spawnRows)
 
-      terminal.onData((data) => {
-        // Spectators silently drop input. Main also enforces this, but
-        // gating here avoids the round-trip + any suggestion the keystroke
-        // "took" (we don't echo back since xterm's local echo is off).
-        if (!isControllerRef.current) return
-        backend.writeTerminal(terminalId, data)
-      })
+      if (legacy) {
+        // Empty string falls through to env.SHELL in pty-manager — picks up the
+        // user's actual shell instead of hardcoding zsh on bash-only systems.
+        const shell = ''
+        const agentArg = type === 'agent' ? await buildAgentArg() : ''
+        if (disposed) return
+        const args =
+          type === 'agent'
+            ? ['-ilc', agentArg]
+            : shellCommand
+              ? ['-ilc', shellCommand]
+              : ['-il']
+        backend.createTerminal(terminalId, resolveShellCwd(), shell, args, type === 'agent' ? agentKind : undefined, spawnCols, spawnRows)
+        stream.beginLive(false)
+        return
+      }
 
-      cleanupData = backend.onTerminalData((id, data) => {
-        if (id === terminalId) {
-          terminal.write(sanitizeTerminalData(data))
-          setLoading(false)
-        }
-      })
+      let res: TerminalCreateResult
+      try {
+        res = await backend.createOrAttachTerminal(buildSpec(), spawnCols, spawnRows)
+      } catch {
+        res = { outcome: 'failed', history: '' }
+      }
+      if (disposed) return
+      if (res.outcome === 'attached') {
+        terminal.reset()
+        terminal.write(sanitizeTerminalData(res.history))
+        stream.beginLive(true)
+        setLoading(false)
+        return
+      }
+      stream.beginLive(false)
+    }
 
-      // Safety net: if no output has arrived by the time spawnPty
-      // returns + a short grace window, clear the overlay anyway. This
-      // covers the "attach to a running but idle Claude with no
-      // accumulated history" case, where getTerminalHistory returns ''
-      // and no new bytes will flow until the user does something — the
-      // overlay would otherwise stay forever.
+    const attachWithFallback = async (): Promise<TerminalAttachResult> => {
+      try {
+        return await backend.attachTerminal(terminalId)
+      } catch {
+        legacy = true
+        return { alive: false, history: await backend.getTerminalHistory(terminalId) }
+      }
+    }
+
+    attachWithFallback().then((res) => {
+      if (disposed) return
+      // Safety net: if no output has arrived shortly after the attach
+      // reply, clear the overlay anyway. This covers attaching to a
+      // running but idle agent with no accumulated history, where no new
+      // bytes will flow until the user does something — the overlay
+      // would otherwise stay forever.
       setTimeout(() => {
         if (!disposed) setLoading(false)
       }, 800)
-    }
-
-    backend.getTerminalHistory(terminalId).then((history) => {
-      if (disposed) return
-      if (!history) {
-        spawnPty()
+      if (res.alive) {
+        // A live PTY: replay its scrollback as-is and go live. No banner
+        // and no mode reset — the running agent still expects the modes
+        // it turned on.
+        terminal.write(sanitizeTerminalData(res.history))
+        stream.beginLive(true)
+        setLoading(false)
+        if (visibleRef.current && isControllerRef.current) {
+          try {
+            fitAddon.fit()
+            const dims = fitAddon.proposeDimensions()
+            if (dims) backend.resizeTerminal(terminalId, dims.cols, dims.rows)
+          } catch {
+            // the visible effect fits again
+          }
+        }
         return
       }
-      // A non-empty history means main already has a live PTY for this id
-      // — the agent isn't "starting," we're attaching to a running one.
+      if (!res.history) {
+        void spawnPty()
+        return
+      }
+      // Dead PTY with scrollback: show it above the fresh process.
       // Clear the loading overlay so the restored scrollback is visible
-      // without waiting for new bytes (which may never come if the agent
-      // is idle at its prompt).
+      // without waiting for new bytes.
       setLoading(false)
       // Replay raw scrollback. Wait for xterm to finish parsing before
-      // attaching onData, otherwise any response sequences xterm generates
+      // spawning, otherwise any response sequences xterm generates
       // mid-parse (e.g. focus reports from CSI ?1004h in the saved history)
       // get sent to the freshly spawned PTY — which is how a stray "O" was
       // leaking into Claude on session resume (focus-out = ESC [ O).
-      terminal.write(sanitizeTerminalData(history), () => {
+      terminal.write(sanitizeTerminalData(res.history), () => {
         if (disposed) return
         // Reset any reporting modes the restored session may have left on, so
         // the fresh process starts in a clean state.
@@ -556,11 +616,11 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           '\x1b[?2004l'   // bracketed paste
         terminal.write(RESET_MODES + '\r\n\x1b[2m── session restored ──\x1b[0m\r\n', () => {
           if (disposed) return
-          spawnPty()
+          void spawnPty()
         })
       })
     }).catch(() => {
-      spawnPty()
+      void spawnPty()
     })
 
     // Handle resize — only fit when actually visible. Spectators still
