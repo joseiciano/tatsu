@@ -470,12 +470,13 @@ async function handleToolCall(name, args) {
         throw new Error('prNumber must be a positive integer')
       }
     }
-    if (
-      args.agentKind !== undefined &&
-      args.agentKind !== null &&
-      !Object.prototype.hasOwnProperty.call(AGENT_KIND_LABELS, args.agentKind)
-    ) {
-      throw new Error('agentKind must be "claude", "codex", "opencode", or "pi"')
+    let agentKind
+    if (args.agentKind !== undefined && args.agentKind !== null && args.agentKind !== '') {
+      if (typeof args.agentKind !== 'string') throw new Error('agentKind must be a string')
+      agentKind = args.agentKind.trim().toLowerCase()
+      if (!Object.prototype.hasOwnProperty.call(AGENT_KIND_LABELS, agentKind)) {
+        throw new Error('agentKind must be "claude", "codex", "opencode", or "pi"')
+      }
     }
     const r = await callControl('POST', '/worktrees', {
       terminalId: TERMINAL_ID,
@@ -484,13 +485,10 @@ async function handleToolCall(name, args) {
       prNumber: prNumber,
       baseBranch: args.baseBranch,
       initialPrompt: args.initialPrompt,
-      agentKind: args.agentKind,
+      agentKind,
       model: args.model
     })
-    const agentLabel =
-      args.agentKind === undefined || args.agentKind === null
-        ? 'agent'
-        : AGENT_KIND_LABELS[args.agentKind]
+    const agentLabel = agentKind === undefined ? 'agent' : AGENT_KIND_LABELS[agentKind]
     const modelSuffix = args.model ? ` (model: ${args.model})` : ''
     return prNumber
       ? `Created worktree ${r.path} on branch ${r.branch} for PR #${prNumber}. Harness will open a new ${agentLabel} chat tab in it${modelSuffix}.`

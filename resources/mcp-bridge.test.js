@@ -3,6 +3,7 @@ import { createServer } from 'http'
 import { spawn } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { AGENT_REGISTRY } from '../src/shared/agent-registry'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -277,6 +278,110 @@ describe('mcp-bridge create_worktree', () => {
     expect(response.result.content[0].text).toMatch(/claude.*codex/i)
     const postCall = stub.captured.find((c) => c.method === 'POST' && c.url === '/worktrees')
     expect(postCall).toBeUndefined()
+  })
+
+  it('normalises a padded mixed-case agentKind before forwarding it', async () => {
+    stub = await startStub((req, body, res) => {
+      if (req.url === '/scope') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ scope: null, browser: { enabled: true, mode: 'full' } }))
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ path: '/tmp/wt-agent', branch: 'feat' }))
+    })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    bridge.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })
+    await bridge.next()
+    bridge.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'create_worktree',
+        arguments: { branchName: 'feat', agentKind: '  OpenCode ' }
+      }
+    })
+    const response = await bridge.next()
+
+    expect(response.result.isError).toBeFalsy()
+    expect(response.result.content[0].text).toContain('OpenCode chat tab')
+    const postCall = stub.captured.find((c) => c.method === 'POST' && c.url === '/worktrees')
+    expect(postCall).toBeDefined()
+    expect(postCall.body.agentKind).toBe('opencode')
+  })
+
+  it('treats an empty agentKind as unset and omits it from the POST body', async () => {
+    stub = await startStub((req, body, res) => {
+      if (req.url === '/scope') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ scope: null, browser: { enabled: true, mode: 'full' } }))
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ path: '/tmp/wt-agent', branch: 'feat' }))
+    })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    bridge.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })
+    await bridge.next()
+    bridge.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'create_worktree',
+        arguments: { branchName: 'feat', agentKind: '' }
+      }
+    })
+    const response = await bridge.next()
+
+    expect(response.result.isError).toBeFalsy()
+    expect(response.result.content[0].text).toContain('new agent chat tab')
+    const postCall = stub.captured.find((c) => c.method === 'POST' && c.url === '/worktrees')
+    expect(postCall).toBeDefined()
+    expect(postCall.body).not.toHaveProperty('agentKind')
+  })
+
+  it('rejects a non-string agentKind locally without hitting the server', async () => {
+    stub = await startStub((req, body, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ scope: null, browser: { enabled: true, mode: 'full' } }))
+    })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    bridge.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })
+    await bridge.next()
+    bridge.send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'create_worktree',
+        arguments: { branchName: 'feat', agentKind: 42 }
+      }
+    })
+    const response = await bridge.next()
+
+    expect(response.result.isError).toBe(true)
+    expect(response.result.content[0].text).toContain('agentKind must be a string')
+    const postCall = stub.captured.find((c) => c.method === 'POST' && c.url === '/worktrees')
+    expect(postCall).toBeUndefined()
+  })
+
+  it('advertises exactly the AGENT_REGISTRY kinds in the create_worktree agentKind enum', async () => {
+    stub = await startStub((req, body, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ scope: null, browser: { enabled: true, mode: 'full' } }))
+    })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    bridge.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })
+    await bridge.next()
+    bridge.send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
+    const response = await bridge.next()
+
+    const tool = response.result.tools.find((t) => t.name === 'create_worktree')
+    expect(tool.inputSchema.properties.agentKind.enum).toEqual(AGENT_REGISTRY.map((a) => a.kind))
   })
 
   it('surfaces server-side PR failures back to the caller', async () => {
