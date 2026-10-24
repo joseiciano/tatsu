@@ -6,6 +6,12 @@ import * as pi from './pi'
 
 export type { AgentKind }
 
+export interface HarnessMcpServerSpec {
+  command: string
+  args: string[]
+  env: Record<string, string>
+}
+
 export interface AgentSpawnOpts {
   command: string
   cwd: string
@@ -14,6 +20,7 @@ export interface AgentSpawnOpts {
   teleportSessionId?: string
   sessionName?: string
   mcpConfigPath?: string | null
+  mcpServer?: HarnessMcpServerSpec | null
   model?: string | null
   systemPrompt?: string
   tuiFullscreen?: boolean
@@ -43,6 +50,12 @@ export interface AgentModule {
   sessionFileExists(cwd: string, sessionId: string): boolean
   latestSessionId(cwd: string): string | null
   buildSpawnArgs(opts: AgentSpawnOpts): string
+  /** Extra env for this agent's PTY, given the user's configured env vars. */
+  spawnEnv?(
+    opts: AgentSpawnOpts,
+    baseEnv: Record<string, string>,
+    inheritedEnv: Readonly<Record<string, string | undefined>>
+  ): Record<string, string>
 }
 
 const agents: Record<AgentKind, AgentModule> = { claude, codex, opencode, pi }

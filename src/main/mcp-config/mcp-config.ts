@@ -1,14 +1,25 @@
-import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync, chmodSync } from 'fs'
 import { join } from 'path'
 import { getControlServerInfo } from '../control-server'
 import type { CallerScope } from '../control-server'
+import type { HarnessMcpServerSpec } from '../agents'
 import { resolveBundledMcpScript, userDataDir } from '../paths'
 import { log } from '../debug'
 
 function getConfigDir(): string {
   const dir = join(userDataDir(), 'mcp-configs')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
   return dir
+}
+
+export type { HarnessMcpServerSpec }
+
+export function harnessMcpServerSpec(
+  configPath: string,
+  execPath: string = process.execPath,
+  bridgePath: string = getBridgeScriptPath()
+): HarnessMcpServerSpec {
+  return { command: execPath, args: [bridgePath, '--config', configPath], env: { ELECTRON_RUN_AS_NODE: '1' } }
 }
 
 export function getBridgeScriptPath(): string {
@@ -42,7 +53,6 @@ export function writeMcpConfigForTerminal(
     log('mcp', 'control server not ready — skipping MCP config write')
     return null
   }
-  const configPath = join(getConfigDir(), `${sanitize(terminalId)}.json`)
   const env: Record<string, string> = {
     ELECTRON_RUN_AS_NODE: '1',
     HARNESS_PORT: String(info.port),
@@ -64,13 +74,21 @@ export function writeMcpConfigForTerminal(
       }
     }
   }
+  let configPath: string
   try {
-    writeFileSync(configPath, JSON.stringify(config, null, 2))
-    return configPath
+    configPath = join(getConfigDir(), `${sanitize(terminalId)}.json`)
+    writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 })
   } catch (err) {
     log('mcp', 'failed to write config', err instanceof Error ? err.message : err)
     return null
   }
+  try {
+    chmodSync(configPath, 0o600)
+  } catch (err) {
+    log('mcp', 'failed to chmod config', err instanceof Error ? err.message : err)
+    return null
+  }
+  return configPath
 }
 
 /** Remove mcp config files for terminals not present in `keepIds`. */

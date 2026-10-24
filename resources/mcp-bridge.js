@@ -1,10 +1,25 @@
 #!/usr/bin/env node
 // Harness MCP bridge — minimal MCP stdio server that forwards tool calls
 // to the Harness control HTTP server running inside the Electron main process.
-// Spawned by Claude Code via `ELECTRON_RUN_AS_NODE=1 <electron-binary> <this>`.
+// Spawned by an agent CLI via `ELECTRON_RUN_AS_NODE=1 <electron-binary> <this> [--config <per-terminal json>]`.
 
 const http = require('http')
 const readline = require('readline')
+
+const CONFIG_FLAG = process.argv.indexOf('--config')
+if (CONFIG_FLAG !== -1) {
+  const file = process.argv[CONFIG_FLAG + 1]
+  try {
+    const parsed = JSON.parse(require('fs').readFileSync(file, 'utf-8'))
+    const env =
+      parsed && parsed.mcpServers && parsed.mcpServers['harness-control'] && parsed.mcpServers['harness-control'].env
+    if (!env || typeof env !== 'object') throw new Error('no mcpServers.harness-control.env')
+    for (const [k, v] of Object.entries(env)) if (typeof v === 'string') process.env[k] = v
+  } catch (e) {
+    process.stderr.write('harness-mcp: cannot read --config ' + file + ': ' + (e && e.message ? e.message : e) + '\n')
+    process.exit(1)
+  }
+}
 
 const PORT = process.env.HARNESS_PORT
 const TOKEN = process.env.HARNESS_TOKEN
