@@ -18,7 +18,8 @@ flow (Steps 18–21).
 - An unsaved template shows an `Unsaved` marker. Editing a template that
   changed on disk asks before overwriting.
 - `Delete template` and `Delete fragment` remove a template or fragment.
-- Rendered files carry a provenance marker. The inventory rows link back
+- Rendered files carry no provenance marker; Tatsu matches them to templates by
+  output path. The inventory rows link back
   through `Edit template <ref>`.
 
 ## How to get to it (user POV)
@@ -44,7 +45,7 @@ The end state that proves it works:
 
 - The template file exists under `DATA_DIR/harness-config-source/`.
 - After sync, `SANDBOX_HOME/.claude/skills/greet/SKILL.md` exists with the
-  rendered body and the provenance marker.
+  rendered body and no `tatsu-template` marker.
 - The inventory row offers `Edit template …`.
 
 ## Gotchas
@@ -54,7 +55,7 @@ The end state that proves it works:
 - The template source folder is in `DATA_DIR`, not `HOME`. Check both after a sync.
 - Run: `journeys/template-render-sync.mjs`. The template lands at
   `DATA_DIR/harness-config-source/skills/greet/TEMPLATE.md`; the rendered
-  `SKILL.md` carries `tatsu-template: skill/greet` in its frontmatter; the row
+  `SKILL.md` has no `tatsu-template` marker (renderer version 3); the row
   offers `Edit template skill/greet`. Harness checkboxes are
   `#template-harness-<claude|codex|opencode>`; the create button is `Create`
   (exact). The body editor is the first `.monaco-editor` on the page.

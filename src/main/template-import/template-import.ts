@@ -12,7 +12,7 @@ import {
   validateTemplateTargets,
   type HarnessTemplateDraft
 } from '../../shared/harness-templates'
-import { TEMPLATE_MARKER_KEY } from '../../shared/harness-template-render'
+import { LEGACY_TEMPLATE_MARKER_KEY, stripLegacyTemplateMarker } from '../../shared/harness-template-render'
 import type {
   HarnessTemplateHarnessBlock,
   HarnessTemplateHarnesses,
@@ -132,7 +132,7 @@ function splitSource(source: string): ParsedSource {
     }
     if (data === undefined || data === null) data = {}
     if (!isPlainObject(data)) throw new Error('The frontmatter must be a mapping')
-    return { data, body: lines.slice(index + 1).join('\n') }
+    return { data, body: stripLegacyTemplateMarker(lines.slice(index + 1).join('\n')) }
   }
   throw new Error('The frontmatter block is not closed')
 }
@@ -233,8 +233,8 @@ class Importer {
     block: HarnessTemplateHarnessBlock,
     unsupported: HarnessTemplateImportSetting[]
   ): void {
-    const keys = [...(this.outside[harness] ?? []), TEMPLATE_MARKER_KEY]
-    for (const key of keys) {
+    delete block.frontmatter[LEGACY_TEMPLATE_MARKER_KEY]
+    for (const key of this.outside[harness] ?? []) {
       if (!Object.prototype.hasOwnProperty.call(block.frontmatter, key)) continue
       unsupported.push({ harness, key, value: displayValue(block.frontmatter[key]) })
       delete block.frontmatter[key]

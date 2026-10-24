@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Create a skill template "greet" for Claude Code on the Templates tab, then
 // sync it to disk from the Skills tab and prove the rendered SKILL.md landed
-// with the body and a provenance marker, and the row links back to the template.
+// with the body and no provenance marker, and the row still links back to the
+// template because Tatsu derives provenance from the template's output path.
 //
 // Usage: node .claude/skills/verify/scripts/journeys/template-render-sync.mjs <state.env>
 import { copyFileSync, existsSync, readFileSync } from 'node:fs'
@@ -57,7 +58,7 @@ await withApp(process.argv[2], 'template-render-sync', async ({ page, state, sho
   const text = readFileSync(rendered, 'utf8')
   log(`rendered ${rendered}:\n${text}`)
   if (!text.includes(BODY)) throw new Error('rendered SKILL.md is missing the template body')
-  if (!/tatsu/i.test(text)) throw new Error('rendered SKILL.md has no Tatsu provenance marker')
+  if (/tatsu/i.test(text)) throw new Error('rendered SKILL.md still carries a Tatsu provenance marker')
   if (!text.includes('Greet the user.')) throw new Error('rendered SKILL.md is missing the description')
 
   await dialog.waitFor({ state: 'detached', timeout: 10000 }).catch(async () => {

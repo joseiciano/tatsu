@@ -17,7 +17,7 @@ import type { Stats } from 'fs'
 import { homedir } from 'os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path'
 
-import { resourcePathForName, type HarnessConfigResourceType } from '../../shared/agent-registry'
+import { resourcePathForName, templateOutputFor, type HarnessConfigResourceType } from '../../shared/agent-registry'
 import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
@@ -34,10 +34,9 @@ import {
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
 import {
-  readTemplateRef,
   renderTemplates,
   templateFragmentNames,
-  templateMarker,
+  templateRefOf,
   type RenderableTemplate,
   type TemplateRenderResult
 } from '../../shared/harness-template-render'
@@ -1347,7 +1346,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         hash: resource.hash,
         updatedAt: 0,
         source: 'template',
-        templateRef: templateMarker(resource.templateKind, resource.templateName)
+        templateRef: templateRefOf(resource.templateKind, resource.templateName)
       })
     }
     const renderedIds = new Set(rendered.map((resource) => resource.id))
@@ -1362,12 +1361,12 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
     const contributing = source.templates
       .filter((template) => this.templateTouchesScope(scope, template))
-      .map((template) => ({ template, ref: templateMarker(template.kind, template.name) }))
+      .map((template) => ({ template, ref: templateRefOf(template.kind, template.name) }))
       .sort((a, b) => lexicalCompare(a.ref, b.ref))
     const contributingRefs = new Set(contributing.map(({ ref }) => ref))
     const messages = new Map<string, string[]>()
     for (const error of result.errors) {
-      const ref = templateMarker(error.templateKind, error.templateName)
+      const ref = templateRefOf(error.templateKind, error.templateName)
       if (!contributingRefs.has(ref)) continue
       messages.set(ref, [...(messages.get(ref) ?? []), error.message])
     }
@@ -1447,16 +1446,60 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return expansion.content
   }
 
+  /** Which template each harness file comes from, keyed by physical id:
+   *  rendered output first, then the paths a template that fails to render
+   *  would write (REQ-007), so that earlier output is held rather than
+   *  treated as disk-only. A template file that no longer parses has unknown
+   *  harness blocks, so only its default-name path per harness is known. */
+  private templateProvenance(): Map<string, string> {
+    const { source, result } = this.templateRender()
+    const provenance = new Map<string, string>()
+    const claim = (
+      agentKind: ManagedHarnessKind,
+      resourceType: HarnessConfigResourceType,
+      relativePath: string | null,
+      ref: string
+    ): void => {
+      const descriptor = this.getHarness(agentKind).resources[resourceType]
+      if (!descriptor?.supported || !descriptor.rootKey || relativePath === null) return
+      const id = physicalId(agentKind, descriptor.rootKey, relativePath)
+      if (!provenance.has(id)) provenance.set(id, ref)
+    }
+    for (const resource of result.resources) {
+      claim(resource.agentKind, resource.resourceType, resource.relativePath, templateRefOf(resource.templateKind, resource.templateName))
+    }
+    const failed = new Set(result.errors.map((error) => templateRefOf(error.templateKind, error.templateName)))
+    for (const template of source.templates) {
+      const ref = templateRefOf(template.kind, template.name)
+      if (!failed.has(ref)) continue
+      const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[template.kind]
+      for (const agentKind of templateTargets(template)) {
+        const block = template.harnesses[agentKind]
+        const name = (block ? block.name : undefined) ?? template.name
+        claim(agentKind, resourceType, resourcePathForName(agentKind, resourceType, name), ref)
+      }
+    }
+    for (const { templateRef } of this.templateSourceErrors(source)) {
+      const [kind, name] = [templateRef.slice(0, templateRef.indexOf('/')), templateRef.slice(templateRef.indexOf('/') + 1)]
+      const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[kind as HarnessTemplate['kind']]
+      for (const agentKind of MANAGED_HARNESSES) {
+        if (!templateOutputFor(agentKind, resourceType)) continue
+        claim(agentKind, resourceType, resourcePathForName(agentKind, resourceType, name), templateRef)
+      }
+    }
+    return provenance
+  }
+
   /** REQ-007: a template file that no longer parses is missing from the
    *  template list, so its harness targets are unknown. Its parse error is
    *  keyed by template ref so any earlier output on disk can be held. */
   private templateSourceErrors(source: HarnessConfigTemplateSource): ScopeRenderError[] {
-    const loaded = new Set(source.templates.map((template) => templateMarker(template.kind, template.name)))
+    const loaded = new Set(source.templates.map((template) => templateRefOf(template.kind, template.name)))
     const messages = new Map<string, string[]>()
     for (const error of source.errors ?? []) {
       const entry = classifyTemplateSourcePath(error.relativePath)
       if (!entry || entry.type === 'fragment') continue
-      const ref = templateMarker(entry.type === 'reference' ? 'skill' : entry.kind, entry.name)
+      const ref = templateRefOf(entry.type === 'reference' ? 'skill' : entry.kind, entry.name)
       if (loaded.has(ref)) continue
       messages.set(ref, [...(messages.get(ref) ?? []), error.message])
     }
@@ -1490,6 +1533,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         .map((resource) => resource.id)
     )
     const byId = new Map<string, DiskEntry>()
+    const provenance = this.templateProvenance()
     for (const descriptor of descriptors) {
       const { root, rootLinkedFrom } = this.resolveRootInfo(descriptor)
       const walked: WalkEntry[] = []
@@ -1529,7 +1573,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         }
         const resourceLinkedFrom = rootLinkedFrom ?? linkedFrom
         if (resourceLinkedFrom) ref.linkedFrom = resourceLinkedFrom
-        const templateRef = readTemplateRef(bytes.toString('utf8'))
+        const templateRef = provenance.get(id)
         if (templateRef) ref.templateRef = templateRef
         byId.set(id, { ref, descriptor, root })
       }
@@ -1653,8 +1697,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         updatedAt: resource.updatedAt
       }
       if (linkedFrom) ref.linkedFrom = linkedFrom
-      const templateRef = resource.templateRef ?? readTemplateRef(resource.content)
-      if (templateRef) ref.templateRef = templateRef
+      if (resource.templateRef) ref.templateRef = resource.templateRef
       if (resource.source === 'template') ref.source = 'template'
       entries.set(expectedId, {
         resource: { ...resource, id: expectedId, hash: contentHash },
