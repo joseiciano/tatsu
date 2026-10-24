@@ -29,9 +29,9 @@ A common real-world layout hits all three, and its build deletes and regenerates
   - the root path itself (the last path segment, checked before resolving) is a symlink, and the user has not set an explicit override for that root key in [Step 16](./step-16-config-root-settings.md). In that case every resource in the scope gets `linkedFrom` set to the root's real path.
 - **REQ-003a**: Symlinks above the root's last segment (for example `~/.claude` itself pointing to a kept dotfiles folder) do not make resources managed elsewhere. Only the root's last segment and the path below it count. Do not broaden this rule.
 - **REQ-003b**: Setting an explicit Step 16 override for a root key is the user's opt-in to write there. With an override, a symlinked root is treated as a plain folder at its real path.
-- **REQ-004**: A resource with `linkedFrom` set is **managed elsewhere**. Direct update, direct delete, and sync-to-disk overwrite or delete of that resource MUST be rejected with a new error code `linked-resource`. The containment check for writes stays as strict as today.
+- **REQ-004** (superseded 2026-10-24): Linked resources are writable. Direct update, direct delete, create, and sync-to-disk write through the link to its real target and leave the link in place; deleting a file-level link deletes its target and leaves the link dangling. Write containment follows live links the same way read containment does (REQ-005) and still rejects broken links. Originally: these writes were rejected with `linked-resource`.
 - **REQ-005**: Reading a managed-elsewhere resource (`harnessConfig:readFile`, compare, adopt from disk) MUST work. Containment for reads is checked against the real path of the root plus the real path of each symlink target the walker followed, not against the root alone.
-- **REQ-006**: Creating a new resource in a root that is managed elsewhere (REQ-003) MUST be rejected with `linked-resource`. Creating a resource whose path would pass through a symlinked entry (for example a new file inside a symlinked skill folder) MUST also be rejected.
+- **REQ-006** (superseded 2026-10-24): Creating a resource in a symlinked root, or through a symlinked entry, writes into the link's real target. Originally rejected with `linked-resource`.
 - **REQ-007**: The Config UI MUST show managed-elsewhere resources with a badge and the `linkedFrom` path, disable Edit and Delete for them, and explain why.
 - **REQ-008**: The sync conflict modal MUST list managed-elsewhere entries but exclude them from the operations of a sync-to-disk plan, and say so in the modal.
 - **SEC-001**: No write may follow a symlink. Reads may follow symlinks only to regular files, never to devices, sockets, or FIFOs.
@@ -78,8 +78,8 @@ A common real-world layout hits all three, and its build deletes and regenerates
 - **TEST-001**: A symlinked root folder scans its entries.
 - **TEST-002**: Symlinked skill folders and symlinked command files appear with `linkedFrom` set.
 - **TEST-003**: A broken link and a directory loop are skipped without failing the scan.
-- **TEST-004**: Update, delete, and sync-to-disk on a linked resource reject with `linked-resource` and leave both the link and its target unchanged.
-- **TEST-005**: Without an override, create, update, and sync-to-disk in a symlinked root reject with `linked-resource`. With a Step 16 override pointing at the same folder, the same create writes a regular file there.
+- **TEST-004** (superseded 2026-10-24): Update, delete, and sync-to-disk on a linked resource change its real target and leave the link a symlink.
+- **TEST-005** (superseded 2026-10-24): Without an override, create, update, and sync-to-disk in a symlinked root write into its real target, the same as with a Step 16 override.
 - **TEST-005a**: A symlink above the root (the harness home folder) does not set `linkedFrom`.
 - **TEST-006**: Adopt from disk copies a linked resource's content into Tatsu config.
 - **TEST-007**: `pnpm typecheck`, `pnpm build`, `pnpm test`.

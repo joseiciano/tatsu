@@ -11,7 +11,8 @@ disk files into Tatsu.
 - **Adopt current disk files into Tatsu config** stores the disk version.
   Badges then turn from `Disk only` to `Synced`.
 - **Sync Tatsu config to disk** writes the stored version to disk.
-- `Managed elsewhere` (symlinked) rows are listed but never written.
+- `Linked` (symlinked) rows sync like any other; the write lands in the link's
+  target and the link stays a symlink.
 - While the plan runs, the dialog shows `Preparing plan…` and then `Applying…`
   (`aria-busy`).
 

@@ -694,3 +694,31 @@ describe('Config templates view (Step 21)', () => {
     confirmSpy.mockRestore()
   })
 })
+
+describe('Config linked resources', () => {
+  it('opens a linked resource as editable, with Delete enabled once its content loads', async () => {
+    const linked = ref({
+      id: 'linked-skill',
+      label: 'Linked Skill',
+      relativePath: 'deploy/SKILL.md',
+      linkedFrom: '/dotfiles/output/claude/skills/deploy'
+    })
+    setStore({ skills: [linked] })
+    backendApi.readHarnessConfigFile.mockResolvedValue({ ok: true, value: { ref: linked, content: 'deploy skill' } })
+
+    await renderConfig()
+    await flush()
+    clickTab('Skills')
+    await flush()
+    const row = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Linked Skill'))
+    click(row ?? null)
+    await flush()
+
+    expect(backendApi.readHarnessConfigFile).toHaveBeenCalledWith({
+      scope: { agentKind: 'claude', resourceType: 'skills' },
+      id: 'linked-skill'
+    })
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="Delete resource"]')
+    expect(deleteButton?.disabled).toBe(false)
+  })
+})

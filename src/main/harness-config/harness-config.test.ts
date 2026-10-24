@@ -985,27 +985,36 @@ describe('confirmation, staleness, and path security', () => {
     expect(fixture.service.planSync(scope).status).toBe('synced')
   })
 
-  it('treats a link into a real prefix-sibling folder as managed elsewhere and refuses to write through it', async () => {
+  it('writes an update through a link into a real prefix-sibling folder and keeps the link', async () => {
     const fixture = makeFixture({ fs: makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) }) })
     const scope = { agentKind: 'claude', resourceType: 'agents' }
     addResolver(fixture, scope, 'agents', /\.md$/)
     const sibling = join(fixture.root, 'agents-backup')
     const siblingFile = put(sibling, 'evil.md', 'sibling')
-    symlinkSync(sibling, join(fixture.roots.agents, 'backup'))
+    const link = join(fixture.roots.agents, 'backup')
+    symlinkSync(sibling, link)
 
     const ref = fixture.service.scan(scope).find((entry: FileRef) => entry.relativePath === 'backup/evil.md')!
     expect(ref.linkedFrom).toBe(realpathSync.native(sibling))
-    await rejectsCode(() => fixture.service.prepareUpdate(scope, ref.id, 'overwrite'), 'linked-resource')
-    expect(readFileSync(siblingFile, 'utf8')).toBe('sibling')
+    const plan = fixture.service.prepareUpdate(scope, ref.id, 'overwrite')
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(readFileSync(siblingFile, 'utf8')).toBe('overwrite')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
   })
 
-  it('rejects target and ancestor symlink escapes for direct mutations', async () => {
-    const { fixture, scope } = createFixture()
+  it('creates through a directory link that points outside the root into the link target and skips a dangling file link', async () => {
+    const fixture = makeFixture({ fs: makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) }) })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
     const outside = join(fixture.root, 'outside')
     mkdirSync(outside)
-    symlinkSync(outside, join(fixture.roots.agents, 'escape'))
-    await rejectsCode(() => fixture.service.prepareCreate(scope, 'escape/new', 'secret'), 'linked-resource')
-    expect(readdirSync(outside)).toEqual([])
+    const link = join(fixture.roots.agents, 'escape')
+    symlinkSync(outside, link)
+    const plan = fixture.service.prepareCreate(scope, 'escape/new', 'secret')
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(readdirSync(outside)).toEqual(['new.md'])
+    expect(readFileSync(join(outside, 'new.md'), 'utf8')).toBe('secret')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
 
     symlinkSync(join(outside, 'target.md'), join(fixture.roots.agents, 'link.md'))
     const targetRef = fixture.service.scan(scope).find((ref: FileRef) => ref.relativePath === 'link.md')
@@ -1984,24 +1993,106 @@ describe('harness-config symlink-aware inventory', () => {
     expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(['a.md', 'nested/b.md'])
   })
 
-  it('rejects update, delete, and sync-to-disk of a linked resource and leaves link and target unchanged', async () => {
-    const { fixture, claudeHome, build } = dotfilesFixture({
-      desired: [
-        desiredAt('claudeSkills', 'skills', 'deploy/SKILL.md', 'tatsu edit'),
-        desiredAt('claudeSkills', 'skills', 'local/SKILL.md', 'local skill')
-      ]
-    })
-    const ref = fixture.service.scan(skills).find((entry: FileRef) => entry.relativePath === 'deploy/SKILL.md')!
-    await rejectsCode(() => fixture.service.prepareUpdate(skills, ref.id, 'changed'), 'linked-resource')
-    await rejectsCode(() => fixture.service.prepareDelete(skills, ref.id), 'linked-resource')
-    await rejectsCode(() => fixture.service.planSyncToDisk(skills), 'linked-resource')
+  type LinkCase = {
+    scope: Scope
+    rootKey: string
+    relativePath: string
+    link: (claudeHome: string) => string
+    target: (build: string) => string
+    before: string
+  }
+  const linkCases: Array<[string, LinkCase]> = [
+    ['symlinked root folder', {
+      scope: agents,
+      rootKey: 'claudeAgents',
+      relativePath: 'reviewer.md',
+      link: (claudeHome) => join(claudeHome, 'agents'),
+      target: (build) => join(build, 'agents', 'reviewer.md'),
+      before: 'reviewer'
+    }],
+    ['symlinked skill folder', {
+      scope: skills,
+      rootKey: 'claudeSkills',
+      relativePath: 'deploy/SKILL.md',
+      link: (claudeHome) => join(claudeHome, 'skills', 'deploy'),
+      target: (build) => join(build, 'skills', 'deploy', 'SKILL.md'),
+      before: 'deploy skill'
+    }],
+    ['symlinked command file', {
+      scope: commands,
+      rootKey: 'claudeCommands',
+      relativePath: 'ship.md',
+      link: (claudeHome) => join(claudeHome, 'commands', 'ship.md'),
+      target: (build) => join(build, 'commands', 'ship.md'),
+      before: 'ship'
+    }]
+  ]
 
-    expect(lstatSync(join(claudeHome, 'skills', 'deploy')).isSymbolicLink()).toBe(true)
-    expect(readFileSync(join(build, 'skills', 'deploy', 'SKILL.md'), 'utf8')).toBe('deploy skill')
-    expect(backupFiles(join(build, 'skills', 'deploy'))).toEqual([])
+  it.each(linkCases)('writes an update through a %s into its target and keeps the link', async (_name, linkCase) => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = linkCase.link(claudeHome)
+    const target = linkCase.target(build)
+    const id = physicalId('claude', linkCase.rootKey, linkCase.relativePath)
+
+    const plan = fixture.service.prepareUpdate(linkCase.scope, id, 'tatsu edit')
+    await fixture.service.applyPlan({ scope: linkCase.scope, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(readFileSync(target, 'utf8')).toBe('tatsu edit')
+    const backups = backupFiles(dirname(target))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(dirname(target), backups[0]), 'utf8')).toBe(linkCase.before)
+    expect(backupFiles(dirname(link))).toEqual([])
+    expect(tempFiles(dirname(target))).toEqual([])
+    const ref = fixture.service.scan(linkCase.scope).find((entry: FileRef) => entry.id === id)!
+    expect(ref.linkedFrom).toBeDefined()
   })
 
-  it('excludes linked entries from a mixed sync-to-disk plan but still lists them', async () => {
+  it.each(linkCases)('syncs a changed resource to disk through a %s into its target and keeps the link', async (_name, linkCase) => {
+    const { fixture, claudeHome, build } = dotfilesFixture({
+      desired: [desiredAt(linkCase.rootKey, linkCase.scope.resourceType, linkCase.relativePath, 'from config')]
+    })
+    const link = linkCase.link(claudeHome)
+    const target = linkCase.target(build)
+
+    const plan = fixture.service.planSyncToDisk(linkCase.scope)
+    await fixture.service.applyPlan({ scope: linkCase.scope, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(readFileSync(target, 'utf8')).toBe('from config')
+    const backups = backupFiles(dirname(target))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(dirname(target), backups[0]), 'utf8')).toBe(linkCase.before)
+    expect(backupFiles(dirname(link))).toEqual([])
+  })
+
+  it('deletes the target of a symlinked command file, leaves the link dangling, and drops it from the scan', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const target = join(build, 'commands', 'ship.md')
+    const plan = fixture.service.prepareDelete(commands, physicalId('claude', 'claudeCommands', 'ship.md'))
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(existsSync(target)).toBe(false)
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(existsSync(link)).toBe(false)
+    const backups = backupFiles(join(build, 'commands'))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(build, 'commands', backups[0]), 'utf8')).toBe('ship')
+    expect(fixture.service.scan(commands).map((ref: FileRef) => ref.relativePath)).not.toContain('ship.md')
+  })
+
+  it('deletes a skill inside a symlinked skill folder from the target and keeps the folder link', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const plan = fixture.service.prepareDelete(skills, physicalId('claude', 'claudeSkills', 'deploy/SKILL.md'))
+    await fixture.service.applyPlan({ scope: skills, planId: plan.planId, confirmed: true })
+
+    expect(existsSync(join(build, 'skills', 'deploy', 'SKILL.md'))).toBe(false)
+    expect(lstatSync(join(claudeHome, 'skills', 'deploy')).isSymbolicLink()).toBe(true)
+    expect(fixture.service.scan(skills).map((ref: FileRef) => ref.relativePath)).toEqual(['local/SKILL.md'])
+  })
+
+  it('includes linked entries in a mixed sync-to-disk plan and writes them through the link', async () => {
     const freshPath = 'fresh/SKILL.md'
     const { fixture, claudeHome, build } = dotfilesFixture({
       desired: [
@@ -2012,34 +2103,56 @@ describe('harness-config symlink-aware inventory', () => {
     })
     const plan = fixture.service.planSyncToDisk(skills)
     expect(plan.changed.map((pair) => (pair.disk as FileRef).linkedFrom)).toEqual([join(build, 'skills', 'deploy')])
-    expect(plan.configOnly.map((entry: FileRef) => entry.relativePath)).toEqual([freshPath])
 
     const result = await fixture.service.applyPlan({ scope: skills, planId: plan.planId, confirmed: true })
     expect(result.applied).toEqual([
+      { type: 'overwrite', id: physicalId('claude', 'claudeSkills', 'deploy/SKILL.md'), relativePath: 'deploy/SKILL.md' },
       { type: 'create', id: physicalId('claude', 'claudeSkills', freshPath), relativePath: freshPath }
     ])
     expect(readFileSync(join(claudeHome, 'skills', 'fresh', 'SKILL.md'), 'utf8')).toBe('fresh skill')
-    expect(readFileSync(join(build, 'skills', 'deploy', 'SKILL.md'), 'utf8')).toBe('deploy skill')
+    expect(readFileSync(join(build, 'skills', 'deploy', 'SKILL.md'), 'utf8')).toBe('tatsu edit')
+    expect(readFileSync(join(claudeHome, 'skills', 'local', 'SKILL.md'), 'utf8')).toBe('local skill')
+    expect(lstatSync(join(claudeHome, 'skills', 'deploy')).isSymbolicLink()).toBe(true)
   })
 
-  it('rejects creating through a symlinked entry', async () => {
+  it('creates through a symlinked folder entry into its target', async () => {
     const { fixture, claudeHome, build } = dotfilesFixture()
-    symlinkSync(join(build, 'skills'), join(claudeHome, 'commands', 'shared'))
-    await rejectsCode(() => fixture.service.prepareCreate(commands, 'shared/new', 'x'), 'linked-resource')
-    expect(existsSync(join(build, 'skills', 'new.md'))).toBe(false)
+    const link = join(claudeHome, 'commands', 'shared')
+    symlinkSync(join(build, 'skills'), link)
+    const plan = fixture.service.prepareCreate(commands, 'shared/new', 'x')
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(readFileSync(join(build, 'skills', 'new.md'), 'utf8')).toBe('x')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    const created = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'shared/new.md')!
+    expect(created.linkedFrom).toBe(join(build, 'skills'))
   })
 
-  it('rejects create, update, and sync-to-disk in a symlinked root without an override', async () => {
-    const { fixture, build } = dotfilesFixture({
-      desired: [desiredAt('claudeAgents', 'agents', 'planner.md', 'planner')]
+  it('creates directly and through sync-to-disk in a symlinked root without an override, writing into the target', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture({
+      desired: [
+        desiredAt('claudeAgents', 'agents', 'planner.md', 'planner'),
+        desiredAt('claudeAgents', 'agents', 'reviewer.md', 'reviewer')
+      ]
     })
-    await rejectsCode(() => fixture.service.prepareCreate(agents, 'new-agent', 'new'), 'linked-resource')
-    await rejectsCode(
-      () => fixture.service.prepareUpdate(agents, physicalId('claude', 'claudeAgents', 'reviewer.md'), 'changed'),
-      'linked-resource'
-    )
-    await rejectsCode(() => fixture.service.planSyncToDisk(agents), 'linked-resource')
-    expect(readdirSync(join(build, 'agents'))).toEqual(['reviewer.md'])
+    const created = fixture.service.prepareCreate(agents, 'new-agent', 'new')
+    await fixture.service.applyPlan({ scope: agents, planId: created.planId, confirmed: true })
+    const synced = fixture.service.planSyncToDisk(agents)
+    await fixture.service.applyPlan({ scope: agents, planId: synced.planId, confirmed: true })
+
+    expect(lstatSync(join(claudeHome, 'agents')).isSymbolicLink()).toBe(true)
+    expect(readdirSync(join(build, 'agents')).filter((name) => !name.includes('.x-backup-')).sort()).toEqual([
+      'new-agent.md',
+      'planner.md',
+      'reviewer.md'
+    ])
+    expect(readFileSync(join(build, 'agents', 'new-agent.md'), 'utf8')).toBe('new')
+    expect(readFileSync(join(build, 'agents', 'planner.md'), 'utf8')).toBe('planner')
+    expect(fixture.service.scan(agents).map((ref: FileRef) => [ref.relativePath, ref.linkedFrom])).toEqual([
+      ['new-agent.md', join(build, 'agents')],
+      ['planner.md', join(build, 'agents')],
+      ['reviewer.md', join(build, 'agents')]
+    ])
   })
 
   it('treats a symlinked root as a plain folder at its real path when an override is set', async () => {

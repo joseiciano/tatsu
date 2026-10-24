@@ -466,7 +466,7 @@ function DoneStep({
             <span className="text-xs text-faint">{entry.status ?? 'Comparing…'}</span>
             {entry.linked.length > 0 && (
               <div className="flex flex-col text-xs text-warning">
-                <span>Still links into another build, so Tatsu leaves them alone:</span>
+                <span>Still links into another build, so syncing writes through to it:</span>
                 {entry.linked.map((ref) => (
                   <span key={ref.id} className="text-dim break-all">
                     {ref.relativePath} → {ref.linkedFrom}
@@ -481,8 +481,8 @@ function DoneStep({
         <ol className="list-decimal pl-5 flex flex-col gap-1 text-xs text-dim">
           <li>Stop running the old build, so it and Tatsu do not overwrite each other in the harness folders.</li>
           <li>
-            Harness files that are symbolic links into the old build stay managed elsewhere. Remove those links when
-            you are ready.
+            Harness files that are still symbolic links into the old build are written through to it. Remove those
+            links when you are ready.
           </li>
           <li>Then sync each scope to disk. Tatsu writes real files in place of the removed links.</li>
         </ol>
