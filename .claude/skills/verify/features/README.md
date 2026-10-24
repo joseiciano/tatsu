@@ -7,11 +7,11 @@ what end state proves it works. Journeys reuse `scripts/browser.mjs`.
 | Feature | File | Scripted journey |
 |---|---|---|
 | Config page inventory | [config-inventory.md](config-inventory.md) | none yet |
-| Skill ↔ command conversion | [skill-command-conversion.md](skill-command-conversion.md) | `journeys/convert-skill-to-command.mjs` (proven: skill → command, Opencode only) |
-| Sync Tatsu config with disk | [config-sync.md](config-sync.md) | `journeys/config-sync-adopt.mjs` (proven: Adopt for Claude skills); Sync to disk proven via `template-render-sync.mjs` |
-| Config folders in Settings | [config-folders-settings.md](config-folders-settings.md) | `journeys/config-folders.mjs` (proven: entry point 2, relative-path rejection, override, reset) |
-| Templates and fragments | [templates.md](templates.md) | `journeys/template-render-sync.mjs` (proven: create skill template → sync to Claude; fragments unproven) |
-| Import existing setup | [import-existing-setup.md](import-existing-setup.md) | `journeys/import-existing-setup.mjs` (proven: skills + commands folders) |
+| Skill ↔ command conversion | [skill-command-conversion.md](skill-command-conversion.md) | `journeys/convert-skill-to-command.mjs`, `journeys/convert-command-to-skill.mjs` (proven: both directions for Opencode, Claude "already available" notice) |
+| Sync Tatsu config with disk | [config-sync.md](config-sync.md) | `journeys/config-sync-adopt.mjs`, `journeys/config-edit-and-sync.mjs` (proven: Adopt, editor Save, Sync to disk over an outside edit) |
+| Config folders in Settings | [config-folders-settings.md](config-folders-settings.md) | `journeys/config-folders.mjs` (proven: both entry points, relative-path rejection, override, reset) |
+| Templates and fragments | [templates.md](templates.md) | `journeys/template-render-sync.mjs`, `journeys/template-fragments.mjs` (proven: create, fragments, reorder, remove, outside-change prompt, deletes, sync) |
+| Import existing setup | [import-existing-setup.md](import-existing-setup.md) | `journeys/import-existing-setup.mjs`, `journeys/import-full-setup.mjs` (proven: every folder kind) |
 
 Unless a file says a step was run, its selectors and end states come from
 reading the source. Treat them as a starting point, not as proof. The first

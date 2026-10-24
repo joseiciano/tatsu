@@ -51,8 +51,13 @@ The end state that proves it works:
 
 ## Gotchas
 
-- The seed has no agents, fragments, or references folders, so those preview
-  sections stay empty. Add fixtures to `seed.sh` before proving them.
+- `seed.sh` writes `<scratch>/import-full` with agents, agent fragments, two
+  skills folders, and references. `journeys/import-full-setup.mjs` proves an
+  agent keeps `shared:` as `fragments:`, the fragments land under
+  `fragments/`, and a skill's linked reference lands in
+  `skills/<name>/references/`.
+- The duplicate-skill, covered-command, and hidden-stored-config preview
+  sections still have no fixtures.
 - Run: `journeys/import-existing-setup.mjs`. Import asks a `window.confirm`
   ("Import 2 templates and fragments…"), which `browser.mjs` accepts. Output
   is `skills/deploy-check/TEMPLATE.md` and `commands/pr-summary.md` under the

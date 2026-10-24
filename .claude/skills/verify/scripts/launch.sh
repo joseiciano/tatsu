@@ -15,6 +15,10 @@ REPO="$(cd "$SKILL_DIR/../../.." && pwd)"
 BUILD=0
 if [ "${1:-}" = "--build" ]; then BUILD=1; shift; fi
 RUN_ID="${1:-$(date +%Y%m%d-%H%M%S)-$$}"
+if ! [[ "$RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "run id must match [A-Za-z0-9._-]+ (got '$RUN_ID')" >&2
+  exit 2
+fi
 
 SCRATCH="${TMPDIR:-/tmp}"
 SCRATCH="${SCRATCH%/}/tatsu-verify/$RUN_ID"

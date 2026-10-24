@@ -44,11 +44,14 @@ The end state that proves it works:
   "Choose an absolute folder path" and is not persisted, the override lands
   in `DATA_DIR/config.json` and rescans Skills, and Reset restores `hello`.
   Commit-on-blur comes from source.
-- Entry point 1 is unproven: with no repository open, Cmd+, does not open
-  Settings in the web client, and the Command Center needs a repository.
-  The journey deletes `$SANDBOX_HOME/.agents/skills` so it can use entry point 2.
-- When Settings opens at Config folders, the left nav highlights **GitHub**
-  instead of **Config folders** (see `config-folders-02-relative-rejected.png`).
+- Both entry points run. Cmd+, works on the onboarding screen and, from the
+  Config page, replaces Config with Settings. The journey deletes
+  `$SANDBOX_HOME/.agents/skills` so the entry-point-2 link appears.
+- The **GitHub** nav item is tinted blue whenever no GitHub token is set (a
+  fresh sandbox never has one). That is the "needs attention" style, not the
+  active section; assert the active item by its `bg-surface` class.
+- The journey asserts the `Config folders` heading sits inside the scroll
+  container after the link opens Settings (it used to be scrolled under the top edge).
 - Nine inputs have `Reset <label> to default` buttons and several labels
   repeat (`Skills` three times). Scope the Reset click to the input's row.
 - Entry point 2 needs an unavailable root. Delete one sandbox root (for example
