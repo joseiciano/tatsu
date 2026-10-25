@@ -297,7 +297,7 @@ export function Sidebar({
           </button>
         </Tooltip>
         {ENABLE_NOTIFICATION_CENTER && (
-          <Tooltip label="Notifications" side="bottom">
+          <Tooltip label="Notifications" action="openNotifications" side="bottom">
             <button
               onClick={onOpenNotifications}
               aria-label="Notifications"

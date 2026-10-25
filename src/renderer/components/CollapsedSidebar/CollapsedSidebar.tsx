@@ -194,7 +194,7 @@ export function CollapsedSidebar({
           </button>
         </Tooltip>
         {ENABLE_NOTIFICATION_CENTER && (
-          <Tooltip label="Notifications" side="right">
+          <Tooltip label="Notifications" action="openNotifications" side="right">
             <button
               onClick={onOpenNotifications}
               className="text-dim hover:text-fg hover:bg-surface rounded px-1 py-1 transition-colors cursor-pointer flex items-center gap-0.5"
