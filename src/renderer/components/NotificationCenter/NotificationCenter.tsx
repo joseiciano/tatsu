@@ -38,6 +38,8 @@ export function NotificationCenter({ onClose }: NotificationCenterProps): JSX.El
       dismissedIds={dismissedIds}
       loading={refreshing}
       muted={settings.announcementsMuted}
+      lastError={announcements.lastError}
+      lastFetched={announcements.lastFetched}
       onClose={onClose}
       onRefresh={handleRefresh}
       onOpen={(href) => backend.openExternal(href)}

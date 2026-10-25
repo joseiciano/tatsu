@@ -1,4 +1,4 @@
-import { ArrowLeft, Bell, BellOff, CalendarDays, Loader2, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bell, BellOff, CalendarDays, Loader2, RefreshCw, X } from 'lucide-react'
 import type { Announcement } from '../../../shared/state/announcements'
 
 export interface NotificationCenterViewProps {
@@ -6,6 +6,8 @@ export interface NotificationCenterViewProps {
   dismissedIds: ReadonlySet<string>
   loading: boolean
   muted: boolean
+  lastError: string | null
+  lastFetched: number | null
   onClose: () => void
   onRefresh: () => void
   onOpen: (href: string) => void
@@ -19,11 +21,17 @@ function formatDate(iso: string): string {
   return new Date(t).toLocaleDateString()
 }
 
+function formatFetchTime(ms: number | null): string {
+  return ms === null ? 'never' : new Date(ms).toLocaleString()
+}
+
 export function NotificationCenterView({
   items,
   dismissedIds,
   loading,
   muted,
+  lastError,
+  lastFetched,
   onClose,
   onRefresh,
   onOpen,
@@ -64,6 +72,18 @@ export function NotificationCenterView({
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-8 py-8">
+          {lastError && (
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-2 text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2"
+            >
+              <AlertCircle className="icon-sm shrink-0" />
+              <span>
+                Could not fetch announcements: {lastError}. Last successful fetch: {formatFetchTime(lastFetched)}.
+              </span>
+            </div>
+          )}
+
           {muted && (
             <div className="mb-4 text-xs text-dim bg-surface/40 border border-border rounded-lg px-3 py-2">
               Notifications are muted. Unmute to see new announcements.
