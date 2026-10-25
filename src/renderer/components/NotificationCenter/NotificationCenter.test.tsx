@@ -139,4 +139,56 @@ describe('NotificationCenter', () => {
     expect(container.textContent).toContain('No announcements yet.')
     expect(container.textContent).not.toContain('Checking for announcements…')
   })
+
+  it('dismiss calls the backend with the item id and does not open the item (REQ-019)', async () => {
+    setStore({ items: [announcement({ id: 'a-7', href: 'https://example.test/a-7' })], lastFetched: 1 })
+
+    await render()
+    click(buttonTitled('Dismiss'))
+
+    expect(backendApi.dismissAnnouncement).toHaveBeenCalledTimes(1)
+    expect(backendApi.dismissAnnouncement).toHaveBeenCalledWith('a-7')
+    expect(backendApi.openExternal).not.toHaveBeenCalled()
+  })
+
+  it('clicking an item opens its href (REQ-009)', async () => {
+    setStore({ items: [announcement({ href: 'https://example.test/open-me' })], lastFetched: 1 })
+
+    await render()
+    click(container.querySelector('[title="Open"]'))
+
+    expect(backendApi.openExternal).toHaveBeenCalledWith('https://example.test/open-me')
+    expect(backendApi.dismissAnnouncement).not.toHaveBeenCalled()
+  })
+
+  it('mute toggles the backend with the inverse of the current setting (REQ-019)', async () => {
+    setStore({ lastFetched: 1 }, { announcementsMuted: false })
+    await render()
+    click(buttonTitled('Mute notifications'))
+    expect(backendApi.muteAnnouncements).toHaveBeenLastCalledWith(true)
+
+    setStore({ lastFetched: 1 }, { announcementsMuted: true })
+    await act(async () => {
+      root.render(<NotificationCenter onClose={() => {}} />)
+    })
+    click(buttonTitled('Unmute notifications'))
+    expect(backendApi.muteAnnouncements).toHaveBeenLastCalledWith(false)
+  })
+
+  it('refresh shows the spinner until the backend promise resolves (REQ-019)', async () => {
+    const pending = deferred<boolean>()
+    backendApi.refreshAnnouncements.mockReturnValue(pending.promise)
+    setStore({ items: [announcement()], lastFetched: 1 })
+
+    await render()
+    expect(buttonTitled('Refresh').querySelector('.animate-spin')).toBeNull()
+
+    click(buttonTitled('Refresh'))
+    expect(backendApi.refreshAnnouncements).toHaveBeenCalledTimes(1)
+    expect(buttonTitled('Refresh').querySelector('.animate-spin')).not.toBeNull()
+
+    pending.resolve(true)
+    await flush()
+    expect(buttonTitled('Refresh').querySelector('.animate-spin')).toBeNull()
+  })
 })
