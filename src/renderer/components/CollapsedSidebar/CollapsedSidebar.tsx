@@ -11,13 +11,16 @@ import {
   Activity,
   ShieldAlert,
   HatGlasses,
-  GitPullRequest
+  GitPullRequest,
+  Bell
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
-import { usePrs, useSettings, useSnooze, useWorktrees } from '../../store'
+import { useAnnouncements, usePrs, useSettings, useSnooze, useWorktrees } from '../../store'
 import { groupWorktrees, type GroupKey } from '../../worktree-sort'
+import { countUnreadAnnouncements } from '../NotificationCenter'
+import { ENABLE_NOTIFICATION_CENTER } from '../../../shared/constants'
 
 interface CollapsedSidebarProps {
   onExpand: () => void
@@ -26,6 +29,7 @@ interface CollapsedSidebarProps {
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
+  onOpenNotifications: () => void
   onOpenHotkeyCheatsheet: () => void
   onOpenSettings: () => void
 }
@@ -39,6 +43,7 @@ export function CollapsedSidebar({
   onOpenCleanup,
   onOpenCommandCenter,
   onOpenNewProject,
+  onOpenNotifications,
   onOpenHotkeyCheatsheet,
   onOpenSettings
 }: CollapsedSidebarProps): JSX.Element {
@@ -46,8 +51,20 @@ export function CollapsedSidebar({
   // store so we don't have to thread N more props through App.tsx.
   const worktrees = useWorktrees().list
   const prs = usePrs()
+  const announcements = useAnnouncements()
   const snooze = useSnooze()
-  const viewerLogin = useSettings().viewerLogin
+  const settings = useSettings()
+  const viewerLogin = settings.viewerLogin
+  const unreadAnnouncementCount = useMemo(
+    () =>
+      countUnreadAnnouncements(
+        announcements.items,
+        settings.dismissedAnnouncementIds,
+        settings.announcementsMuted,
+        Date.now()
+      ),
+    [announcements.items, settings.announcementsMuted, settings.dismissedAnnouncementIds]
+  )
   const snoozedPaths = useMemo(() => {
     const m: Record<string, true> = {}
     for (const p of Object.keys(snooze.byPath)) m[p] = true
@@ -176,6 +193,22 @@ export function CollapsedSidebar({
             <FolderOpen className="icon-sm" />
           </button>
         </Tooltip>
+        {ENABLE_NOTIFICATION_CENTER && (
+          <Tooltip label="Notifications" action="openNotifications" side="right">
+            <button
+              onClick={onOpenNotifications}
+              className="text-dim hover:text-fg hover:bg-surface rounded px-1 py-1 transition-colors cursor-pointer flex items-center gap-0.5"
+              aria-label="Notifications"
+            >
+              <Bell className="icon-xs" />
+              {unreadAnnouncementCount > 0 && (
+                <span className="text-xs tabular-nums leading-none">
+                  {unreadAnnouncementCount > 99 ? '99+' : unreadAnnouncementCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+        )}
         <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="right">
           <button
             onClick={onOpenHotkeyCheatsheet}
