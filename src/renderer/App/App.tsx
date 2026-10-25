@@ -1320,6 +1320,19 @@ const setQuestStep = useCallback((next: QuestStep) => {
                 role="menu"
                 className="no-drag absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded border border-accent/30 bg-app shadow-md text-sm"
               >
+                {ENABLE_NOTIFICATION_CENTER && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setAnnouncementsMenuOpen(false)
+                      closeFullscreenViews()
+                      setShowNotifications(true)
+                    }}
+                    className="no-drag block w-full text-left px-3 py-2 hover:bg-accent/10 cursor-pointer"
+                  >
+                    View all announcements
+                  </button>
+                )}
                 <button
                   role="menuitem"
                   onClick={() => {
