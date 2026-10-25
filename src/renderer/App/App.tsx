@@ -628,6 +628,15 @@ const setQuestStep = useCallback((next: QuestStep) => {
     }
   }, [showCommandCenter, closeFullscreenViews])
 
+  const toggleNotifications = useCallback(() => {
+    if (showNotifications) {
+      setShowNotifications(false)
+    } else {
+      closeFullscreenViews()
+      setShowNotifications(true)
+    }
+  }, [showNotifications, closeFullscreenViews])
+
   // All worktree + repo + pending-creation handlers. Also subscribes to
   // external-create events from the harness-control MCP and routes focus
   // to the new path.
@@ -721,6 +730,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowPerfMonitor,
     setShowHotkeyCheatsheet,
     setShowReview,
+    toggleNotifications,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
