@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useAnnouncements, useSettings } from '../../store'
 import { useBackend } from '../../backend'
-import { sortAnnouncementsNewestFirst } from './active-announcements'
+import { partitionExpiredAnnouncements } from './active-announcements'
 import { NotificationCenterView } from './NotificationCenterView'
 
 export interface NotificationCenterProps {
@@ -14,8 +14,8 @@ export function NotificationCenter({ onClose }: NotificationCenterProps): JSX.El
   const settings = useSettings()
   const [refreshing, setRefreshing] = useState(false)
 
-  const sortedItems = useMemo(
-    () => sortAnnouncementsNewestFirst(announcements.items),
+  const { current, expired } = useMemo(
+    () => partitionExpiredAnnouncements(announcements.items, Date.now()),
     [announcements.items]
   )
   const dismissedIds = useMemo(
@@ -34,7 +34,8 @@ export function NotificationCenter({ onClose }: NotificationCenterProps): JSX.El
 
   return (
     <NotificationCenterView
-      items={sortedItems}
+      items={current}
+      expiredItems={expired}
       dismissedIds={dismissedIds}
       loading={refreshing}
       muted={settings.announcementsMuted}

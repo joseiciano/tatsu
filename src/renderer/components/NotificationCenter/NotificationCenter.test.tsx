@@ -191,4 +191,33 @@ describe('NotificationCenter', () => {
     await flush()
     expect(buttonTitled('Refresh').querySelector('.animate-spin')).toBeNull()
   })
+
+  it('lists expired items in a collapsed Expired section that expands on click (REQ-015)', async () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString()
+    setStore({
+      items: [
+        announcement({ id: 'live', title: 'Still live' }),
+        announcement({ id: 'gone', title: 'Already expired', expiresAt: past })
+      ],
+      lastFetched: 1
+    })
+
+    await render()
+
+    expect(container.textContent).toContain('Still live')
+    expect(container.textContent).not.toContain('Already expired')
+    const toggle = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Expired'))
+    expect(toggle?.textContent).toContain('1')
+
+    click(toggle ?? null)
+    expect(container.textContent).toContain('Already expired')
+  })
+
+  it('renders no Expired section when nothing has expired (REQ-015)', async () => {
+    setStore({ items: [announcement()], lastFetched: 1 })
+
+    await render()
+
+    expect(container.textContent).not.toContain('Expired')
+  })
 })

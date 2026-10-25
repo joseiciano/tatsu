@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getActiveAnnouncements, sortAnnouncementsNewestFirst, countUnreadAnnouncements } from './active-announcements'
+import { getActiveAnnouncements, sortAnnouncementsNewestFirst, countUnreadAnnouncements, partitionExpiredAnnouncements } from './active-announcements'
 import type { Announcement } from '../../../shared/state/announcements'
 
 const NOW = Date.parse('2026-08-01T00:00:00Z')
@@ -96,5 +96,38 @@ describe('countUnreadAnnouncements', () => {
 
   it('returns 0 for an empty feed', () => {
     expect(countUnreadAnnouncements([], [], false, NOW)).toBe(0)
+  })
+})
+
+describe('partitionExpiredAnnouncements', () => {
+  it('splits items into current and expired, both newest first', () => {
+    const items = [
+      mk({ id: 'old-expired', publishedAt: '2026-01-01T00:00:00Z', expiresAt: '2026-02-01T00:00:00Z' }),
+      mk({ id: 'current-a', publishedAt: '2026-03-01T00:00:00Z' }),
+      mk({ id: 'new-expired', publishedAt: '2026-05-01T00:00:00Z', expiresAt: '2026-07-01T00:00:00Z' }),
+      mk({ id: 'current-b', publishedAt: '2026-06-01T00:00:00Z', expiresAt: '2026-09-01T00:00:00Z' })
+    ]
+    const result = partitionExpiredAnnouncements(items, NOW)
+    expect(result.current.map((a) => a.id)).toEqual(['current-b', 'current-a'])
+    expect(result.expired.map((a) => a.id)).toEqual(['new-expired', 'old-expired'])
+  })
+
+  it('treats an item expiring exactly at now as current', () => {
+    const result = partitionExpiredAnnouncements([mk({ id: 'a', expiresAt: '2026-08-01T00:00:00Z' })], NOW)
+    expect(result.current.map((a) => a.id)).toEqual(['a'])
+    expect(result.expired).toEqual([])
+  })
+
+  it('treats an unparseable expiresAt as current', () => {
+    const result = partitionExpiredAnnouncements([mk({ id: 'a', expiresAt: 'not-a-date' })], NOW)
+    expect(result.current.map((a) => a.id)).toEqual(['a'])
+    expect(result.expired).toEqual([])
+  })
+
+  it('keeps dismissed items in whichever bucket their expiry puts them', () => {
+    const items = [mk({ id: 'a', expiresAt: '2026-07-01T00:00:00Z' }), mk({ id: 'b' })]
+    const result = partitionExpiredAnnouncements(items, NOW)
+    expect(result.expired.map((a) => a.id)).toEqual(['a'])
+    expect(result.current.map((a) => a.id)).toEqual(['b'])
   })
 })

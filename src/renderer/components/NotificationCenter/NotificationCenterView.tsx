@@ -1,8 +1,10 @@
-import { AlertCircle, ArrowLeft, Bell, BellOff, CalendarDays, Loader2, RefreshCw, X } from 'lucide-react'
+import { useState } from 'react'
+import { AlertCircle, ArrowLeft, Bell, BellOff, CalendarDays, ChevronDown, ChevronRight, Loader2, RefreshCw, X } from 'lucide-react'
 import type { Announcement } from '../../../shared/state/announcements'
 
 export interface NotificationCenterViewProps {
   items: Announcement[]
+  expiredItems: Announcement[]
   dismissedIds: ReadonlySet<string>
   loading: boolean
   muted: boolean
@@ -27,6 +29,7 @@ function formatFetchTime(ms: number | null): string {
 
 export function NotificationCenterView({
   items,
+  expiredItems,
   dismissedIds,
   loading,
   muted,
@@ -38,6 +41,50 @@ export function NotificationCenterView({
   onDismiss,
   onToggleMute
 }: NotificationCenterViewProps): JSX.Element {
+  const [expiredOpen, setExpiredOpen] = useState(false)
+
+  const renderItem = (a: Announcement): JSX.Element => {
+    const dismissed = dismissedIds.has(a.id)
+    return (
+      <div
+        key={a.id}
+        onClick={() => onOpen(a.href)}
+        className={`group flex items-start gap-3 p-4 bg-app/50 border border-border rounded-xl cursor-pointer hover:border-accent/40 transition-colors ${
+          dismissed ? 'opacity-50' : ''
+        }`}
+        title="Open"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-fg-bright truncate">{a.title}</span>
+            {dismissed && (
+              <span className="shrink-0 text-xs uppercase tracking-wider text-dim/70 bg-faint/10 px-1 py-px rounded">
+                dismissed
+              </span>
+            )}
+          </div>
+          {a.summary && <p className="text-sm text-muted mt-1">{a.summary}</p>}
+          <div className="flex items-center gap-1.5 text-xs text-dim mt-2">
+            <CalendarDays className="icon-xs" />
+            <span>{formatDate(a.publishedAt)}</span>
+          </div>
+        </div>
+        {!dismissed && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onDismiss(a.id)
+            }}
+            className="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0 cursor-pointer p-1"
+            title="Dismiss"
+          >
+            <X className="icon-sm" />
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full w-full bg-panel">
       <div className="drag-region h-10 shrink-0 border-b border-border relative">
@@ -96,49 +143,21 @@ export function NotificationCenterView({
             </div>
           )}
 
-          <div className="space-y-3">
-            {items.map((a) => {
-              const dismissed = dismissedIds.has(a.id)
-              return (
-                <div
-                  key={a.id}
-                  onClick={() => onOpen(a.href)}
-                  className={`group flex items-start gap-3 p-4 bg-app/50 border border-border rounded-xl cursor-pointer hover:border-accent/40 transition-colors ${
-                    dismissed ? 'opacity-50' : ''
-                  }`}
-                  title="Open"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-fg-bright truncate">{a.title}</span>
-                      {dismissed && (
-                        <span className="shrink-0 text-xs uppercase tracking-wider text-dim/70 bg-faint/10 px-1 py-px rounded">
-                          dismissed
-                        </span>
-                      )}
-                    </div>
-                    {a.summary && <p className="text-sm text-muted mt-1">{a.summary}</p>}
-                    <div className="flex items-center gap-1.5 text-xs text-dim mt-2">
-                      <CalendarDays className="icon-xs" />
-                      <span>{formatDate(a.publishedAt)}</span>
-                    </div>
-                  </div>
-                  {!dismissed && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDismiss(a.id)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0 cursor-pointer p-1"
-                      title="Dismiss"
-                    >
-                      <X className="icon-sm" />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          <div className="space-y-3">{items.map(renderItem)}</div>
+
+          {expiredItems.length > 0 && (
+            <div className="mt-8">
+              <button
+                onClick={() => setExpiredOpen((v) => !v)}
+                aria-expanded={expiredOpen}
+                className="flex items-center gap-1.5 text-xs text-dim hover:text-fg transition-colors cursor-pointer"
+              >
+                {expiredOpen ? <ChevronDown className="icon-xs" /> : <ChevronRight className="icon-xs" />}
+                Expired ({expiredItems.length})
+              </button>
+              {expiredOpen && <div className="space-y-3 mt-3 opacity-70">{expiredItems.map(renderItem)}</div>}
+            </div>
+          )}
         </div>
       </div>
     </div>
