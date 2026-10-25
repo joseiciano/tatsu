@@ -92,7 +92,7 @@ export function NotificationCenterView({
 
           {items.length === 0 && !loading && (
             <div className="text-sm text-dim py-12 text-center">
-              No announcements yet.
+              {lastFetched === null ? 'Checking for announcements…' : 'No announcements yet.'}
             </div>
           )}
 

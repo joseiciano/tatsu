@@ -121,4 +121,22 @@ describe('NotificationCenter', () => {
 
     expect(container.querySelector('[role="alert"]')).toBeNull()
   })
+
+  it('reads "Checking for announcements…" while the first fetch has not completed (REQ-014)', async () => {
+    setStore({ items: [], lastFetched: null })
+
+    await render()
+
+    expect(container.textContent).toContain('Checking for announcements…')
+    expect(container.textContent).not.toContain('No announcements yet.')
+  })
+
+  it('reads "No announcements yet." when a fetch completed and returned nothing (REQ-014)', async () => {
+    setStore({ items: [], lastFetched: 1 })
+
+    await render()
+
+    expect(container.textContent).toContain('No announcements yet.')
+    expect(container.textContent).not.toContain('Checking for announcements…')
+  })
 })
