@@ -20,6 +20,7 @@ import { Tooltip } from '../Tooltip'
 import { useAnnouncements, usePrs, useSettings, useSnooze, useWorktrees } from '../../store'
 import { groupWorktrees, type GroupKey } from '../../worktree-sort'
 import { countUnreadAnnouncements } from '../NotificationCenter'
+import { ENABLE_NOTIFICATION_CENTER } from '../../../shared/constants'
 
 interface CollapsedSidebarProps {
   onExpand: () => void
@@ -192,20 +193,22 @@ export function CollapsedSidebar({
             <FolderOpen className="icon-sm" />
           </button>
         </Tooltip>
-        <Tooltip label="Notifications" side="right">
-          <button
-            onClick={onOpenNotifications}
-            className="text-dim hover:text-fg hover:bg-surface rounded px-1 py-1 transition-colors cursor-pointer flex items-center gap-0.5"
-            aria-label="Notifications"
-          >
-            <Bell className="icon-xs" />
-            {unreadAnnouncementCount > 0 && (
-              <span className="text-xs tabular-nums leading-none">
-                {unreadAnnouncementCount > 99 ? '99+' : unreadAnnouncementCount}
-              </span>
-            )}
-          </button>
-        </Tooltip>
+        {ENABLE_NOTIFICATION_CENTER && (
+          <Tooltip label="Notifications" side="right">
+            <button
+              onClick={onOpenNotifications}
+              className="text-dim hover:text-fg hover:bg-surface rounded px-1 py-1 transition-colors cursor-pointer flex items-center gap-0.5"
+              aria-label="Notifications"
+            >
+              <Bell className="icon-xs" />
+              {unreadAnnouncementCount > 0 && (
+                <span className="text-xs tabular-nums leading-none">
+                  {unreadAnnouncementCount > 99 ? '99+' : unreadAnnouncementCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+        )}
         <Tooltip label="Keyboard shortcuts" action="hotkeyCheatsheet" side="right">
           <button
             onClick={onOpenHotkeyCheatsheet}

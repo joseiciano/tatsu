@@ -50,7 +50,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { type GroupKey } from '../worktree-sort'
 import { useViewport } from '../hooks/useViewport'
 import { MobileApp } from '../components/MobileApp'
-import { harnessReleaseNotesUrl } from '../../shared/constants'
+import { ENABLE_NOTIFICATION_CENTER, harnessReleaseNotesUrl } from '../../shared/constants'
 
 function isPendingId(id: string | null | undefined): id is string {
   return typeof id === 'string' && id.startsWith('pending:')
@@ -1575,7 +1575,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             />
           </div>
         )}
-        {showNotifications && (
+        {ENABLE_NOTIFICATION_CENTER && showNotifications && (
           <div className="flex-1 min-w-0 flex">
             <NotificationCenter onClose={() => setShowNotifications(false)} />
           </div>
