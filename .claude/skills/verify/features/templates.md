@@ -65,3 +65,28 @@ The end state that proves it works:
   folder since you opened it"; deletes leave `*.x-backup-<timestamp>` files.
 - `Create fragment` and the template editor both use a `Create` button and
   `.monaco-editor` index 0; only one editor is open at a time.
+
+## Inline fragment placeholders
+
+A `{{fragment:name}}` line in a skill, agent, or command file (or a template
+body) is expanded on Save into a marked section:
+
+```
+<!-- tatsu:fragment name sha=<12 hex> -->
+...fragment text...
+<!-- /tatsu:fragment name -->
+```
+
+- The editor shows a hint starting `Saving turns each` while the draft has a
+  placeholder or marker.
+- The fragment editor lists the files that use it in
+  `[data-testid="fragment-usage"]` ("Used in N file(s): …").
+- Saving a fragment never writes harness files. The scopes that use it show
+  `Content changed` in the sync dialog until `Sync Tatsu config to disk`.
+- A section edited by hand appears under `Edited fragment sections` in the
+  sync dialog, with `Use fragment`, `Save edit to fragment`, and `Detach`.
+- Run: `journeys/inline-fragments.mjs` against a Step 23 build. The section
+  sha changes after a fragment sync; text outside the section is untouched;
+  Adopt keeps the hand edit on disk, and `Use fragment` then Sync restores the
+  file byte for byte. A file whose only issue is an edited section shows
+  `Synced` on its row while the group heading says `Conflict`.
