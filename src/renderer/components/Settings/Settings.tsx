@@ -44,6 +44,7 @@ type SubSectionId =
   | 'hotkeys-external'
   | 'experimental-browser-control'
   | 'experimental-web-mobile'
+  | 'experimental-chat-agents'
 
 interface SubSection {
   id: SubSectionId
@@ -95,7 +96,8 @@ const SECTIONS: Section[] = [
   {
     id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
       { id: 'experimental-browser-control', label: 'Browser control' },
-      { id: 'experimental-web-mobile', label: 'Web & mobile' }
+      { id: 'experimental-web-mobile', label: 'Web & mobile' },
+      { id: 'experimental-chat-agents', label: 'Chat agents' }
     ]
   }
 ]
@@ -192,7 +194,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     'hotkeys-overlays': null,
     'hotkeys-external': null,
     'experimental-browser-control': null,
-    'experimental-web-mobile': null
+    'experimental-web-mobile': null,
+    'experimental-chat-agents': null
   })
   const isProgrammaticScroll = useRef(false)
 
@@ -373,11 +376,14 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     prReviewPrompt,
     claudeTuiFullscreen,
     browserToolsEnabled,
+    experimentalChatAgentsEnabled,
     browserToolsMode,
     wsTransportEnabled,
     wsTransportPort,
     wsTransportHost,
     defaultClaudeTabType,
+    defaultOpencodeTabType,
+    defaultCodexTabType,
     jsonModeChatDensity,
     uiScale,
     jsonModeSendOnEnter,
@@ -1740,6 +1746,36 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <InterfaceToggle
                       value={defaultClaudeTabType}
                       onChange={(value) => { void backend.setDefaultClaudeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'opencode' && experimentalChatAgentsEnabled && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Opencode tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultOpencodeTabType}
+                      onChange={(value) => { void backend.setDefaultOpencodeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'codex' && experimentalChatAgentsEnabled && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Codex tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultCodexTabType}
+                      onChange={(value) => { void backend.setDefaultCodexTabType(value) }}
                     />
                   </div>
                 )}
@@ -3208,6 +3244,35 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               </p>
 
               {/* Browser control sub-card */}
+              <div
+                ref={(el) => { subSectionRefs.current['experimental-chat-agents'] = el }}
+                id="experimental-chat-agents"
+                className="bg-panel-raised border border-warning/30 rounded-lg p-4 mb-4"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-fg-bright">Chat for OpenCode and Codex</h3>
+                  <span className="text-xs font-medium text-warning bg-warning/10 border border-warning/30 rounded px-1.5 py-0.5">
+                    Experimental
+                  </span>
+                </div>
+                <p className="text-xs text-dim mb-3">
+                  Adds the Chat interface to OpenCode and Codex tabs. The agent
+                  runtime is downloaded on first use; sign-in happens from the
+                  chat tab.
+                </p>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="experimental-chat-agents-enabled"
+                    checked={experimentalChatAgentsEnabled}
+                    onChange={(e) => { void backend.setExperimentalChatAgentsEnabled(e.target.checked) }}
+                    className="mt-0.5 cursor-pointer icon-base" />
+                  <label htmlFor="experimental-chat-agents-enabled" className="text-sm text-fg-bright cursor-pointer">
+                    Enable Chat tabs for OpenCode and Codex
+                  </label>
+                </div>
+              </div>
+
               <div
                 ref={(el) => { subSectionRefs.current['experimental-browser-control'] = el }}
                 id="experimental-browser-control"

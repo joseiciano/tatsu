@@ -26,11 +26,13 @@ import {
   ShieldAlert,
   Sparkles
 } from 'lucide-react'
-import { useJsonClaudeSession, useSettings } from '../../store'
+import { useJsonClaudeSession, useRuntimeStatus, useSettings } from '../../store'
 import { useBackend } from '../../backend'
 import { useJsonClaudeApprovals } from '../../hooks/useJsonClaudeApprovals'
 import { JsonClaudeApprovalCard } from '../JsonClaudeApprovalCard'
 import { Tooltip } from '../Tooltip'
+import { RuntimeDownloadCard } from '../RuntimeDownloadCard'
+import { agentDisplayName } from '../../../shared/agent-registry'
 import { dispatchToolCard, ToolCardChrome } from '../json-mode-cards'
 import { ToolGroup } from '../json-mode-cards/ToolGroup'
 import { TaskCard } from '../json-mode-cards/TaskCard'
@@ -40,6 +42,7 @@ import { JsonModeChatImageThumb } from '../JsonModeChatImageThumb'
 import { fuzzyMatch } from '../../fuzzy'
 import 'highlight.js/styles/github-dark.css'
 import type {
+  JsonClaudeAuthMethod,
   JsonClaudeChatEntry,
   ChatRuntimeCapabilities
 } from '../../../shared/state/json-claude'
@@ -330,17 +333,120 @@ function SubprocessExitCard({
   )
 }
 
+type AuthResult = { ok: boolean; error?: string }
+
+function AuthMethodAction({
+  method,
+  onAuthenticate,
+  onOpenLoginTab,
+  canOpenAuthLogin
+}: {
+  method: JsonClaudeAuthMethod
+  onAuthenticate: (methodId: string, apiKey?: string) => Promise<AuthResult>
+  onOpenLoginTab: () => void
+  canOpenAuthLogin: boolean
+}): JSX.Element {
+  const [apiKey, setApiKey] = useState('')
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isApiKey = method.id === 'api-key'
+  const isTerminal = method.type === 'terminal'
+
+  const run = async (): Promise<void> => {
+    setPending(true)
+    setError(null)
+    try {
+      const res = await onAuthenticate(method.id, isApiKey ? apiKey.trim() : undefined)
+      if (!res.ok) setError(res.error ?? 'Authentication failed')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const primaryBtn =
+    'px-2 py-1 bg-accent text-white rounded hover:bg-accent/90 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+
+  return (
+    <div className="space-y-1">
+      {isTerminal ? (
+        <>
+          <div>
+            Sign in from a terminal: Tatsu opens a tab running{' '}
+            <code className="font-mono text-fg-bright">opencode auth login</code>.
+          </div>
+          <div>
+            <button
+              onClick={onOpenLoginTab}
+              disabled={!canOpenAuthLogin}
+              className={primaryBtn}
+            >
+              Open terminal
+            </button>
+          </div>
+        </>
+      ) : isApiKey ? (
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && apiKey.trim() && !pending) void run()
+            }}
+            placeholder="OpenAI API key"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={pending}
+            className="flex-1 min-w-40 px-2 py-1 bg-app/40 border border-border-strong rounded text-fg-bright font-mono outline-none focus:border-accent"
+          />
+          <button
+            onClick={() => void run()}
+            disabled={pending || !apiKey.trim()}
+            className={primaryBtn}
+          >
+            {pending ? 'Signing in…' : 'Save key and sign in'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2 items-center">
+          <button onClick={() => void run()} disabled={pending} className={primaryBtn}>
+            {`Sign in with ${method.name}`}
+          </button>
+          {pending && (
+            <span className="text-muted italic">Waiting for the browser…</span>
+          )}
+        </div>
+      )}
+      {method.description && (
+        <div className="text-muted">{method.description}</div>
+      )}
+      {error && (
+        <pre className="whitespace-pre-wrap break-words font-mono text-xs text-danger bg-app/40 border border-border/40 rounded px-2 py-1 max-h-32 overflow-auto">
+          {error}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 function AuthFailureCard({
   message,
   onOpenLoginTab,
   onRetry,
-  canOpenAuthLogin
+  canOpenAuthLogin,
+  authMethods,
+  onAuthenticate
 }: {
   message?: string
   onOpenLoginTab: () => void
   onRetry: () => void
   canOpenAuthLogin: boolean
+  authMethods?: JsonClaudeAuthMethod[]
+  onAuthenticate: (methodId: string, apiKey?: string) => Promise<AuthResult>
 }): JSX.Element {
+  const hasMethods = !!authMethods && authMethods.length > 0
   return (
     <div
       className="my-2 border border-danger/40 bg-danger/5 overflow-hidden"
@@ -368,7 +474,19 @@ function AuthFailureCard({
             {message}
           </pre>
         )}
-        {canOpenAuthLogin ? (
+        {hasMethods ? (
+          <div className="space-y-3">
+            {authMethods.map((m) => (
+              <AuthMethodAction
+                key={m.id}
+                method={m}
+                onAuthenticate={onAuthenticate}
+                onOpenLoginTab={onOpenLoginTab}
+                canOpenAuthLogin={canOpenAuthLogin}
+              />
+            ))}
+          </div>
+        ) : canOpenAuthLogin ? (
           <div>
             Click{' '}
             <span className="font-semibold text-fg-bright">Sign in</span> to open{' '}
@@ -385,7 +503,7 @@ function AuthFailureCard({
           </div>
         )}
         <div className="flex gap-2 pt-1">
-          {canOpenAuthLogin && (
+          {!hasMethods && canOpenAuthLogin && (
             <button
               onClick={onOpenLoginTab}
               className="px-2 py-1 bg-accent text-white rounded hover:bg-accent/90 cursor-pointer"
@@ -570,6 +688,7 @@ interface RenderContext {
   isExited: boolean
   onOpenLoginTab: () => void
   onRetryAuth: () => void
+  onAuthenticate: (methodId: string, apiKey?: string) => Promise<AuthResult>
   canOpenAuthLogin: boolean
 }
 
@@ -677,6 +796,34 @@ function renderEntries(
       })
       continue
     }
+    if (entry.kind === 'error' && entry.errorKind === 'runtime-missing') {
+      rows.push({
+        key: entry.entryId,
+        entryId: entry.entryId,
+        type: 'text',
+        node: (
+          <div className="my-2 text-xs text-muted">
+            <span className="font-semibold text-fg">Runtime not installed</span>
+            {entry.errorMessage ? ` — ${entry.errorMessage}` : ''}
+          </div>
+        )
+      })
+      continue
+    }
+    if (entry.kind === 'system' && entry.errorKind === 'session-load-failed') {
+      rows.push({
+        key: entry.entryId,
+        entryId: entry.entryId,
+        type: 'text',
+        node: (
+          <div className="my-2 text-xs text-muted">
+            <span className="font-semibold text-fg">New session</span>
+            {entry.errorMessage ? ` — ${entry.errorMessage}` : ''}
+          </div>
+        )
+      })
+      continue
+    }
     if (entry.kind === 'error' && entry.errorKind === 'auth-failure') {
       rows.push({
         key: entry.entryId,
@@ -688,6 +835,8 @@ function renderEntries(
             onOpenLoginTab={ctx.onOpenLoginTab}
             onRetry={ctx.onRetryAuth}
             canOpenAuthLogin={ctx.canOpenAuthLogin}
+            authMethods={entry.authMethods}
+            onAuthenticate={ctx.onAuthenticate}
           />
         )
       })
@@ -926,6 +1075,28 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       ? `${modKeySymbol}↵`
       : `${modKeySymbol}Enter`
   const sendHotkeyAria = sendOnEnter ? 'Enter' : `${modKeyWord}+Enter`
+  const runtimeStatus = useRuntimeStatus(session?.agentKind)
+  const runtimeAgentName = agentDisplayName(session?.agentKind)
+  const runtimeBlocksSend =
+    runtimeStatus.state === 'missing' ||
+    runtimeStatus.state === 'downloading' ||
+    runtimeStatus.state === 'error'
+  const runtimeCardVisible =
+    runtimeBlocksSend ||
+    (runtimeStatus.state === 'ready' && session?.state === 'exited')
+  const sendDisabledReason = runtimeBlocksSend
+    ? `download the ${runtimeAgentName} runtime first`
+    : null
+  const restartRuntimeSession = useCallback(async () => {
+    await backend.killJsonClaude(sessionId)
+    await backend.startJsonClaude(sessionId, worktreePath)
+  }, [backend, sessionId, worktreePath])
+  const downloadRuntime = useCallback(async () => {
+    const kind = session?.agentKind
+    if (kind !== 'opencode' && kind !== 'codex') return
+    const ok = await backend.downloadRuntime(kind)
+    if (ok) await restartRuntimeSession()
+  }, [backend, session?.agentKind, restartRuntimeSession])
   const composerPlaceholder = sendOnEnter
     ? 'Message Claude — Enter to send, Shift+Enter for newline'
     : `Message Claude — ${modKeyWord}+Enter to send`
@@ -1261,6 +1432,8 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           await backend.startJsonClaude(sessionId, worktreePath)
         })()
       },
+      onAuthenticate: (methodId, apiKey) =>
+        backend.authenticateJsonClaude(sessionId, methodId, apiKey),
       canOpenAuthLogin
     })
     // approvalByToolUseId already depends on pending; pendingToolUseIds
@@ -1612,6 +1785,7 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
       path: a.path ?? ''
     }))
     if (!session || state === 'exited') return
+    if (sendDisabledReason) return
     if (!text && images.length === 0) return
     backend.sendJsonClaudeMessage(
       sessionId,
@@ -1926,6 +2100,16 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
           </button>
         </div>
       )}
+      {session && runtimeCardVisible && (
+        <div className="shrink-0 border-t border-border px-2">
+          <RuntimeDownloadCard
+            agentKind={session.agentKind}
+            status={runtimeStatus}
+            onDownload={() => void downloadRuntime()}
+            onRetry={() => void restartRuntimeSession()}
+          />
+        </div>
+      )}
       <div className="shrink-0 border-t border-border p-2">
         <div className="relative rounded-md border border-border bg-panel focus-within:border-accent transition-colors">
           {mentionItems.length > 0 && (
@@ -2047,9 +2231,11 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
               }
             }}
             placeholder={
-              mode === 'asleep'
-                ? 'Type to wake this session…'
-                : composerPlaceholder
+              sendDisabledReason
+                ? `Message ${runtimeAgentName} — ${sendDisabledReason}`
+                : mode === 'asleep'
+                  ? 'Type to wake this session…'
+                  : composerPlaceholder
             }
             // text-base (16px) below sm: prevents iOS Safari from zooming
             // the viewport when the textarea takes focus. text-sm on
@@ -2097,9 +2283,12 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
             )}
             <button
               onClick={() => send()}
-              disabled={!draft.trim() && attachments.length === 0}
+              disabled={
+                !!sendDisabledReason ||
+                (!draft.trim() && attachments.length === 0)
+              }
               aria-label={`Send (${sendHotkeyAria})`}
-              title={`Send (${sendHotkeyAria})`}
+              title={sendDisabledReason ?? `Send (${sendHotkeyAria})`}
               className="px-2.5 py-0.5 bg-accent text-white rounded text-xs font-medium disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
             >
               <span>Send</span>

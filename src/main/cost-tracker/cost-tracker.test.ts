@@ -54,7 +54,7 @@ describe('CostTracker — JSON-mode wiring', () => {
     readFileSyncMock.mockReturnValue('')
     store.dispatch({
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId, worktreePath: '/tmp/wt' }
+      payload: { sessionId, worktreePath: '/tmp/wt', agentKind: 'claude', runtimeId: 'claude' }
     })
     expect(store.getSnapshot().state.costs.byTerminal[sessionId]).toBeUndefined()
 
@@ -123,7 +123,7 @@ describe('CostTracker — JSON-mode wiring', () => {
     trackerA.setClientInterested('client-A', true)
     storeA.dispatch({
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId, worktreePath: '/tmp/wt' }
+      payload: { sessionId, worktreePath: '/tmp/wt', agentKind: 'claude', runtimeId: 'claude' }
     })
     readFileSyncMock.mockReturnValue(turn1)
     storeA.dispatch({
@@ -146,7 +146,7 @@ describe('CostTracker — JSON-mode wiring', () => {
     readFileSyncMock.mockReturnValue(fullTranscript)
     storeB.dispatch({
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId, worktreePath: '/tmp/wt' }
+      payload: { sessionId, worktreePath: '/tmp/wt', agentKind: 'claude', runtimeId: 'claude' }
     })
     trackerB.stop()
     const singleShot = storeB.getSnapshot().state.costs.byTerminal[sessionId]
@@ -170,7 +170,7 @@ describe('CostTracker — JSON-mode wiring', () => {
     const sessionId = 'sess-cost-2'
     store.dispatch({
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId, worktreePath: '/tmp/wt' }
+      payload: { sessionId, worktreePath: '/tmp/wt', agentKind: 'claude', runtimeId: 'claude' }
     })
     // sessionStarted itself triggers a reparse on resume; that
     // empty-transcript run must not have dispatched usageUpdated.
@@ -245,7 +245,7 @@ describe('CostTracker — JSON-mode wiring', () => {
 
     store.dispatch({
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId, worktreePath: '/tmp/wt' }
+      payload: { sessionId, worktreePath: '/tmp/wt', agentKind: 'claude', runtimeId: 'claude' }
     })
     store.dispatch({
       type: 'jsonClaude/busyChanged',

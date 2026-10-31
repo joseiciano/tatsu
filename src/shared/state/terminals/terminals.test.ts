@@ -560,7 +560,8 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const leaves = getLeaves(next.panes['/wt/a'])
@@ -569,6 +570,7 @@ describe('terminalsReducer', () => {
     expect(tab.id).toBe('sess-1')
     expect(tab.sessionId).toBe('sess-1')
     expect(tab.label).toBe('Chat')
+    expect(tab.agentKind).toBe('claude')
     expect(leaves[0].activeTabId).toBe('sess-1')
     // Other tabs untouched.
     expect(leaves[0].tabs[1].id).toBe('shell-1')
@@ -589,7 +591,8 @@ describe('terminalsReducer', () => {
         tabId: 'sess-1',
         newId: 'agent-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     const leaves = getLeaves(next.panes['/wt/a'])
@@ -617,7 +620,8 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
@@ -747,6 +751,68 @@ describe('terminalsReducer', () => {
     expect(next).toBe(start)
   })
 
+  it('tabLabelChanged sets the trimmed label on the matching tab only and keeps customLabel', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        { id: 't1', type: 'json-claude', label: 'Chat', customLabel: 'Mine' },
+        { id: 't2', type: 'json-claude', label: 'Chat' }
+      ],
+      activeTabId: 't1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabLabelChanged',
+      payload: { worktreePath: '/wt/a', tabId: 't1', label: '  Fix the parser  ' }
+    })
+    const tabs = getLeaves(next.panes['/wt/a'])[0].tabs
+    expect(tabs[0].label).toBe('Fix the parser')
+    expect(tabs[0].customLabel).toBe('Mine')
+    expect(tabs[1]).toBe((tree as PaneLeaf).tabs[1])
+  })
+
+  it('tabLabelChanged keeps untouched leaves by reference in a split', () => {
+    const other = leaf('p2', ['t9'])
+    const tree: PaneNode = {
+      type: 'split',
+      id: 's1',
+      direction: 'horizontal',
+      ratio: 0.5,
+      children: [leaf('p1', ['t1']), other]
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabLabelChanged',
+      payload: { worktreePath: '/wt/a', tabId: 't1', label: 'Titled' }
+    })
+    const [first, second] = getLeaves(next.panes['/wt/a'])
+    expect(first.tabs[0].label).toBe('Titled')
+    expect(second).toBe(other)
+  })
+
+  it('tabLabelChanged is a no-op for an unknown worktree or tab, an unchanged label, or a blank label', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 't1', type: 'json-claude', label: 'Chat' }],
+      activeTabId: 't1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const cases = [
+      { name: 'unknown worktree', worktreePath: '/wt/missing', tabId: 't1', label: 'X' },
+      { name: 'unknown tab', worktreePath: '/wt/a', tabId: 'missing', label: 'X' },
+      { name: 'unchanged label', worktreePath: '/wt/a', tabId: 't1', label: 'Chat' },
+      { name: 'unchanged after trim', worktreePath: '/wt/a', tabId: 't1', label: ' Chat ' },
+      { name: 'empty label', worktreePath: '/wt/a', tabId: 't1', label: '' },
+      { name: 'whitespace label', worktreePath: '/wt/a', tabId: 't1', label: '   ' }
+    ]
+    for (const c of cases) {
+      const { name, ...payload } = c
+      expect(apply(start, { type: 'terminals/tabLabelChanged', payload }), name).toBe(start)
+    }
+  })
+
   it('tabRenamed sets a customLabel on the matching tab', () => {
     const tree: PaneNode = {
       type: 'leaf',
@@ -834,7 +900,8 @@ describe('terminalsReducer', () => {
         tabId: 't1',
         newId: 't1-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     expect(noWt).toBe(start)
@@ -845,7 +912,8 @@ describe('terminalsReducer', () => {
         tabId: 't-missing',
         newId: 't-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     expect(noTab).toBe(start)
@@ -868,11 +936,13 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.type).toBe('json-claude')
+    expect(tab.agentKind).toBe('claude')
     expect('runtime' in tab).toBe(false)
   })
 
@@ -893,7 +963,8 @@ describe('terminalsReducer', () => {
         tabId: 'agent-1',
         newId: 'sess-1',
         newType: 'json-claude',
-        newLabel: 'Chat'
+        newLabel: 'Chat',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
@@ -918,12 +989,175 @@ describe('terminalsReducer', () => {
         tabId: 'sess-1',
         newId: 'agent-new',
         newType: 'agent',
-        newLabel: 'Claude'
+        newLabel: 'Claude',
+        agentKind: 'claude'
       }
     })
     const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
     expect(tab.type).toBe('agent')
     expect('runtime' in tab).toBe(false)
+  })
+
+  it('tabTypeChanged to json-claude stores agentSessionId and keeps the source sessionId', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 'agent-1', type: 'agent', label: 'OpenCode', agentKind: 'opencode', sessionId: 'sess-1' }],
+      activeTabId: 'agent-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabTypeChanged',
+      payload: {
+        worktreePath: '/wt/a',
+        tabId: 'agent-1',
+        newId: 'sess-1',
+        newType: 'json-claude',
+        newLabel: 'Chat',
+        agentKind: 'opencode',
+        agentSessionId: 'ses_abc'
+      }
+    })
+    const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect(tab.agentSessionId).toBe('ses_abc')
+    expect(tab.sessionId).toBe('sess-1')
+  })
+
+  it('tabTypeChanged to json-claude omits agentSessionId when the payload has none', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 'agent-1', type: 'agent', label: 'OpenCode', agentKind: 'opencode', sessionId: 'sess-1' }],
+      activeTabId: 'agent-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabTypeChanged',
+      payload: {
+        worktreePath: '/wt/a',
+        tabId: 'agent-1',
+        newId: 'sess-1',
+        newType: 'json-claude',
+        newLabel: 'Chat',
+        agentKind: 'opencode'
+      }
+    })
+    const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
+    expect(tab.type).toBe('json-claude')
+    expect('agentSessionId' in tab).toBe(false)
+  })
+
+  it('tabTypeChanged to agent resumes agentSessionId over the source sessionId', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 'sess-1', type: 'json-claude', label: 'Chat', agentKind: 'opencode', sessionId: 'sess-1' }],
+      activeTabId: 'sess-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabTypeChanged',
+      payload: {
+        worktreePath: '/wt/a',
+        tabId: 'sess-1',
+        newId: 'agent-new',
+        newType: 'agent',
+        newLabel: 'OpenCode',
+        agentKind: 'opencode',
+        agentSessionId: 'ses_abc'
+      }
+    })
+    const tab = getLeaves(next.panes['/wt/a'])[0].tabs[0]
+    expect(tab.type).toBe('agent')
+    expect(tab.sessionId).toBe('ses_abc')
+  })
+
+  it('tabTypeChanged to agent falls back to the source sessionId, then newId', () => {
+    const withSession: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 'sess-1', type: 'json-claude', label: 'Chat', agentKind: 'opencode', sessionId: 'sess-1' }],
+      activeTabId: 'sess-1'
+    }
+    const noSession: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [{ id: 'sess-1', type: 'json-claude', label: 'Chat', agentKind: 'opencode' }],
+      activeTabId: 'sess-1'
+    }
+    const event: TerminalsEvent = {
+      type: 'terminals/tabTypeChanged',
+      payload: {
+        worktreePath: '/wt/a',
+        tabId: 'sess-1',
+        newId: 'agent-new',
+        newType: 'agent',
+        newLabel: 'OpenCode',
+        agentKind: 'opencode'
+      }
+    }
+    const fromSession = apply({ ...initialTerminals, panes: { '/wt/a': withSession } }, event)
+    expect(getLeaves(fromSession.panes['/wt/a'])[0].tabs[0].sessionId).toBe('sess-1')
+    const fromNothing = apply({ ...initialTerminals, panes: { '/wt/a': noSession } }, event)
+    expect(getLeaves(fromNothing.panes['/wt/a'])[0].tabs[0].sessionId).toBe('agent-new')
+  })
+
+  it('tabAgentSessionIdChanged sets agentSessionId on the matching tab only', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        { id: 'sess-1', type: 'json-claude', label: 'Chat', agentKind: 'opencode', sessionId: 'sess-1' },
+        { id: 'sess-2', type: 'json-claude', label: 'Chat', agentKind: 'opencode', sessionId: 'sess-2' }
+      ],
+      activeTabId: 'sess-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    const next = apply(start, {
+      type: 'terminals/tabAgentSessionIdChanged',
+      payload: { worktreePath: '/wt/a', tabId: 'sess-2', agentSessionId: 'ses_abc' }
+    })
+    const [first, second] = getLeaves(next.panes['/wt/a'])[0].tabs
+    expect(second.agentSessionId).toBe('ses_abc')
+    expect(first).toBe((tree as PaneLeaf).tabs[0])
+  })
+
+  it('tabAgentSessionIdChanged is a no-op when the worktree, tab, or value is unchanged', () => {
+    const tree: PaneNode = {
+      type: 'leaf',
+      id: 'p1',
+      tabs: [
+        {
+          id: 'sess-1',
+          type: 'json-claude',
+          label: 'Chat',
+          agentKind: 'opencode',
+          sessionId: 'sess-1',
+          agentSessionId: 'ses_abc'
+        }
+      ],
+      activeTabId: 'sess-1'
+    }
+    const start: TerminalsState = { ...initialTerminals, panes: { '/wt/a': tree } }
+    expect(
+      apply(start, {
+        type: 'terminals/tabAgentSessionIdChanged',
+        payload: { worktreePath: '/wt/missing', tabId: 'sess-1', agentSessionId: 'ses_new' }
+      })
+    ).toBe(start)
+    expect(
+      apply(start, {
+        type: 'terminals/tabAgentSessionIdChanged',
+        payload: { worktreePath: '/wt/a', tabId: 'missing', agentSessionId: 'ses_new' }
+      })
+    ).toBe(start)
+    expect(
+      apply(start, {
+        type: 'terminals/tabAgentSessionIdChanged',
+        payload: { worktreePath: '/wt/a', tabId: 'sess-1', agentSessionId: 'ses_abc' }
+      })
+    ).toBe(start)
   })
 
   it('tabSlept does not add runtime on json-claude tabs', () => {

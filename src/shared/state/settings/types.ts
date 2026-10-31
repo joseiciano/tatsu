@@ -96,6 +96,10 @@ export interface SettingsState {
   viewerLogin: string | null
   harnessStarred: boolean | null
   autoUpdateEnabled: boolean
+  /** Release gate for OpenCode and Codex chat tabs. Off hides every chat
+   *  entry point for those agents until the download + login flows have
+   *  shipped in a signed build. */
+  experimentalChatAgentsEnabled: boolean
   harnessSystemPromptEnabled: boolean
   harnessSystemPrompt: string
   harnessSystemPromptMain: string
@@ -109,6 +113,14 @@ export interface SettingsState {
    *  ('xterm') or the React chat interface ('json'). Internal values are
    *  unchanged; the user-facing label is "Terminal" / "Chat". */
   defaultClaudeTabType: 'xterm' | 'json'
+  /** Controls whether new Opencode tabs spawn as the terminal-hosted TUI
+   *  ('xterm') or the React chat interface ('json'). Same semantics as
+   *  `defaultClaudeTabType`, per agent. */
+  defaultOpencodeTabType: 'xterm' | 'json'
+  /** Controls whether new Codex tabs spawn as the terminal-hosted TUI
+   *  ('xterm') or the React chat interface ('json'). Same semantics as
+   *  `defaultClaudeTabType`, per agent. */
+  defaultCodexTabType: 'xterm' | 'json'
   /** True once the user clicks the X on the "Switch to the new Chat
    *  mode" overlay shown on Terminal Claude tabs. Persistent so the
    *  promotion stays dismissed across reloads. */
@@ -208,6 +220,7 @@ export type SettingsEvent =
   | { type: 'settings/codexModelChanged'; payload: string | null }
   | { type: 'settings/opencodeModelChanged'; payload: string | null }
   | { type: 'settings/autoUpdateEnabledChanged'; payload: boolean }
+  | { type: 'settings/experimentalChatAgentsEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptEnabledChanged'; payload: boolean }
   | { type: 'settings/harnessSystemPromptChanged'; payload: string }
   | { type: 'settings/harnessSystemPromptMainChanged'; payload: string }
@@ -218,6 +231,8 @@ export type SettingsEvent =
   | { type: 'settings/browserToolsEnabledChanged'; payload: boolean }
   | { type: 'settings/browserToolsModeChanged'; payload: BrowserToolsMode }
   | { type: 'settings/defaultClaudeTabTypeChanged'; payload: 'xterm' | 'json' }
+  | { type: 'settings/defaultOpencodeTabTypeChanged'; payload: 'xterm' | 'json' }
+  | { type: 'settings/defaultCodexTabTypeChanged'; payload: 'xterm' | 'json' }
   | { type: 'settings/chatPromotionDismissedChanged'; payload: boolean }
   | { type: 'settings/autoApprovePermissionsChanged'; payload: boolean }
   | { type: 'settings/autoApproveSteerInstructionsChanged'; payload: string }

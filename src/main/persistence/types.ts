@@ -75,6 +75,7 @@ export interface Config {
   harnessAutoStarred?: boolean
   costs?: CostsState
   autoUpdateEnabled?: boolean
+  experimentalChatAgentsEnabled?: boolean
   shareClaudeSettings?: boolean
   hooksConsent?: 'pending' | 'accepted' | 'declined'
   hooksMigratedToGlobal?: boolean
@@ -89,6 +90,8 @@ export interface Config {
   browserToolsEnabled?: boolean
   browserToolsMode?: 'view' | 'full'
   defaultClaudeTabType?: 'xterm' | 'json'
+  defaultOpencodeTabType?: 'xterm' | 'json'
+  defaultCodexTabType?: 'xterm' | 'json'
   chatPromotionDismissed?: boolean
   autoApprovePermissions?: boolean
   autoApproveSteerInstructions?: string
