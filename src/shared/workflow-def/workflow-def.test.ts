@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateCondition, validateWorkflowDefinition, type WorkflowCondition, type WorkflowDiagnostic } from '.'
+import { evaluateCondition, needsClosure, validateWorkflowDefinition, type WorkflowCondition, type WorkflowDiagnostic } from '.'
 
 const PLAN_EXAMPLE = `name: plan-build-review
 inputs:
@@ -256,7 +256,7 @@ steps:
   })
 
   it('resolves a small alias', () => {
-    const result = validateWorkflowDefinition('name: x\ndefaults:\n  allow: &cmds [git status]\nsteps:\n  - id: a\n    allow: *cmds\n')
+    const result = validateWorkflowDefinition('name: x\ndefaults:\n  allow: &cmds [git status]\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    allow: *cmds\n')
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.steps[0].allow).toEqual(['git status'])
   })
@@ -306,7 +306,7 @@ steps:
 describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
   it('accepts foreach and orchestrator steps with their reserved fields', () => {
     const result = validateWorkflowDefinition(
-      'name: x\nsteps:\n  - id: split\n    output:\n      tasks: { type: array, items: { type: string } }\n      required: [tasks]\n  - id: each\n    kind: foreach\n    over: steps.split.data.tasks\n    mode: stacked\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n    timeout: 600\n    parallel_safe: false\n'
+      'name: x\nsteps:\n  - id: split\n    agent: claude\n    prompt: split\n    output:\n      tasks: { type: array, items: { type: string } }\n      required: [tasks]\n  - id: each\n    kind: foreach\n    over: steps.split.data.tasks\n    mode: stacked\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n    timeout: 600\n    parallel_safe: false\n'
     )
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.steps[0].output).toEqual({ fields: { tasks: { type: 'array', items: { type: 'string' } } }, required: ['tasks'] })
@@ -315,14 +315,15 @@ describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
   })
 
   it('leaves agent names to the graph stage', () => {
-    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: pi\n')
-    expect(result.diagnostics).toEqual([])
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: pi\n    prompt: go\n')
     expect(result.parsed?.steps[0].agent).toBe('pi')
+    expect(result.definition).toBeUndefined()
+    expect(result.diagnostics.map((d) => d.path)).toEqual(['steps[0].agent'])
   })
 
   it('accepts every condition shape', () => {
     const result = validateWorkflowDefinition(
-      'name: x\nsteps:\n  - id: a\n    when: { field: v, in: [1, two, true] }\n  - id: b\n    when: { field: v, not: fail }\n  - id: c\n    kind: shell\n    run: "true"\n    when: { exit: 0 }\n'
+      'name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    when: { field: v, in: [1, two, true] }\n  - id: b\n    agent: claude\n    prompt: go\n    when: { field: v, not: fail }\n  - id: c\n    kind: shell\n    run: "true"\n    when: { exit: 0 }\n'
     )
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.steps.map((s) => s.when)).toEqual([
@@ -330,6 +331,120 @@ describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
       { field: 'v', not: 'fail' },
       { exit: 0 }
     ])
+  })
+})
+
+describe('validateWorkflowDefinition: resolved definition', () => {
+  it('resolves the plan example', () => {
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    expect(result.diagnostics).toEqual([])
+    const steps = result.definition!.steps
+    expect(steps.map((s) => s.id)).toEqual(['plan', 'build', 'test', 'review'])
+    expect(steps.map((s) => s.needs)).toEqual([[], ['plan'], ['build'], ['build', 'test']])
+    expect(steps.map((s) => s.kind)).toEqual(['agent', 'agent', 'shell', 'agent'])
+    expect(steps[0]).toMatchObject({ permissions: 'read-only', allow: ['pnpm', 'git status', 'git diff'] })
+    expect(steps[1]).toMatchObject({ agent: 'codex', permissions: 'edit', allow: ['pnpm', 'git status', 'git diff'] })
+    expect(steps[2]).toEqual({ id: 'test', kind: 'shell', needs: ['build'], run: 'pnpm typecheck && npx vitest run' })
+    expect(steps[3]).toMatchObject({ permissions: 'read-only', loop: { back_to: 'build', until: { field: 'verdict', equals: 'pass' }, max: 3 } })
+  })
+
+  it('keeps the parsed shape unresolved alongside the definition', () => {
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    expect(result.parsed?.steps[1].needs).toBeUndefined()
+    expect(result.parsed?.steps[1].permissions).toBeUndefined()
+  })
+
+  it('defaults permissions to edit with no defaults block', () => {
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n')
+    expect(result.definition?.steps[0]).toEqual({ id: 'a', kind: 'agent', agent: 'claude', prompt: 'go', needs: [], permissions: 'edit', allow: [] })
+  })
+
+  it('replaces defaults.allow with a step allow list instead of merging', () => {
+    const result = validateWorkflowDefinition(
+      'name: x\ndefaults:\n  allow: ["pnpm *", git status]\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    allow: ["git log *"]\n  - id: b\n    agent: claude\n    prompt: go\n  - id: c\n    agent: claude\n    prompt: go\n    allow: []\n'
+    )
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps.map((s) => ('allow' in s ? s.allow : undefined))).toEqual([['git log'], ['pnpm', 'git status'], []])
+  })
+
+  it('warns once per dropped allow entry and still resolves', () => {
+    const result = validateWorkflowDefinition(
+      'name: x\ndefaults:\n  allow: ["pnpm *", "rm $(x)", "a*b", "pnpm"]\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    allow: ["git \'log\'"]\n'
+    )
+    expect(result.diagnostics.map((d) => [d.severity, d.code, d.path, d.line, d.col])).toEqual([
+      ['warning', 'unsafe-allow', 'defaults.allow[1]', 3, 21],
+      ['warning', 'unsafe-allow', 'defaults.allow[2]', 3, 32],
+      ['warning', 'unsafe-allow', 'steps[0].allow[0]', 8, 13]
+    ])
+    expect(result.definition?.steps[0]).toMatchObject({ allow: [] })
+  })
+
+  it('fills omitted needs with the previous step in file order', () => {
+    const step = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n${extra}`
+    const result = validateWorkflowDefinition(
+      `name: x\nsteps:\n${step('a')}${step('b', '    needs: []\n')}${step('c')}${step('d', '    needs: [a]\n')}${step('e')}`
+    )
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps.map((s) => s.needs)).toEqual([[], [], ['b'], ['a'], ['d']])
+  })
+})
+
+describe('needsClosure', () => {
+  it.each([
+    { name: 'linear chain', steps: [{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }, { id: 'c', needs: ['b'] }], of: 'c', expected: ['a', 'b'] },
+    { name: 'diamond', steps: [{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }, { id: 'c', needs: ['a'] }, { id: 'd', needs: ['b', 'c'] }], of: 'd', expected: ['a', 'b', 'c'] },
+    { name: 'root step', steps: [{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }], of: 'a', expected: [] },
+    { name: 'unknown refs are skipped', steps: [{ id: 'a', needs: ['ghost'] }, { id: 'b', needs: ['a', 'nope'] }], of: 'b', expected: ['a'] },
+    { name: 'unknown step', steps: [{ id: 'a', needs: [] }], of: 'zz', expected: [] },
+    { name: 'cycle terminates', steps: [{ id: 'a', needs: ['c'] }, { id: 'b', needs: ['a'] }, { id: 'c', needs: ['b'] }], of: 'c', expected: ['a', 'b', 'c'] }
+  ])('$name', ({ steps, of, expected }) => {
+    expect([...needsClosure(steps, of)].sort()).toEqual(expected)
+  })
+})
+
+describe('validateWorkflowDefinition: graph and per-kind errors', () => {
+  const A = '    agent: claude\n    prompt: go\n'
+  const loop = (target: string) => `    loop: { back_to: ${target}, until: { field: v, equals: x }, max: 2 }\n`
+
+  it.each([
+    { name: 'duplicate id', text: `  - id: a\n${A}  - id: a\n${A}`, expected: { code: 'duplicate-id', path: 'steps[1].id', line: 6, col: 9 } },
+    { name: 'unknown needs ref', text: `  - id: a\n${A}  - id: b\n    needs: [a, nope]\n${A}`, expected: { code: 'unknown-ref', path: 'steps[1].needs[1]', line: 7, col: 16 } },
+    { name: 'self cycle', text: `  - id: a\n    needs: [a]\n${A}`, expected: { code: 'cycle', path: 'steps[0].needs[0]', line: 4, col: 13, message: 'Steps form a "needs" cycle: a -> a' } },
+    { name: '2-step cycle', text: `  - id: a\n    needs: [b]\n${A}  - id: b\n    needs: [a]\n${A}`, expected: { code: 'cycle', path: 'steps[0].needs[0]', line: 4, col: 13, message: 'Steps form a "needs" cycle: a -> b -> a' } },
+    { name: '3-step cycle through implicit needs', text: `  - id: a\n    needs: [c]\n${A}  - id: b\n${A}  - id: c\n${A}`, expected: { code: 'cycle', path: 'steps[0].needs[0]', line: 4, col: 13, message: 'Steps form a "needs" cycle: a -> c -> b -> a' } },
+    { name: 'back_to downstream', text: `  - id: a\n${A}${loop('b')}  - id: b\n${A}`, expected: { code: 'bad-back-to', path: 'steps[0].loop.back_to', line: 6, col: 22 } },
+    { name: 'back_to self', text: `  - id: a\n${A}${loop('a')}`, expected: { code: 'bad-back-to', path: 'steps[0].loop.back_to', line: 6, col: 22 } },
+    { name: 'back_to unknown', text: `  - id: a\n${A}${loop('zz')}`, expected: { code: 'unknown-ref', path: 'steps[0].loop.back_to', line: 6, col: 22 } },
+    { name: 'unknown needs does not cascade into back_to', text: `  - id: a\n${A}  - id: b\n    needs: [nope]\n${A}${loop('a')}`, expected: { code: 'unknown-ref', path: 'steps[1].needs[0]', line: 7, col: 13 } },
+    { name: 'shell step with prompt', text: '  - id: a\n    kind: shell\n    run: make\n    prompt: hi\n', expected: { code: 'kind-mismatch', path: 'steps[0].prompt', line: 6, col: 13 } },
+    { name: 'shell step with an unsafe allow', text: '  - id: a\n    kind: shell\n    run: make\n    allow: ["a*b"]\n', expected: { code: 'kind-mismatch', path: 'steps[0].allow', line: 6, col: 12 } },
+    { name: 'shell step without run', text: '  - id: a\n    kind: shell\n', expected: { code: 'missing-field', path: 'steps[0].run', line: 3, col: 5 } },
+    { name: 'agent step without prompt', text: '  - id: a\n    agent: claude\n', expected: { code: 'missing-field', path: 'steps[0].prompt', line: 3, col: 5 } },
+    { name: 'agent step without agent', text: '  - id: a\n    prompt: go\n', expected: { code: 'missing-field', path: 'steps[0].agent', line: 3, col: 5 } },
+    { name: 'agent: pi', text: '  - id: a\n    agent: pi\n    prompt: go\n', expected: { code: 'bad-value', path: 'steps[0].agent', line: 4, col: 12, message: 'pi is a tab harness, not a workflow step harness in v1' } },
+    { name: 'unknown agent', text: '  - id: a\n    agent: gemini\n    prompt: go\n', expected: { code: 'bad-value', path: 'steps[0].agent', line: 4, col: 12 } },
+    { name: 'exit condition on an agent step', text: `  - id: a\n${A}    when: { exit: 0 }\n`, expected: { code: 'bad-condition', path: 'steps[0].when.exit', line: 6, col: 19 } },
+    { name: 'item_input naming no input', text: `  - id: a\n${A}`, prefix: 'inputs:\n  task: { type: text }\nitem_input: tsk\n', expected: { code: 'unknown-ref', path: 'item_input', line: 4, col: 13 } },
+    { name: 'required naming an undeclared output field', text: `  - id: a\n${A}    output:\n      verdict: { enum: [pass, fail] }\n      required: [verdikt]\n`, expected: { code: 'unknown-ref', path: 'steps[0].output.required[0]', line: 8, col: 18 } }
+  ])('$name', ({ text, prefix, expected }) => {
+    const result = validateWorkflowDefinition(`name: x\n${prefix ?? ''}steps:\n${text}`)
+    expect(result.diagnostics).toHaveLength(1)
+    expect(result.diagnostics[0]).toMatchObject({ severity: 'error', ...expected })
+    expect(result.parsed).toBeDefined()
+    expect(result.definition).toBeUndefined()
+  })
+
+  it('allows an exit condition on a shell step', () => {
+    const result = validateWorkflowDefinition(
+      `name: x\nsteps:\n  - id: a\n${A}  - id: t\n    kind: shell\n    run: make\n    loop: { back_to: a, until: { exit: 0 }, max: 2 }\n`
+    )
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps[1]).toEqual({ id: 't', kind: 'shell', needs: ['a'], run: 'make', loop: { back_to: 'a', until: { exit: 0 }, max: 2 } })
+  })
+
+  it('skips the graph stage when the shape stage fails', () => {
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    needs: [nope]\n    gate: later\n')
+    expect(result.diagnostics.map((d) => d.code)).toEqual(['bad-value'])
   })
 })
 
