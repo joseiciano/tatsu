@@ -52,6 +52,11 @@ export interface TerminalTab {
   commitHash?: string
   /** For agent tabs: UUID passed to the agent CLI so the tab resumes its own session. */
   sessionId?: string
+  /** For json-claude tabs on ACP agents (OpenCode, Codex): the agent's own
+   *  session id, assigned by the agent at `session/new`. Used for
+   *  `session/load` on the next start and as the terminal resume id when
+   *  the tab is converted back to an agent tab. */
+  agentSessionId?: string
   /** For agent tabs: one-shot kickoff prompt. In-memory only — main strips it before persistence. */
   initialPrompt?: string
   /** For agent tabs: one-shot teleport session id. In-memory only — main strips it before persistence. */
@@ -202,7 +207,17 @@ export type TerminalsEvent =
         newId: string
         newType: 'agent' | 'json-claude'
         newLabel: string
+        /** Agent kind carried onto the destination tab so a converted
+         *  json-claude tab still routes to the right runtime. */
+        agentKind: AgentKind
+        /** ACP agent session to continue: onto a json-claude tab as
+         *  `agentSessionId`, onto an agent tab as its resume `sessionId`. */
+        agentSessionId?: string
       }
+    }
+  | {
+      type: 'terminals/tabAgentSessionIdChanged'
+      payload: { worktreePath: string; tabId: string; agentSessionId: string }
     }
   | {
       type: 'terminals/tabSlept'
@@ -214,5 +229,10 @@ export type TerminalsEvent =
     }
   | {
       type: 'terminals/tabRenamed'
+      payload: { worktreePath: string; tabId: string; label: string }
+    }
+  | {
+      /** Replaces the auto-derived `label`; a user `customLabel` still wins. */
+      type: 'terminals/tabLabelChanged'
       payload: { worktreePath: string; tabId: string; label: string }
     }

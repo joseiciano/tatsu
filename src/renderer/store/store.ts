@@ -33,6 +33,8 @@ import {
   type StateEvent,
   type WireSnapshotState
 } from '../../shared/state'
+import type { AgentKind } from '../../shared/state/terminals'
+import type { RuntimeStatus } from '../../shared/state/runtimes'
 import type { HarnessTemplateKind } from '../../shared/state/harness-config'
 import type { LocalTransportHandle, BackendConnection } from '../types'
 import { WebSocketClientTransport } from '../../shared/transport/transport-websocket'
@@ -577,6 +579,17 @@ export function useCosts() {
 export function useSnooze() {
   return useAppState((s) => s.snooze)
 }
+
+/** Download status of one agent's native runtime. Per-id selector — only
+ *  re-renders when that agent's status changes. Claude is always bundled. */
+export function useRuntimeStatus(agentKind: AgentKind | undefined): RuntimeStatus {
+  return useAppState((s) =>
+    agentKind === 'opencode' || agentKind === 'codex'
+      ? (s.runtimes.byAgent[agentKind] ?? { state: 'bundled' })
+      : BUNDLED
+  )
+}
+const BUNDLED: RuntimeStatus = { state: 'bundled' }
 
 /** Scratchpad text for one worktree. Per-id selector — only re-renders
  *  when this worktree's text changes (other worktrees' edits don't fan

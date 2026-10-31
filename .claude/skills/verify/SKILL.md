@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch Tatsu (the Electron agent-harness app) headless with a sandboxed HOME, drive its web client with Playwright, and capture evidence that a feature works the way a user sees it. Reach for it to prove a change to the renderer, the Config page (skills, agents, commands, templates, sync, import), Settings, or any main-process behavior visible in the UI. Never touches the user's real ~/.claude, ~/.codex, ~/.agents or ~/.config/opencode.
+description: Launch Tatsu (the Electron agent-harness app) headless with a sandboxed HOME, drive its web client with Playwright, and capture evidence that a feature works the way a user sees it. Reach for it to prove a change to the renderer, the Config page (skills, agents, commands, templates, sync, import), Settings, or any main-process behavior visible in the UI. For the OpenCode and Codex chat agents (ACP runtimes, chat-agents flag, login, session continuity, tool approvals, runtime packaging) it drives the headless server over WebSocket with `scripts/control.mjs` instead. Never touches the user's real ~/.claude, ~/.codex, ~/.agents or ~/.config/opencode.
 ---
 
 # Verify Tatsu by driving the real app
@@ -191,8 +191,17 @@ All of these are executable. Run them from the repo root.
   cannot drive, so type absolute paths into the inputs instead. The picker
   itself stays unverified.
 - Agent CLIs and terminal tabs, which need real `claude`/`codex` binaries and
-  write to `/tmp/harness-status`.
+  write to `/tmp/harness-status`. OpenCode and Codex chat tabs are covered by
+  `chat-agents.md`.
 - Linux. The helper scripts are macOS-only.
+
+## Chat agents and packaging
+
+The chat-agent features are driven by a second harness, `scripts/control.mjs`,
+which sends transport requests and signals over WebSocket instead of clicking
+the web client. Its static gate (`scripts/gate.sh`), launch, doctor, drive,
+evidence and report steps are in [`chat-agents.md`](chat-agents.md). Run that
+gate when a change touches packaging, `scripts/` or `package.json`.
 
 ## Feature map
 

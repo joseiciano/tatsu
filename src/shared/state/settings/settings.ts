@@ -68,6 +68,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, piModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
+    case 'settings/experimentalChatAgentsEnabledChanged':
+      return { ...state, experimentalChatAgentsEnabled: event.payload }
     case 'settings/harnessSystemPromptEnabledChanged':
       return { ...state, harnessSystemPromptEnabled: event.payload }
     case 'settings/harnessSystemPromptChanged':
@@ -88,6 +90,10 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, browserToolsMode: event.payload }
     case 'settings/defaultClaudeTabTypeChanged':
       return { ...state, defaultClaudeTabType: event.payload }
+    case 'settings/defaultOpencodeTabTypeChanged':
+      return { ...state, defaultOpencodeTabType: event.payload }
+    case 'settings/defaultCodexTabTypeChanged':
+      return { ...state, defaultCodexTabType: event.payload }
     case 'settings/chatPromotionDismissedChanged':
       return { ...state, chatPromotionDismissed: event.payload }
     case 'settings/autoApprovePermissionsChanged':

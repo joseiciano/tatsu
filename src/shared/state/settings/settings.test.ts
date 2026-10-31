@@ -112,6 +112,16 @@ describe('settingsReducer', () => {
     expect(next.prReviewPrompt).toBe('Focus on security issues only.')
   })
 
+  it('experimentalChatAgentsEnabledChanged gates OpenCode/Codex chat, off by default', () => {
+    expect(initialSettings.experimentalChatAgentsEnabled).toBe(false)
+    const on = apply(initialSettings, {
+      type: 'settings/experimentalChatAgentsEnabledChanged',
+      payload: true
+    })
+    expect(on.experimentalChatAgentsEnabled).toBe(true)
+    expect(apply(on, { type: 'settings/experimentalChatAgentsEnabledChanged', payload: false }).experimentalChatAgentsEnabled).toBe(false)
+  })
+
   it('autoUpdateEnabledChanged toggles auto-update flag', () => {
     expect(initialSettings.autoUpdateEnabled).toBe(true)
     const off = apply(initialSettings, {
@@ -473,6 +483,34 @@ describe('settingsReducer', () => {
       payload: 'xterm'
     })
     expect(xterm.defaultClaudeTabType).toBe('xterm')
+  })
+
+  it('defaultOpencodeTabTypeChanged switches between xterm and json', () => {
+    expect(initialSettings.defaultOpencodeTabType).toBe('xterm')
+    const json = apply(initialSettings, {
+      type: 'settings/defaultOpencodeTabTypeChanged',
+      payload: 'json'
+    })
+    expect(json.defaultOpencodeTabType).toBe('json')
+    const xterm = apply(json, {
+      type: 'settings/defaultOpencodeTabTypeChanged',
+      payload: 'xterm'
+    })
+    expect(xterm.defaultOpencodeTabType).toBe('xterm')
+  })
+
+  it('defaultCodexTabTypeChanged switches between xterm and json', () => {
+    expect(initialSettings.defaultCodexTabType).toBe('xterm')
+    const json = apply(initialSettings, {
+      type: 'settings/defaultCodexTabTypeChanged',
+      payload: 'json'
+    })
+    expect(json.defaultCodexTabType).toBe('json')
+    const xterm = apply(json, {
+      type: 'settings/defaultCodexTabTypeChanged',
+      payload: 'xterm'
+    })
+    expect(xterm.defaultCodexTabType).toBe('xterm')
   })
 
   it('jsonModeChatDensityChanged switches between compact and comfy', () => {

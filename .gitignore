@@ -15,4 +15,5 @@ prompts/
 
 prompts
 ticket
+resources/runtime-manifest.json
 .verify-evidence/
