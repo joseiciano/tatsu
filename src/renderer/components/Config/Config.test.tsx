@@ -497,3 +497,27 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     expect(backendApi.prepareHarnessConfigSkillFromCommand).not.toHaveBeenCalled()
   })
 })
+
+describe('Config deferred harnesses (Step 14 TASK-008/TEST-007)', () => {
+  it('presents Pi as explicitly deferred on every tab with no actions and never scopes a request to it', async () => {
+    await renderConfig()
+    await flush()
+
+    for (const tab of ['Agents', 'Skills', 'Commands']) {
+      clickTab(tab)
+      await flush()
+      const section = container.querySelector('[data-testid="config-deferred-pi"]')
+      expect(section).not.toBeNull()
+      expect(section!.textContent).toContain('Pi')
+      expect(section!.textContent).toContain('Deferred')
+      expect(section!.textContent).toContain('Pi config management is deferred')
+      expect(section!.querySelectorAll('button')).toHaveLength(0)
+    }
+
+    const requestedKinds = Object.values(backendApi).flatMap((fn) =>
+      fn.mock.calls.map((args) => (args[0] as { scope?: HarnessConfigScope } | undefined)?.scope?.agentKind)
+    )
+    expect(requestedKinds.length).toBeGreaterThan(0)
+    expect(requestedKinds).not.toContain('pi')
+  })
+})
