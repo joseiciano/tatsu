@@ -85,6 +85,12 @@ import {
   type SnoozeState
 } from './snooze'
 import {
+  initialRuntimes,
+  runtimesReducer,
+  type RuntimesEvent,
+  type RuntimesState
+} from './runtimes'
+import {
   initialAnnouncements,
   announcementsReducer,
   type AnnouncementsEvent,
@@ -169,6 +175,7 @@ export type {
   JsonClaudePendingApproval
 } from './json-claude'
 export type { SnoozeState, SnoozeEvent, SnoozeEntry } from './snooze'
+export type { RuntimesState, RuntimesEvent, RuntimeStatus, DownloadableRuntime } from './runtimes'
 export { MAX_WAKE } from './snooze'
 export type {
   AnnouncementsState,
@@ -206,6 +213,7 @@ export interface AppState {
   browser: BrowserState
   jsonClaude: JsonClaudeState
   snooze: SnoozeState
+  runtimes: RuntimesState
   announcements: AnnouncementsState
   scratchpad: ScratchpadState
   harnessConfig: HarnessConfigState
@@ -224,6 +232,7 @@ export type StateEvent =
   | BrowserEvent
   | JsonClaudeEvent
   | SnoozeEvent
+  | RuntimesEvent
   | AnnouncementsEvent
   | ScratchpadEvent
   | HarnessConfigEvent
@@ -241,6 +250,7 @@ export const initialState: AppState = {
   browser: initialBrowser,
   jsonClaude: initialJsonClaude,
   snooze: initialSnooze,
+  runtimes: initialRuntimes,
   announcements: initialAnnouncements,
   scratchpad: initialScratchpad,
   harnessConfig: initialHarnessConfig
@@ -302,6 +312,12 @@ export function rootReducer(state: AppState, event: StateEvent): AppState {
     return {
       ...state,
       snooze: snoozeReducer(state.snooze, event as SnoozeEvent)
+    }
+  }
+  if (event.type.startsWith('runtimes/')) {
+    return {
+      ...state,
+      runtimes: runtimesReducer(state.runtimes, event as RuntimesEvent)
     }
   }
   if (event.type.startsWith('announcements/')) {
@@ -374,6 +390,7 @@ export function mergeWireSnapshot(state: WireSnapshotState): AppState {
     browser: { ...initialState.browser, ...state.browser },
     jsonClaude: { ...initialState.jsonClaude, ...state.jsonClaude },
     snooze: { ...initialState.snooze, ...state.snooze },
+    runtimes: { ...initialState.runtimes, ...state.runtimes },
     announcements: { ...initialState.announcements, ...state.announcements },
     scratchpad: { ...initialState.scratchpad, ...state.scratchpad },
     harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }

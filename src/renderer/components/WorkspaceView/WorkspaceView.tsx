@@ -13,6 +13,8 @@ import {
 } from '@dnd-kit/core'
 import type { PaneNode, PaneLeaf, PaneSplit, PtyStatus, AgentKind } from '../../types'
 import { getLeaves, findLeafByTabId } from '../../../shared/state/terminals'
+import { useSettings } from '../../store'
+import { chatRuntimeAvailable } from '../../../shared/state/json-claude'
 import { TerminalPanel } from '../TerminalPanel'
 import { XTerminal } from '../XTerminal'
 import { DiffView } from '../DiffView'
@@ -349,6 +351,7 @@ export function WorkspaceView({
   topBarTrailingExtendPx = 0,
   crashedTabIds
 }: WorkspaceViewProps): JSX.Element {
+  const chatAgentsEnabled = useSettings().experimentalChatAgentsEnabled
   const backend = useBackend()
   // Stable slot DOM elements keyed by pane.id. Created imperatively and
   // reparented as the pane tree changes, so a split (which causes the
@@ -618,7 +621,7 @@ export function WorkspaceView({
                         : undefined
                     }
                     onSwitchToChat={
-                      tab.type === 'agent' && tab.agentKind === 'claude' && onConvertTabType
+                      tab.type === 'agent' && chatRuntimeAvailable(tab.agentKind ?? 'claude', chatAgentsEnabled) && onConvertTabType
                         ? (): void => onConvertTabType(worktreePath, tab.id, 'json-claude')
                         : undefined
                     }

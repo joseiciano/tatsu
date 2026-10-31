@@ -17,17 +17,21 @@ import {
 } from '../../shared/state/terminals'
 import type { PersistedPaneNode } from '../persistence'
 import { agentDisplayName, getAgentInfo } from '../../shared/agent-registry'
-import { log } from '../debug'
+import { isChatRuntimeId } from '../../shared/state/json-claude'
 
 interface PanesFSMOptions {
   persist: (panes: Record<string, PaneNode>) => void
   getRepoRootForWorktree: (worktreePath: string) => string | undefined
   getLatestClaudeSessionId: (worktreePath: string) => Promise<string | null>
   getDefaultAgentKind?: () => AgentKind
-  /** Read the default Claude interface setting. When this returns 'json',
-   *  a default Claude agent tab spawns as a json-claude tab instead of
-   *  an xterm-hosted one. */
-  getDefaultClaudeTabType?: () => 'xterm' | 'json'
+  /** Read the default interface setting for a given agent kind. When this
+   *  returns 'json', a default agent tab of that kind spawns as a json-
+   *  claude tab instead of an xterm-hosted one. */
+  getDefaultTabType?: (agentKind: AgentKind) => 'xterm' | 'json'
+  /** Whether a chat tab may be created or converted to for this agent kind
+   *  right now (release gate for OpenCode/Codex). Defaults to the static
+   *  runtime list. */
+  chatEnabledFor?: (agentKind: AgentKind) => boolean
   /** Tear down the PTY backing a closed tab. Called for agent + shell
    *  tabs when they're removed from the tree (closeTab, restartAgentTab,
    *  clearForWorktree). Authoritative on the main side so PTY lifetime
@@ -175,6 +179,7 @@ export class PanesFSM {
         label: t.label,
         agentKind: t.agentKind,
         sessionId: t.sessionId,
+        ...(t.agentSessionId ? { agentSessionId: t.agentSessionId } : {}),
         url: t.url,
         command: t.command,
         cwd: t.cwd,
@@ -228,14 +233,14 @@ export class PanesFSM {
     const model = opts?.model && opts.model.trim() ? opts.model.trim() : undefined
     const shellTabId = `shell-${wtPath}-${Date.now()}`
     // Branch to a json-claude default tab when the user has opted in
-    // and the kind is Claude. teleport sessions stay on xterm (json-
-    // claude has no `--resume <id>` analog for an arbitrary external
-    // session today). initialPrompt is honored for both — for the
-    // json-claude side we pre-spawn the subprocess and send it as the
-    // first message via startJsonClaudeWithPrompt below.
+    // for this agent kind. teleport sessions stay on xterm (json-claude
+    // has no `--resume <id>` analog for an arbitrary external session
+    // today). initialPrompt is honored for both — for the json-claude
+    // side we pre-spawn the subprocess and send it as the first message
+    // via startJsonClaudeWithPrompt below.
     const wantsJson =
-      agentKind === 'claude' &&
-      this.opts.getDefaultClaudeTabType?.() === 'json' &&
+      this._chatEnabled(agentKind) &&
+      this.opts.getDefaultTabType?.(agentKind) === 'json' &&
       !opts?.teleportSessionId
     let agentTab: TerminalTab
     let jsonClaudeKickoff: { sessionId: string; initialPrompt?: string; model?: string } | null = null
@@ -246,6 +251,7 @@ export class PanesFSM {
         type: 'json-claude',
         label: 'Chat',
         sessionId,
+        agentKind,
         mode: 'awake',
         model
       }
@@ -431,12 +437,7 @@ export class PanesFSM {
     if (!tab) return
     if (tab.type === newType) return
     if (tab.type !== 'agent' && tab.type !== 'json-claude') return
-    if (tab.type === 'agent' && tab.agentKind && tab.agentKind !== 'claude') {
-      // Only Claude agent tabs have a json-claude counterpart; refuse
-      // to swap a Codex tab.
-      log('panes-fsm', `convertTabType refused for non-claude agent kind=${tab.agentKind}`)
-      return
-    }
+    if (newType === 'json-claude' && !this._chatEnabled(tab.agentKind ?? 'claude')) return
     const sessionId = tab.sessionId ?? crypto.randomUUID()
     if (tab.type === 'agent') {
       this.opts.killTabPty?.(tabId)
@@ -451,10 +452,22 @@ export class PanesFSM {
       newType === 'json-claude'
         ? sessionId
         : `agent-${wtPath.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`
-    const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName('claude')
+    const newLabel = newType === 'json-claude' ? 'Chat' : agentDisplayName(tab.agentKind ?? 'claude')
+    // Preserve the agent kind so the destination tab routes to the same
+    // runtime. For ACP agents the agent's own session id travels too:
+    // chat → terminal resumes it on the CLI; terminal → chat offers the
+    // terminal's session id to session/load (best effort — the runtime
+    // starts a new session when the agent does not know it).
+    const agentKind = tab.agentKind ?? 'claude'
+    const agentSessionId =
+      agentKind === 'claude'
+        ? undefined
+        : tab.type === 'json-claude'
+          ? tab.agentSessionId
+          : tab.sessionId
     this.store.dispatch({
       type: 'terminals/tabTypeChanged',
-      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel }
+      payload: { worktreePath: wtPath, tabId, newId, newType, newLabel, agentKind, agentSessionId }
     })
     this.opts.persist(this.buildPersistPayload())
   }
@@ -483,6 +496,38 @@ export class PanesFSM {
       leaf.id === paneId ? { ...leaf, activeTabId: tabId } : leaf
     )
     this.commit(wtPath, updated)
+  }
+
+  private _chatEnabled(agentKind: AgentKind): boolean {
+    return this.opts.chatEnabledFor ? this.opts.chatEnabledFor(agentKind) : isChatRuntimeId(agentKind)
+  }
+
+  /** Record the agent-assigned session id on a json-claude tab once the
+   *  runtime learns it, so the next start can `session/load` it. */
+  setTabAgentSessionId(wtPath: string, tabId: string, agentSessionId: string): void {
+    const tree = this.getTree(wtPath)
+    if (!tree) return
+    const leaf = findLeafByTabId(tree, tabId)
+    if (!leaf) return
+    this.store.dispatch({
+      type: 'terminals/tabAgentSessionIdChanged',
+      payload: { worktreePath: wtPath, tabId, agentSessionId }
+    })
+    this.opts.persist(this.buildPersistPayload())
+  }
+
+  /** Replace a tab's auto-derived label (an ACP agent's session title).
+   *  Leaves any user rename (`customLabel`) in place. */
+  setTabLabel(wtPath: string, tabId: string, label: string): void {
+    const tree = this.getTree(wtPath)
+    if (!tree) return
+    const leaf = findLeafByTabId(tree, tabId)
+    if (!leaf) return
+    this.store.dispatch({
+      type: 'terminals/tabLabelChanged',
+      payload: { worktreePath: wtPath, tabId, label }
+    })
+    this.opts.persist(this.buildPersistPayload())
   }
 
   renameTab(wtPath: string, tabId: string, label: string): void {
@@ -605,6 +650,7 @@ export class PanesFSM {
         type: 'json-claude',
         label: sourceActive!.label,
         sessionId,
+        agentKind: sourceActive!.agentKind ?? 'claude',
         mode: 'awake',
         model: sourceActive!.model
       }
