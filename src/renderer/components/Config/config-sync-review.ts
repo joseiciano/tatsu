@@ -3,6 +3,7 @@ import type {
   HarnessConfigChangedRef,
   HarnessConfigComparison,
   HarnessConfigFileRef,
+  HarnessConfigRenderErrorEntry,
   HarnessConfigSyncPlan
 } from '../../../shared/state/harness-config'
 import type {
@@ -47,7 +48,9 @@ function serializeRef(ref: HarnessConfigFileRef): string {
     existsOnDisk: ref.existsOnDisk,
     managed: ref.managed,
     updatedAt: ref.updatedAt,
-    linkedFrom: ref.linkedFrom ?? null
+    linkedFrom: ref.linkedFrom ?? null,
+    templateRef: ref.templateRef ?? null,
+    source: ref.source ?? null
   })
 }
 
@@ -65,12 +68,23 @@ export function configSyncReviewKey(review: ReviewLike): string {
     .sort(compareChangedPair)
     .map((pair) => `${serializeRef(pair.disk)}|${serializeRef(pair.config)}`)
 
+  const shadowed = [...(review.shadowed ?? [])].sort(compareRefByPathThenId).map(serializeRef)
+  const renderErrors = [...(review.renderErrors ?? [])]
+    .sort((left, right) => compareText(left.templateRef, right.templateRef))
+    .map((entry) => ({
+      templateRef: entry.templateRef,
+      message: entry.message,
+      held: [...entry.held].sort(compareRefByPathThenId).map(serializeRef)
+    }))
+
   return JSON.stringify({
     scope: review.scope,
     status: review.status,
     diskOnly,
     configOnly,
-    changed
+    changed,
+    shadowed,
+    renderErrors
   })
 }
 
@@ -86,13 +100,14 @@ export function formatHash(hash: string): { shortLabel: string; fullLabel: strin
   return { shortLabel: `sha256:${hash.slice(0, 12)}`, fullLabel: `sha256:${hash}` }
 }
 
-function toFileRow(ref: HarnessConfigFileRef, sourceLabel: 'Disk' | 'Tatsu config'): ConfigSyncFileRow {
+function toFileRow(ref: HarnessConfigFileRef, side: 'Disk' | 'Tatsu config'): ConfigSyncFileRow {
   const hash = formatHash(ref.hash)
+  const fromTemplate = side === 'Tatsu config' && ref.source === 'template'
   return {
-    key: `${sourceLabel}:${ref.agentKind}:${ref.id}`,
+    key: `${side}:${ref.agentKind}:${ref.id}`,
     ref,
-    sourceLabel,
-    updatedAtLabel: formatUpdatedAt(ref.updatedAt),
+    sourceLabel: fromTemplate ? 'Template' : side,
+    updatedAtLabel: fromTemplate ? `Built from ${ref.templateRef ?? 'a template'}` : formatUpdatedAt(ref.updatedAt),
     hashShortLabel: hash.shortLabel,
     hashFullLabel: hash.fullLabel
   }
@@ -104,11 +119,15 @@ function toFileRow(ref: HarnessConfigFileRef, sourceLabel: 'Disk' | 'Tatsu confi
 export function buildReviewSections(
   diskOnly: readonly HarnessConfigFileRef[],
   configOnly: readonly HarnessConfigFileRef[],
-  changed: readonly HarnessConfigChangedRef[]
+  changed: readonly HarnessConfigChangedRef[],
+  shadowed: readonly HarnessConfigFileRef[] = [],
+  renderErrors: readonly HarnessConfigRenderErrorEntry[] = []
 ): ConfigSyncReviewSections {
   const sortedDiskOnly = [...diskOnly].sort(compareRefByPathThenId)
   const sortedConfigOnly = [...configOnly].sort(compareRefByPathThenId)
   const sortedChanged = [...changed].sort(compareChangedPair)
+  const sortedShadowed = [...shadowed].sort(compareRefByPathThenId)
+  const sortedErrors = [...renderErrors].sort((left, right) => compareText(left.templateRef, right.templateRef))
 
   return {
     diskOnly: sortedDiskOnly.map((ref) => toFileRow(ref, 'Disk')),
@@ -117,6 +136,13 @@ export function buildReviewSections(
       key: `${pair.disk.agentKind}:${pair.disk.id}`,
       disk: toFileRow(pair.disk, 'Disk'),
       config: toFileRow(pair.config, 'Tatsu config')
+    })),
+    shadowed: sortedShadowed.map((ref) => ({ ...toFileRow(ref, 'Tatsu config'), key: `Shadowed:${ref.agentKind}:${ref.id}` })),
+    renderErrors: sortedErrors.map((entry) => ({
+      key: entry.templateRef,
+      templateRef: entry.templateRef,
+      message: entry.message,
+      held: [...entry.held].sort(compareRefByPathThenId).map((ref) => toFileRow(ref, 'Disk'))
     }))
   }
 }
@@ -136,7 +162,13 @@ export function toConfigSyncReview(review: ReviewLike): ConfigSyncReview {
     scope: review.scope,
     scopeKey: harnessConfigScopeKey(review.scope),
     status: review.status,
-    sections: buildReviewSections(review.diskOnly, review.configOnly, review.changed),
+    sections: buildReviewSections(
+      review.diskOnly,
+      review.configOnly,
+      review.changed,
+      review.shadowed,
+      review.renderErrors
+    ),
     reviewKey: configSyncReviewKey(review),
     timestampLabel: formatUpdatedAt(reviewTimestamp(review))
   }

@@ -3,6 +3,7 @@ import { HarnessConfigError, harnessConfigScopeKey, type HarnessConfigService } 
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import type { HarnessTemplateDraft } from '../../shared/harness-templates'
 import type {
+  HarnessConfigAdoptRequest,
   HarnessFragment,
   HarnessTemplate,
   HarnessTemplateHarnessBlock,
@@ -139,6 +140,11 @@ function parseContentString(value: unknown): string {
   return value
 }
 
+function parseBooleanFlag(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') throw new HarnessConfigValidationError(`${field} must be a boolean`)
+  return value
+}
+
 function parseConfirmedFlag(value: unknown): boolean {
   if (typeof value !== 'boolean') throw new HarnessConfigValidationError('confirmed must be a boolean')
   return value
@@ -153,6 +159,18 @@ function parseScopeOnlyRequest(raw: unknown): HarnessConfigScopeRequest {
   const obj = requireObject(raw)
   assertExactKeys(obj, ['scope'])
   return { scope: parseManagedScope(obj.scope) }
+}
+
+function parseAdoptRequest(raw: unknown): HarnessConfigAdoptRequest {
+  const obj = requireObject(raw)
+  if (!('detach' in obj)) {
+    assertExactKeys(obj, ['scope'])
+    return { scope: parseManagedScope(obj.scope) }
+  }
+  assertExactKeys(obj, ['scope', 'detach'])
+  const detach = parseStringList(obj.detach, 'detach')
+  if (detach.some((id) => id.length === 0)) throw new HarnessConfigValidationError('detach ids must be non-empty')
+  return { scope: parseManagedScope(obj.scope), detach }
 }
 
 function parseScopeIdRequest(raw: unknown): HarnessConfigReadRequest {
@@ -468,8 +486,8 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   }
 
   async function handlePlanAdoptFromDisk(raw: unknown): Promise<HarnessConfigSyncPlan> {
-    const { scope } = parseScopeOnlyRequest(raw)
-    const plan = service.planAdoptFromDisk(scope)
+    const { scope, detach } = parseAdoptRequest(raw)
+    const plan = detach ? service.planAdoptFromDisk(scope, { detach }) : service.planAdoptFromDisk(scope)
     bindPlan(plan.planId, {
       mutationChannel: CHANNEL.adoptFromDisk,
       scopeKey: harnessConfigScopeKey(scope),
@@ -528,10 +546,21 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
 
   async function handleSaveTemplate(raw: unknown): Promise<HarnessTemplate> {
     const obj = requireObject(raw)
-    assertExactKeys(obj, ['template', 'confirmed'])
+    assertExactKeys(obj, 'allowShadowing' in obj ? ['template', 'confirmed', 'allowShadowing'] : ['template', 'confirmed'])
     const draft = parseTemplateDraft(obj.template)
     requireConfirmed(obj.confirmed)
-    return requireTemplateSource().saveTemplate(draft)
+    const allowShadowing = 'allowShadowing' in obj ? parseBooleanFlag(obj.allowShadowing, 'allowShadowing') : false
+    const templateSource = requireTemplateSource()
+    // REQ-002: warn before a template hides stored entries at its paths.
+    const shadows = service.templateShadows(draft)
+    if (shadows.length > 0 && !allowShadowing) {
+      const paths = shadows.map((entry) => `${entry.agentKind} ${entry.resourceType} ${entry.relativePath}`)
+      throw new HarnessConfigError(
+        'template-shadows',
+        `This template replaces stored Tatsu config at ${paths.join(', ')}. Save again to confirm.`
+      )
+    }
+    return templateSource.saveTemplate(draft)
   }
 
   async function handleDeleteTemplate(raw: unknown): Promise<{ deleted: true }> {

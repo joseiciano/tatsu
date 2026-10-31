@@ -1,6 +1,11 @@
 import type { Dirent, Stats } from 'fs'
 import type { HarnessConfigResourceType } from '../../shared/agent-registry'
 import type {
+  RenderableFragment,
+  RenderableTemplate,
+  TemplateRenderResult
+} from '../../shared/harness-template-render'
+import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
@@ -14,6 +19,7 @@ import type {
   HarnessConfigRootKey,
   HarnessConfigScope,
   HarnessConfigSyncPlan,
+  HarnessTemplate,
   ManagedHarnessKind
 } from '../../shared/state/harness-config'
 
@@ -112,6 +118,25 @@ export interface HarnessConfigDesiredResource {
   content: string
   hash: string
   updatedAt: number
+  /** Set only on entries rendered from a template; never persisted. */
+  source?: 'template'
+  templateRef?: string
+}
+
+export interface HarnessConfigTemplateSource {
+  templates: readonly (RenderableTemplate & { hash?: string })[]
+  fragments: readonly (RenderableFragment & { hash?: string })[]
+  errors?: readonly { relativePath: string; message: string }[]
+}
+
+export interface HarnessConfigShadowedEntry {
+  agentKind: ManagedHarnessKind
+  resourceType: HarnessConfigResourceType
+  relativePath: string
+}
+
+export interface HarnessConfigAdoptOptions {
+  detach?: readonly string[]
 }
 
 /** Local alias kept so existing main-side call sites don't need to
@@ -143,6 +168,13 @@ export interface HarnessConfigServiceDeps {
     scope: HarnessConfigScope,
     resources: HarnessConfigDesiredResource[]
   ) => void | Promise<void>
+  loadTemplateSource?: () => HarnessConfigTemplateSource
+  render?: (
+    templates: readonly RenderableTemplate[],
+    fragments: readonly RenderableFragment[]
+  ) => TemplateRenderResult
+  /** Removes `agentKind` from the template's targets (adopt "Detach"). */
+  detachTemplateTarget?: (templateRef: string, agentKind: ManagedHarnessKind) => void | Promise<void>
   filesystem?: HarnessConfigFilesystem
   log?: (category: string, message: string, data?: unknown) => void
   formatErr?: (error: unknown) => string
@@ -153,7 +185,7 @@ export interface HarnessConfigService {
   readFile(id: string): HarnessConfigReadResult
   planSync(scope: HarnessConfigScope): HarnessConfigComparison
   planSyncToDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan
-  planAdoptFromDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan
+  planAdoptFromDisk(scope: HarnessConfigScope, options?: HarnessConfigAdoptOptions): HarnessConfigSyncPlan
   prepareCreate(scope: HarnessConfigScope, name: string, content: string): HarnessConfigMutationPlan
   prepareUpdate(scope: HarnessConfigScope, id: string, content: string): HarnessConfigMutationPlan
   prepareDelete(scope: HarnessConfigScope, id: string): HarnessConfigMutationPlan
@@ -162,4 +194,8 @@ export interface HarnessConfigService {
   applyPlan(request: HarnessConfigApplyRequest): Promise<HarnessConfigApplyResult>
   defaultRoots(): Record<HarnessConfigRootKey, string>
   scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[]
+  /** Supported scopes that a template's output lands in, aliases included. */
+  scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[]
+  /** Stored entries this template would hide if saved (REQ-002). */
+  templateShadows(template: RenderableTemplate): HarnessConfigShadowedEntry[]
 }

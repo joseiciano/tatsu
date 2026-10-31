@@ -289,3 +289,30 @@ describe('decideFreshPlanOutcome', () => {
     expect(decideFreshPlanOutcome(displayedKey, matchingPlan)).toBe('apply-fresh-plan')
   })
 })
+
+describe('template sync review fields (Step 20)', () => {
+  it('keys on template source, shadowed entries, and render errors but not the detach list', () => {
+    const base = comparison({ configOnly: [ref({ id: 'a', source: 'template', templateRef: 'skill/one' })] })
+    const baseKey = configSyncReviewKey(base)
+    expect(configSyncReviewKey(comparison({ configOnly: [ref({ id: 'a' })] }))).not.toBe(baseKey)
+    expect(configSyncReviewKey({ ...base, shadowed: [ref({ id: 'a' })] })).not.toBe(baseKey)
+    expect(
+      configSyncReviewKey({ ...base, renderErrors: [{ templateRef: 'skill/two', message: 'x', held: [] }] })
+    ).not.toBe(baseKey)
+    expect(configSyncReviewKey(plan({ ...base, direction: 'adopt-from-disk', detach: ['a'] }))).toBe(baseKey)
+  })
+
+  it('labels template rows by their template instead of a modified time', () => {
+    const sections = buildReviewSections(
+      [],
+      [ref({ id: 'a', source: 'template', templateRef: 'skill/one', updatedAt: 0 })],
+      [],
+      [ref({ id: 'a' })],
+      [{ templateRef: 'skill/two', message: 'Unknown fragment: x', held: [ref({ id: 'held' })] }]
+    )
+    expect(sections.configOnly[0]).toMatchObject({ sourceLabel: 'Template', updatedAtLabel: 'Built from skill/one' })
+    expect(sections.shadowed[0]).toMatchObject({ sourceLabel: 'Tatsu config', key: 'Shadowed:claude:a' })
+    expect(sections.renderErrors[0]).toMatchObject({ templateRef: 'skill/two', message: 'Unknown fragment: x' })
+    expect(sections.renderErrors[0].held[0].sourceLabel).toBe('Disk')
+  })
+})

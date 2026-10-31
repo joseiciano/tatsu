@@ -58,6 +58,14 @@ describe('mergeWireSnapshot', () => {
     expect(merged.runtimes.byAgent.opencode).toEqual({ state: 'ready', version: '1.18.14' })
   })
 
+  it('fills templateSyncNotice when an older server omits it', () => {
+    const { templateSyncNotice: _omitted, ...older } = initialState.harnessConfig
+    void _omitted
+    const wire = { harnessConfig: older } as unknown as WireSnapshotState
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.harnessConfig.templateSyncNotice).toBeNull()
+  })
+
   it('preserves partial harness config snapshots while filling omitted fields', () => {
     const serverResources = {
       agents: [],

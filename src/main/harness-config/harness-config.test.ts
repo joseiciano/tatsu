@@ -70,6 +70,8 @@ type Comparison = {
   diskOnly: FileRef[]
   configOnly: FileRef[]
   changed: AnyRecord[]
+  shadowed?: FileRef[]
+  renderErrors?: Array<{ templateRef: string; message: string; held: FileRef[] }>
 }
 type Plan = Comparison & {
   planId: string
@@ -2038,5 +2040,290 @@ describe('harness-config template provenance', () => {
 
     const commands = fixture.service.scan({ agentKind: 'opencode', resourceType: 'commands' })
     expect(commands.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([['fix-ci.md', 'command/fix-ci']])
+  })
+})
+
+describe('harness-config template sync', () => {
+  type TemplateSeed = Parameters<typeof renderTemplates>[0][number] & { hash?: string }
+  type FragmentSeed = { name: string; content: string; hash?: string }
+  type TemplateFixture = Fixture & {
+    roots: Record<string, string>
+    source: { templates: TemplateSeed[]; fragments: FragmentSeed[]; errors: { relativePath: string; message: string }[] }
+    detach: ReturnType<typeof vi.fn>
+  }
+
+  const claudeAgents: Scope = { agentKind: 'claude', resourceType: 'agents' }
+  const opencodeAgents: Scope = { agentKind: 'opencode', resourceType: 'agents' }
+
+  function agentTemplate(overrides: Partial<TemplateSeed> = {}): TemplateSeed {
+    return {
+      kind: 'agent',
+      name: 'reviewer',
+      description: 'Reviews code',
+      fragments: [],
+      body: 'Review the diff.',
+      harnesses: { claude: { frontmatter: {} }, opencode: { frontmatter: { mode: 'subagent' } } },
+      references: [],
+      ...overrides
+    }
+  }
+
+  function makeTemplateFixture(options: { desired?: DesiredResource[]; deps?: AnyRecord } = {}): TemplateFixture {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-template-sync-'))
+    const roots: Record<string, string> = {}
+    for (const key of ['claudeAgents', 'claudeSkills', 'claudeCommands', 'opencodeAgents']) {
+      roots[key] = join(fixtureRoot, key)
+      mkdirSync(roots[key], { recursive: true })
+    }
+    const source: TemplateFixture['source'] = { templates: [], fragments: [], errors: [] }
+    const detach = vi.fn()
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots,
+      desired: options.desired,
+      deps: {
+        homeDir: join(fixtureRoot, 'home'),
+        env: { HOME: join(fixtureRoot, 'home') },
+        loadTemplateSource: () => ({ templates: source.templates, fragments: source.fragments, errors: source.errors }),
+        detachTemplateTarget: detach,
+        ...options.deps
+      }
+    })
+    return { ...fixture, roots, source, detach }
+  }
+
+  function setTemplates(fixture: TemplateFixture, templates: TemplateSeed[], fragments = fixture.source.fragments): void {
+    fixture.source.templates = [...templates]
+    fixture.source.fragments = [...fragments]
+  }
+
+  function renderedFor(fixture: TemplateFixture, agentKind: string): { relativePath: string; content: string } {
+    const { resources } = renderTemplates(fixture.source.templates, fixture.source.fragments)
+    const resource = resources.find((entry) => entry.agentKind === agentKind)
+    if (!resource) throw new Error(`no ${agentKind} output`)
+    return resource
+  }
+
+  async function syncScope(fixture: TemplateFixture, scope: Scope): Promise<void> {
+    const plan = fixture.service.planSyncToDisk(scope)
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+  }
+
+  it('reports each targeted scope as config-only until that scope is synced (TEST-001)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+
+    for (const scope of [claudeAgents, opencodeAgents]) {
+      const comparison = fixture.service.planSync(scope)
+      expect(comparison.status).toBe('config-only')
+      expect(comparison.configOnly).toHaveLength(1)
+      expect(comparison.configOnly[0]).toMatchObject({
+        relativePath: 'reviewer.md',
+        source: 'template',
+        templateRef: 'agent/reviewer'
+      })
+    }
+
+    await syncScope(fixture, claudeAgents)
+    expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+    expect(fixture.service.planSync(opencodeAgents).status).toBe('config-only')
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+    expect(fixture.desired.replaceDesiredScope).not.toHaveBeenCalled()
+
+    await syncScope(fixture, opencodeAgents)
+    expect(fixture.service.planSync(opencodeAgents).status).toBe('synced')
+  })
+
+  it('shows a Claude skill template in the commands alias scope without planning a delete', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate({ kind: 'skill', name: 'deploy', harnesses: { claude: { frontmatter: {} } } })])
+    await syncScope(fixture, { agentKind: 'claude', resourceType: 'skills' })
+    const commands = fixture.service.planSync({ agentKind: 'claude', resourceType: 'commands' })
+    expect(commands.status).toBe('synced')
+    expect(fixture.service.scan({ agentKind: 'claude', resourceType: 'commands' })[0]).toMatchObject({
+      relativePath: 'deploy/SKILL.md',
+      managed: true
+    })
+  })
+
+  it('lets template output shadow a stored entry at the same path (REQ-002)', () => {
+    const id = physicalId('claude', 'claudeAgents', 'reviewer.md')
+    const stored = refToDesired({ id, agentKind: 'claude', relativePath: 'reviewer.md', resourceType: 'agents' }, 'stored text')
+    const fixture = makeTemplateFixture({ desired: [stored] })
+    expect(fixture.service.planSync(claudeAgents).shadowed).toBeUndefined()
+
+    expect(
+      (fixture.service as unknown as HarnessConfigService).templateShadows(agentTemplate())
+    ).toEqual([{ agentKind: 'claude', resourceType: 'agents', relativePath: 'reviewer.md' }])
+
+    setTemplates(fixture, [agentTemplate()])
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.configOnly).toHaveLength(1)
+    expect(comparison.configOnly[0]).toMatchObject({ id, source: 'template' })
+    expect(comparison.configOnly[0].hash).toBe(hashBytes(renderedFor(fixture, 'claude').content))
+    expect(comparison.shadowed).toHaveLength(1)
+    expect(comparison.shadowed?.[0]).toMatchObject({ id, hash: stored.hash })
+    expect(comparison.shadowed?.[0]).not.toHaveProperty('source')
+  })
+
+  it('makes pending plans in every dependent scope stale when a shared fragment changes (TEST-002)', async () => {
+    const fixture = makeTemplateFixture()
+    const fragment = { name: 'tone', content: 'Be brief.', hash: 'tone-1' }
+    setTemplates(fixture, [agentTemplate({ fragments: ['tone'] })], [fragment])
+    const plans = [claudeAgents, opencodeAgents].map((scope) => fixture.service.planSyncToDisk(scope))
+
+    setTemplates(fixture, fixture.source.templates, [{ ...fragment, content: 'Be very brief.', hash: 'tone-2' }])
+    for (const plan of plans) {
+      await rejectsCode(
+        () => fixture.service.applyPlan({ scope: plan.scope, planId: plan.planId, confirmed: true }),
+        'stale-plan'
+      )
+    }
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(false)
+  })
+
+  it('makes pending plans stale when the renderer version changes (TEST-003)', async () => {
+    let version = 2
+    const fixture = makeTemplateFixture({
+      deps: {
+        render: (templates: TemplateSeed[], fragments: FragmentSeed[]) => ({
+          ...renderTemplates(templates, fragments),
+          rendererVersion: version
+        })
+      }
+    })
+    setTemplates(fixture, [agentTemplate()])
+    const plan = fixture.service.planSyncToDisk(claudeAgents)
+    const adopt = fixture.service.planAdoptFromDisk(opencodeAgents)
+    version = 3
+    setTemplates(fixture, fixture.source.templates)
+    await rejectsCode(() => fixture.service.applyPlan({ scope: claudeAgents, planId: plan.planId, confirmed: true }), 'stale-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope: opencodeAgents, planId: adopt.planId, confirmed: true }), 'stale-plan')
+  })
+
+  it('keeps the template on adopt by default and stores disk content only on detach (TEST-004)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.changed).toHaveLength(1)
+    const templateId = (comparison.changed[0].config as FileRef).id
+
+    const keep = fixture.service.planAdoptFromDisk(claudeAgents)
+    expect(keep).not.toHaveProperty('detach')
+    await fixture.service.applyPlan({ scope: claudeAgents, planId: keep.planId, confirmed: true })
+    expect(fixture.detach).not.toHaveBeenCalled()
+    expect(fixture.desired.resources.map((resource) => resource.relativePath)).toEqual(['manual.md'])
+    expect(fixture.service.planSync(claudeAgents).changed).toHaveLength(1)
+
+    const detach = (fixture.service as unknown as HarnessConfigService).planAdoptFromDisk(claudeAgents as never, {
+      detach: [templateId]
+    })
+    expect(detach.detach).toEqual([templateId])
+    const result = await fixture.service.applyPlan({ scope: claudeAgents, planId: detach.planId, confirmed: true })
+    expect(fixture.detach).toHaveBeenCalledWith('agent/reviewer', 'claude')
+    expect(result.applied).toEqual([
+      { type: 'adopt' },
+      { type: 'detach', id: templateId, relativePath: 'reviewer.md' }
+    ])
+    const stored = fixture.desired.resources.find((resource) => resource.id === templateId)
+    expect(stored?.content).toBe('hand edited')
+    expect(stored).not.toHaveProperty('source')
+  })
+
+  it('rejects detaching a resource that is not template-built', async () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    const id = physicalId('claude', 'claudeAgents', 'manual.md')
+    await rejectsCode(
+      () => (fixture.service as unknown as HarnessConfigService).planAdoptFromDisk(claudeAgents as never, { detach: [id] }),
+      'unknown-resource'
+    )
+  })
+
+  it('holds earlier output of a template with a render error instead of deleting it (TEST-005)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [agentTemplate({ fragments: ['missing'] })])
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.status).toBe('conflict')
+    expect(comparison.diskOnly).toEqual([])
+    expect(comparison.renderErrors).toEqual([
+      expect.objectContaining({ templateRef: 'agent/reviewer', message: expect.stringContaining('missing') })
+    ])
+    expect(comparison.renderErrors?.[0].held.map((ref) => ref.relativePath)).toEqual(['reviewer.md'])
+
+    const opencode = fixture.service.planSync(opencodeAgents)
+    expect(opencode.renderErrors?.[0].templateRef).toBe('agent/reviewer')
+    expect(opencode.configOnly).toEqual([])
+
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(true)
+
+    const adopt = fixture.service.planAdoptFromDisk(claudeAgents)
+    await fixture.service.applyPlan({ scope: claudeAgents, planId: adopt.planId, confirmed: true })
+    expect(fixture.desired.resources).toEqual([])
+  })
+
+  it('holds earlier output of a template whose file no longer parses (REQ-007)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [])
+    fixture.source.errors = [{ relativePath: 'agents/reviewer.md', message: 'Invalid frontmatter' }]
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.status).toBe('conflict')
+    expect(comparison.diskOnly).toEqual([])
+    expect(comparison.renderErrors).toEqual([
+      expect.objectContaining({ templateRef: 'agent/reviewer', message: 'Invalid frontmatter' })
+    ])
+    expect(comparison.renderErrors?.[0].held.map((ref) => ref.relativePath)).toEqual(['reviewer.md'])
+    expect(fixture.service.planSync(opencodeAgents).renderErrors).toBeUndefined()
+
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(true)
+  })
+
+  it('keeps a stored entry shadowed by a kept template when adopting (REQ-002)', async () => {
+    const id = physicalId('claude', 'claudeAgents', 'reviewer.md')
+    const stored = refToDesired({ id, agentKind: 'claude', relativePath: 'reviewer.md', resourceType: 'agents' }, 'stored text')
+    const fixture = makeTemplateFixture({ desired: [stored] })
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+
+    const keep = fixture.service.planAdoptFromDisk(claudeAgents)
+    await fixture.service.applyPlan({ scope: claudeAgents, planId: keep.planId, confirmed: true })
+    const kept = fixture.desired.resources.find((resource) => resource.id === id)
+    expect(kept?.content).toBe('stored text')
+  })
+
+  it('backs up an existing file before syncing template output over it (TEST-006)', async () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'old reviewer')
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    const backups = backupFiles(fixture.roots.claudeAgents)
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(fixture.roots.claudeAgents, backups[0]), 'utf8')).toBe('old reviewer')
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+  })
+
+  it('lists the scopes a template lands in, including the Claude commands alias', () => {
+    const fixture = makeTemplateFixture()
+    const scopes = (fixture.service as unknown as HarnessConfigService).scopesForTemplates([
+      { kind: 'skill', harnesses: { claude: { frontmatter: {} } } },
+      { kind: 'agent', harnesses: { opencode: { frontmatter: {} }, claude: false } }
+    ])
+    expect(scopes.map((scope) => `${scope.agentKind}:${scope.resourceType}`).sort()).toEqual([
+      'claude:commands',
+      'claude:skills',
+      'opencode:agents'
+    ])
   })
 })
