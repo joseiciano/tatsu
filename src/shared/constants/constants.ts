@@ -11,6 +11,7 @@ export const HARNESS_SITE_RELEASES_URL = `${HARNESS_SITE_URL}/releases.html`
 export const ENABLE_COST = false
 export const ENABLE_TIMELINE = false
 export const ENABLE_MY_WEEK = false
+export const ENABLE_NOTIFICATION_CENTER = true
 
 export function harnessReleaseNotesUrl(version: string): string {
   const v = version.startsWith('v') ? version : `v${version}`
