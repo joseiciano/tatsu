@@ -288,6 +288,8 @@ export function buildBackend(
     setThemeDark: (theme: string) => req('config:setThemeDark', theme),
     setLastEffectiveAppBg: (hex: string) => sig('config:setLastEffectiveAppBg', hex),
     reloadCustomThemes: () => req('config:reloadCustomThemes'),
+    reloadWorkflowDefinitions: () => req('workflows:reloadDefinitions'),
+    getWorkflowDefinition: (id: string) => req('workflows:getDefinition', id),
     openThemesFolder: () => reqLocal('config:openThemesFolder'),
     setCostsInterest: (expanded: boolean) => req('costs:setInterest', expanded),
     getAllSessionCosts: (sinceMs?: number) => req('costs:getAllSessions', sinceMs),

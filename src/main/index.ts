@@ -94,6 +94,8 @@ import { writeMcpConfigForTerminal, pruneMcpConfigs, harnessMcpServerSpec } from
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
+import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
+import { registerWorkflowsRequestHandlers } from './workflows-transport'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
@@ -293,6 +295,15 @@ try {
 } catch (err) {
   log('themes', `initial scan failed: ${(err as Error).message}`)
 }
+const workflowDefsLoader = createWorkflowDefsLoader({
+  dir: workflowsDir(),
+  dispatch: (event) => store.dispatch(event)
+})
+try {
+  workflowDefsLoader.reload()
+} catch {
+  log('workflow', 'initial scan failed')
+}
 const perfMonitor = new PerfMonitor()
 setGitHubApiRecorder(() => perfMonitor.recordGitHubApiCall())
 setGitHubApiLoggingEnabled(config.expandedDiagnosticLoggingEnabled === true)
@@ -444,6 +455,7 @@ const harnessConfigService = createHarnessConfigService({
   replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)
 })
 registerHarnessConfigRequestHandlers({ transport, store, service: harnessConfigService })
+registerWorkflowsRequestHandlers({ transport, loader: workflowDefsLoader })
 
 // Tails Claude Code session jsonl transcripts on Stop hook events,
 // sums per-model usage, and dispatches costs/usageUpdated. See
