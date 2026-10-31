@@ -786,3 +786,117 @@ describe('registerHarnessConfigRequestHandlers', () => {
     })
   })
 })
+
+describe('template source channels', () => {
+  const TEMPLATE = {
+    kind: 'agent',
+    name: 'reviewer',
+    description: 'Reviews code',
+    fragments: ['style'],
+    body: 'Body',
+    harnesses: { claude: { frontmatter: { model: 'opus' }, name: 'code-reviewer' }, codex: false },
+    references: []
+  }
+
+  function setupTemplates(overrides: Record<string, unknown> = {}) {
+    const transport = new FakeTransport()
+    const store = new FakeStore()
+    const templateSource = {
+      saveTemplate: vi.fn((draft) => ({ ...draft, relativePath: 'agents/reviewer.md', hash: 'h' })),
+      deleteTemplate: vi.fn(),
+      saveFragment: vi.fn((name: string, content: string) => ({
+        name,
+        content,
+        relativePath: `fragments/${name}.md`,
+        hash: 'h'
+      })),
+      deleteFragment: vi.fn(),
+      ...overrides
+    }
+    registerHarnessConfigRequestHandlers({
+      transport,
+      store,
+      service: createFakeService(),
+      templateSource,
+      log: vi.fn(),
+      formatErr: vi.fn()
+    })
+    return { transport, store, templateSource }
+  }
+
+  it('saveTemplate passes a validated draft to the template source', async () => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call('harnessConfig:saveTemplate', { template: TEMPLATE, confirmed: true })) as {
+      ok: boolean
+      value: { relativePath: string }
+    }
+    expect(result.ok).toBe(true)
+    expect(result.value.relativePath).toBe('agents/reviewer.md')
+    expect(templateSource.saveTemplate).toHaveBeenCalledWith(TEMPLATE)
+  })
+
+  it.each([
+    ['saveTemplate', { template: TEMPLATE, confirmed: false }],
+    ['deleteTemplate', { kind: 'agent', name: 'reviewer', confirmed: false }],
+    ['saveFragment', { name: 'style', content: 'x', confirmed: false }],
+    ['deleteFragment', { name: 'style', confirmed: false }]
+  ])('%s requires an explicit confirmation', async (channel, payload) => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call(`harnessConfig:${channel}`, payload)) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unconfirmed-plan' }) })
+    for (const fn of Object.values(templateSource)) expect(fn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['an unknown kind', { template: { ...TEMPLATE, kind: 'workflow' }, confirmed: true }],
+    ['an unknown harness', { template: { ...TEMPLATE, harnesses: { pi: false } }, confirmed: true }],
+    ['a block without frontmatter', { template: { ...TEMPLATE, harnesses: { claude: {} } }, confirmed: true }],
+    ['an extra field', { template: TEMPLATE, confirmed: true, force: true }],
+    ['a missing field', { template: { ...TEMPLATE, body: undefined }, confirmed: true }]
+  ])('saveTemplate rejects %s', async (_label, payload) => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call('harnessConfig:saveTemplate', payload)) as { ok: boolean; error: { code: string } }
+    expect(result.ok).toBe(false)
+    expect(result.error.code).toBe('invalid-request')
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('surfaces invalid target errors from the template source', async () => {
+    const { transport, store } = setupTemplates({
+      saveTemplate: vi.fn(() => {
+        throw new HarnessConfigError('invalid-target', 'Codex agents are one AGENTS.md file')
+      })
+    })
+    const result = await transport.call('harnessConfig:saveTemplate', { template: TEMPLATE, confirmed: true })
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'invalid-target', message: 'Codex agents are one AGENTS.md file' }
+    })
+    expect(store.eventsOfType('harnessConfig/errorChanged').at(-1)).toEqual({
+      type: 'harnessConfig/errorChanged',
+      payload: 'Codex agents are one AGENTS.md file'
+    })
+  })
+
+  it('deleteTemplate, saveFragment, and deleteFragment call through when confirmed', async () => {
+    const { transport, templateSource } = setupTemplates()
+    expect(await transport.call('harnessConfig:deleteTemplate', { kind: 'skill', name: 'x', confirmed: true })).toEqual({
+      ok: true,
+      value: { deleted: true }
+    })
+    expect(templateSource.deleteTemplate).toHaveBeenCalledWith('skill', 'x')
+    await transport.call('harnessConfig:saveFragment', { name: 'style', content: 'Be brief.', confirmed: true })
+    expect(templateSource.saveFragment).toHaveBeenCalledWith('style', 'Be brief.')
+    await transport.call('harnessConfig:deleteFragment', { name: 'style', confirmed: true })
+    expect(templateSource.deleteFragment).toHaveBeenCalledWith('style')
+  })
+
+  it('reports an unavailable template source when none is wired', async () => {
+    const { transport } = setup()
+    const result = await transport.call('harnessConfig:saveFragment', { name: 'style', content: 'x', confirmed: true })
+    expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unsupported-scope' }) })
+  })
+})

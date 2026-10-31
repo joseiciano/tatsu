@@ -49,7 +49,11 @@ import type {
   HarnessConfigPrepareUpdateRequest,
   HarnessConfigReadRequest,
   HarnessConfigScopeRequest,
-  HarnessConfigSetRootRequest
+  HarnessConfigSetRootRequest,
+  HarnessFragmentDeleteRequest,
+  HarnessFragmentSaveRequest,
+  HarnessTemplateDeleteRequest,
+  HarnessTemplateSaveRequest
 } from '../types'
 
 export type { ElectronOnlyHelpers }
@@ -623,7 +627,13 @@ export function buildBackend(
     prepareHarnessConfigCommandFromSkill: (request: HarnessConfigConversionRequest) =>
       req('harnessConfig:prepareCommandFromSkill', request),
     prepareHarnessConfigSkillFromCommand: (request: HarnessConfigConversionRequest) =>
-      req('harnessConfig:prepareSkillFromCommand', request)
+      req('harnessConfig:prepareSkillFromCommand', request),
+    saveHarnessTemplate: (request: HarnessTemplateSaveRequest) => req('harnessConfig:saveTemplate', request),
+    deleteHarnessTemplate: (request: HarnessTemplateDeleteRequest) =>
+      req('harnessConfig:deleteTemplate', request),
+    saveHarnessFragment: (request: HarnessFragmentSaveRequest) => req('harnessConfig:saveFragment', request),
+    deleteHarnessFragment: (request: HarnessFragmentDeleteRequest) =>
+      req('harnessConfig:deleteFragment', request)
   }
 
   return api as ElectronAPI

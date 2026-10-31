@@ -36,7 +36,13 @@ import type {
   HarnessConfigScope,
   HarnessConfigScopeRequest,
   HarnessConfigSetRootRequest,
-  HarnessConfigSyncPlan
+  HarnessConfigSyncPlan,
+  HarnessFragment,
+  HarnessFragmentDeleteRequest,
+  HarnessFragmentSaveRequest,
+  HarnessTemplate,
+  HarnessTemplateDeleteRequest,
+  HarnessTemplateSaveRequest
 } from '../../shared/state/harness-config'
 export type {
   HarnessConfigApplyRequest,
@@ -57,7 +63,13 @@ export type {
   HarnessConfigScope,
   HarnessConfigScopeRequest,
   HarnessConfigSetRootRequest,
-  HarnessConfigSyncPlan
+  HarnessConfigSyncPlan,
+  HarnessFragment,
+  HarnessFragmentDeleteRequest,
+  HarnessFragmentSaveRequest,
+  HarnessTemplate,
+  HarnessTemplateDeleteRequest,
+  HarnessTemplateSaveRequest
 }
 
 /** Per-kind dirtiness flags for a worktree. `git` reflects
@@ -684,6 +696,14 @@ export interface ElectronAPI {
   prepareHarnessConfigSkillFromCommand(
     request: HarnessConfigConversionRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
+  saveHarnessTemplate(request: HarnessTemplateSaveRequest): Promise<HarnessConfigRequestResult<HarnessTemplate>>
+  deleteHarnessTemplate(
+    request: HarnessTemplateDeleteRequest
+  ): Promise<HarnessConfigRequestResult<{ deleted: true }>>
+  saveHarnessFragment(request: HarnessFragmentSaveRequest): Promise<HarnessConfigRequestResult<HarnessFragment>>
+  deleteHarnessFragment(
+    request: HarnessFragmentDeleteRequest
+  ): Promise<HarnessConfigRequestResult<{ deleted: true }>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the

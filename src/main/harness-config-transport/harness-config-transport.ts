@@ -1,7 +1,14 @@
 import { toAgentKind } from '../agent-kind'
 import { HarnessConfigError, harnessConfigScopeKey, type HarnessConfigService } from '../harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
+import type { HarnessTemplateDraft } from '../../shared/harness-templates'
 import type {
+  HarnessFragment,
+  HarnessTemplate,
+  HarnessTemplateHarnessBlock,
+  HarnessTemplateHarnesses,
+  HarnessTemplateKind,
+  HarnessTemplateReference,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
@@ -38,10 +45,18 @@ export interface HarnessConfigStoreLike {
   dispatch(event: HarnessConfigEvent): void
 }
 
+export interface HarnessTemplateSourceLike {
+  saveTemplate(draft: HarnessTemplateDraft): HarnessTemplate
+  deleteTemplate(kind: HarnessTemplateKind, name: string): void
+  saveFragment(name: string, content: string): HarnessFragment
+  deleteFragment(name: string): void
+}
+
 export interface RegisterHarnessConfigRequestHandlersDeps {
   transport: HarnessConfigTransportLike
   store: HarnessConfigStoreLike
   service: HarnessConfigService
+  templateSource?: HarnessTemplateSourceLike
   now?: () => number
   log?: (category: string, message: string, data?: unknown) => void
   formatErr?: (error: unknown) => string
@@ -51,6 +66,7 @@ const MAX_LIVE_BINDINGS = 64
 
 const MANAGED_AGENT_KINDS: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
 const RESOURCE_TYPES: readonly HarnessConfigResourceType[] = ['agents', 'skills', 'commands']
+const TEMPLATE_KINDS: readonly HarnessTemplateKind[] = ['agent', 'skill', 'command']
 
 const CHANNEL = {
   scan: 'harnessConfig:scan',
@@ -67,7 +83,11 @@ const CHANNEL = {
   syncToDisk: 'harnessConfig:syncToDisk',
   adoptFromDisk: 'harnessConfig:adoptFromDisk',
   prepareCommandFromSkill: 'harnessConfig:prepareCommandFromSkill',
-  prepareSkillFromCommand: 'harnessConfig:prepareSkillFromCommand'
+  prepareSkillFromCommand: 'harnessConfig:prepareSkillFromCommand',
+  saveTemplate: 'harnessConfig:saveTemplate',
+  deleteTemplate: 'harnessConfig:deleteTemplate',
+  saveFragment: 'harnessConfig:saveFragment',
+  deleteFragment: 'harnessConfig:deleteFragment'
 } as const
 
 type MutationChannel =
@@ -168,6 +188,79 @@ function parseMutationRequest(raw: unknown): HarnessConfigApplyRequest {
     scope: parseManagedScope(obj.scope),
     planId: parseNonEmptyString(obj.planId, 'planId'),
     confirmed: parseConfirmedFlag(obj.confirmed)
+  }
+}
+
+function parseStringList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+    throw new HarnessConfigValidationError(`${field} must be a list of names`)
+  }
+  return [...value]
+}
+
+function parseTemplateKind(value: unknown): HarnessTemplateKind {
+  if (typeof value !== 'string' || !TEMPLATE_KINDS.includes(value as HarnessTemplateKind)) {
+    throw new HarnessConfigValidationError('kind must be agent, skill, or command')
+  }
+  return value as HarnessTemplateKind
+}
+
+function parseHarnessBlock(value: unknown, harness: string): HarnessTemplateHarnessBlock | false {
+  if (value === false) return false
+  if (!isPlainObject(value)) throw new HarnessConfigValidationError(`harnesses.${harness} must be an object or false`)
+  const allowed = ['frontmatter', 'name', 'fragments']
+  if (Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new HarnessConfigValidationError(`harnesses.${harness} has unexpected fields`)
+  }
+  if (!isPlainObject(value.frontmatter)) {
+    throw new HarnessConfigValidationError(`harnesses.${harness}.frontmatter must be an object`)
+  }
+  const block: HarnessTemplateHarnessBlock = { frontmatter: { ...value.frontmatter } }
+  if (value.name !== undefined) block.name = parseNonEmptyString(value.name, `harnesses.${harness}.name`)
+  if (value.fragments !== undefined) block.fragments = parseStringList(value.fragments, `harnesses.${harness}.fragments`)
+  return block
+}
+
+function parseHarnesses(value: unknown): HarnessTemplateHarnesses {
+  if (!isPlainObject(value)) throw new HarnessConfigValidationError('harnesses must be an object')
+  const harnesses: HarnessTemplateHarnesses = {}
+  for (const [key, block] of Object.entries(value)) {
+    if (!MANAGED_AGENT_KINDS.includes(key as ManagedHarnessKind)) {
+      throw new HarnessConfigValidationError(`harnesses.${key} is not a managed harness`)
+    }
+    harnesses[key as ManagedHarnessKind] = parseHarnessBlock(block, key)
+  }
+  return harnesses
+}
+
+function parseReferences(value: unknown): HarnessTemplateReference[] {
+  if (!Array.isArray(value)) throw new HarnessConfigValidationError('references must be a list')
+  return value.map((entry) => {
+    if (!isPlainObject(entry)) throw new HarnessConfigValidationError('Each reference must be an object')
+    assertExactKeys(entry, ['fileName', 'content'])
+    return { fileName: parseNonEmptyString(entry.fileName, 'fileName'), content: parseContentString(entry.content) }
+  })
+}
+
+function parseTemplateDraft(raw: unknown): HarnessTemplateDraft {
+  if (!isPlainObject(raw)) throw new HarnessConfigValidationError('template must be an object')
+  assertExactKeys(raw, ['kind', 'name', 'description', 'fragments', 'body', 'harnesses', 'references'])
+  if (typeof raw.description !== 'string') throw new HarnessConfigValidationError('description must be a string')
+  if (typeof raw.body !== 'string') throw new HarnessConfigValidationError('body must be a string')
+  return {
+    kind: parseTemplateKind(raw.kind),
+    name: parseNonEmptyString(raw.name, 'name'),
+    description: raw.description,
+    fragments: parseStringList(raw.fragments, 'fragments'),
+    body: raw.body,
+    harnesses: parseHarnesses(raw.harnesses),
+    references: parseReferences(raw.references)
+  }
+}
+
+function requireConfirmed(value: unknown): void {
+  if (parseConfirmedFlag(value) !== true) {
+    throw new HarnessConfigError('unconfirmed-plan', 'The change was not explicitly confirmed')
   }
 }
 
@@ -426,6 +519,49 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     }
   }
 
+  function requireTemplateSource(): HarnessTemplateSourceLike {
+    if (!deps.templateSource) {
+      throw new HarnessConfigError('unsupported-scope', 'The template source folder is unavailable')
+    }
+    return deps.templateSource
+  }
+
+  async function handleSaveTemplate(raw: unknown): Promise<HarnessTemplate> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['template', 'confirmed'])
+    const draft = parseTemplateDraft(obj.template)
+    requireConfirmed(obj.confirmed)
+    return requireTemplateSource().saveTemplate(draft)
+  }
+
+  async function handleDeleteTemplate(raw: unknown): Promise<{ deleted: true }> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['kind', 'name', 'confirmed'])
+    const kind = parseTemplateKind(obj.kind)
+    const name = parseNonEmptyString(obj.name, 'name')
+    requireConfirmed(obj.confirmed)
+    requireTemplateSource().deleteTemplate(kind, name)
+    return { deleted: true }
+  }
+
+  async function handleSaveFragment(raw: unknown): Promise<HarnessFragment> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['name', 'content', 'confirmed'])
+    const name = parseNonEmptyString(obj.name, 'name')
+    const content = parseContentString(obj.content)
+    requireConfirmed(obj.confirmed)
+    return requireTemplateSource().saveFragment(name, content)
+  }
+
+  async function handleDeleteFragment(raw: unknown): Promise<{ deleted: true }> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['name', 'confirmed'])
+    const name = parseNonEmptyString(obj.name, 'name')
+    requireConfirmed(obj.confirmed)
+    requireTemplateSource().deleteFragment(name)
+    return { deleted: true }
+  }
+
   const register = (name: string, handler: (raw: unknown) => Promise<unknown>): void => {
     transport.onRequest(name, (_ctx, payload) => withLifecycle(() => handler(payload)))
   }
@@ -445,4 +581,8 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   register(CHANNEL.adoptFromDisk, makeApplyHandler(CHANNEL.adoptFromDisk))
   register(CHANNEL.prepareCommandFromSkill, handlePrepareCommandFromSkill)
   register(CHANNEL.prepareSkillFromCommand, handlePrepareSkillFromCommand)
+  register(CHANNEL.saveTemplate, handleSaveTemplate)
+  register(CHANNEL.deleteTemplate, handleDeleteTemplate)
+  register(CHANNEL.saveFragment, handleSaveFragment)
+  register(CHANNEL.deleteFragment, handleDeleteFragment)
 }

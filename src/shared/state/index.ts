@@ -195,7 +195,13 @@ export type {
   HarnessConfigComparison,
   HarnessConfigSyncPlan,
   HarnessConfigState,
-  HarnessConfigEvent
+  HarnessConfigEvent,
+  HarnessTemplate,
+  HarnessTemplateKind,
+  HarnessTemplateHarnessBlock,
+  HarnessFragment,
+  HarnessTemplateParseError,
+  HarnessTemplateSourceState
 } from './harness-config'
 export { harnessConfigScopeKey } from './harness-config'
 
@@ -393,7 +399,11 @@ export function mergeWireSnapshot(state: WireSnapshotState): AppState {
     runtimes: { ...initialState.runtimes, ...state.runtimes },
     announcements: { ...initialState.announcements, ...state.announcements },
     scratchpad: { ...initialState.scratchpad, ...state.scratchpad },
-    harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }
+    harnessConfig: {
+      ...initialState.harnessConfig,
+      ...state.harnessConfig,
+      templates: { ...initialState.harnessConfig.templates, ...state.harnessConfig?.templates }
+    }
   }
 }
 
