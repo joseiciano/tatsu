@@ -915,15 +915,20 @@ store.subscribe((event) => {
 })
 
 // ACP agents title their own sessions; mirror the title onto the tab label.
-// The renderer prefers a user rename (`customLabel`) over `label`.
+// The renderer prefers a user rename (`customLabel`) over `label`. Codex
+// titles with the whole first prompt and the tab bar does not truncate,
+// so the label is capped.
+const MAX_TAB_LABEL_CHARS = 40
 store.subscribe((event) => {
   if (event.type !== 'jsonClaude/sessionTitleChanged') return
   const { sessionId, title } = event.payload
-  const trimmed = title.trim()
+  const trimmed = title.trim().replace(/\s+/g, ' ')
   if (!trimmed) return
+  const label =
+    trimmed.length > MAX_TAB_LABEL_CHARS ? `${trimmed.slice(0, MAX_TAB_LABEL_CHARS - 1).trimEnd()}…` : trimmed
   const hit = findJsonClaudeTab(sessionId)
-  if (!hit || hit.tab.label === trimmed) return
-  panesFSM.setTabLabel(hit.worktreePath, hit.tab.id, trimmed)
+  if (!hit || hit.tab.label === label) return
+  panesFSM.setTabLabel(hit.worktreePath, hit.tab.id, label)
 })
 
 const worktreesFSM = new WorktreesFSM(store, {
