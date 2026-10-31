@@ -1,4 +1,5 @@
 import type { StateEvent, StateSnapshot } from '../../shared/state'
+import type { DownloadableRuntime } from '../../shared/state/runtimes'
 export type { StateEvent, StateSnapshot }
 
 import type { Worktree, PendingWorktree, PendingDeletion } from '../../shared/state/worktrees'
@@ -366,6 +367,8 @@ export interface ElectronAPI {
   setBrowserToolsEnabled(enabled: boolean): Promise<boolean>
   setBrowserToolsMode(mode: 'view' | 'full'): Promise<boolean>
   setDefaultClaudeTabType(value: 'xterm' | 'json'): Promise<boolean>
+  setDefaultOpencodeTabType(value: 'xterm' | 'json'): Promise<boolean>
+  setDefaultCodexTabType(value: 'xterm' | 'json'): Promise<boolean>
   setChatPromotionDismissed(value: boolean): Promise<boolean>
   setJsonModeChatDensity(value: 'compact' | 'comfy'): Promise<boolean>
   setUiScale(value: 'x-small' | 'small' | 'medium' | 'large' | 'x-large'): Promise<boolean>
@@ -424,6 +427,14 @@ export interface ElectronAPI {
   setWorktreeDetail(detail: WorktreeDetail): Promise<boolean>
   setEditor(editorId: string): Promise<boolean>
   getAvailableEditors(): Promise<{ id: string; name: string }[]>
+  downloadRuntime(agentKind: DownloadableRuntime): Promise<boolean>
+  setExperimentalChatAgentsEnabled(enabled: boolean): Promise<boolean>
+  authenticateJsonClaude(
+    sessionId: string,
+    methodId: string,
+    apiKey?: string
+  ): Promise<{ ok: boolean; error?: string }>
+  refreshRuntimes(): Promise<boolean>
   snooze(path: string, wakeAt: number): Promise<boolean>
   unsnooze(path: string): Promise<boolean>
   setSnoozeDefaultDays(days: number): Promise<boolean>

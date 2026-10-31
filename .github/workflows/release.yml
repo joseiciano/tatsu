@@ -99,6 +99,12 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm exec electron-builder --mac --publish=never
 
+      - name: Smoke packaged desktop runtimes
+        run: node scripts/smoke-packed-desktop.mjs
+
+      - name: Smoke first-use runtime download
+        run: node scripts/smoke-runtime-download.mjs
+
       - name: Attach to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -142,6 +148,12 @@ jobs:
 
       - name: Build Linux packages
         run: pnpm run dist:linux
+
+      - name: Smoke packaged desktop runtimes
+        run: node scripts/smoke-packed-desktop.mjs
+
+      - name: Smoke first-use runtime download
+        run: node scripts/smoke-runtime-download.mjs
 
       - name: Attach to GitHub release
         env:
@@ -194,6 +206,9 @@ jobs:
 
       - name: Pack tarball
         run: pnpm run pack:headless
+
+      - name: Validate staged runtime closure
+        run: node scripts/smoke-packed-runtimes.mjs
 
       - name: Attach to GitHub release
         env:

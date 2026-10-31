@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { ProgressAddon } from '@xterm/addon-progress'
 import { SearchAddon } from '@xterm/addon-search'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import type { StateEvent } from '../../../shared/state'
 import { getClientId, subscribeActiveTransportReconnect, useSettings, useTerminalSession } from '../../store'
@@ -254,6 +255,19 @@ interface XTerminalProps {
   onSwitchToChat?: () => void
 }
 
+/** The WebGL renderer draws block and box characters to fill the whole
+ *  cell, so TUI art has no gaps between rows. Browsers cap live WebGL
+ *  contexts, so a lost context drops that terminal back to the DOM renderer. */
+function loadWebglRenderer(terminal: Terminal): void {
+  try {
+    const webgl = new WebglAddon()
+    webgl.onContextLoss(() => webgl.dispose())
+    terminal.loadAddon(webgl)
+  } catch {
+    // No WebGL2 here; the DOM renderer stays in place.
+  }
+}
+
 export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, onSwitchToChat }: XTerminalProps): JSX.Element {
   // Lazy font-cache init — fires once on first XTerminal mount. See
   // initFontCache() comment for why this is lazy rather than at module
@@ -419,6 +433,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
     })
 
     terminal.open(containerRef.current)
+    loadWebglRenderer(terminal)
 
     requestAnimationFrame(() => {
       fitAddon.fit()

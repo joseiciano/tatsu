@@ -3,8 +3,10 @@ import { createRequire } from 'module'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { PtyManager } from './pty-manager'
-import { ChatRuntimeRegistry } from './chat-runtimes'
+import { ChatRuntimeRegistry, type ApprovalDecision } from './chat-runtimes'
 import { ClaudeAcpRuntime } from './chat-runtimes/claude-acp'
+import { AcpStdioRuntime } from './chat-runtimes/acp-stdio'
+import { BundledRuntimeResolver } from './chat-runtimes/runtime-path-resolver'
 import {
   readAttachmentImage,
   writeAttachmentImage
@@ -18,7 +20,9 @@ import { getOrCreateWsToken, rotateWsToken } from './ws-token'
 import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
-import { detectRuntime, userDataDir } from './paths'
+import { detectRuntime, resolveRuntimeManifestPath, userDataDir } from './paths'
+import { shellQuote } from './shell-quote'
+import { RuntimeDownloader, readRuntimeManifest } from './runtime-downloader'
 import { fixPathFromLoginShell } from './path-fix'
 import { parseCliFlags, USAGE, type CliFlags } from './cli-args'
 import { PlaywrightBrowserManager } from './browser-manager-playwright'
@@ -76,6 +80,7 @@ import type { AddRepoResult } from '../shared/repo-pick'
 import { isWorktreeMerged } from '../shared/state/prs'
 import { MAX_WAKE } from '../shared/state/snooze'
 import { hasScratchpadNote } from '../shared/state/scratchpad'
+import { chatRuntimeAvailable, type ChatRuntimeId } from '../shared/state/json-claude'
 import {
   DEFAULT_LIGHT_THEME,
   DEFAULT_DARK_THEME,
@@ -94,7 +99,7 @@ import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing
 import { startControlServer } from './control-server'
 import { writeMcpConfigForTerminal, pruneMcpConfigs } from './mcp-config'
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
-import { log, getLogFilePath } from './debug'
+import { log, getLogFilePath, formatErr } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
@@ -539,7 +544,44 @@ const jsonClaudeStatusDeriver = new JsonClaudeStatusDeriver(store)
 jsonClaudeStatusDeriver.start()
 
 const chatRuntimeRegistry = new ChatRuntimeRegistry(store)
-chatRuntimeRegistry.register('acp', new ClaudeAcpRuntime(store))
+chatRuntimeRegistry.register('claude', new ClaudeAcpRuntime(store))
+// OpenCode/Codex chat runtimes are driven over shared ACP stdio, always
+// launched via executables the app controls — never a global CLI/PATH
+// lookup. Dev and headless resolve them from node_modules; the packaged
+// desktop app bundles only Claude and downloads these two on first chat use
+// (see runtime-downloader). Launch config is resolved per spawn so a
+// download that finishes after boot is picked up, and a missing runtime
+// surfaces as a `runtime-missing` card instead of a startup crash.
+const runtimeDownloader: RuntimeDownloader = new RuntimeDownloader({
+  store,
+  manifest: readRuntimeManifest(resolveRuntimeManifestPath()),
+  platform: `${process.platform}-${process.arch}`,
+  installRoot: join(userDataDir(), 'runtimes'),
+  bundledBinary: (kind): string | undefined => bundledRuntimeResolver.bundledBinary(kind)
+})
+const bundledRuntimeResolver: BundledRuntimeResolver = new BundledRuntimeResolver({
+  downloadedBinary: (kind): string | undefined => runtimeDownloader.installedBinary(kind)
+})
+chatRuntimeRegistry.register(
+  'opencode',
+  new AcpStdioRuntime(store, {
+    agentKind: 'opencode',
+    launch: () => bundledRuntimeResolver.buildOpenCodeConfig()
+  })
+)
+const OPENAI_API_KEY_SECRET = 'openaiApiKey'
+chatRuntimeRegistry.register(
+  'codex',
+  new AcpStdioRuntime(store, {
+    agentKind: 'codex',
+    launch: () => {
+      const cfg = bundledRuntimeResolver.buildCodexConfig()
+      const key = process.env.OPENAI_API_KEY ?? process.env.CODEX_API_KEY ?? getSecret(OPENAI_API_KEY_SECRET)
+      return key ? { ...cfg, env: { ...cfg.env, OPENAI_API_KEY: key } } : cfg
+    }
+  })
+)
+runtimeDownloader.publishStatuses()
 
 /** Resolve the GitHub login of whoever owns the configured token, and
  *  dispatch it so the sidebar can route PRs they didn't author into the
@@ -713,7 +755,8 @@ function treeToPersistedNode(node: PaneNode): PersistedPaneNode | null {
           command: stripped.command,
           cwd: stripped.cwd,
           model: stripped.model,
-          ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {})
+          ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {}),
+          ...(stripped.agentSessionId ? { agentSessionId: stripped.agentSessionId } : {})
         }
       })
     if (tabs.length === 0) return null
@@ -764,8 +807,15 @@ const panesFSM = new PanesFSM(store, {
     return getAgent(kind).latestSessionId(wtPath)
   },
   getDefaultAgentKind: () => toAgentKind(store.getSnapshot().state.settings.defaultAgent),
-  getDefaultClaudeTabType: () => {
+  chatEnabledFor: (agentKind) => chatAgentEnabled(agentKind),
+  getDefaultTabType: (agentKind) => {
     const s = store.getSnapshot().state.settings
+    if (agentKind === 'opencode') {
+      return s.defaultOpencodeTabType === 'json' ? 'json' : 'xterm'
+    }
+    if (agentKind === 'codex') {
+      return s.defaultCodexTabType === 'json' ? 'json' : 'xterm'
+    }
     return s.defaultClaudeTabType === 'json' ? 'json' : 'xterm'
   },
   // Authoritative PTY teardown when tabs leave the tree. The renderer
@@ -804,23 +854,76 @@ function findJsonClaudeTabModel(sessionId: string): string | undefined {
   return undefined
 }
 
+function chatAgentEnabled(kind: AgentKind | undefined): kind is ChatRuntimeId {
+  return chatRuntimeAvailable(kind, store.getSnapshot().state.settings.experimentalChatAgentsEnabled)
+}
+
+function findJsonClaudeTab(sessionId: string): { worktreePath: string; tab: TerminalTab } | undefined {
+  const panes = store.getSnapshot().state.terminals.panes
+  for (const [worktreePath, tree] of Object.entries(panes)) {
+    for (const leaf of getLeaves(tree)) {
+      for (const tab of leaf.tabs) {
+        if (tab.id === sessionId && tab.type === 'json-claude') return { worktreePath, tab }
+      }
+    }
+  }
+  return undefined
+}
+
+/** Look up a json-claude tab's persisted `agentKind` by sessionId (which
+ *  is also the tab id for json-claude tabs). Used when a fresh json-claude
+ *  session starts before its slice entry exists, so the registry can route
+ *  to the right runtime. */
+function findJsonClaudeTabAgentKind(sessionId: string): AgentKind | undefined {
+  const panes = store.getSnapshot().state.terminals.panes
+  for (const tree of Object.values(panes)) {
+    for (const leaf of getLeaves(tree)) {
+      for (const tab of leaf.tabs) {
+        if (tab.id === sessionId && tab.type === 'json-claude') {
+          return tab.agentKind
+        }
+      }
+    }
+  }
+  return undefined
+}
+
 /** Single source of truth for "spin up the json-claude subprocess for
  *  this sessionId". Used by the jsonClaude:start IPC handler, the
  *  panesFSM's startJsonClaudeWithPrompt + startJsonClaude options
  *  (kickoff + wake), so all paths produce the same dispatch + seed +
  *  create order. Idempotent — chat runtime start short-circuits
  *  if the instance is already running. */
-function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
-  if (chatRuntimeRegistry.hasSession(sessionId)) return
-  const capabilities = chatRuntimeRegistry.getRuntimeById('acp').getCapabilities(sessionId)
+function startJsonClaudeSession(
+  sessionId: string,
+  worktreePath: string,
+  agentKind?: AgentKind
+): void {
+  const existing = store.getSnapshot().state.jsonClaude.sessions[sessionId]
+  const kind =
+    existing?.agentKind ?? agentKind ?? findJsonClaudeTabAgentKind(sessionId)
+  if (!kind) {
+    throw new Error(`No agent kind for json-claude session ${sessionId}`)
+  }
+  if (!chatAgentEnabled(kind)) {
+    throw new Error(`Agent kind ${kind} has no chat runtime enabled (session ${sessionId})`)
+  }
+  // Route explicitly by agent kind for the first start — there is no slice
+  // entry yet to route on, and hasSession()/capabilities need a runtime.
+  const runtime = chatRuntimeRegistry.getRuntimeById(kind)
+  if (runtime.hasSession(sessionId)) return
+  const capabilities = runtime.getCapabilities(sessionId)
   store.dispatch({
     type: 'jsonClaude/sessionStarted',
     payload: {
       sessionId,
       worktreePath,
+      agentKind: kind,
+      runtimeId: kind,
       defaultPermissionMode:
         store.getSnapshot().state.settings.jsonModeDefaultPermissionMode,
-      capabilities
+      capabilities,
+      agentSessionId: findJsonClaudeTab(sessionId)?.tab.agentSessionId
     }
   })
   const permMode =
@@ -831,6 +934,33 @@ function startJsonClaudeSession(sessionId: string, worktreePath: string): void {
     modelOverride: findJsonClaudeTabModel(sessionId)
   })
 }
+
+// The agent assigns ACP session ids at session/new; record each on its tab
+// so the next start (wake, reload, convert) can session/load it.
+store.subscribe((event) => {
+  if (event.type !== 'jsonClaude/agentSessionIdChanged') return
+  const { sessionId, agentSessionId } = event.payload
+  const hit = findJsonClaudeTab(sessionId)
+  if (!hit || hit.tab.agentSessionId === agentSessionId) return
+  panesFSM.setTabAgentSessionId(hit.worktreePath, hit.tab.id, agentSessionId)
+})
+
+// ACP agents title their own sessions; mirror the title onto the tab label.
+// The renderer prefers a user rename (`customLabel`) over `label`. Codex
+// titles with the whole first prompt and the tab bar does not truncate,
+// so the label is capped.
+const MAX_TAB_LABEL_CHARS = 40
+store.subscribe((event) => {
+  if (event.type !== 'jsonClaude/sessionTitleChanged') return
+  const { sessionId, title } = event.payload
+  const trimmed = title.trim().replace(/\s+/g, ' ')
+  if (!trimmed) return
+  const label =
+    trimmed.length > MAX_TAB_LABEL_CHARS ? `${trimmed.slice(0, MAX_TAB_LABEL_CHARS - 1).trimEnd()}…` : trimmed
+  const hit = findJsonClaudeTab(sessionId)
+  if (!hit || hit.tab.label === label) return
+  panesFSM.setTabLabel(hit.worktreePath, hit.tab.id, label)
+})
 
 const worktreesFSM = new WorktreesFSM(store, {
   getRepoRoots: () => config.repoRoots || [],
@@ -1705,6 +1835,20 @@ function registerIpcHandlers(): void {
     store.dispatch({
       type: 'settings/shareClaudeSettingsChanged',
       payload: config.shareClaudeSettings !== false
+    })
+    return true
+  })
+
+  transport.onRequest('config:setExperimentalChatAgentsEnabled', (_ctx, enabled: boolean) => {
+    if (enabled) {
+      config.experimentalChatAgentsEnabled = true
+    } else {
+      delete config.experimentalChatAgentsEnabled
+    }
+    saveConfig(config)
+    store.dispatch({
+      type: 'settings/experimentalChatAgentsEnabledChanged',
+      payload: config.experimentalChatAgentsEnabled === true
     })
     return true
   })
@@ -2631,7 +2775,12 @@ function registerIpcHandlers(): void {
 
   transport.onRequest(
     'jsonClaude:resolveApproval',
-    () => false
+    (_ctx, requestId: string, decision: ApprovalDecision) => {
+      if (!requestId || !decision || (decision.behavior !== 'allow' && decision.behavior !== 'deny')) {
+        return false
+      }
+      return chatRuntimeRegistry.resolveApproval(requestId, decision)
+    }
   )
 
   transport.onRequest(
@@ -2736,12 +2885,45 @@ function registerIpcHandlers(): void {
     }
   )
 
+  // Terminal-type login (OpenCode's `opencode auth login`): open a shell tab
+  // in the worktree that runs the bundled/downloaded binary, never a PATH
+  // lookup. Codex logs in in-process through jsonClaude:authenticate.
   transport.onRequest(
     'jsonClaude:openAuthLoginTab',
     (_ctx, worktreePath: string, sessionId: string): { ok: true; tabId: string } | { ok: false; error: string } => {
-      void worktreePath
-      void sessionId
-      return { ok: false, error: 'Auth login is not supported by the ACP runtime' }
+      if (!worktreePath || !sessionId) return { ok: false, error: 'missing worktree or session' }
+      const kind = store.getSnapshot().state.jsonClaude.sessions[sessionId]?.agentKind
+      if (kind !== 'opencode') {
+        return { ok: false, error: `${kind ?? 'this agent'} logs in from the chat card, not a terminal` }
+      }
+      let binary: string
+      try {
+        binary = bundledRuntimeResolver.resolveOpenCodeExecutable()
+      } catch (err) {
+        return { ok: false, error: formatErr(err) }
+      }
+      const tabId = `shell-${Date.now()}`
+      panesFSM.addTab(worktreePath, {
+        id: tabId,
+        type: 'shell',
+        label: 'OpenCode login',
+        command: `${shellQuote(binary)} auth login`
+      })
+      return { ok: true, tabId }
+    }
+  )
+
+  // In-process login for ACP agents. An API key is kept in the encrypted
+  // secrets store and reaches the agent through its launch env (see the
+  // Codex launch config), so the runtime respawns before authenticating.
+  transport.onRequest(
+    'jsonClaude:authenticate',
+    async (_ctx, sessionId: string, methodId: string, apiKey?: string) => {
+      if (!sessionId || !methodId) return { ok: false, error: 'missing session or method' }
+      if (typeof apiKey === 'string' && apiKey.trim()) {
+        setSecret(OPENAI_API_KEY_SECRET, apiKey.trim())
+      }
+      return chatRuntimeRegistry.authenticate(sessionId, methodId)
     }
   )
 
@@ -2847,6 +3029,42 @@ function registerIpcHandlers(): void {
       saveConfig(config)
       store.dispatch({
         type: 'settings/defaultClaudeTabTypeChanged',
+        payload: next
+      })
+      return true
+    }
+  )
+
+  transport.onRequest(
+    'config:setDefaultOpencodeTabType',
+    (_ctx, value: 'xterm' | 'json') => {
+      const next: 'xterm' | 'json' = value === 'json' ? 'json' : 'xterm'
+      if (next === 'xterm') {
+        delete config.defaultOpencodeTabType
+      } else {
+        config.defaultOpencodeTabType = 'json'
+      }
+      saveConfig(config)
+      store.dispatch({
+        type: 'settings/defaultOpencodeTabTypeChanged',
+        payload: next
+      })
+      return true
+    }
+  )
+
+  transport.onRequest(
+    'config:setDefaultCodexTabType',
+    (_ctx, value: 'xterm' | 'json') => {
+      const next: 'xterm' | 'json' = value === 'json' ? 'json' : 'xterm'
+      if (next === 'xterm') {
+        delete config.defaultCodexTabType
+      } else {
+        config.defaultCodexTabType = 'json'
+      }
+      saveConfig(config)
+      store.dispatch({
+        type: 'settings/defaultCodexTabTypeChanged',
         payload: next
       })
       return true
@@ -3109,6 +3327,21 @@ function registerIpcHandlers(): void {
       type: 'terminals/progressChanged',
       payload: { id, state, value: Number.isFinite(v) ? v : 0 }
     })
+  })
+
+  transport.onRequest('runtimes:download', async (_ctx, agentKind: string) => {
+    if (agentKind !== 'opencode' && agentKind !== 'codex') return false
+    try {
+      await runtimeDownloader.download(agentKind)
+      return true
+    } catch (err) {
+      log('runtimes', `download failed for ${agentKind}: ${formatErr(err)}`)
+      return false
+    }
+  })
+  transport.onRequest('runtimes:refresh', async () => {
+    runtimeDownloader.publishStatuses()
+    return true
   })
 
   transport.onRequest('snooze:snooze', (_ctx, path: string, wakeAt: number) => {
