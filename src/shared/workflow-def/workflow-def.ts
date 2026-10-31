@@ -1,5 +1,5 @@
 import { LineCounter, isAlias, isMap, isScalar, isSeq, parseDocument, type Document, type Node, type YAMLMap, type YAMLSeq } from 'yaml'
-import { PERMISSION_LEVELS, isPermissionLevel, type PermissionLevel } from '../permission-level'
+import { PERMISSION_LEVELS, isPermissionLevel, normalizeAllowEntry, sanitizeBashAllow, type PermissionLevel } from '../permission-level'
 import type {
   ConditionContext,
   ForeachMode,
@@ -8,7 +8,11 @@ import type {
   OutputScalarType,
   ParsedWorkflowDefinition,
   ParsedWorkflowStep,
+  ResolvedDefinition,
+  ResolvedStepCommon,
+  ResolvedWorkflowStep,
   ValidateWorkflowOptions,
+  WorkflowAgent,
   WorkflowCondition,
   WorkflowDefaults,
   WorkflowDiagnostic,
@@ -62,6 +66,10 @@ const GATES: readonly WorkflowGate[] = ['approve']
 const FOREACH_MODES: readonly ForeachMode[] = ['independent', 'stacked']
 const OUTPUT_SCALAR_TYPES: readonly OutputScalarType[] = ['string', 'number', 'boolean']
 const OUTPUT_FIELD_TYPES: readonly (OutputScalarType | 'array')[] = [...OUTPUT_SCALAR_TYPES, 'array']
+const WORKFLOW_AGENTS: readonly WorkflowAgent[] = ['claude', 'codex', 'opencode']
+const PI_MESSAGE = 'pi is a tab harness, not a workflow step harness in v1'
+const SHELL_FORBIDDEN_KEYS = ['agent', 'model', 'prompt', 'permissions', 'allow', 'output'] as const
+const DEFAULT_PERMISSION: PermissionLevel = 'edit'
 
 type MaybeNode = Node | null | undefined
 
@@ -505,6 +513,256 @@ class ShapeWalker {
   }
 }
 
+type Locate = (path: string) => { line: number; col: number }
+
+interface NeedsNode {
+  id: string
+  needs: readonly string[]
+}
+
+export function needsClosure(steps: readonly NeedsNode[], stepId: string): Set<string> {
+  const byId = new Map<string, NeedsNode>()
+  for (const step of steps) if (!byId.has(step.id)) byId.set(step.id, step)
+  const seen = new Set<string>()
+  const pending = [...(byId.get(stepId)?.needs ?? [])]
+  while (pending.length > 0) {
+    const id = pending.pop()!
+    const step = byId.get(id)
+    if (!step || seen.has(id)) continue
+    seen.add(id)
+    for (const dep of step.needs) pending.push(dep)
+  }
+  return seen
+}
+
+function findCycles(steps: readonly NeedsNode[]): string[][] {
+  const byId = new Map(steps.map((s) => [s.id, s]))
+  const state = new Map<string, 'active' | 'done'>()
+  const cycles: string[][] = []
+  for (const root of steps) {
+    if (state.has(root.id)) continue
+    const path: string[] = []
+    const frames: { id: string; next: number }[] = [{ id: root.id, next: 0 }]
+    state.set(root.id, 'active')
+    path.push(root.id)
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1]
+      const needs = byId.get(frame.id)?.needs ?? []
+      if (frame.next >= needs.length) {
+        frames.pop()
+        path.pop()
+        state.set(frame.id, 'done')
+        continue
+      }
+      const dep = needs[frame.next++]
+      const depState = state.get(dep)
+      if (depState === 'active') cycles.push(path.slice(path.indexOf(dep)))
+      else if (depState === undefined && byId.has(dep)) {
+        state.set(dep, 'active')
+        path.push(dep)
+        frames.push({ id: dep, next: 0 })
+      }
+    }
+  }
+  return cycles
+}
+
+function isWorkflowAgent(value: string): value is WorkflowAgent {
+  return (WORKFLOW_AGENTS as readonly string[]).includes(value)
+}
+
+function preview(value: string): string {
+  return value.length > 60 ? `${value.slice(0, 60)}…` : value
+}
+
+class GraphStage {
+  readonly diagnostics: WorkflowDiagnostic[] = []
+
+  constructor(
+    private readonly def: ParsedWorkflowDefinition,
+    private readonly locate: Locate
+  ) {}
+
+  report(code: WorkflowDiagnosticCode, message: string, path: string, severity: WorkflowDiagnostic['severity'] = 'error'): void {
+    this.diagnostics.push({ ...this.locate(path), severity, code, message, path })
+  }
+
+  run(): ResolvedDefinition | undefined {
+    const { def } = this
+    if (def.item_input !== undefined && !Object.hasOwn(def.inputs, def.item_input)) {
+      this.report('unknown-ref', `"item_input" names "${def.item_input}", which is not a declared input`, 'item_input')
+    }
+    const needs = def.steps.map((step, i) => step.needs ?? (i === 0 ? [] : [def.steps[i - 1].id]))
+    if (this.checkIds()) this.checkGraph(needs)
+    const defaultAllow = this.resolveAllow(def.defaults?.allow ?? [], 'defaults.allow')
+    const steps = def.steps.map((step, i) => this.resolveStep(step, i, needs[i], defaultAllow))
+    if (this.diagnostics.some((d) => d.severity === 'error')) return undefined
+    const resolved: ResolvedDefinition = { name: def.name, inputs: def.inputs, steps: steps.filter((s) => s !== undefined) }
+    if (def.item_input !== undefined) resolved.item_input = def.item_input
+    return resolved
+  }
+
+  checkIds(): boolean {
+    const first = new Map<string, number>()
+    let unique = true
+    this.def.steps.forEach((step, i) => {
+      const prior = first.get(step.id)
+      if (prior === undefined) {
+        first.set(step.id, i)
+        return
+      }
+      unique = false
+      this.report('duplicate-id', `Step id "${step.id}" is already used by steps[${prior}]`, `steps[${i}].id`)
+    })
+    return unique
+  }
+
+  checkGraph(needs: readonly string[][]): void {
+    const steps = this.def.steps
+    const ids = new Set(steps.map((s) => s.id))
+    let needsOk = true
+    steps.forEach((step, i) => {
+      step.needs?.forEach((ref, j) => {
+        if (ids.has(ref)) return
+        needsOk = false
+        this.report('unknown-ref', `"needs" names "${ref}", which is not a step in this workflow`, `steps[${i}].needs[${j}]`)
+      })
+    })
+    const nodes = steps.map((step, i) => ({ id: step.id, needs: needs[i].filter((ref) => ids.has(ref)) }))
+    const index = new Map(steps.map((s, i) => [s.id, i]))
+    for (const cycle of findCycles(nodes)) {
+      needsOk = false
+      this.reportCycle(cycle, index)
+    }
+    steps.forEach((step, i) => {
+      if (!step.loop) return
+      const target = step.loop.back_to
+      const path = `steps[${i}].loop.back_to`
+      if (!ids.has(target)) {
+        this.report('unknown-ref', `"back_to" names "${target}", which is not a step in this workflow`, path)
+      } else if (needsOk && !needsClosure(nodes, step.id).has(target)) {
+        this.report('bad-back-to', `"back_to" must name a step that "${step.id}" depends on through "needs"; "${target}" is not upstream of it`, path)
+      }
+    })
+  }
+
+  reportCycle(cycle: readonly string[], index: ReadonlyMap<string, number>): void {
+    let start = 0
+    cycle.forEach((id, k) => {
+      if ((index.get(id) ?? 0) < (index.get(cycle[start]) ?? 0)) start = k
+    })
+    const ordered = [...cycle.slice(start), ...cycle.slice(0, start)]
+    const stepIndex = index.get(ordered[0]) ?? 0
+    const successor = ordered[1 % ordered.length]
+    const entry = this.def.steps[stepIndex].needs?.indexOf(successor) ?? -1
+    const path = entry >= 0 ? `steps[${stepIndex}].needs[${entry}]` : `steps[${stepIndex}].needs`
+    this.report('cycle', `Steps form a "needs" cycle: ${[...ordered, ordered[0]].join(' -> ')}`, path)
+  }
+
+  resolveAllow(list: readonly string[], path: string): string[] {
+    list.forEach((raw, j) => {
+      if (sanitizeBashAllow([normalizeAllowEntry(raw)]).length > 0) return
+      this.report(
+        'unsafe-allow',
+        `Allow pattern "${preview(raw)}" is dropped: patterns must be non-empty, at most 200 characters, and free of , ( ) quotes, backticks, line breaks and "*" (other than a trailing " *")`,
+        `${path}[${j}]`,
+        'warning'
+      )
+    })
+    return sanitizeBashAllow(list.map(normalizeAllowEntry))
+  }
+
+  resolveStep(step: ParsedWorkflowStep, i: number, needs: string[], defaultAllow: readonly string[]): ResolvedWorkflowStep | undefined {
+    const at = (key: string) => `steps[${i}].${key}`
+    const kind = step.kind ?? 'agent'
+    const common: ResolvedStepCommon = { id: step.id, needs: [...needs] }
+    if (step.gate !== undefined) common.gate = step.gate
+    if (step.loop !== undefined) common.loop = step.loop
+    if (step.when !== undefined) common.when = step.when
+    if (step.on_loop !== undefined) common.on_loop = step.on_loop
+    if (step.parallel_safe !== undefined) common.parallel_safe = step.parallel_safe
+    if (step.timeout !== undefined) common.timeout = step.timeout
+
+    if (kind === 'shell') {
+      for (const key of SHELL_FORBIDDEN_KEYS) {
+        if (step[key] !== undefined) this.report('kind-mismatch', `"${key}" is not allowed on a shell step`, at(key))
+      }
+      if (step.run === undefined) {
+        this.report('missing-field', 'A shell step needs "run"', at('run'))
+        return undefined
+      }
+      return { ...common, kind, run: step.run }
+    }
+
+    this.checkExitConditions(step, i)
+    this.checkRequiredOutput(step, i)
+    const allow = step.allow === undefined ? [...defaultAllow] : this.resolveAllow(step.allow, at('allow'))
+
+    if (kind !== 'agent') {
+      const reserved: ResolvedWorkflowStep = { ...step, kind, needs: common.needs }
+      if (step.allow !== undefined) reserved.allow = allow
+      return reserved
+    }
+
+    const agent = this.agent(step, at('agent'))
+    if (step.prompt === undefined) this.report('missing-field', 'An agent step needs "prompt"', at('prompt'))
+    if (agent === undefined || step.prompt === undefined) return undefined
+    const resolved: ResolvedWorkflowStep = {
+      ...common,
+      kind,
+      agent,
+      prompt: step.prompt,
+      permissions: step.permissions ?? this.def.defaults?.permissions ?? DEFAULT_PERMISSION,
+      allow
+    }
+    if (step.model !== undefined) resolved.model = step.model
+    if (step.output !== undefined) resolved.output = step.output
+    return resolved
+  }
+
+  agent(step: ParsedWorkflowStep, path: string): WorkflowAgent | undefined {
+    if (step.agent === undefined) {
+      this.report('missing-field', `An agent step needs "agent" (one of ${quoteList(WORKFLOW_AGENTS)})`, path)
+      return undefined
+    }
+    if (isWorkflowAgent(step.agent)) return step.agent
+    if (step.agent === 'pi') this.report('bad-value', PI_MESSAGE, path)
+    else this.report('bad-value', `"${preview(step.agent)}" is not one of ${quoteList(WORKFLOW_AGENTS)}`, path)
+    return undefined
+  }
+
+  checkExitConditions(step: ParsedWorkflowStep, i: number): void {
+    const message = 'An "exit" condition is only allowed on a shell step'
+    if (step.when && 'exit' in step.when) this.report('bad-condition', message, `steps[${i}].when.exit`)
+    if (step.loop && 'exit' in step.loop.until) this.report('bad-condition', message, `steps[${i}].loop.until.exit`)
+  }
+
+  checkRequiredOutput(step: ParsedWorkflowStep, i: number): void {
+    const output = step.output
+    output?.required?.forEach((name, j) => {
+      if (Object.hasOwn(output.fields, name)) return
+      this.report('unknown-ref', `"required" names "${name}", which is not a declared output field`, `steps[${i}].output.required[${j}]`)
+    })
+  }
+}
+
+function nodeAt(doc: Document, path: string): MaybeNode {
+  let node = doc.contents as MaybeNode
+  for (const segment of path.match(/[^.[\]]+/g) ?? []) {
+    const container = isAlias(node) ? node.resolve(doc) : node
+    let next: MaybeNode
+    if (isMap(container)) {
+      const pair = container.items.find((p) => isScalar(p.key) && p.key.value === segment)
+      next = pair?.value as MaybeNode
+    } else if (isSeq(container) && /^\d+$/.test(segment)) {
+      next = container.items[Number(segment)] as MaybeNode
+    }
+    if (!next?.range) break
+    node = next
+  }
+  return node
+}
+
 function diagnosticAt(
   lineCounter: LineCounter,
   code: WorkflowDiagnosticCode,
@@ -552,8 +810,11 @@ function parseStage(text: string): WorkflowValidationResult {
   const walker = new ShapeWalker(doc, lineCounter)
   const parsed = walker.definition(doc.contents as MaybeNode)
   diagnostics.push(...walker.diagnostics)
-  if (parsed && !diagnostics.some((d) => d.severity === 'error')) return { parsed, diagnostics }
-  return { diagnostics }
+  if (!parsed || diagnostics.some((d) => d.severity === 'error')) return { diagnostics }
+  const graph = new GraphStage(parsed, (path) => positionOf(lineCounter, nodeAt(doc, path)?.range?.[0] ?? 0))
+  const definition = graph.run()
+  diagnostics.push(...graph.diagnostics)
+  return definition ? { parsed, definition, diagnostics } : { parsed, diagnostics }
 }
 
 export function validateWorkflowDefinition(text: string, _opts: ValidateWorkflowOptions = {}): WorkflowValidationResult {

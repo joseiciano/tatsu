@@ -12,6 +12,12 @@ export type WorkflowDiagnosticCode =
   | 'missing-field'
   | 'bad-value'
   | 'bad-condition'
+  | 'duplicate-id'
+  | 'unknown-ref'
+  | 'cycle'
+  | 'bad-back-to'
+  | 'kind-mismatch'
+  | 'unsafe-allow'
   | 'internal'
 
 export interface WorkflowDiagnostic {
@@ -102,10 +108,44 @@ export interface ParsedWorkflowDefinition {
   steps: ParsedWorkflowStep[]
 }
 
+export type WorkflowAgent = 'claude' | 'codex' | 'opencode'
+
+export interface ResolvedStepCommon extends Pick<ParsedWorkflowStep, 'id' | 'gate' | 'loop' | 'when' | 'on_loop' | 'parallel_safe' | 'timeout'> {
+  needs: string[]
+}
+
+export interface ResolvedAgentStep extends ResolvedStepCommon, Pick<ParsedWorkflowStep, 'model' | 'output'> {
+  kind: 'agent'
+  agent: WorkflowAgent
+  prompt: string
+  permissions: PermissionLevel
+  allow: string[]
+}
+
+export interface ResolvedShellStep extends ResolvedStepCommon {
+  kind: 'shell'
+  run: string
+}
+
+export interface ResolvedReservedStep extends Omit<ParsedWorkflowStep, 'kind' | 'needs'> {
+  kind: 'foreach' | 'orchestrator'
+  needs: string[]
+}
+
+export type ResolvedWorkflowStep = ResolvedAgentStep | ResolvedShellStep | ResolvedReservedStep
+
+export interface ResolvedDefinition {
+  name: string
+  inputs: Record<string, WorkflowInputDef>
+  item_input?: string
+  steps: ResolvedWorkflowStep[]
+}
+
 export type ValidateWorkflowOptions = Record<never, never>
 
 export interface WorkflowValidationResult {
   parsed?: ParsedWorkflowDefinition
+  definition?: ResolvedDefinition
   diagnostics: WorkflowDiagnostic[]
 }
 
