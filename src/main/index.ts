@@ -71,6 +71,7 @@ import { createHarnessConfigService } from './harness-config'
 import { registerHarnessConfigRequestHandlers } from './harness-config-transport'
 import { registerHarnessConfigSettingsHandlers } from './harness-config-settings'
 import { createTemplateSourceStore } from './template-source-store'
+import { readTemplateImportListing } from './template-import'
 import { createTemplateSyncDeriver } from './template-sync-deriver'
 import { loadRepoConfig, saveRepoConfig, type RepoConfig } from './repo-config'
 import { createNewProject, type GitignorePreset } from './repo-create'
@@ -472,7 +473,11 @@ registerHarnessConfigRequestHandlers({
   transport,
   store,
   service: harnessConfigService,
-  templateSource: templateSourceStore
+  templateSource: templateSourceStore,
+  templateImport: {
+    readListing: (folders) => readTemplateImportListing(folders),
+    existing: () => store.getSnapshot().state.harnessConfig.templates
+  }
 })
 registerHarnessConfigSettingsHandlers({
   transport,

@@ -59,6 +59,7 @@ export function ConfigTemplates({
   initialTemplateRef,
   searchQuery,
   onDirtyChange,
+  onImport,
   fontFamily,
   fontSize
 }: ConfigTemplatesProps): JSX.Element {
@@ -521,6 +522,7 @@ export function ConfigTemplates({
           onSelectFragment={handleSelectFragment}
           onCreateTemplate={handleCreateTemplate}
           onCreateFragment={handleCreateFragment}
+          onImport={onImport}
         />
       </div>
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">{editor}</div>

@@ -86,7 +86,12 @@ afterEach(() => {
 
 function element(initialTemplateRef: string | null = null): JSX.Element {
   return (
-    <ConfigTemplates initialTemplateRef={initialTemplateRef} searchQuery="" onDirtyChange={onDirtyChange} />
+    <ConfigTemplates
+      initialTemplateRef={initialTemplateRef}
+      searchQuery=""
+      onDirtyChange={onDirtyChange}
+      onImport={() => undefined}
+    />
   )
 }
 

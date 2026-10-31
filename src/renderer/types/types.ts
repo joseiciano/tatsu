@@ -43,6 +43,10 @@ import type {
   HarnessFragmentSaveRequest,
   HarnessTemplate,
   HarnessTemplateDeleteRequest,
+  HarnessTemplateImportApplyRequest,
+  HarnessTemplateImportApplyResult,
+  HarnessTemplateImportPreview,
+  HarnessTemplateImportPreviewRequest,
   HarnessTemplateSaveRequest
 } from '../../shared/state/harness-config'
 export type {
@@ -71,6 +75,10 @@ export type {
   HarnessFragmentSaveRequest,
   HarnessTemplate,
   HarnessTemplateDeleteRequest,
+  HarnessTemplateImportApplyRequest,
+  HarnessTemplateImportApplyResult,
+  HarnessTemplateImportPreview,
+  HarnessTemplateImportPreviewRequest,
   HarnessTemplateSaveRequest
 }
 
@@ -706,6 +714,12 @@ export interface ElectronAPI {
   deleteHarnessFragment(
     request: HarnessFragmentDeleteRequest
   ): Promise<HarnessConfigRequestResult<{ deleted: true }>>
+  previewHarnessTemplateImport(
+    request: HarnessTemplateImportPreviewRequest
+  ): Promise<HarnessConfigRequestResult<HarnessTemplateImportPreview>>
+  applyHarnessTemplateImport(
+    request: HarnessTemplateImportApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessTemplateImportApplyResult>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the

@@ -400,3 +400,110 @@ export type HarnessConfigEvent =
       type: 'harnessConfig/templateSourceErrorChanged'
       payload: { relativePath: string; message: string | null }
     }
+
+// --- Template import (Step 22) ---
+
+/** Absolute folders the user picked in the import wizard, one per kind.
+ *  `skills` may name several source folders. */
+export interface HarnessTemplateImportFolders {
+  agents: string | null
+  agentFragments: string | null
+  skills: string[]
+  references: string | null
+  commands: string | null
+}
+
+export type HarnessTemplateImportConflictChoice = 'skip' | 'replace'
+
+export interface HarnessTemplateImportChoices {
+  /** Harnesses that skills and plain commands target (default Claude). */
+  harnesses: ManagedHarnessKind[]
+  /** Skill name to the source folder that wins, or `'skip'`. */
+  duplicateChoices: Record<string, string>
+  /** `<kind>/<name>` or `fragment/<name>` to skip or replace. */
+  conflictChoices: Record<string, HarnessTemplateImportConflictChoice>
+}
+
+export interface HarnessTemplateImportPreviewRequest {
+  folders: HarnessTemplateImportFolders
+  choices: HarnessTemplateImportChoices
+}
+
+export interface HarnessTemplateImportApplyRequest extends HarnessTemplateImportPreviewRequest {
+  fingerprint: string
+  confirmed: boolean
+  allowShadowing?: boolean
+}
+
+export interface HarnessTemplateImportSetting {
+  harness: string
+  key: string
+  value: string
+}
+
+export type HarnessTemplateImportAction = 'create' | 'replace' | 'skip' | 'undecided' | 'invalid'
+
+export interface HarnessTemplateImportItem {
+  /** `<kind>/<name>` for templates, `fragment/<name>` for fragments. */
+  key: string
+  type: 'template' | 'fragment'
+  kind: HarnessTemplateKind | null
+  name: string
+  sourcePath: string
+  targets: ManagedHarnessKind[]
+  fragments: string[]
+  references: string[]
+  /** Harness blocks Tatsu does not manage or cannot target, dropped. */
+  droppedBlocks: string[]
+  /** Settings the old build wrote outside resource files (REQ-006). */
+  unsupportedSettings: HarnessTemplateImportSetting[]
+  notes: string[]
+  conflict: boolean
+  action: HarnessTemplateImportAction
+  error: string | null
+}
+
+export interface HarnessTemplateImportIssue {
+  sourcePath: string
+  message: string
+}
+
+export interface HarnessTemplateImportDuplicate {
+  name: string
+  sources: string[]
+  choice: string | null
+}
+
+export interface HarnessTemplateImportCoveredCommand {
+  name: string
+  skill: string
+  sourcePath: string
+}
+
+export interface HarnessTemplateImportFile {
+  templateRef: string
+  agentKind: ManagedHarnessKind
+  resourceType: HarnessConfigResourceType
+  relativePath: string
+  rendered: string
+  /** Current file in the harness folder, or null when there is none. */
+  current: string | null
+}
+
+export interface HarnessTemplateImportPreview {
+  fingerprint: string
+  items: HarnessTemplateImportItem[]
+  duplicates: HarnessTemplateImportDuplicate[]
+  coveredCommands: HarnessTemplateImportCoveredCommand[]
+  unknownFiles: HarnessTemplateImportIssue[]
+  renderErrors: HarnessTemplateImportIssue[]
+  shadows: string[]
+  files: HarnessTemplateImportFile[]
+  blockingReasons: string[]
+}
+
+export interface HarnessTemplateImportApplyResult {
+  written: string[]
+  skipped: string[]
+  scopes: HarnessConfigScope[]
+}
