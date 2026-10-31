@@ -19,6 +19,7 @@ import type {
   WorkflowDefaults,
   WorkflowDiagnostic,
   WorkflowDiagnosticCode,
+  WorkflowFeature,
   WorkflowGate,
   WorkflowInputDef,
   WorkflowInputType,
@@ -29,6 +30,7 @@ import type {
   WorkflowValidationResult
 } from './types'
 import { formatTemplateRef, tokenizeTemplate } from './templates'
+import { BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES } from './constants'
 
 const MAX_SOURCE_LENGTH = 512 * 1024
 const MAX_ALIAS_COUNT = 100
@@ -855,6 +857,46 @@ class TemplateStage {
   }
 }
 
+const STEP_FEATURE_KEYS = ['gate', 'loop', 'when', 'on_loop', 'parallel_safe', 'timeout'] as const
+
+class FeatureStage {
+  readonly diagnostics: WorkflowDiagnostic[] = []
+
+  constructor(
+    private readonly parsed: ParsedWorkflowDefinition,
+    private readonly def: ResolvedDefinition,
+    private readonly supported: ReadonlySet<WorkflowFeature>,
+    private readonly locateKey: Locate,
+    private readonly locateValue: Locate
+  ) {}
+
+  report(feature: WorkflowFeature, path: string, locate: Locate = this.locateKey): void {
+    if (this.supported.has(feature)) return
+    const { message } = WORKFLOW_FEATURES[feature]
+    this.diagnostics.push({ ...locate(path), severity: 'error', code: 'unsupported-feature', feature, message, path })
+  }
+
+  run(): void {
+    if (this.def.item_input !== undefined) this.report('item_input', 'item_input')
+    const earlier = new Set<string>()
+    this.def.steps.forEach((step, i) => {
+      const at = (key: string) => `steps[${i}].${key}`
+      if (step.kind === 'foreach' || step.kind === 'orchestrator') this.report(step.kind, at('kind'), this.locateValue)
+      if (step.kind === 'agent' && step.agent !== 'claude') this.report(`agent-${step.agent}`, at('agent'), this.locateValue)
+      for (const key of STEP_FEATURE_KEYS) if (step[key] !== undefined) this.report(key, at(key))
+      if (this.parsed.steps[i].needs !== undefined && !sameSet(needsClosure(this.def.steps, step.id), earlier)) {
+        this.report('nonlinear-needs', at('needs'))
+      }
+      earlier.add(step.id)
+    })
+    this.diagnostics.sort((a, b) => a.line - b.line || a.col - b.col)
+  }
+}
+
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((x) => b.has(x))
+}
+
 function openPositions(text: string): number[] {
   const out: number[] = []
   for (let i = text.indexOf('{{'); i >= 0; i = text.indexOf('{{', i + 2)) out.push(i)
@@ -888,6 +930,15 @@ function nodeAt(doc: Document, path: string): MaybeNode {
   return node
 }
 
+function keyAt(doc: Document, path: string): MaybeNode {
+  const split = path.lastIndexOf('.')
+  const parent = split < 0 ? (doc.contents as MaybeNode) : nodeAt(doc, path.slice(0, split))
+  const container = isAlias(parent) ? parent.resolve(doc) : parent
+  const key = path.slice(split + 1)
+  const pair = isMap(container) ? container.items.find((p) => isScalar(p.key) && p.key.value === key) : undefined
+  return isScalar(pair?.key) && pair.key.range ? pair.key : nodeAt(doc, path)
+}
+
 function diagnosticAt(
   lineCounter: LineCounter,
   code: WorkflowDiagnosticCode,
@@ -898,7 +949,7 @@ function diagnosticAt(
   return { severity, code, message, path: '', ...positionOf(lineCounter, offset) }
 }
 
-function parseStage(text: string): WorkflowValidationResult {
+function parseStage(text: string, supported: ReadonlySet<WorkflowFeature>): WorkflowValidationResult {
   const lineCounter = new LineCounter()
   if (text.length > MAX_SOURCE_LENGTH) {
     return { diagnostics: [diagnosticAt(lineCounter, 'too-large', `Workflow definitions are limited to ${MAX_SOURCE_LENGTH} characters`, 0)] }
@@ -943,12 +994,17 @@ function parseStage(text: string): WorkflowValidationResult {
   const templates = new TemplateStage(definition, (path, value, offset) => tokenPosition(text, lineCounter, nodeAt(doc, path), value, offset))
   templates.run()
   diagnostics.push(...templates.diagnostics)
-  return templates.diagnostics.length > 0 ? { parsed, diagnostics } : { parsed, definition, diagnostics }
+  if (templates.diagnostics.length > 0) return { parsed, diagnostics }
+  const locate = (find: (doc: Document, path: string) => MaybeNode) => (path: string) => positionOf(lineCounter, find(doc, path)?.range?.[0] ?? 0)
+  const features = new FeatureStage(parsed, definition, supported, locate(keyAt), locate(nodeAt))
+  features.run()
+  diagnostics.push(...features.diagnostics)
+  return features.diagnostics.length > 0 ? { parsed, diagnostics } : { parsed, definition, diagnostics }
 }
 
-export function validateWorkflowDefinition(text: string, _opts: ValidateWorkflowOptions = {}): WorkflowValidationResult {
+export function validateWorkflowDefinition(text: string, opts: ValidateWorkflowOptions = {}): WorkflowValidationResult {
   try {
-    return parseStage(text)
+    return parseStage(text, new Set(opts.supportedFeatures ?? BASELINE_SUPPORTED_FEATURES))
   } catch {
     return { diagnostics: [{ severity: 'error', code: 'internal', message: 'The workflow definition could not be validated', path: '', line: 1, col: 1 }] }
   }

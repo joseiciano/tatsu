@@ -20,6 +20,7 @@ export type WorkflowDiagnosticCode =
   | 'unsafe-allow'
   | 'bad-template'
   | 'template-scope'
+  | 'unsupported-feature'
   | 'internal'
 
 export interface WorkflowDiagnostic {
@@ -29,6 +30,27 @@ export interface WorkflowDiagnostic {
   path: string
   line: number
   col: number
+  feature?: WorkflowFeature
+}
+
+export type WorkflowFeature =
+  | 'agent-codex'
+  | 'agent-opencode'
+  | 'gate'
+  | 'loop'
+  | 'when'
+  | 'on_loop'
+  | 'nonlinear-needs'
+  | 'parallel_safe'
+  | 'timeout'
+  | 'item_input'
+  | 'foreach'
+  | 'orchestrator'
+
+export interface WorkflowFeatureInfo {
+  phase: number
+  message: string
+  supported: boolean
 }
 
 export type WorkflowInputType = 'text' | 'issue' | 'pr' | 'file'
@@ -143,7 +165,9 @@ export interface ResolvedDefinition {
   steps: ResolvedWorkflowStep[]
 }
 
-export type ValidateWorkflowOptions = Record<never, never>
+export interface ValidateWorkflowOptions {
+  supportedFeatures?: Iterable<WorkflowFeature>
+}
 
 export interface WorkflowValidationResult {
   parsed?: ParsedWorkflowDefinition
