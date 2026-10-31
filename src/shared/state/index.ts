@@ -371,7 +371,14 @@ export type WireSnapshotState = {
  *  literal won't satisfy `AppState`. */
 export function mergeWireSnapshot(state: WireSnapshotState): AppState {
   return {
-    settings: { ...initialState.settings, ...state.settings },
+    settings: {
+      ...initialState.settings,
+      ...state.settings,
+      harnessConfigRoots:
+        state.settings?.harnessConfigRoots ?? initialState.settings.harnessConfigRoots,
+      harnessConfigSourceDir:
+        state.settings?.harnessConfigSourceDir ?? initialState.settings.harnessConfigSourceDir
+    },
     prs: { ...initialState.prs, ...state.prs },
     onboarding: { ...initialState.onboarding, ...state.onboarding },
     hooks: { ...initialState.hooks, ...state.hooks },

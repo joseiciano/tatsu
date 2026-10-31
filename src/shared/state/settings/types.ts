@@ -1,4 +1,5 @@
 import type { JsonClaudePermissionMode } from '../json-claude'
+import type { HarnessConfigRootKey, HarnessConfigRoots } from '../harness-config'
 
 export interface WorktreeScripts {
   setup: string
@@ -187,6 +188,11 @@ export interface SettingsState {
    *  the feed contents. Set by the "Hide all announcements" action and
    *  cleared only by the user. */
   announcementsMuted: boolean
+  /** Per-root overrides for where each harness keeps its agents, skills,
+   *  and commands. A missing key means the service default. */
+  harnessConfigRoots: HarnessConfigRoots
+  /** Template source folder. `null` means `<userData>/harness-config-source`. */
+  harnessConfigSourceDir: string | null
 }
 
 export type SettingsEvent =
@@ -253,3 +259,8 @@ export type SettingsEvent =
   | { type: 'settings/piCommandChanged'; payload: string }
   | { type: 'settings/piEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/piModelChanged'; payload: string | null }
+  | {
+      type: 'settings/harnessConfigRootsChanged'
+      payload: { key: HarnessConfigRootKey; path: string | null }
+    }
+  | { type: 'settings/harnessConfigSourceDirChanged'; payload: string | null }

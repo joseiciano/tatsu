@@ -11,6 +11,7 @@ import type {
   HarnessConfigMutationDirection,
   HarnessConfigMutationPlan,
   HarnessConfigReadFileResult,
+  HarnessConfigRootKey,
   HarnessConfigScope,
   HarnessConfigSyncPlan,
   ManagedHarnessKind
@@ -130,7 +131,7 @@ export interface HarnessConfigFilesystem {
 }
 
 export interface HarnessConfigServiceDeps {
-  knownRoots?: Record<string, string | undefined>
+  knownRoots?: () => Partial<Record<HarnessConfigRootKey, string>>
   resolvers?: Partial<Record<ManagedHarnessKind, HarnessResolver>>
   homeDir?: string
   env?: Record<string, string | undefined>
@@ -158,4 +159,6 @@ export interface HarnessConfigService {
   prepareCommandFromSkill(scope: HarnessConfigScope, id: string): HarnessConfigConversionResult
   prepareSkillFromCommand(scope: HarnessConfigScope, id: string): HarnessConfigConversionResult
   applyPlan(request: HarnessConfigApplyRequest): Promise<HarnessConfigApplyResult>
+  defaultRoots(): Record<HarnessConfigRootKey, string>
+  scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[]
 }

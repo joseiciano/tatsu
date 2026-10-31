@@ -1,6 +1,7 @@
 import type {
   HarnessConfigEvent,
   HarnessConfigFileRef,
+  HarnessConfigRootKey,
   HarnessConfigScope,
   HarnessConfigScopeKey,
   HarnessConfigState,
@@ -11,6 +12,21 @@ const HARNESS_ORDER: Record<ManagedHarnessKind, number> = {
   claude: 0,
   codex: 1,
   opencode: 2
+}
+
+export const HARNESS_CONFIG_ROOT_KEYS: readonly HarnessConfigRootKey[] = [
+  'claudeAgents',
+  'claudeSkills',
+  'claudeCommands',
+  'codexHome',
+  'codexSkills',
+  'opencodeAgents',
+  'opencodeSkills',
+  'opencodeCommands'
+]
+
+export function isHarnessConfigRootKey(value: unknown): value is HarnessConfigRootKey {
+  return typeof value === 'string' && (HARNESS_CONFIG_ROOT_KEYS as readonly string[]).includes(value)
 }
 
 export const initialHarnessConfig: HarnessConfigState = {

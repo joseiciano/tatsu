@@ -653,4 +653,56 @@ describe('settingsReducer', () => {
     expect(next.claudeCommand).toBe('pre-existing')
     expect(next.nameClaudeSessions).toBe(true)
   })
+
+  it('harnessConfigRootsChanged sets, replaces, and clears one root override', () => {
+    expect(initialSettings.harnessConfigRoots).toEqual({})
+    const set = apply(initialSettings, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'claudeSkills', path: '/dotfiles/claude/skills' }
+    })
+    expect(set.harnessConfigRoots).toEqual({ claudeSkills: '/dotfiles/claude/skills' })
+    const both = apply(set, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'opencodeAgents', path: '/dotfiles/opencode/agents' }
+    })
+    expect(both.harnessConfigRoots).toEqual({
+      claudeSkills: '/dotfiles/claude/skills',
+      opencodeAgents: '/dotfiles/opencode/agents'
+    })
+    const cleared = apply(both, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'claudeSkills', path: null }
+    })
+    expect(cleared.harnessConfigRoots).toEqual({ opencodeAgents: '/dotfiles/opencode/agents' })
+    expect('claudeSkills' in cleared.harnessConfigRoots).toBe(false)
+  })
+
+  it('harnessConfigRootsChanged returns the same state for a no-op', () => {
+    const same = apply(initialSettings, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'codexHome', path: null }
+    })
+    expect(same).toBe(initialSettings)
+    const set = apply(initialSettings, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'codexHome', path: '/x/codex' }
+    })
+    expect(
+      apply(set, {
+        type: 'settings/harnessConfigRootsChanged',
+        payload: { key: 'codexHome', path: '/x/codex' }
+      })
+    ).toBe(set)
+  })
+
+  it('harnessConfigSourceDirChanged sets and clears the template source folder', () => {
+    expect(initialSettings.harnessConfigSourceDir).toBeNull()
+    const set = apply(initialSettings, {
+      type: 'settings/harnessConfigSourceDirChanged',
+      payload: '/templates'
+    })
+    expect(set.harnessConfigSourceDir).toBe('/templates')
+    const cleared = apply(set, { type: 'settings/harnessConfigSourceDirChanged', payload: null })
+    expect(cleared.harnessConfigSourceDir).toBeNull()
+  })
 })

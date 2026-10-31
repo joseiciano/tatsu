@@ -23,6 +23,8 @@ import type {
   HarnessConfigComparison,
   HarnessConfigConversionRequest,
   HarnessConfigConversionResult,
+  HarnessConfigFolderDefaults,
+  HarnessConfigFolderSettingResult,
   HarnessConfigMutationPlan,
   HarnessConfigPrepareCreateRequest,
   HarnessConfigPrepareDeleteRequest,
@@ -33,6 +35,7 @@ import type {
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
+  HarnessConfigSetRootRequest,
   HarnessConfigSyncPlan
 } from '../../shared/state/harness-config'
 export type {
@@ -41,6 +44,8 @@ export type {
   HarnessConfigComparison,
   HarnessConfigConversionRequest,
   HarnessConfigConversionResult,
+  HarnessConfigFolderDefaults,
+  HarnessConfigFolderSettingResult,
   HarnessConfigMutationPlan,
   HarnessConfigPrepareCreateRequest,
   HarnessConfigPrepareDeleteRequest,
@@ -51,6 +56,7 @@ export type {
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
+  HarnessConfigSetRootRequest,
   HarnessConfigSyncPlan
 }
 
@@ -472,6 +478,9 @@ export interface ElectronAPI {
   setGithubToken(token: string): Promise<{ ok: boolean; username?: string; error?: string }>
   clearGithubToken(): Promise<boolean>
   setHarnessStarred(starred: boolean): Promise<{ ok: boolean; error?: string }>
+  setHarnessConfigRoot(request: HarnessConfigSetRootRequest): Promise<HarnessConfigFolderSettingResult>
+  setHarnessConfigSourceDir(path: string | null): Promise<HarnessConfigFolderSettingResult>
+  getHarnessConfigFolderDefaults(): Promise<HarnessConfigFolderDefaults>
 
   getVersion(): Promise<string>
   readRecentLog(maxLines?: number): Promise<string>

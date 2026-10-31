@@ -113,7 +113,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return false
 }
 
-export function Config({ onClose }: ConfigProps): JSX.Element {
+export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Element {
   const backend = useBackend()
   const harnessConfig = useHarnessConfig()
   const settings = useSettings()
@@ -268,6 +268,19 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     return window.confirm('Discard unsaved changes in the Config editor?')
   }, [isDirty])
 
+  // A config-folder change in Settings moves the roots under every scope,
+  // so drop the per-session scanned bookkeeping and per-scope errors and
+  // let the scan effect below rescan what's visible.
+  const rootsRef = useRef(settings.harnessConfigRoots)
+  const [rootsVersion, setRootsVersion] = useState(0)
+  useEffect(() => {
+    if (rootsRef.current === settings.harnessConfigRoots) return
+    rootsRef.current = settings.harnessConfigRoots
+    scannedRef.current.delete(activeBackend.id)
+    setScopeStatusState({})
+    setRootsVersion((v) => v + 1)
+  }, [settings.harnessConfigRoots, activeBackend.id])
+
   // ---- Scanning (REQ-010) ----
 
   const runScopeScan = useCallback(
@@ -317,7 +330,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       void runScopeScan(scope, backendId, generation)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, agentFilter, activeBackend.id, runScopeScan])
+  }, [activeTab, agentFilter, activeBackend.id, runScopeScan, rootsVersion])
 
   const refreshComparisons = useCallback(
     async (
@@ -1272,6 +1285,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
             onSync={handleSync}
             onCreateCommand={handleCreateCommand}
             onCreateSkill={handleCreateSkill}
+            onOpenConfigFolders={onOpenConfigFolders}
           />
         </div>
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">

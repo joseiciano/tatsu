@@ -69,6 +69,7 @@ import {
 } from './persistence'
 import { createHarnessConfigService } from './harness-config'
 import { registerHarnessConfigRequestHandlers } from './harness-config-transport'
+import { registerHarnessConfigSettingsHandlers } from './harness-config-settings'
 import { loadRepoConfig, saveRepoConfig, type RepoConfig } from './repo-config'
 import { createNewProject, type GitignorePreset } from './repo-create'
 import { resolveRepoPath } from './repo-resolve'
@@ -447,10 +448,19 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
 // saveConfig()) so a confirmed mutation either persists before
 // returning or throws and leaves Tatsu config untouched.
 const harnessConfigService = createHarnessConfigService({
+  knownRoots: () => store.getSnapshot().state.settings.harnessConfigRoots,
   loadDesiredResources: () => getPersistedHarnessConfigResources(config),
   replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)
 })
 registerHarnessConfigRequestHandlers({ transport, store, service: harnessConfigService })
+registerHarnessConfigSettingsHandlers({
+  transport,
+  store,
+  config,
+  saveConfig,
+  service: harnessConfigService,
+  defaultSourceDir: () => join(userDataDir(), 'harness-config-source')
+})
 
 // Tails Claude Code session jsonl transcripts on Stop hook events,
 // sums per-model usage, and dispatches costs/usageUpdated. See

@@ -129,6 +129,17 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
     prepareCommandFromSkill: vi.fn((): HarnessConfigConversionResult => ({ status: 'draft', agentKind: 'claude', resourceType: 'commands', name: 'foo', relativePath: 'foo.md', label: 'foo', content: 'c' })),
     prepareSkillFromCommand: vi.fn((): HarnessConfigConversionResult => ({ status: 'draft', agentKind: 'claude', resourceType: 'skills', name: 'foo', relativePath: 'foo/SKILL.md', label: 'foo', content: 'c' })),
     applyPlan: vi.fn(async () => makeApplyResult()),
+    defaultRoots: vi.fn(() => ({
+      claudeAgents: '/home/.claude/agents',
+      claudeSkills: '/home/.claude/skills',
+      claudeCommands: '/home/.claude/commands',
+      codexHome: '/home/.codex',
+      codexSkills: '/home/.agents/skills',
+      opencodeAgents: '/home/.config/opencode/agents',
+      opencodeSkills: '/home/.config/opencode/skills',
+      opencodeCommands: '/home/.config/opencode/commands'
+    })),
+    scopesForRootKeys: vi.fn(() => [] as HarnessConfigScope[]),
     ...overrides
   }
 }

@@ -5,6 +5,30 @@ export type { HarnessConfigResourceType } from '../../agent-registry'
 
 export type ManagedHarnessKind = Extract<AgentKind, 'claude' | 'codex' | 'opencode'>
 
+export type HarnessConfigRootKey =
+  | 'claudeAgents'
+  | 'claudeSkills'
+  | 'claudeCommands'
+  | 'codexHome'
+  | 'codexSkills'
+  | 'opencodeAgents'
+  | 'opencodeSkills'
+  | 'opencodeCommands'
+
+export type HarnessConfigRoots = Partial<Record<HarnessConfigRootKey, string>>
+
+export interface HarnessConfigFolderDefaults {
+  roots: Record<HarnessConfigRootKey, string>
+  sourceDir: string
+}
+
+export interface HarnessConfigSetRootRequest {
+  key: HarnessConfigRootKey
+  path: string | null
+}
+
+export type HarnessConfigFolderSettingResult = { ok: true } | { ok: false; message: string }
+
 export interface HarnessConfigScope {
   agentKind: ManagedHarnessKind
   resourceType: HarnessConfigResourceType
