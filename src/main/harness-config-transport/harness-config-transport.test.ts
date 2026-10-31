@@ -45,7 +45,6 @@ function makeComparison(overrides: Partial<HarnessConfigComparison> = {}): Harne
   return {
     scope: { agentKind: 'claude', resourceType: 'skills' },
     status: 'synced',
-    diskOnly: [],
     configOnly: [],
     changed: [],
     comparedAt: 100,
@@ -71,7 +70,6 @@ function makeSyncPlan(overrides: Partial<HarnessConfigSyncPlan> = {}): HarnessCo
     scope: { agentKind: 'claude', resourceType: 'skills' },
     direction: 'sync-to-disk',
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [],
     generatedAt: 10,
@@ -119,9 +117,6 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
     readFile: vi.fn((): HarnessConfigReadFileResult => ({ ref: makeRef(), content: 'secret content', hash: 'hash-1' })),
     planSync: vi.fn((scope: HarnessConfigScope) => makeComparison({ scope })),
     planSyncToDisk: vi.fn((scope: HarnessConfigScope) => makeSyncPlan({ scope })),
-    planAdoptFromDisk: vi.fn((scope: HarnessConfigScope) =>
-      makeSyncPlan({ scope, planId: 'adopt-plan-1', direction: 'adopt-from-disk' })
-    ),
     prepareCreate: vi.fn((scope: HarnessConfigScope) => makeMutationPlan({ scope, direction: 'create' })),
     prepareUpdate: vi.fn((scope: HarnessConfigScope) =>
       makeMutationPlan({ scope, direction: 'update', planId: 'plan-update-1' })
@@ -332,7 +327,6 @@ describe('registerHarnessConfigRequestHandlers', () => {
       ['harnessConfig:prepareUpdate', { scope: SKILLS_SCOPE, id: 'ref-1', content: 'c' }],
       ['harnessConfig:prepareDelete', { scope: SKILLS_SCOPE, id: 'ref-1' }],
       ['harnessConfig:planSyncToDisk', { scope: SKILLS_SCOPE }],
-      ['harnessConfig:planAdoptFromDisk', { scope: SKILLS_SCOPE }],
       ['harnessConfig:prepareCommandFromSkill', { scope: SKILLS_SCOPE, id: 'ref-1' }],
       ['harnessConfig:prepareSkillFromCommand', { scope: { agentKind: 'claude', resourceType: 'commands' }, id: 'ref-1' }]
     ])('%s never calls applyPlan and dispatches no resource/comparison/sync events', async (channel, payload) => {
@@ -501,7 +495,7 @@ describe('registerHarnessConfigRequestHandlers', () => {
     })
   })
 
-  describe('sync/adopt directional mutations (TEST-005/TEST-007)', () => {
+  describe('sync directional mutations (TEST-005/TEST-007)', () => {
     it('confirmed syncToDisk refreshes inventory, dispatches a fresh comparison, and dispatches syncApplied', async () => {
       const plan = makeSyncPlan()
       const freshComparison = makeComparison({ status: 'synced' })
@@ -561,20 +555,6 @@ describe('registerHarnessConfigRequestHandlers', () => {
       const applied = store.eventsOfType('harnessConfig/syncApplied')
       expect(applied).toHaveLength(1)
       expect((applied[0] as { payload: { syncedAt: number } }).payload.syncedAt).toBe(applyResolvedAt)
-    })
-
-    it('a sync-to-disk plan cannot be applied through adoptFromDisk', async () => {
-      const plan = makeSyncPlan()
-      const { transport, service } = setup({ planSyncToDisk: vi.fn(() => plan) })
-      await transport.call('harnessConfig:planSyncToDisk', { scope: SKILLS_SCOPE })
-
-      const result = (await transport.call('harnessConfig:adoptFromDisk', {
-        scope: SKILLS_SCOPE,
-        planId: plan.planId,
-        confirmed: true
-      })) as { ok: false; error: { code: string } }
-      expect(result.error.code).toBe('unknown-plan')
-      expect(service.applyPlan).not.toHaveBeenCalled()
     })
 
     it('a partial apply failure still rescans and may refresh comparison, but withholds syncApplied and keeps the original error', async () => {
@@ -837,7 +817,7 @@ describe('template source channels', () => {
     return { transport, store, templateSource }
   }
 
-  it('saveTemplate warns before shadowing stored entries and saves once allowed (REQ-002)', async () => {
+  it('saveTemplate warns before writing over existing files and saves once allowed (REQ-002)', async () => {
     const service = createFakeService({
       templateShadows: vi.fn(() => [{ agentKind: 'claude' as const, resourceType: 'agents' as const, relativePath: 'code-reviewer.md' }])
     })
@@ -871,15 +851,15 @@ describe('template source channels', () => {
     expect(templateSource.saveTemplate).not.toHaveBeenCalled()
   })
 
-  it('planAdoptFromDisk passes detach ids through and validates them', async () => {
+  it('planSyncToDisk passes detach ids through and validates them', async () => {
     const service = createFakeService()
     const { transport } = setupTemplates({}, service)
     const scope = { agentKind: 'claude', resourceType: 'agents' }
-    await transport.call('harnessConfig:planAdoptFromDisk', { scope, detach: ['id-1'] })
-    expect(service.planAdoptFromDisk).toHaveBeenCalledWith(scope, { detach: ['id-1'] })
-    await transport.call('harnessConfig:planAdoptFromDisk', { scope })
-    expect(service.planAdoptFromDisk).toHaveBeenLastCalledWith(scope)
-    const invalid = (await transport.call('harnessConfig:planAdoptFromDisk', { scope, detach: [1] })) as {
+    await transport.call('harnessConfig:planSyncToDisk', { scope, detach: ['id-1'] })
+    expect(service.planSyncToDisk).toHaveBeenCalledWith(scope, { detach: ['id-1'] })
+    await transport.call('harnessConfig:planSyncToDisk', { scope })
+    expect(service.planSyncToDisk).toHaveBeenLastCalledWith(scope)
+    const invalid = (await transport.call('harnessConfig:planSyncToDisk', { scope, detach: [1] })) as {
       ok: boolean
       error: { code: string }
     }
@@ -1100,7 +1080,7 @@ describe('template import channels (Step 22)', () => {
     expect(templateSource.saveTemplate).toHaveBeenCalledTimes(1)
   })
 
-  it('requires allowShadowing when an imported template hides stored entries', async () => {
+  it('requires allowShadowing when an imported template writes over existing files', async () => {
     const service = createFakeService({
       templateShadows: vi.fn(() => [
         { agentKind: 'claude' as const, resourceType: 'agents' as const, relativePath: 'reviewer.md' }

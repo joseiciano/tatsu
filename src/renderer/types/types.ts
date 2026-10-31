@@ -18,7 +18,6 @@ import type { AddRepoResult } from '../../shared/repo-pick'
 export type { AddRepoResult }
 
 import type {
-  HarnessConfigAdoptRequest,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
@@ -38,6 +37,7 @@ import type {
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
+  HarnessConfigSyncToDiskRequest,
   HarnessConfigSetRootRequest,
   HarnessConfigSyncPlan,
   HarnessFragment,
@@ -54,7 +54,6 @@ import type {
   HarnessTemplateSaveRequest
 } from '../../shared/state/harness-config'
 export type {
-  HarnessConfigAdoptRequest,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
@@ -74,6 +73,7 @@ export type {
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
+  HarnessConfigSyncToDiskRequest,
   HarnessConfigSetRootRequest,
   HarnessConfigSyncPlan,
   HarnessFragment,
@@ -688,10 +688,7 @@ export interface ElectronAPI {
     request: HarnessConfigPrepareDeleteRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
   planHarnessConfigSyncToDisk(
-    request: HarnessConfigScopeRequest
-  ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
-  planHarnessConfigAdoptFromDisk(
-    request: HarnessConfigAdoptRequest
+    request: HarnessConfigSyncToDiskRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
   createHarnessConfigFile(
     request: HarnessConfigApplyRequest
@@ -703,9 +700,6 @@ export interface ElectronAPI {
     request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   syncHarnessConfigToDisk(
-    request: HarnessConfigApplyRequest
-  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
-  adoptHarnessConfigFromDisk(
     request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   prepareHarnessConfigCommandFromSkill(

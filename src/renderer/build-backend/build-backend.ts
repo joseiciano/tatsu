@@ -50,6 +50,7 @@ import type {
   HarnessConfigReadRequest,
   HarnessConfigResolveFragmentEditRequest,
   HarnessConfigScopeRequest,
+  HarnessConfigSyncToDiskRequest,
   HarnessConfigSetRootRequest,
   HarnessFragmentDeleteRequest,
   HarnessFragmentSaveRequest,
@@ -614,10 +615,8 @@ export function buildBackend(
       req('harnessConfig:prepareUpdate', request),
     prepareHarnessConfigDelete: (request: HarnessConfigPrepareDeleteRequest) =>
       req('harnessConfig:prepareDelete', request),
-    planHarnessConfigSyncToDisk: (request: HarnessConfigScopeRequest) =>
+    planHarnessConfigSyncToDisk: (request: HarnessConfigSyncToDiskRequest) =>
       req('harnessConfig:planSyncToDisk', request),
-    planHarnessConfigAdoptFromDisk: (request: HarnessConfigScopeRequest) =>
-      req('harnessConfig:planAdoptFromDisk', request),
     createHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:createFile', request),
     updateHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
@@ -626,8 +625,6 @@ export function buildBackend(
       req('harnessConfig:deleteFile', request),
     syncHarnessConfigToDisk: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:syncToDisk', request),
-    adoptHarnessConfigFromDisk: (request: HarnessConfigApplyRequest) =>
-      req('harnessConfig:adoptFromDisk', request),
     prepareHarnessConfigCommandFromSkill: (request: HarnessConfigConversionRequest) =>
       req('harnessConfig:prepareCommandFromSkill', request),
     prepareHarnessConfigSkillFromCommand: (request: HarnessConfigConversionRequest) =>

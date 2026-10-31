@@ -10,7 +10,6 @@ import {
   type HarnessConfigResourceType,
   type HarnessConfigScope,
   type HarnessConfigScopeKey,
-  type HarnessConfigSyncDirection,
   type ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import { ConfigTabs } from './ConfigTabs'
@@ -474,7 +473,6 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     const existsInComparison =
       !!comparison &&
       (comparison.configOnly.some((r) => r.id === selected.id) ||
-        comparison.diskOnly.some((r) => r.id === selected.id) ||
         comparison.changed.some((c) => c.disk.id === selected.id))
     if (existsInComparison) return
     invalidateRead()
@@ -743,7 +741,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
 
   // REQ-014: the *only* two callers of the conversion prepare channels.
   // Nothing else — mount, tab/filter change, scan, Tatsu-config refresh,
-  // sync/adopt, conflict completion, plugin metadata — may invoke this.
+  // sync, conflict completion, plugin metadata — may invoke this.
   // An `alias`/`existing` result is a pure notice with zero mutation
   // (REQ-017); a `draft` result enters the existing create flow without
   // ever applying itself (REQ-015/REQ-016).
@@ -1077,8 +1075,8 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         setDialogReview(toConfigSyncReview(compared.value))
         setDialogActionNotice(
           resolution === 'keep-edit'
-            ? `Saved the edit to ${fragment}. Sync to disk to update this file, and sync other folders that use it.`
-            : 'Resolved in Tatsu config. Sync to disk to update this file.'
+            ? `Saved the edit to ${fragment} and updated this file. Sync other folders that use it.`
+            : 'Resolved and updated this file on disk.'
         )
         setDialogStage('idle')
       })()
@@ -1148,8 +1146,8 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
   // mutation buttons. Every identity/token check in REQ-021 runs after
   // each awaited planner/apply/recovery call before the next request is
   // issued or local UI state is committed.
-  const handleOutcomeClick = useCallback(
-    (direction: HarnessConfigSyncDirection) => {
+  const handleSyncClick = useCallback(
+    () => {
       if (!dialogReview || dialogStage !== 'idle' || !dialogReviewUsable) return
 
       const token = dialogTokenRef.current
@@ -1177,10 +1175,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
       void (async () => {
         let planResult: Awaited<ReturnType<typeof backend.planHarnessConfigSyncToDisk>>
         try {
-          planResult =
-            direction === 'sync-to-disk'
-              ? await backend.planHarnessConfigSyncToDisk({ scope })
-              : await backend.planHarnessConfigAdoptFromDisk(detach.length > 0 ? { scope, detach } : { scope })
+          planResult = await backend.planHarnessConfigSyncToDisk(detach.length > 0 ? { scope, detach } : { scope })
         } catch (err) {
           if (isStale()) return
           setDialogActionError(requestFailureMessage(err))
@@ -1212,23 +1207,15 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
           return
         }
 
-        // apply-fresh-plan: a review-equivalent, drift-bearing plan from
-        // the direction-specific planner that matches this outcome.
+        // apply-fresh-plan: a review-equivalent, drift-bearing plan.
         setDialogStage('applying')
         let applyResult: Awaited<ReturnType<typeof backend.syncHarnessConfigToDisk>>
         try {
-          applyResult =
-            direction === 'sync-to-disk'
-              ? await backend.syncHarnessConfigToDisk({
-                  scope: freshPlan.scope,
-                  planId: freshPlan.planId,
-                  confirmed: true
-                })
-              : await backend.adoptHarnessConfigFromDisk({
-                  scope: freshPlan.scope,
-                  planId: freshPlan.planId,
-                  confirmed: true
-                })
+          applyResult = await backend.syncHarnessConfigToDisk({
+            scope: freshPlan.scope,
+            planId: freshPlan.planId,
+            confirmed: true
+          })
         } catch (err) {
           applyResult = { ok: false, error: { code: 'internal-error', message: requestFailureMessage(err) } }
         }
@@ -1241,11 +1228,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
 
         if (applyResult.ok) {
           closeDialog()
-          const notice =
-            direction === 'sync-to-disk'
-              ? `Synced ${agentName} ${resourceLabel} to disk`
-              : `Adopted current disk ${resourceLabel} into Tatsu config`
-          showScopeNotice(scopeKey, notice, backendId, generation)
+          showScopeNotice(scopeKey, `Synced ${agentName} ${resourceLabel} to disk`, backendId, generation)
           return
         }
 
@@ -1521,8 +1504,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         detachIds={dialogDetachIds}
         onDetachChange={handleDetachChange}
         onResolveFragmentEdit={handleResolveFragmentEdit}
-        onSyncToDisk={() => handleOutcomeClick('sync-to-disk')}
-        onAdoptFromDisk={() => handleOutcomeClick('adopt-from-disk')}
+        onSyncToDisk={handleSyncClick}
         onCancel={handleDialogCancel}
       />
     </div>

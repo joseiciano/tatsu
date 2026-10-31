@@ -30,7 +30,7 @@ function template(name: string, overrides: Partial<HarnessTemplate> = {}): Harne
 }
 
 function comparison(scope: HarnessConfigScope, status: HarnessConfigSyncStatus, comparedAt = 1): HarnessConfigComparison {
-  return { scope, status, diskOnly: [], configOnly: [], changed: [], comparedAt }
+  return { scope, status, configOnly: [], changed: [], comparedAt }
 }
 
 class FakeStore implements TemplateSyncDeriverStore {

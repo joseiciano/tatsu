@@ -105,7 +105,7 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
 
 ## 3. Alternatives
 
-- **ALT-001**: Treat disk as the only source of truth and use Tatsu solely as a file editor. Rejected because it cannot represent desired resources that are temporarily missing from disk and cannot provide a deterministic sync-to-disk direction.
+- **ALT-001**: Treat disk as the only source of truth and use Tatsu solely as a file editor. Rejected because it cannot represent desired resources that are temporarily missing from disk and cannot provide a deterministic sync-to-disk direction. Superseded: once templates landed, disk became the source for hand-written files and adopt from disk (REQ-010) was removed; see the source-of-truth rules in [implementation-details.md](./implementation-details.md).
 - **ALT-002**: Treat Tatsu config as authoritative and automatically overwrite drift on scan. Rejected because it can destroy existing user-authored harness configuration without informed consent.
 - **ALT-003**: Provide one global sync action across all harnesses and resource types. Rejected for the first implementation because the blast radius is too large and plugin/capability differences make a single confirmation ambiguous.
 - **ALT-004**: Convert plugin and resource formats between harnesses automatically. Rejected because plugin schemas and runtime assumptions are not portable across vendors.

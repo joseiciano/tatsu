@@ -55,7 +55,7 @@ export type ConfigConversionOutcome =
       source: ConfigConversionSourceInfo
     }
 
-export type ConfigDriftBadge = 'synced' | 'disk-only' | 'config-only' | 'conflict'
+export type ConfigDriftBadge = 'synced' | 'config-only' | 'conflict'
 
 /** Exact identity of the resource the page is reading/editing. Both
  *  fields travel together everywhere a request is made so a stale
@@ -248,7 +248,7 @@ export interface ConfigSyncFileRow {
   /** Stable React key. */
   key: string
   ref: HarnessConfigFileRef
-  sourceLabel: 'Disk' | 'Tatsu config' | 'Template'
+  sourceLabel: 'Disk' | 'After sync' | 'Template'
   updatedAtLabel: string
   /** `sha256:<first 12 chars>` — the default visual label (REQ-007). */
   hashShortLabel: string
@@ -256,7 +256,7 @@ export interface ConfigSyncFileRow {
   hashFullLabel: string
 }
 
-/** One content-changed pair: the disk side and the Tatsu config side of
+/** One content-changed pair: the disk side and the after-sync side of
  *  the same logical resource, rendered as two explicitly labeled sides
  *  of one row (REQ-008). */
 export interface ConfigSyncChangedRow {
@@ -266,18 +266,15 @@ export interface ConfigSyncChangedRow {
 }
 
 export interface ConfigSyncReviewSections {
-  diskOnly: ConfigSyncFileRow[]
   configOnly: ConfigSyncFileRow[]
   changed: ConfigSyncChangedRow[]
-  /** Stored entries hidden by template output at the same path (Step 20). */
-  shadowed: ConfigSyncFileRow[]
   renderErrors: ConfigSyncRenderErrorRow[]
   fragmentErrors: ConfigSyncFragmentErrorRow[]
   fragmentEdits: ConfigSyncFragmentEditRow[]
 }
 
-/** A stored file whose fragment placeholders cannot expand. Its disk
- *  copy, when there is one, is held instead of synced or deleted. */
+/** A hand-written file whose fragment placeholders cannot expand. Sync
+ *  leaves it as it is on disk. */
 export interface ConfigSyncFragmentErrorRow {
   key: string
   label: string
@@ -286,7 +283,7 @@ export interface ConfigSyncFragmentErrorRow {
   held: ConfigSyncFileRow | null
 }
 
-/** A stored file with hand-edited fragment sections to resolve. */
+/** A hand-written file with hand-edited fragment sections to resolve. */
 export interface ConfigSyncFragmentEditRow {
   key: string
   id: string
@@ -331,12 +328,11 @@ export interface ConfigSyncDialogProps {
   reviewUsable: boolean
   actionError: string | null
   actionNotice: string | null
-  /** Template-built ids the user chose to detach on adopt (REQ-006). */
+  /** Template-built ids the user chose to keep on disk and detach. */
   detachIds: ReadonlySet<string>
   onDetachChange: (id: string, detach: boolean) => void
   onResolveFragmentEdit: (id: string, fragment: string, resolution: HarnessConfigFragmentResolution) => void
   onSyncToDisk: () => void
-  onAdoptFromDisk: () => void
   onCancel: () => void
 }
 
@@ -458,7 +454,7 @@ export interface ConfigFragmentEditorProps {
   onContentChange: (content: string) => void
   /** `<kind>/<name>` of every template that uses this fragment. */
   usedBy: readonly string[]
-  /** `<harness> <path>` of every stored file that uses this fragment. */
+  /** `<harness> <path>` of every hand-written file that uses this fragment. */
   usedByFiles: readonly string[]
   dirty: boolean
   busy: boolean

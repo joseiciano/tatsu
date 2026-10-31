@@ -12,7 +12,7 @@ The goal is to let Tatsu view and manage exactly three logical resource types:
 - `skills` — **Skills**
 - `commands` — **Commands**
 
-This allows users to compare the resources configured for one agentic harness with those configured for another, then create, edit, delete, sync to disk, or adopt from disk within an explicitly selected harness and resource scope.
+This allows users to compare the resources configured for one agentic harness with those configured for another, then create, edit, delete, or sync to disk within an explicitly selected harness and resource scope.
 
 ### Why Create This
 
@@ -24,7 +24,7 @@ Tatsu connects users to multiple agentic harnesses, but today each harness must 
 - The Config page has three tabs with the preserved labels `Agents`, `Skills`, and `Commands`; they map only to `agents`, `skills`, and `commands`, respectively.
 - Every harness/resource combination remains visible. Managed combinations are enabled; deferred, unsupported, or unknown combinations are disabled with an explanation.
 - For an enabled `${agentKind}:${resourceType}` scope, the selected tab shows disk inventory and its comparison with Tatsu config. Users can create, edit, or delete one resource through the explicit gates in the operation matrix below.
-- A conflict presents the scoped differences and lets the user either `Sync Tatsu config to disk`, `Adopt current disk files into Tatsu config`, or `Cancel`. Nothing is written until the user confirms a current plan.
+- A conflict presents the scoped differences and lets the user `Sync to disk` or `Cancel`. Nothing is written until the user confirms a current plan.
 - The `Skills` view offers `Create command`, and the `Commands` view offers `Create skill`. Where Claude exposes the same physical resource in both views, conversion reuses its stable identity and path rather than creating another file.
 
 ## Product Boundary and Source of Truth
@@ -62,41 +62,39 @@ Every comparison, generated plan, current-plan slot, and mutation is scoped by `
 
 Canonical terminology (GUD-001) — use these terms consistently in every downstream plan and UI contract:
 
-- **Disk inventory** — the files currently discovered by a harness-specific resolver inside known configuration roots. It is an observation, not desired state.
-- **Tatsu config** — the persisted desired managed state stored in Tatsu's app config. It is NOT a cache of the latest disk scan. With templates ([Step 18](./step-18-template-source-model.md) to [Step 20](./step-20-template-sync.md)), Tatsu config for a scope also includes the files built from templates that target it; the templates themselves live in the template source folder.
+- **Disk inventory** — the files currently discovered by a harness-specific resolver inside known configuration roots. Disk is the source of truth for hand-written files: Tatsu keeps no saved copy of them.
+- **Tatsu config** — the desired state of a scope: the files built from templates that target it ([Step 18](./step-18-template-source-model.md) to [Step 20](./step-20-template-sync.md)), plus each hand-written disk file with its inline fragment sections refreshed ([Step 23](./step-23-inline-fragments.md)). Templates and fragments live in the template source folder. Earlier builds also stored a copy of every hand-written file in Tatsu's app config; that copy is no longer read or written.
 - **Template** — a source definition that builds one resource for each harness it explicitly targets, optionally including shared **fragments**.
-- **Sync to disk** — generate and, only after confirmation, apply a plan that makes the selected disk scope match Tatsu config.
-- **Adopt from disk** — generate and, only after confirmation, apply a plan that replaces the selected portion of Tatsu config with the current disk inventory.
+- **Sync to disk** — generate and, only after confirmation, apply a plan that writes missing or out-of-date template output and refreshed fragment sections to the selected disk scope. It never deletes a file. For a template file that differs on disk, the user may instead keep the disk file and detach it from the template.
 - **Conflict** — a difference between disk inventory and Tatsu config for a scoped `${agentKind}:${resourceType}`.
 - **Confirmed plan** — a previously generated, still-current plan that the user has explicitly confirmed for a specific mutation.
 
-Direction is fixed: sync to disk writes Tatsu config to disk; adopt from disk writes disk inventory into Tatsu config (TEST-002).
+Direction is fixed: sync to disk writes Tatsu config to disk (TEST-002). There is no adopt from disk: a hand-written file is already the source, so editing it on disk or in Tatsu is the change.
 
 ### Source-of-truth operation matrix
 
 | Operation | Reads | Writes | Required user gate |
 |---|---|---|---|
 | Scan | Known harness roots | Nothing | None |
-| Compare | Disk inventory and Tatsu config | Nothing | None |
-| Sync to disk | Confirmed Tatsu config snapshot | Selected harness directory | Confirmed current sync plan |
-| Adopt from disk | Confirmed disk inventory snapshot | Selected Tatsu config scope | Confirmed current adopt plan |
+| Compare | Disk inventory, templates, and fragments | Nothing | None |
+| Sync to disk | Confirmed Tatsu config snapshot | Selected harness directory, and the template source for detached files | Confirmed current sync plan |
 | Direct create | User draft and target capability | One new resource | Explicit Create action |
 | Direct update | User draft and current resource | Backup plus one existing resource | Explicit Save confirmation |
 | Direct delete | Current resource | Backup plus removal of one existing resource | Explicit Delete confirmation |
 
-Scan and compare are read-only and MAY run automatically (REQ-014). No direct create, direct update, direct delete, sync to disk, adopt from disk, or plugin setup operation may run without an explicit user action that confirms that specific mutation.
+Scan and compare are read-only and MAY run automatically (REQ-014). No direct create, direct update, direct delete, sync to disk, or plugin setup operation may run without an explicit user action that confirms that specific mutation.
 
-Existing unmanaged user files remain unmanaged until the user explicitly uses adopt from disk or confirms a direct mutation (CON-003).
+Tatsu never changes a hand-written file unless the user confirms a direct mutation, a fragment resolution, or a sync that refreshes its fragment sections (CON-003).
 
 ### Conflict and current-plan behavior
 
-A **conflict** exists only within one `${agentKind}:${resourceType}` scope when disk inventory and Tatsu config differ. Tatsu MUST show the scoped conflict modal before any sync to disk or adopt from disk mutation (REQ-012). The modal:
+A **conflict** exists only within one `${agentKind}:${resourceType}` scope when disk inventory and Tatsu config differ. Tatsu MUST show the scoped conflict modal before any sync to disk mutation (REQ-012). The modal:
 
-- Displays disk-only, config-only, and content-changed entries, each labeled with the originating harness and logical resource type (REQ-013, GUD-002).
-- Offers exactly three outcomes: `Sync Tatsu config to disk`, `Adopt current disk files into Tatsu config`, and `Cancel` (REQ-013).
+- Displays not-on-disk and content-changed entries, each labeled with the originating harness and logical resource type (REQ-013, GUD-002).
+- Offers `Sync to disk` and `Cancel`, with a per-file choice to keep and detach a template file that differs on disk (REQ-013).
 - Mutates nothing when opened, canceled, or dismissed. `Cancel` and dismissal are no-op outcomes (REQ-015).
 
-Each generated sync to disk or adopt from disk plan occupies only the current-plan slot for its `${agentKind}:${resourceType}` scope and binds the disk inventory and Tatsu config snapshots used to generate it. A new scan that changes either bound snapshot invalidates that displayed plan. Apply MUST reject an absent, unconfirmed, or stale plan; the user must regenerate and explicitly confirm a current plan before any mutation (REQ-015, TASK-005).
+Each generated sync to disk plan occupies only the current-plan slot for its `${agentKind}:${resourceType}` scope and binds the disk inventory and Tatsu config snapshots used to generate it. A new scan that changes either bound snapshot invalidates that displayed plan. Apply MUST reject an absent, unconfirmed, or stale plan; the user must regenerate and explicitly confirm a current plan before any mutation (REQ-015, TASK-005).
 
 The full conflict presentation contract is owned by [step-09-sync-conflict-ux.md](./step-09-sync-conflict-ux.md).
 
@@ -114,7 +112,7 @@ Alias capability rules are owned by [step-03-harness-capability-metadata.md](./s
 
 **Plugin provenance and inventory** (REQ-018):
 
-Plugin origin MAY be displayed as provenance metadata for an inventoried `agents`, `skills`, or `commands` resource under its originating harness. Plugin metadata does not make the plugin a managed resource, add it to the resource union or capability matrix, or authorize plugin installation, conversion, or automatic cross-harness copying. Plugins are never sync to disk or adopt from disk payloads in the first implementation.
+Plugin origin MAY be displayed as provenance metadata for an inventoried `agents`, `skills`, or `commands` resource under its originating harness. Plugin metadata does not make the plugin a managed resource, add it to the resource union or capability matrix, or authorize plugin installation, conversion, or automatic cross-harness copying. Plugins are never sync to disk payloads in the first implementation.
 
 **Backup invariant** (REQ-016, SEC-001, TASK-008):
 
@@ -142,7 +140,7 @@ Exact harness directory conventions, repo-local versus global discovery roots, a
 
 ## Alternatives considered
 
-- **ALT-001**: Treat disk as the only source of truth and use Tatsu solely as a file editor. Rejected: cannot represent desired resources that are temporarily missing from disk and cannot provide a deterministic sync to disk direction.
+- **ALT-001**: Treat disk as the only source of truth and use Tatsu solely as a file editor. First rejected because it could not represent desired resources missing from disk. Adopted after templates landed: templates now hold the desired state that can be missing from disk, and a hidden saved copy of hand-written files only duplicated what disk shows.
 - **ALT-002**: Treat Tatsu config as authoritative and automatically overwrite drift on scan. Rejected: can destroy existing user-authored harness configuration without informed consent.
 - **ALT-003**: Provide one global sync action across all harnesses and resource types. Rejected for the first implementation: blast radius too large and plugin/capability differences make a single confirmation ambiguous.
 - **ALT-004**: Convert plugin and resource formats between harnesses automatically. Rejected: plugin schemas and runtime assumptions are not portable across vendors.

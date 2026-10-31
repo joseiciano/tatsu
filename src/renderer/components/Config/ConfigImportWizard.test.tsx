@@ -227,7 +227,6 @@ describe('template import model', () => {
         'claude:agents': {
           scope: { agentKind: 'claude', resourceType: 'agents' },
           status: 'conflict',
-          diskOnly: [],
           configOnly: [],
           changed: [],
           comparedAt: 1

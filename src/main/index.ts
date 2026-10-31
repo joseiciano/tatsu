@@ -61,8 +61,6 @@ import {
   DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
   pruneTerminalHistory,
   LOCAL_BACKEND_ID,
-  getPersistedHarnessConfigResources,
-  replacePersistedHarnessConfigScope,
   type BackendConnection,
   type PersistedPaneNode,
   type QuestStep
@@ -447,13 +445,8 @@ function getLanAddresses(): Array<{ iface: string; address: string }> {
   return result
 }
 
-// Uses the synchronous, throwing persistence path (not the debounced
-// saveConfig()) so a confirmed mutation either persists before
-// returning or throws and leaves Tatsu config untouched.
 const harnessConfigService = createHarnessConfigService({
   knownRoots: () => store.getSnapshot().state.settings.harnessConfigRoots,
-  loadDesiredResources: () => getPersistedHarnessConfigResources(config),
-  replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources),
   loadTemplateSource: () => store.getSnapshot().state.harnessConfig.templates,
   detachTemplateTarget: (templateRef, agentKind) => {
     templateSourceStore.detachTarget(templateRef, agentKind)

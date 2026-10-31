@@ -46,12 +46,10 @@ const { backendApi, storeState } = vi.hoisted(() => {
     prepareHarnessConfigUpdate: vi.fn(),
     prepareHarnessConfigDelete: vi.fn(),
     planHarnessConfigSyncToDisk: vi.fn(),
-    planHarnessConfigAdoptFromDisk: vi.fn(),
     createHarnessConfigFile: vi.fn(),
     updateHarnessConfigFile: vi.fn(),
     deleteHarnessConfigFile: vi.fn(),
     syncHarnessConfigToDisk: vi.fn(),
-    adoptHarnessConfigFromDisk: vi.fn(),
     prepareHarnessConfigCommandFromSkill: vi.fn(),
     prepareHarnessConfigSkillFromCommand: vi.fn()
   }
@@ -96,7 +94,7 @@ function ref(overrides: Partial<HarnessConfigFileRef> = {}): HarnessConfigFileRe
 }
 
 function emptyComparison(scope: HarnessConfigScope): HarnessConfigComparison {
-  return { scope, status: 'synced', diskOnly: [], configOnly: [], changed: [], comparedAt: 1 }
+  return { scope, status: 'synced', configOnly: [], changed: [], comparedAt: 1 }
 }
 
 const MANAGED_KINDS: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
@@ -391,7 +389,7 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     expect(backendApi.deleteHarnessConfigFile).not.toHaveBeenCalled()
   })
 
-  it('never dispatches a conversion from mount, tab/filter/search changes, an inventory refresh, or a sync/adopt flow', async () => {
+  it('never dispatches a conversion from mount, tab/filter/search changes, an inventory refresh, or a sync flow', async () => {
     const claudeSkill = ref({
       id: 'claude-skill-1',
       agentKind: 'claude',
@@ -448,7 +446,7 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     await rerenderConfig()
     await flush()
 
-    // A full scoped sync-conflict review -> adopt-from-disk outcome.
+    // A full scoped sync-conflict review -> sync-to-disk outcome.
     const conflictScope: HarnessConfigScope = { agentKind: 'claude', resourceType: 'skills' }
     const driftRef = ref({
       id: 'drift-1',
@@ -458,9 +456,8 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     })
     const conflict: HarnessConfigComparison = {
       scope: conflictScope,
-      status: 'conflict',
-      diskOnly: [driftRef],
-      configOnly: [],
+      status: 'config-only',
+      configOnly: [driftRef],
       changed: [],
       comparedAt: 1
     }
@@ -470,21 +467,20 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     await flush()
     expect(container.querySelector('[role="dialog"]')).toBeTruthy()
 
-    backendApi.planHarnessConfigAdoptFromDisk.mockResolvedValueOnce({
+    backendApi.planHarnessConfigSyncToDisk.mockResolvedValueOnce({
       ok: true,
       value: {
         planId: 'plan-1',
         scope: conflictScope,
-        direction: 'adopt-from-disk',
-        status: 'conflict',
-        diskOnly: [driftRef],
-        configOnly: [],
+        direction: 'sync-to-disk',
+        status: 'config-only',
+        configOnly: [driftRef],
         changed: [],
         generatedAt: 1,
         fingerprint: 'fp-1'
       }
     } satisfies HarnessConfigRequestResult<HarnessConfigSyncPlan>)
-    backendApi.adoptHarnessConfigFromDisk.mockResolvedValueOnce({
+    backendApi.syncHarnessConfigToDisk.mockResolvedValueOnce({
       ok: true,
       value: {
         scope: conflictScope,
@@ -495,11 +491,11 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
       }
     } satisfies HarnessConfigRequestResult<HarnessConfigApplyResult>)
 
-    click(findButtonByText('Adopt current disk files into Tatsu config'))
+    click(findButtonByText('Sync to disk'))
     await flush()
     await flush()
 
-    expect(backendApi.adoptHarnessConfigFromDisk).toHaveBeenCalledTimes(1)
+    expect(backendApi.syncHarnessConfigToDisk).toHaveBeenCalledTimes(1)
     expect(container.querySelector('[role="dialog"]')).toBeNull()
 
     expect(backendApi.prepareHarnessConfigCommandFromSkill).not.toHaveBeenCalled()
@@ -538,7 +534,6 @@ describe('Config template sync (Step 20)', () => {
     return {
       scope: agentsScope,
       status: 'conflict',
-      diskOnly: [],
       configOnly: [],
       changed: [
         {
@@ -594,14 +589,14 @@ describe('Config template sync (Step 20)', () => {
     expect(container.querySelector('[role="status"]')).toBeNull()
   })
 
-  it('sends the detach choice with the adopt plan request (REQ-006)', async () => {
+  async function openTemplateReview(): Promise<void> {
     setNotice()
     backendApi.compareHarnessConfig.mockImplementation(async () => ({ ok: true, value: templateConflict() }))
-    backendApi.planHarnessConfigAdoptFromDisk.mockResolvedValue({
+    backendApi.planHarnessConfigSyncToDisk.mockResolvedValue({
       ok: true,
-      value: { ...templateConflict(), planId: 'plan-1', direction: 'adopt-from-disk', generatedAt: 1, fingerprint: 'fp' }
+      value: { ...templateConflict(), planId: 'plan-1', direction: 'sync-to-disk', generatedAt: 1, fingerprint: 'fp' }
     } satisfies HarnessConfigRequestResult<HarnessConfigSyncPlan>)
-    backendApi.adoptHarnessConfigFromDisk.mockResolvedValue({
+    backendApi.syncHarnessConfigToDisk.mockResolvedValue({
       ok: true,
       value: { scope: agentsScope, planId: 'plan-1', applied: [], resultingRefs: [], requiresRescan: true }
     } satisfies HarnessConfigRequestResult<HarnessConfigApplyResult>)
@@ -609,16 +604,35 @@ describe('Config template sync (Step 20)', () => {
     await flush()
     click(findButtonByText('Review Claude Code · Agents'))
     await flush()
+  }
+
+  it('sends the chosen detach ids through the sync plan request and offers no adopt action (REQ-006)', async () => {
+    await openTemplateReview()
+
+    const buttons = Array.from(container.querySelectorAll('[role="dialog"] button')).map((b) => b.textContent)
+    expect(buttons.some((text) => /adopt/i.test(text ?? ''))).toBe(false)
 
     const detach = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((input) =>
-      input.parentElement?.textContent?.startsWith('Detach from template')
+      input.parentElement?.textContent?.startsWith('Keep the disk file and detach it')
     )
     click(detach ?? null)
-    click(findButtonByText('Adopt current disk files into Tatsu config'))
+    click(findButtonByText('Sync to disk'))
     await flush()
     await flush()
-    expect(backendApi.planHarnessConfigAdoptFromDisk).toHaveBeenCalledWith({ scope: agentsScope, detach: ['tmpl-1'] })
-    expect(backendApi.adoptHarnessConfigFromDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
+    expect(backendApi.planHarnessConfigSyncToDisk).toHaveBeenCalledTimes(1)
+    expect(backendApi.planHarnessConfigSyncToDisk).toHaveBeenCalledWith({ scope: agentsScope, detach: ['tmpl-1'] })
+    expect(backendApi.syncHarnessConfigToDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
+  })
+
+  it('plans an overwrite-from-template sync without a detach list when nothing is detached', async () => {
+    await openTemplateReview()
+
+    click(findButtonByText('Sync to disk'))
+    await flush()
+    await flush()
+    expect(backendApi.planHarnessConfigSyncToDisk).toHaveBeenCalledTimes(1)
+    expect(backendApi.planHarnessConfigSyncToDisk.mock.calls[0][0]).toStrictEqual({ scope: agentsScope })
+    expect(backendApi.syncHarnessConfigToDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
   })
 })
 

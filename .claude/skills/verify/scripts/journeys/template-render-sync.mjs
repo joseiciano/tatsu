@@ -47,7 +47,7 @@ await withApp(process.argv[2], 'template-render-sync', async ({ page, state, sho
   await page.getByRole('button', { name: 'Sync Claude Code' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.waitFor()
-  const sync = dialog.getByRole('button', { name: 'Sync Tatsu config to disk' })
+  const sync = dialog.getByRole('button', { name: 'Sync to disk' })
   for (let i = 0; i < 50 && (await sync.isDisabled()); i++) await page.waitForTimeout(100)
   log(`plan:\n${await dialog.ariaSnapshot()}`)
   await shot('sync-plan')

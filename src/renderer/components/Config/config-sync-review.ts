@@ -64,13 +64,11 @@ function serializeRef(ref: HarnessConfigFileRef): string {
  *  the non-authorizing comparison the user reviewed. Never mutates the
  *  input arrays. */
 export function configSyncReviewKey(review: ReviewLike): string {
-  const diskOnly = [...review.diskOnly].sort(compareRefByPathThenId).map(serializeRef)
   const configOnly = [...review.configOnly].sort(compareRefByPathThenId).map(serializeRef)
   const changed = [...review.changed]
     .sort(compareChangedPair)
     .map((pair) => `${serializeRef(pair.disk)}|${serializeRef(pair.config)}`)
 
-  const shadowed = [...(review.shadowed ?? [])].sort(compareRefByPathThenId).map(serializeRef)
   const renderErrors = [...(review.renderErrors ?? [])]
     .sort((left, right) => compareText(left.templateRef, right.templateRef))
     .map((entry) => ({
@@ -88,10 +86,8 @@ export function configSyncReviewKey(review: ReviewLike): string {
   return JSON.stringify({
     scope: review.scope,
     status: review.status,
-    diskOnly,
     configOnly,
     changed,
-    shadowed,
     renderErrors,
     fragmentErrors,
     fragmentEdits
@@ -110,9 +106,9 @@ export function formatHash(hash: string): { shortLabel: string; fullLabel: strin
   return { shortLabel: `sha256:${hash.slice(0, 12)}`, fullLabel: `sha256:${hash}` }
 }
 
-function toFileRow(ref: HarnessConfigFileRef, side: 'Disk' | 'Tatsu config'): ConfigSyncFileRow {
+function toFileRow(ref: HarnessConfigFileRef, side: 'Disk' | 'After sync'): ConfigSyncFileRow {
   const hash = formatHash(ref.hash)
-  const fromTemplate = side === 'Tatsu config' && ref.source === 'template'
+  const fromTemplate = side === 'After sync' && ref.source === 'template'
   return {
     key: `${side}:${ref.agentKind}:${ref.id}`,
     ref,
@@ -127,31 +123,25 @@ function toFileRow(ref: HarnessConfigFileRef, side: 'Disk' | 'Tatsu config'): Co
  *  construction. Reads the input arrays but never mutates or re-sorts
  *  them in place — every sort operates on a shallow copy. */
 export function buildReviewSections(
-  diskOnly: readonly HarnessConfigFileRef[],
   configOnly: readonly HarnessConfigFileRef[],
   changed: readonly HarnessConfigChangedRef[],
-  shadowed: readonly HarnessConfigFileRef[] = [],
   renderErrors: readonly HarnessConfigRenderErrorEntry[] = [],
   fragmentErrors: readonly HarnessConfigFragmentErrorEntry[] = [],
   fragmentEdits: readonly HarnessConfigFragmentEditEntry[] = []
 ): ConfigSyncReviewSections {
-  const sortedDiskOnly = [...diskOnly].sort(compareRefByPathThenId)
   const sortedConfigOnly = [...configOnly].sort(compareRefByPathThenId)
   const sortedChanged = [...changed].sort(compareChangedPair)
-  const sortedShadowed = [...shadowed].sort(compareRefByPathThenId)
   const sortedErrors = [...renderErrors].sort((left, right) => compareText(left.templateRef, right.templateRef))
   const byPath = (left: { relativePath: string; id: string }, right: { relativePath: string; id: string }): number =>
     compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id)
 
   return {
-    diskOnly: sortedDiskOnly.map((ref) => toFileRow(ref, 'Disk')),
-    configOnly: sortedConfigOnly.map((ref) => toFileRow(ref, 'Tatsu config')),
+    configOnly: sortedConfigOnly.map((ref) => toFileRow(ref, 'After sync')),
     changed: sortedChanged.map((pair) => ({
       key: `${pair.disk.agentKind}:${pair.disk.id}`,
       disk: toFileRow(pair.disk, 'Disk'),
-      config: toFileRow(pair.config, 'Tatsu config')
+      config: toFileRow(pair.config, 'After sync')
     })),
-    shadowed: sortedShadowed.map((ref) => ({ ...toFileRow(ref, 'Tatsu config'), key: `Shadowed:${ref.agentKind}:${ref.id}` })),
     renderErrors: sortedErrors.map((entry) => ({
       key: entry.templateRef,
       templateRef: entry.templateRef,
@@ -191,10 +181,8 @@ export function toConfigSyncReview(review: ReviewLike): ConfigSyncReview {
     scopeKey: harnessConfigScopeKey(review.scope),
     status: review.status,
     sections: buildReviewSections(
-      review.diskOnly,
       review.configOnly,
       review.changed,
-      review.shadowed,
       review.renderErrors,
       review.fragmentErrors,
       review.fragmentEdits

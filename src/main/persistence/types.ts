@@ -5,22 +5,12 @@ import type {
 } from '../persistence-migrations'
 import type { CostsState } from '../../shared/state/costs'
 import type { SnoozeEntry } from '../../shared/state/snooze'
-import type { HarnessConfigDesiredResource } from '../harness-config'
 import type { HarnessConfigRoots } from '../../shared/state/harness-config'
 
 import type { AgentKind } from '../../shared/state/terminals'
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
 
 export type QuestStep = 'hidden' | 'spawn-second' | 'switch-between' | 'finale' | 'done'
-
-/** Canonical Tatsu config resource contract, reused verbatim from the
- *  harness-config service (never independently restated here). */
-export type PersistedHarnessConfigResource = HarnessConfigDesiredResource
-
-export interface PersistedHarnessConfig {
-  version: 1
-  resources: PersistedHarnessConfigResource[]
-}
 
 export interface BackendConnection {
   id: string
@@ -110,7 +100,9 @@ export interface Config {
   dismissedAnnouncementIds?: string[]
   announcementsMuted?: boolean
   scratchpadNotes?: Record<string, Record<string, string>>
-  harnessConfig?: PersistedHarnessConfig
+  /** Saved copies of harness files from builds that kept them. No longer
+   *  read or written; left in place so an older build still finds them. */
+  harnessConfig?: unknown
   harnessConfigRoots?: HarnessConfigRoots
   harnessConfigSourceDir?: string
 }

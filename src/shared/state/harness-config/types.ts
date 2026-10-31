@@ -55,23 +55,22 @@ export interface HarnessConfigFileRef {
   /** `<kind>/<name>` of the template that rendered this file, read from
    *  its provenance marker (Step 19). Absent for hand-written files. */
   templateRef?: string
-  /** `'template'` when this Tatsu config entry is built from a template
-   *  (Step 20); absent for stored entries and disk refs. */
+  /** `'template'` on the desired side of an entry built from a template
+   *  (Step 20); absent for hand-written files and disk refs. */
   source?: 'template'
 }
 
-/** A template whose render failed. It contributes nothing to Tatsu
- *  config, and `held` lists its earlier disk output, which sync to disk
- *  leaves alone instead of deleting (Step 20 REQ-007). */
+/** A template whose render failed. It builds nothing, and `held` lists
+ *  its earlier disk output, which sync to disk leaves alone (Step 20 REQ-007). */
 export interface HarnessConfigRenderErrorEntry {
   templateRef: string
   message: string
   held: HarnessConfigFileRef[]
 }
 
-/** A stored file whose fragment placeholders or markers cannot be
- *  expanded. It contributes nothing to Tatsu config until fixed, and
- *  `held` is its disk copy, which sync to disk leaves alone. */
+/** A hand-written file whose fragment placeholders or markers cannot be
+ *  expanded. `held` is the file on disk, which sync to disk leaves alone
+ *  until it is fixed. */
 export interface HarnessConfigFragmentErrorEntry {
   id: string
   label: string
@@ -80,7 +79,7 @@ export interface HarnessConfigFragmentErrorEntry {
   held?: HarnessConfigFileRef
 }
 
-/** A stored file with a fragment section that was edited by hand, so it
+/** A hand-written file with a fragment section that was edited by hand, so it
  *  no longer follows its fragment until the edit is resolved. */
 export interface HarnessConfigFragmentEditEntry {
   id: string
@@ -89,9 +88,9 @@ export interface HarnessConfigFragmentEditEntry {
   fragments: string[]
 }
 
-export type HarnessConfigSyncDirection = 'sync-to-disk' | 'adopt-from-disk'
+export type HarnessConfigSyncDirection = 'sync-to-disk'
 
-export type HarnessConfigSyncStatus = 'synced' | 'disk-only' | 'config-only' | 'conflict'
+export type HarnessConfigSyncStatus = 'synced' | 'config-only' | 'conflict'
 
 export interface HarnessConfigChangedRef {
   disk: HarnessConfigFileRef
@@ -101,12 +100,9 @@ export interface HarnessConfigChangedRef {
 export interface HarnessConfigComparison {
   scope: HarnessConfigScope
   status: HarnessConfigSyncStatus
-  diskOnly: HarnessConfigFileRef[]
   configOnly: HarnessConfigFileRef[]
   changed: HarnessConfigChangedRef[]
   comparedAt: number
-  /** Stored entries hidden by a template that renders to the same path. */
-  shadowed?: HarnessConfigFileRef[]
   renderErrors?: HarnessConfigRenderErrorEntry[]
   fragmentErrors?: HarnessConfigFragmentErrorEntry[]
   fragmentEdits?: HarnessConfigFragmentEditEntry[]
@@ -117,17 +113,15 @@ export interface HarnessConfigSyncPlan {
   scope: HarnessConfigScope
   direction: HarnessConfigSyncDirection
   status: HarnessConfigSyncStatus
-  diskOnly: HarnessConfigFileRef[]
   configOnly: HarnessConfigFileRef[]
   changed: HarnessConfigChangedRef[]
   generatedAt: number
   fingerprint: string
-  shadowed?: HarnessConfigFileRef[]
   renderErrors?: HarnessConfigRenderErrorEntry[]
   fragmentErrors?: HarnessConfigFragmentErrorEntry[]
   fragmentEdits?: HarnessConfigFragmentEditEntry[]
-  /** Adopt only: template-built ids whose disk content is stored as a
-   *  plain entry while that harness is removed from the template. */
+  /** Template-built ids left as they are on disk while that harness is
+   *  removed from the template. */
   detach?: string[]
 }
 
@@ -159,7 +153,7 @@ export type HarnessConfigErrorCode =
   | 'invalid-fragment'
 
 export interface HarnessConfigAppliedOperation {
-  type: 'create' | 'overwrite' | 'delete' | 'adopt' | 'detach'
+  type: 'create' | 'overwrite' | 'delete' | 'detach'
   id?: string
   relativePath?: string
 }
@@ -229,16 +223,16 @@ export type HarnessConfigRequestResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: HarnessConfigRequestError }
 
-/** Shared by `scan`, `compare`, and the two directional plan-generation
- *  channels — each accepts exactly `{ scope }` and nothing else. */
+/** Shared by `scan` and `compare` — each accepts exactly `{ scope }`
+ *  and nothing else. */
 export interface HarnessConfigScopeRequest {
   scope: HarnessConfigScope
 }
 
-export interface HarnessConfigAdoptRequest {
+export interface HarnessConfigSyncToDiskRequest {
   scope: HarnessConfigScope
-  /** Template-built ids to detach; every other template-built id keeps
-   *  its template and is skipped (Step 20 REQ-006). */
+  /** Template-built ids to keep as they are on disk and detach from their
+   *  template; every other template-built id is written from its template. */
   detach?: string[]
 }
 
@@ -262,7 +256,7 @@ export interface HarnessConfigResolveFragmentEditResult {
   resolution: HarnessConfigFragmentResolution
 }
 
-/** A stored file that uses a fragment through a placeholder or a
+/** A hand-written file that uses a fragment through a placeholder or a
  *  marked section. */
 export interface HarnessConfigFragmentFileUse {
   id: string

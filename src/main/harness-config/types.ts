@@ -138,7 +138,8 @@ export interface HarnessConfigShadowedEntry {
   relativePath: string
 }
 
-export interface HarnessConfigAdoptOptions {
+export interface HarnessConfigSyncOptions {
+  /** Template-built ids to keep as they are on disk and detach. */
   detach?: readonly string[]
 }
 
@@ -168,17 +169,12 @@ export interface HarnessConfigServiceDeps {
   env?: Record<string, string | undefined>
   clock?: () => number
   uuid?: () => string
-  loadDesiredResources?: () => HarnessConfigDesiredResource[]
-  replaceDesiredScope?: (
-    scope: HarnessConfigScope,
-    resources: HarnessConfigDesiredResource[]
-  ) => void | Promise<void>
   loadTemplateSource?: () => HarnessConfigTemplateSource
   render?: (
     templates: readonly RenderableTemplate[],
     fragments: readonly RenderableFragment[]
   ) => TemplateRenderResult
-  /** Removes `agentKind` from the template's targets (adopt "Detach"). */
+  /** Removes `agentKind` from the template's targets (sync "Detach"). */
   detachTemplateTarget?: (templateRef: string, agentKind: ManagedHarnessKind) => void | Promise<void>
   /** Stores a fragment in the template source folder (resolve "keep edit"). */
   saveFragment?: (name: string, content: string) => void | Promise<void>
@@ -191,8 +187,7 @@ export interface HarnessConfigService {
   scan(scope: HarnessConfigScope): HarnessConfigFileRef[]
   readFile(id: string): HarnessConfigReadResult
   planSync(scope: HarnessConfigScope): HarnessConfigComparison
-  planSyncToDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan
-  planAdoptFromDisk(scope: HarnessConfigScope, options?: HarnessConfigAdoptOptions): HarnessConfigSyncPlan
+  planSyncToDisk(scope: HarnessConfigScope, options?: HarnessConfigSyncOptions): HarnessConfigSyncPlan
   prepareCreate(scope: HarnessConfigScope, name: string, content: string): HarnessConfigMutationPlan
   prepareUpdate(scope: HarnessConfigScope, id: string, content: string): HarnessConfigMutationPlan
   prepareDelete(scope: HarnessConfigScope, id: string): HarnessConfigMutationPlan
@@ -203,12 +198,12 @@ export interface HarnessConfigService {
   scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[]
   /** Supported scopes that a template's output lands in, aliases included. */
   scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[]
-  /** Stored entries this template would hide if saved (REQ-002). */
+  /** Disk files outside this template that its output would overwrite. */
   templateShadows(template: RenderableTemplate): HarnessConfigShadowedEntry[]
-  /** Supported scopes with a stored file that uses `name` as an inline
-   *  fragment, or any inline fragment when `name` is omitted. */
+  /** Supported scopes with a hand-written disk file that uses `name` as an
+   *  inline fragment, or any inline fragment when `name` is omitted. */
   scopesForFragment(name?: string): HarnessConfigScope[]
-  /** Stored files that use the fragment, sorted by harness and path. */
+  /** Hand-written disk files that use the fragment, sorted by harness and path. */
   filesUsingFragment(name: string): HarnessConfigFragmentFileUse[]
   resolveFragmentEdit(
     scope: HarnessConfigScope,
