@@ -63,7 +63,8 @@ Every comparison, generated plan, current-plan slot, and mutation is scoped by `
 Canonical terminology (GUD-001) — use these terms consistently in every downstream plan and UI contract:
 
 - **Disk inventory** — the files currently discovered by a harness-specific resolver inside known configuration roots. It is an observation, not desired state.
-- **Tatsu config** — the persisted desired managed state stored in Tatsu's app config. It is NOT a cache of the latest disk scan.
+- **Tatsu config** — the persisted desired managed state stored in Tatsu's app config. It is NOT a cache of the latest disk scan. With templates ([Step 18](./step-18-template-source-model.md) to [Step 20](./step-20-template-sync.md)), Tatsu config for a scope also includes the files built from templates that target it; the templates themselves live in the template source folder.
+- **Template** — a source definition that builds one resource for each harness it explicitly targets, optionally including shared **fragments**.
 - **Sync to disk** — generate and, only after confirmation, apply a plan that makes the selected disk scope match Tatsu config.
 - **Adopt from disk** — generate and, only after confirmation, apply a plan that replaces the selected portion of Tatsu config with the current disk inventory.
 - **Conflict** — a difference between disk inventory and Tatsu config for a scoped `${agentKind}:${resourceType}`.
@@ -127,6 +128,13 @@ Backup implementation rules are owned by [step-02-main-process-harness-config-se
 **Path safety** (SEC-002, PAT-001):
 
 All filesystem implementations restrict writes to main-process-resolved, normalized paths inside known harness configuration roots. Renderer input MUST NOT supply trusted absolute paths. The main process performs filesystem and persistence work; renderer clients request plans and render store-backed results.
+
+**Templates** (REQ-019 of step-01):
+
+- A template builds resources only for the harnesses it names as targets, using harness settings the user wrote. Nothing is translated between harnesses.
+- Built resources join Tatsu config for their own scope and follow every rule above: scoped comparison, confirmed plans, backups, and stale-plan rejection.
+- Editing a template or a shared fragment can put several scopes out of sync at once; each is still synced on its own.
+- Template behavior is owned by [Step 18](./step-18-template-source-model.md) through [Step 22](./step-22-import-existing-setup.md).
 
 **Open resolver questions** (CON-001, TASK-009):
 
