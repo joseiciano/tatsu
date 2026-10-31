@@ -5,7 +5,21 @@ export type JsonClaudeSessionState =
   | 'exited'
   | 'auth-required'
 
-export type ClaudeChatRuntime = 'acp'
+/** Identifies the concrete runtime backend that owns a chat session.
+ *  Mirrors the supported agent kinds — the registry keys its runtimes on
+ *  this. Widened from the original Claude-only `'acp'` id so OpenCode and
+ *  Codex can route once their runtimes land. */
+export type ChatRuntimeId = 'claude' | 'opencode' | 'codex'
+
+/** An ACP `authMethods` entry. `terminal` methods must be run by the user
+ *  in a shell (OpenCode's `opencode auth login`); the rest complete
+ *  in-process through `authenticate` (Codex's api-key / chat-gpt). */
+export interface JsonClaudeAuthMethod {
+  id: string
+  name: string
+  description?: string
+  type?: 'agent' | 'terminal'
+}
 
 export interface ChatRuntimeCapabilities {
   canInterrupt: boolean
@@ -95,9 +109,15 @@ export interface JsonClaudeChatEntry {
     | 'rate-limit-warning'
     | 'rate-limit-error'
     | 'auth-failure'
+    | 'protocol-version'
+    | 'runtime-missing'
+    | 'session-load-failed'
   /** For kind === 'error'. Human-readable detail (exitReason, rate-limit
    *  retry-at timestamp, original auth error string, etc.). */
   errorMessage?: string
+  /** For errorKind === 'auth-failure' on ACP runtimes: the login methods
+   *  the agent advertised at `initialize`, so the card can offer each. */
+  authMethods?: JsonClaudeAuthMethod[]
   /** For kind === 'error' with errorKind === 'subprocess-exit'. Whether the
    *  exit was clean (user closed the tab) or unexpected (crash). */
   exitWasClean?: boolean
@@ -140,6 +160,20 @@ export interface JsonClaudeChatEntry {
 export interface JsonClaudeSession {
   sessionId: string
   worktreePath: string
+  /** Which agent this chat session belongs to. The registry routes
+   *  runtime operations on this per-session value. */
+  agentKind: AgentKind
+  /** Concrete runtime backend id for the session — normally equal to
+   *  agentKind, but kept separate so a future runtime swap doesn't
+   *  rewrite the agent identity. */
+  runtimeId: ChatRuntimeId
+  /** ACP agents: the agent-assigned session id (OpenCode `ses_*`, Codex
+   *  thread id). Set after `session/new`; reused for `session/load`. */
+  agentSessionId?: string
+  /** ACP agents: the agent's own title for the session, from
+   *  `session_info_update`. Mirrored onto the tab label while the user
+   *  has not renamed the tab. */
+  title?: string
   state: JsonClaudeSessionState
   exitCode: number | null
   exitReason: string | null
@@ -219,6 +253,10 @@ export interface JsonClaudePendingApproval {
   autoReview?: AutoReviewStatus
 }
 
+import type { AgentKind } from '../terminals'
+
+export type { AgentKind } from '../terminals'
+
 export interface JsonClaudeState {
   /** Per-session state keyed by session id (== terminal/tab id). */
   sessions: Record<string, JsonClaudeSession>
@@ -232,6 +270,14 @@ export type JsonClaudeEvent =
       payload: {
         sessionId: string
         worktreePath: string
+        /** Agent kind for this session. Required so the registry can
+         *  route even on the first start (before a slice entry exists).
+         *  Ignored on re-attach — the reducer preserves the existing
+         *  session's kind. */
+        agentKind: AgentKind
+        /** Runtime backend id for this session. Required; on re-attach
+         *  the reducer preserves the existing session's id. */
+        runtimeId: ChatRuntimeId
         /** Permission mode applied only when this session id has no
          *  prior slice entry (fresh tab). When the session already
          *  exists (resume / re-attach / mode-change respawn), the
@@ -240,7 +286,18 @@ export type JsonClaudeEvent =
         /** Capability flags advertised by the runtime. If omitted, the
          *  reducer seeds ACP defaults. */
         capabilities?: ChatRuntimeCapabilities
+        /** ACP agent session to continue (from the tab). Ignored when the
+         *  slice session already carries one. */
+        agentSessionId?: string
       }
+    }
+  | {
+      type: 'jsonClaude/agentSessionIdChanged'
+      payload: { sessionId: string; agentSessionId: string }
+    }
+  | {
+      type: 'jsonClaude/sessionTitleChanged'
+      payload: { sessionId: string; title: string }
     }
   | {
       type: 'jsonClaude/sessionStateChanged'
@@ -334,6 +391,10 @@ export type JsonClaudeEvent =
   | {
       type: 'jsonClaude/userEntriesUnqueued'
       payload: { sessionId: string }
+    }
+  | {
+      type: 'jsonClaude/userEntryUnqueued'
+      payload: { sessionId: string; entryId: string }
     }
   | {
       type: 'jsonClaude/entryRemoved'

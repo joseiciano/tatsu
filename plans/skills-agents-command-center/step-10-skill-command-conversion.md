@@ -37,6 +37,11 @@ Three upstream contracts are refined here and reconciled in Phase 2: the Step 6 
 - **REQ-005**: `createSkillFromCommand` MUST return `{ destinationResourceType: 'skills', destinationName, content }` where `content` is exactly:
 
   ```md
+  ---
+  name: <destinationName>
+  description: <description>
+  ---
+
   # <destinationName>
 
   Use this skill when the user requests the `<label>` command behavior.
@@ -44,7 +49,7 @@ Three upstream contracts are refined here and reconciled in Phase 2: the Step 6 
   <!-- Converted by Tatsu from <agentKind> commands <relativePath> -->
   ```
 
-  The heading uses the slugified `<destinationName>`; the body cites the source's display `<label>`.
+  The heading and `name` use the slugified `<destinationName>`, which is also the skill folder name; the body cites the source's display `<label>`. `<description>` MUST be `extractFrontMatterDescription(source.content)` when that returns a non-empty value, otherwise `Run the <destinationName> command`. The front matter is required because Claude Code and OpenCode discover skills through `name` and `description`; a skill without it is not listed.
 - **REQ-006**: Generated content MUST contain no timestamp, UUID, hash, or randomness so regeneration is byte-identical and re-deriving a draft never manufactures synthetic drift.
 - **REQ-007**: Source metadata MUST appear only in the trailing HTML comment naming `agentKind`, source resource type, and source root-relative path; the comment MUST be the last line followed by a terminating newline. Generated content MUST NOT embed the source file body.
  - **REQ-008**: The service conversion prepare methods `prepareCommandFromSkill(scope, id)` and `prepareSkillFromCommand(scope, id)` in `src/main/harness-config/harness-config.ts` MUST be non-mutating: resolve the source ref from a fresh disk inventory within the requested scope, require the source canonical resource type to match the direction, read fresh UTF-8 source content only after alias/existing resolution requires generation, and return one `HarnessConfigConversionResult`. They MUST NOT create a mutation plan and MUST NOT write disk or Tatsu config.

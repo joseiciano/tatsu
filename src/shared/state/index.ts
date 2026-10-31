@@ -85,6 +85,12 @@ import {
   type SnoozeState
 } from './snooze'
 import {
+  initialRuntimes,
+  runtimesReducer,
+  type RuntimesEvent,
+  type RuntimesState
+} from './runtimes'
+import {
   initialAnnouncements,
   announcementsReducer,
   type AnnouncementsEvent,
@@ -169,6 +175,7 @@ export type {
   JsonClaudePendingApproval
 } from './json-claude'
 export type { SnoozeState, SnoozeEvent, SnoozeEntry } from './snooze'
+export type { RuntimesState, RuntimesEvent, RuntimeStatus, DownloadableRuntime } from './runtimes'
 export { MAX_WAKE } from './snooze'
 export type {
   AnnouncementsState,
@@ -188,7 +195,13 @@ export type {
   HarnessConfigComparison,
   HarnessConfigSyncPlan,
   HarnessConfigState,
-  HarnessConfigEvent
+  HarnessConfigEvent,
+  HarnessTemplate,
+  HarnessTemplateKind,
+  HarnessTemplateHarnessBlock,
+  HarnessFragment,
+  HarnessTemplateParseError,
+  HarnessTemplateSourceState
 } from './harness-config'
 export { harnessConfigScopeKey } from './harness-config'
 
@@ -206,6 +219,7 @@ export interface AppState {
   browser: BrowserState
   jsonClaude: JsonClaudeState
   snooze: SnoozeState
+  runtimes: RuntimesState
   announcements: AnnouncementsState
   scratchpad: ScratchpadState
   harnessConfig: HarnessConfigState
@@ -224,6 +238,7 @@ export type StateEvent =
   | BrowserEvent
   | JsonClaudeEvent
   | SnoozeEvent
+  | RuntimesEvent
   | AnnouncementsEvent
   | ScratchpadEvent
   | HarnessConfigEvent
@@ -241,6 +256,7 @@ export const initialState: AppState = {
   browser: initialBrowser,
   jsonClaude: initialJsonClaude,
   snooze: initialSnooze,
+  runtimes: initialRuntimes,
   announcements: initialAnnouncements,
   scratchpad: initialScratchpad,
   harnessConfig: initialHarnessConfig
@@ -304,6 +320,12 @@ export function rootReducer(state: AppState, event: StateEvent): AppState {
       snooze: snoozeReducer(state.snooze, event as SnoozeEvent)
     }
   }
+  if (event.type.startsWith('runtimes/')) {
+    return {
+      ...state,
+      runtimes: runtimesReducer(state.runtimes, event as RuntimesEvent)
+    }
+  }
   if (event.type.startsWith('announcements/')) {
     return {
       ...state,
@@ -355,7 +377,14 @@ export type WireSnapshotState = {
  *  literal won't satisfy `AppState`. */
 export function mergeWireSnapshot(state: WireSnapshotState): AppState {
   return {
-    settings: { ...initialState.settings, ...state.settings },
+    settings: {
+      ...initialState.settings,
+      ...state.settings,
+      harnessConfigRoots:
+        state.settings?.harnessConfigRoots ?? initialState.settings.harnessConfigRoots,
+      harnessConfigSourceDir:
+        state.settings?.harnessConfigSourceDir ?? initialState.settings.harnessConfigSourceDir
+    },
     prs: { ...initialState.prs, ...state.prs },
     onboarding: { ...initialState.onboarding, ...state.onboarding },
     hooks: { ...initialState.hooks, ...state.hooks },
@@ -367,9 +396,14 @@ export function mergeWireSnapshot(state: WireSnapshotState): AppState {
     browser: { ...initialState.browser, ...state.browser },
     jsonClaude: { ...initialState.jsonClaude, ...state.jsonClaude },
     snooze: { ...initialState.snooze, ...state.snooze },
+    runtimes: { ...initialState.runtimes, ...state.runtimes },
     announcements: { ...initialState.announcements, ...state.announcements },
     scratchpad: { ...initialState.scratchpad, ...state.scratchpad },
-    harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }
+    harnessConfig: {
+      ...initialState.harnessConfig,
+      ...state.harnessConfig,
+      templates: { ...initialState.harnessConfig.templates, ...state.harnessConfig?.templates }
+    }
   }
 }
 

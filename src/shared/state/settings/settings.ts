@@ -68,6 +68,8 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, piModel: event.payload }
     case 'settings/autoUpdateEnabledChanged':
       return { ...state, autoUpdateEnabled: event.payload }
+    case 'settings/experimentalChatAgentsEnabledChanged':
+      return { ...state, experimentalChatAgentsEnabled: event.payload }
     case 'settings/harnessSystemPromptEnabledChanged':
       return { ...state, harnessSystemPromptEnabled: event.payload }
     case 'settings/harnessSystemPromptChanged':
@@ -88,6 +90,10 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
       return { ...state, browserToolsMode: event.payload }
     case 'settings/defaultClaudeTabTypeChanged':
       return { ...state, defaultClaudeTabType: event.payload }
+    case 'settings/defaultOpencodeTabTypeChanged':
+      return { ...state, defaultOpencodeTabType: event.payload }
+    case 'settings/defaultCodexTabTypeChanged':
+      return { ...state, defaultCodexTabType: event.payload }
     case 'settings/chatPromotionDismissedChanged':
       return { ...state, chatPromotionDismissed: event.payload }
     case 'settings/autoApprovePermissionsChanged':
@@ -121,6 +127,21 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
     }
     case 'settings/announcementsMutedChanged':
       return { ...state, announcementsMuted: event.payload }
+    case 'settings/harnessConfigRootsChanged': {
+      const { key, path } = event.payload
+      const current = state.harnessConfigRoots
+      if (path === null) {
+        if (!(key in current)) return state
+        const next = { ...current }
+        delete next[key]
+        return { ...state, harnessConfigRoots: next }
+      }
+      if (current[key] === path) return state
+      return { ...state, harnessConfigRoots: { ...current, [key]: path } }
+    }
+    case 'settings/harnessConfigSourceDirChanged':
+      if (state.harnessConfigSourceDir === event.payload) return state
+      return { ...state, harnessConfigSourceDir: event.payload }
     default: {
       const _exhaustive: never = event
       void _exhaustive

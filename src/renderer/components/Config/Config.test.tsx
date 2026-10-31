@@ -25,6 +25,7 @@ import type {
   HarnessConfigScope,
   HarnessConfigState,
   HarnessConfigSyncPlan,
+  HarnessTemplate,
   ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import type { BackendConnection } from '../../types'
@@ -34,6 +35,7 @@ import type { BackendConnection } from '../../types'
 // for a no-op so `ConfigEditor`'s surrounding create/edit chrome (name
 // input, submit label, generated-from note) still renders normally.
 vi.mock('../MonacoEditor', () => ({ MonacoEditor: () => null }))
+vi.mock('../MonacoDiffEditor', () => ({ MonacoDiffEditor: () => null }))
 
 const { backendApi, storeState } = vi.hoisted(() => {
   const backendApi = {
@@ -44,12 +46,10 @@ const { backendApi, storeState } = vi.hoisted(() => {
     prepareHarnessConfigUpdate: vi.fn(),
     prepareHarnessConfigDelete: vi.fn(),
     planHarnessConfigSyncToDisk: vi.fn(),
-    planHarnessConfigAdoptFromDisk: vi.fn(),
     createHarnessConfigFile: vi.fn(),
     updateHarnessConfigFile: vi.fn(),
     deleteHarnessConfigFile: vi.fn(),
     syncHarnessConfigToDisk: vi.fn(),
-    adoptHarnessConfigFromDisk: vi.fn(),
     prepareHarnessConfigCommandFromSkill: vi.fn(),
     prepareHarnessConfigSkillFromCommand: vi.fn()
   }
@@ -67,7 +67,12 @@ vi.mock('../../backend', () => ({ useBackend: () => backendApi }))
 vi.mock('../../store', () => ({
   useHarnessConfig: () => storeState.harnessConfig,
   useActiveBackend: () => storeState.activeBackend,
-  useSettings: () => storeState.settings
+  useSettings: () => storeState.settings,
+  useHarnessTemplateSource: () => storeState.harnessConfig?.templates,
+  useHarnessTemplate: (kind: string | null, name: string | null) =>
+    storeState.harnessConfig?.templates.templates.find((t) => t.kind === kind && t.name === name) ?? null,
+  useHarnessFragment: (name: string | null) =>
+    storeState.harnessConfig?.templates.fragments.find((f) => f.name === name) ?? null
 }))
 
 function ref(overrides: Partial<HarnessConfigFileRef> = {}): HarnessConfigFileRef {
@@ -89,7 +94,7 @@ function ref(overrides: Partial<HarnessConfigFileRef> = {}): HarnessConfigFileRe
 }
 
 function emptyComparison(scope: HarnessConfigScope): HarnessConfigComparison {
-  return { scope, status: 'synced', diskOnly: [], configOnly: [], changed: [], comparedAt: 1 }
+  return { scope, status: 'synced', configOnly: [], changed: [], comparedAt: 1 }
 }
 
 const MANAGED_KINDS: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
@@ -110,7 +115,9 @@ function setStore(
     loading: false,
     error: null,
     lastScannedAt: null,
-    lastSyncedAt: null
+    lastSyncedAt: null,
+    templates: { templates: [], fragments: [], errors: [], loadedAt: null },
+    templateSyncNotice: null
   }
   storeState.activeBackend = { id: 'local', label: 'Local', url: '', kind: 'local', addedAt: 0 }
   storeState.settings = {}
@@ -382,7 +389,7 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     expect(backendApi.deleteHarnessConfigFile).not.toHaveBeenCalled()
   })
 
-  it('never dispatches a conversion from mount, tab/filter/search changes, an inventory refresh, or a sync/adopt flow', async () => {
+  it('never dispatches a conversion from mount, tab/filter/search changes, an inventory refresh, or a sync flow', async () => {
     const claudeSkill = ref({
       id: 'claude-skill-1',
       agentKind: 'claude',
@@ -439,7 +446,7 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     await rerenderConfig()
     await flush()
 
-    // A full scoped sync-conflict review -> adopt-from-disk outcome.
+    // A full scoped sync-conflict review -> sync-to-disk outcome.
     const conflictScope: HarnessConfigScope = { agentKind: 'claude', resourceType: 'skills' }
     const driftRef = ref({
       id: 'drift-1',
@@ -449,9 +456,8 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     })
     const conflict: HarnessConfigComparison = {
       scope: conflictScope,
-      status: 'conflict',
-      diskOnly: [driftRef],
-      configOnly: [],
+      status: 'config-only',
+      configOnly: [driftRef],
       changed: [],
       comparedAt: 1
     }
@@ -461,21 +467,20 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
     await flush()
     expect(container.querySelector('[role="dialog"]')).toBeTruthy()
 
-    backendApi.planHarnessConfigAdoptFromDisk.mockResolvedValueOnce({
+    backendApi.planHarnessConfigSyncToDisk.mockResolvedValueOnce({
       ok: true,
       value: {
         planId: 'plan-1',
         scope: conflictScope,
-        direction: 'adopt-from-disk',
-        status: 'conflict',
-        diskOnly: [driftRef],
-        configOnly: [],
+        direction: 'sync-to-disk',
+        status: 'config-only',
+        configOnly: [driftRef],
         changed: [],
         generatedAt: 1,
         fingerprint: 'fp-1'
       }
     } satisfies HarnessConfigRequestResult<HarnessConfigSyncPlan>)
-    backendApi.adoptHarnessConfigFromDisk.mockResolvedValueOnce({
+    backendApi.syncHarnessConfigToDisk.mockResolvedValueOnce({
       ok: true,
       value: {
         scope: conflictScope,
@@ -486,14 +491,248 @@ describe('Config conversion orchestration (TASK-017/TEST-008)', () => {
       }
     } satisfies HarnessConfigRequestResult<HarnessConfigApplyResult>)
 
-    click(findButtonByText('Adopt current disk files into Tatsu config'))
+    click(findButtonByText('Sync to disk'))
     await flush()
     await flush()
 
-    expect(backendApi.adoptHarnessConfigFromDisk).toHaveBeenCalledTimes(1)
+    expect(backendApi.syncHarnessConfigToDisk).toHaveBeenCalledTimes(1)
     expect(container.querySelector('[role="dialog"]')).toBeNull()
 
     expect(backendApi.prepareHarnessConfigCommandFromSkill).not.toHaveBeenCalled()
     expect(backendApi.prepareHarnessConfigSkillFromCommand).not.toHaveBeenCalled()
+  })
+})
+
+describe('Config deferred harnesses (Step 14 TASK-008/TEST-007)', () => {
+  it('presents Pi as explicitly deferred on every tab with no actions and never scopes a request to it', async () => {
+    await renderConfig()
+    await flush()
+
+    for (const tab of ['Agents', 'Skills', 'Commands']) {
+      clickTab(tab)
+      await flush()
+      const section = container.querySelector('[data-testid="config-deferred-pi"]')
+      expect(section).not.toBeNull()
+      expect(section!.textContent).toContain('Pi')
+      expect(section!.textContent).toContain('Deferred')
+      expect(section!.textContent).toContain('Pi config management is deferred')
+      expect(section!.querySelectorAll('button')).toHaveLength(0)
+    }
+
+    const requestedKinds = Object.values(backendApi).flatMap((fn) =>
+      fn.mock.calls.map((args) => (args[0] as { scope?: HarnessConfigScope } | undefined)?.scope?.agentKind)
+    )
+    expect(requestedKinds.length).toBeGreaterThan(0)
+    expect(requestedKinds).not.toContain('pi')
+  })
+})
+
+describe('Config template sync (Step 20)', () => {
+  const agentsScope: HarnessConfigScope = { agentKind: 'claude', resourceType: 'agents' }
+
+  function templateConflict(): HarnessConfigComparison {
+    return {
+      scope: agentsScope,
+      status: 'conflict',
+      configOnly: [],
+      changed: [
+        {
+          disk: ref({ id: 'tmpl-1', resourceType: 'agents', relativePath: 'reviewer.md', hash: 'disk' }),
+          config: ref({
+            id: 'tmpl-1',
+            resourceType: 'agents',
+            relativePath: 'reviewer.md',
+            hash: 'template',
+            source: 'template',
+            templateRef: 'agent/reviewer'
+          })
+        }
+      ],
+      comparedAt: 1
+    }
+  }
+
+  function setNotice(): void {
+    const state = storeState.harnessConfig!
+    storeState.harnessConfig = {
+      ...state,
+      comparisons: {
+        ...state.comparisons,
+        'claude:agents': templateConflict()
+      },
+      templateSyncNotice: { scopes: ['claude:agents', 'opencode:skills'], changedAt: 5 }
+    }
+  }
+
+  it('lists only scopes still out of sync after a template save, each linking to its review (REQ-005)', async () => {
+    setNotice()
+    backendApi.compareHarnessConfig.mockImplementation(async () => ({ ok: true, value: templateConflict() }))
+    await renderConfig()
+    await flush()
+
+    const notice = container.querySelector('[role="status"]')
+    expect(notice?.textContent).toContain('Template or fragment changes put these scopes out of sync with disk')
+    expect(notice?.textContent).toContain('Review Claude Code · Agents')
+    expect(notice?.textContent).not.toContain('OpenCode')
+
+    click(findButtonByText('Review Claude Code · Agents'))
+    await flush()
+    expect(backendApi.compareHarnessConfig).toHaveBeenLastCalledWith({ scope: agentsScope })
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain('Template: agent/reviewer')
+  })
+
+  it('hides the notice once dismissed', async () => {
+    setNotice()
+    await renderConfig()
+    await flush()
+    click(findButtonByText('Dismiss'))
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  })
+
+  async function openTemplateReview(): Promise<void> {
+    setNotice()
+    backendApi.compareHarnessConfig.mockImplementation(async () => ({ ok: true, value: templateConflict() }))
+    backendApi.planHarnessConfigSyncToDisk.mockResolvedValue({
+      ok: true,
+      value: { ...templateConflict(), planId: 'plan-1', direction: 'sync-to-disk', generatedAt: 1, fingerprint: 'fp' }
+    } satisfies HarnessConfigRequestResult<HarnessConfigSyncPlan>)
+    backendApi.syncHarnessConfigToDisk.mockResolvedValue({
+      ok: true,
+      value: { scope: agentsScope, planId: 'plan-1', applied: [], resultingRefs: [], requiresRescan: true }
+    } satisfies HarnessConfigRequestResult<HarnessConfigApplyResult>)
+    await renderConfig()
+    await flush()
+    click(findButtonByText('Review Claude Code · Agents'))
+    await flush()
+  }
+
+  it('sends the chosen detach ids through the sync plan request and offers no adopt action (REQ-006)', async () => {
+    await openTemplateReview()
+
+    const buttons = Array.from(container.querySelectorAll('[role="dialog"] button')).map((b) => b.textContent)
+    expect(buttons.some((text) => /adopt/i.test(text ?? ''))).toBe(false)
+
+    const detach = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((input) =>
+      input.parentElement?.textContent?.startsWith('Keep the disk file and detach it')
+    )
+    click(detach ?? null)
+    click(findButtonByText('Sync to disk'))
+    await flush()
+    await flush()
+    expect(backendApi.planHarnessConfigSyncToDisk).toHaveBeenCalledTimes(1)
+    expect(backendApi.planHarnessConfigSyncToDisk).toHaveBeenCalledWith({ scope: agentsScope, detach: ['tmpl-1'] })
+    expect(backendApi.syncHarnessConfigToDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
+  })
+
+  it('plans an overwrite-from-template sync without a detach list when nothing is detached', async () => {
+    await openTemplateReview()
+
+    click(findButtonByText('Sync to disk'))
+    await flush()
+    await flush()
+    expect(backendApi.planHarnessConfigSyncToDisk).toHaveBeenCalledTimes(1)
+    expect(backendApi.planHarnessConfigSyncToDisk.mock.calls[0][0]).toStrictEqual({ scope: agentsScope })
+    expect(backendApi.syncHarnessConfigToDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
+  })
+})
+
+describe('Config templates view (Step 21)', () => {
+  const reviewer: HarnessTemplate = {
+    kind: 'agent',
+    name: 'reviewer',
+    description: 'Reviews code',
+    fragments: [],
+    body: 'Review carefully.',
+    harnesses: { claude: { frontmatter: {} } },
+    references: [],
+    relativePath: 'agents/reviewer.md',
+    hash: 'tmpl-hash'
+  }
+
+  function withTemplate(): void {
+    const state = storeState.harnessConfig!
+    storeState.harnessConfig = {
+      ...state,
+      resources: {
+        ...state.resources,
+        agents: [
+          ref({
+            id: 'rendered',
+            resourceType: 'agents',
+            label: 'reviewer',
+            relativePath: 'reviewer.md',
+            templateRef: 'agent/reviewer'
+          })
+        ]
+      },
+      templates: { templates: [reviewer], fragments: [], errors: [], loadedAt: 1 }
+    }
+  }
+
+  it('adds a Templates view beside the three resource tabs and hides the agent filter there', async () => {
+    withTemplate()
+    await renderConfig()
+    const labels = Array.from(container.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)
+    expect(labels).toEqual(['Agents', 'Skills', 'Commands', 'Templates'])
+    clickTab('Templates')
+    expect(container.querySelector('#config-agent-filter')).toBeNull()
+    expect(container.querySelector('[data-testid="config-templates-agent"]')?.textContent).toContain('reviewer')
+  })
+
+  it('shows the templateRef on a rendered row and opens the template from Edit template', async () => {
+    withTemplate()
+    await renderConfig()
+    await flush()
+    expect(container.textContent).toContain('agent/reviewer')
+    click(container.querySelector('[aria-label="Edit template agent/reviewer"]'))
+    const tab = Array.from(container.querySelectorAll('[role="tab"]')).find((t) => t.textContent === 'Templates')
+    expect(tab?.getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector<HTMLInputElement>('#template-name')?.value).toBe('reviewer')
+  })
+
+  it('guards leaving the Templates view with unsaved template changes', async () => {
+    withTemplate()
+    await renderConfig()
+    clickTab('Templates')
+    click(container.querySelector('[data-testid="config-templates-agent"] button:not([aria-label])'))
+    const description = container.querySelector<HTMLInputElement>('#template-description')!
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(description, 'Changed')
+      description.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    clickTab('Agents')
+    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved changes in the Config editor?')
+    expect(container.querySelector('#template-description')).not.toBeNull()
+    confirmSpy.mockRestore()
+  })
+})
+
+describe('Config linked resources', () => {
+  it('opens a linked resource as editable, with Delete enabled once its content loads', async () => {
+    const linked = ref({
+      id: 'linked-skill',
+      label: 'Linked Skill',
+      relativePath: 'deploy/SKILL.md',
+      linkedFrom: '/dotfiles/output/claude/skills/deploy'
+    })
+    setStore({ skills: [linked] })
+    backendApi.readHarnessConfigFile.mockResolvedValue({ ok: true, value: { ref: linked, content: 'deploy skill' } })
+
+    await renderConfig()
+    await flush()
+    clickTab('Skills')
+    await flush()
+    const row = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Linked Skill'))
+    click(row ?? null)
+    await flush()
+
+    expect(backendApi.readHarnessConfigFile).toHaveBeenCalledWith({
+      scope: { agentKind: 'claude', resourceType: 'skills' },
+      id: 'linked-skill'
+    })
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="Delete resource"]')
+    expect(deleteButton?.disabled).toBe(false)
   })
 })

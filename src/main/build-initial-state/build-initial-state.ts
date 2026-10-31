@@ -10,6 +10,7 @@ import { initialCosts } from '../../shared/state/costs'
 import { initialBrowser } from '../../shared/state/browser'
 import { initialJsonClaude } from '../../shared/state/json-claude'
 import { initialSnooze } from '../../shared/state/snooze'
+import { initialRuntimes } from '../../shared/state/runtimes'
 import { initialAnnouncements } from '../../shared/state/announcements'
 import { initialScratchpad } from '../../shared/state/scratchpad'
 import { initialHarnessConfig } from '../../shared/state/harness-config'
@@ -31,6 +32,7 @@ import {
   type Config
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
+import { normalizeConfigFolder, sanitizeHarnessConfigRoots } from '../harness-config'
 
 /** Flatten the nested `repoRoot → worktreePath → text` shape on disk
  *  into the flat `worktreePath → text` map the slice carries in memory.
@@ -69,6 +71,7 @@ export function buildInitialAppState(
     browser: initialBrowser,
     jsonClaude: initialJsonClaude,
     snooze: config.snooze ? { byPath: { ...config.snooze } } : initialSnooze,
+    runtimes: initialRuntimes,
     announcements: initialAnnouncements,
     scratchpad: { byWorktreePath: flattenScratchpadNotes(config.scratchpadNotes) },
     harnessConfig: initialHarnessConfig,
@@ -108,6 +111,7 @@ export function buildInitialAppState(
       piModel: config.piModel || null,
       hasGithubToken: opts.hasGithubToken,
       autoUpdateEnabled: config.autoUpdateEnabled !== false,
+      experimentalChatAgentsEnabled: config.experimentalChatAgentsEnabled === true,
       shareClaudeSettings: config.shareClaudeSettings !== false,
       harnessSystemPromptEnabled: config.harnessSystemPromptEnabled !== false,
       harnessSystemPrompt: config.harnessSystemPrompt || DEFAULT_HARNESS_SYSTEM_PROMPT,
@@ -119,6 +123,9 @@ export function buildInitialAppState(
       browserToolsEnabled: config.browserToolsEnabled !== false,
       browserToolsMode: config.browserToolsMode === 'view' ? 'view' : 'full',
       defaultClaudeTabType: config.defaultClaudeTabType === 'json' ? 'json' : 'xterm',
+      defaultOpencodeTabType:
+        config.defaultOpencodeTabType === 'json' ? 'json' : 'xterm',
+      defaultCodexTabType: config.defaultCodexTabType === 'json' ? 'json' : 'xterm',
       chatPromotionDismissed: config.chatPromotionDismissed === true,
       jsonModeChatDensity: config.jsonModeChatDensity === 'comfy' ? 'comfy' : 'compact',
       uiScale:
@@ -146,7 +153,9 @@ export function buildInitialAppState(
       dismissedAnnouncementIds: Array.isArray(config.dismissedAnnouncementIds)
         ? config.dismissedAnnouncementIds.filter((x): x is string => typeof x === 'string')
         : [],
-      announcementsMuted: config.announcementsMuted === true
+      announcementsMuted: config.announcementsMuted === true,
+      harnessConfigRoots: sanitizeHarnessConfigRoots(config.harnessConfigRoots),
+      harnessConfigSourceDir: normalizeConfigFolder(config.harnessConfigSourceDir)
     }
   }
 }

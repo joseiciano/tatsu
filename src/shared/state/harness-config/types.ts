@@ -5,6 +5,30 @@ export type { HarnessConfigResourceType } from '../../agent-registry'
 
 export type ManagedHarnessKind = Extract<AgentKind, 'claude' | 'codex' | 'opencode'>
 
+export type HarnessConfigRootKey =
+  | 'claudeAgents'
+  | 'claudeSkills'
+  | 'claudeCommands'
+  | 'codexHome'
+  | 'codexSkills'
+  | 'opencodeAgents'
+  | 'opencodeSkills'
+  | 'opencodeCommands'
+
+export type HarnessConfigRoots = Partial<Record<HarnessConfigRootKey, string>>
+
+export interface HarnessConfigFolderDefaults {
+  roots: Record<HarnessConfigRootKey, string>
+  sourceDir: string
+}
+
+export interface HarnessConfigSetRootRequest {
+  key: HarnessConfigRootKey
+  path: string | null
+}
+
+export type HarnessConfigFolderSettingResult = { ok: true } | { ok: false; message: string }
+
 export interface HarnessConfigScope {
   agentKind: ManagedHarnessKind
   resourceType: HarnessConfigResourceType
@@ -25,11 +49,48 @@ export interface HarnessConfigFileRef {
   existsOnDisk: boolean
   managed: boolean
   updatedAt: number
+  /** Real path of the symlink that makes this resource managed elsewhere
+   *  (Step 17). Display-only; never trusted as a write target. */
+  linkedFrom?: string
+  /** `<kind>/<name>` of the template that rendered this file, read from
+   *  its provenance marker (Step 19). Absent for hand-written files. */
+  templateRef?: string
+  /** `'template'` on the desired side of an entry built from a template
+   *  (Step 20); absent for hand-written files and disk refs. */
+  source?: 'template'
 }
 
-export type HarnessConfigSyncDirection = 'sync-to-disk' | 'adopt-from-disk'
+/** A template whose render failed. It builds nothing, and `held` lists
+ *  its earlier disk output, which sync to disk leaves alone (Step 20 REQ-007). */
+export interface HarnessConfigRenderErrorEntry {
+  templateRef: string
+  message: string
+  held: HarnessConfigFileRef[]
+}
 
-export type HarnessConfigSyncStatus = 'synced' | 'disk-only' | 'config-only' | 'conflict'
+/** A hand-written file whose fragment placeholders or markers cannot be
+ *  expanded. `held` is the file on disk, which sync to disk leaves alone
+ *  until it is fixed. */
+export interface HarnessConfigFragmentErrorEntry {
+  id: string
+  label: string
+  relativePath: string
+  message: string
+  held?: HarnessConfigFileRef
+}
+
+/** A hand-written file with a fragment section that was edited by hand, so it
+ *  no longer follows its fragment until the edit is resolved. */
+export interface HarnessConfigFragmentEditEntry {
+  id: string
+  label: string
+  relativePath: string
+  fragments: string[]
+}
+
+export type HarnessConfigSyncDirection = 'sync-to-disk'
+
+export type HarnessConfigSyncStatus = 'synced' | 'config-only' | 'conflict'
 
 export interface HarnessConfigChangedRef {
   disk: HarnessConfigFileRef
@@ -39,10 +100,12 @@ export interface HarnessConfigChangedRef {
 export interface HarnessConfigComparison {
   scope: HarnessConfigScope
   status: HarnessConfigSyncStatus
-  diskOnly: HarnessConfigFileRef[]
   configOnly: HarnessConfigFileRef[]
   changed: HarnessConfigChangedRef[]
   comparedAt: number
+  renderErrors?: HarnessConfigRenderErrorEntry[]
+  fragmentErrors?: HarnessConfigFragmentErrorEntry[]
+  fragmentEdits?: HarnessConfigFragmentEditEntry[]
 }
 
 export interface HarnessConfigSyncPlan {
@@ -50,11 +113,16 @@ export interface HarnessConfigSyncPlan {
   scope: HarnessConfigScope
   direction: HarnessConfigSyncDirection
   status: HarnessConfigSyncStatus
-  diskOnly: HarnessConfigFileRef[]
   configOnly: HarnessConfigFileRef[]
   changed: HarnessConfigChangedRef[]
   generatedAt: number
   fingerprint: string
+  renderErrors?: HarnessConfigRenderErrorEntry[]
+  fragmentErrors?: HarnessConfigFragmentErrorEntry[]
+  fragmentEdits?: HarnessConfigFragmentEditEntry[]
+  /** Template-built ids left as they are on disk while that harness is
+   *  removed from the template. */
+  detach?: string[]
 }
 
 // --- Main-process service contracts, shared so main and renderer (via
@@ -78,9 +146,14 @@ export type HarnessConfigErrorCode =
   | 'write-failed'
   | 'delete-failed'
   | 'desired-state-failed'
+  | 'linked-resource'
+  | 'invalid-template'
+  | 'invalid-target'
+  | 'template-shadows'
+  | 'invalid-fragment'
 
 export interface HarnessConfigAppliedOperation {
-  type: 'create' | 'overwrite' | 'delete' | 'adopt'
+  type: 'create' | 'overwrite' | 'delete' | 'detach'
   id?: string
   relativePath?: string
 }
@@ -150,10 +223,55 @@ export type HarnessConfigRequestResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: HarnessConfigRequestError }
 
-/** Shared by `scan`, `compare`, and the two directional plan-generation
- *  channels — each accepts exactly `{ scope }` and nothing else. */
+/** Shared by `scan` and `compare` — each accepts exactly `{ scope }`
+ *  and nothing else. */
 export interface HarnessConfigScopeRequest {
   scope: HarnessConfigScope
+}
+
+export interface HarnessConfigSyncToDiskRequest {
+  scope: HarnessConfigScope
+  /** Template-built ids to keep as they are on disk and detach from their
+   *  template; every other template-built id is written from its template. */
+  detach?: string[]
+}
+
+/** How a hand-edited fragment section is settled: restore the fragment
+ *  text, keep the text but drop the markers, or save the edit as the
+ *  fragment so every file using it follows. */
+export type HarnessConfigFragmentResolution = 'overwrite' | 'detach' | 'keep-edit'
+
+export interface HarnessConfigResolveFragmentEditRequest {
+  scope: HarnessConfigScope
+  id: string
+  fragment: string
+  resolution: HarnessConfigFragmentResolution
+  confirmed: true
+}
+
+export interface HarnessConfigResolveFragmentEditResult {
+  scope: HarnessConfigScope
+  id: string
+  fragment: string
+  resolution: HarnessConfigFragmentResolution
+}
+
+/** A hand-written file that uses a fragment through a placeholder or a
+ *  marked section. */
+export interface HarnessConfigFragmentFileUse {
+  id: string
+  agentKind: ManagedHarnessKind
+  resourceType: HarnessConfigResourceType
+  label: string
+  relativePath: string
+}
+
+export interface HarnessFragmentUsageRequest {
+  name: string
+}
+
+export interface HarnessFragmentUsageResult {
+  files: HarnessConfigFragmentFileUse[]
 }
 
 export interface HarnessConfigReadRequest {
@@ -188,6 +306,94 @@ export interface HarnessConfigScanResult {
   scannedAt: number
 }
 
+// --- Template source model (Step 18) ---
+
+export type HarnessTemplateKind = 'agent' | 'skill' | 'command'
+
+/** One harness's block in a template. `frontmatter` is that harness's
+ *  native frontmatter, kept as written; `name` and `fragments` are the
+ *  only keys Tatsu reads, as per-harness overrides. */
+export interface HarnessTemplateHarnessBlock {
+  name?: string
+  fragments?: string[]
+  frontmatter: Record<string, unknown>
+}
+
+export type HarnessTemplateHarnesses = Partial<Record<ManagedHarnessKind, HarnessTemplateHarnessBlock | false>>
+
+export interface HarnessTemplateReference {
+  fileName: string
+  content: string
+}
+
+export interface HarnessTemplate {
+  kind: HarnessTemplateKind
+  name: string
+  description: string
+  fragments: string[]
+  body: string
+  harnesses: HarnessTemplateHarnesses
+  references: HarnessTemplateReference[]
+  relativePath: string
+  hash: string
+}
+
+export interface HarnessFragment {
+  name: string
+  content: string
+  relativePath: string
+  hash: string
+}
+
+export interface HarnessTemplateParseError {
+  relativePath: string
+  message: string
+}
+
+export interface HarnessTemplateTargetError {
+  agentKind: ManagedHarnessKind
+  message: string
+}
+
+export interface HarnessTemplateSourceState {
+  templates: HarnessTemplate[]
+  fragments: HarnessFragment[]
+  errors: HarnessTemplateParseError[]
+  loadedAt: number | null
+}
+
+export interface HarnessTemplateSaveRequest {
+  template: {
+    kind: HarnessTemplateKind
+    name: string
+    description: string
+    fragments: string[]
+    body: string
+    harnesses: HarnessTemplateHarnesses
+    references: HarnessTemplateReference[]
+  }
+  confirmed: boolean
+  /** Set after the user saw the `template-shadows` warning. */
+  allowShadowing?: boolean
+}
+
+export interface HarnessTemplateDeleteRequest {
+  kind: HarnessTemplateKind
+  name: string
+  confirmed: boolean
+}
+
+export interface HarnessFragmentSaveRequest {
+  name: string
+  content: string
+  confirmed: boolean
+}
+
+export interface HarnessFragmentDeleteRequest {
+  name: string
+  confirmed: boolean
+}
+
 export interface HarnessConfigState {
   resources: Record<HarnessConfigResourceType, HarnessConfigFileRef[]>
   comparisons: Partial<Record<HarnessConfigScopeKey, HarnessConfigComparison>>
@@ -195,6 +401,15 @@ export interface HarnessConfigState {
   error: string | null
   lastScannedAt: number | null
   lastSyncedAt: number | null
+  templates: HarnessTemplateSourceState
+  templateSyncNotice: HarnessConfigTemplateSyncNotice | null
+}
+
+/** Scopes a template or fragment save put out of sync with disk
+ *  (Step 20 REQ-005). */
+export interface HarnessConfigTemplateSyncNotice {
+  scopes: HarnessConfigScopeKey[]
+  changedAt: number
 }
 
 export type HarnessConfigEvent =
@@ -222,3 +437,130 @@ export type HarnessConfigEvent =
       }
     }
   | { type: 'harnessConfig/errorChanged'; payload: string | null }
+  | {
+      type: 'harnessConfig/templatesLoaded'
+      payload: { templates: HarnessTemplate[]; errors: HarnessTemplateParseError[]; loadedAt: number }
+    }
+  | { type: 'harnessConfig/templateChanged'; payload: HarnessTemplate }
+  | {
+      type: 'harnessConfig/templateRemoved'
+      payload: { kind: HarnessTemplateKind; name: string }
+    }
+  | {
+      type: 'harnessConfig/fragmentsLoaded'
+      payload: { fragments: HarnessFragment[]; errors: HarnessTemplateParseError[]; loadedAt: number }
+    }
+  | { type: 'harnessConfig/fragmentChanged'; payload: HarnessFragment }
+  | { type: 'harnessConfig/fragmentRemoved'; payload: { name: string } }
+  | { type: 'harnessConfig/templateSyncNoticeChanged'; payload: HarnessConfigTemplateSyncNotice | null }
+  | {
+      type: 'harnessConfig/templateSourceErrorChanged'
+      payload: { relativePath: string; message: string | null }
+    }
+
+// --- Template import (Step 22) ---
+
+/** Absolute folders the user picked in the import wizard, one per kind.
+ *  `skills` may name several source folders. */
+export interface HarnessTemplateImportFolders {
+  agents: string | null
+  agentFragments: string | null
+  skills: string[]
+  references: string | null
+  commands: string | null
+}
+
+export type HarnessTemplateImportConflictChoice = 'skip' | 'replace'
+
+export interface HarnessTemplateImportChoices {
+  /** Harnesses that skills and plain commands target (default Claude). */
+  harnesses: ManagedHarnessKind[]
+  /** Skill name to the source folder that wins, or `'skip'`. */
+  duplicateChoices: Record<string, string>
+  /** `<kind>/<name>` or `fragment/<name>` to skip or replace. */
+  conflictChoices: Record<string, HarnessTemplateImportConflictChoice>
+}
+
+export interface HarnessTemplateImportPreviewRequest {
+  folders: HarnessTemplateImportFolders
+  choices: HarnessTemplateImportChoices
+}
+
+export interface HarnessTemplateImportApplyRequest extends HarnessTemplateImportPreviewRequest {
+  fingerprint: string
+  confirmed: boolean
+  allowShadowing?: boolean
+}
+
+export interface HarnessTemplateImportSetting {
+  harness: string
+  key: string
+  value: string
+}
+
+export type HarnessTemplateImportAction = 'create' | 'replace' | 'skip' | 'undecided' | 'invalid'
+
+export interface HarnessTemplateImportItem {
+  /** `<kind>/<name>` for templates, `fragment/<name>` for fragments. */
+  key: string
+  type: 'template' | 'fragment'
+  kind: HarnessTemplateKind | null
+  name: string
+  sourcePath: string
+  targets: ManagedHarnessKind[]
+  fragments: string[]
+  references: string[]
+  /** Harness blocks Tatsu does not manage or cannot target, dropped. */
+  droppedBlocks: string[]
+  /** Settings the old build wrote outside resource files (REQ-006). */
+  unsupportedSettings: HarnessTemplateImportSetting[]
+  notes: string[]
+  conflict: boolean
+  action: HarnessTemplateImportAction
+  error: string | null
+}
+
+export interface HarnessTemplateImportIssue {
+  sourcePath: string
+  message: string
+}
+
+export interface HarnessTemplateImportDuplicate {
+  name: string
+  sources: string[]
+  choice: string | null
+}
+
+export interface HarnessTemplateImportCoveredCommand {
+  name: string
+  skill: string
+  sourcePath: string
+}
+
+export interface HarnessTemplateImportFile {
+  templateRef: string
+  agentKind: ManagedHarnessKind
+  resourceType: HarnessConfigResourceType
+  relativePath: string
+  rendered: string
+  /** Current file in the harness folder, or null when there is none. */
+  current: string | null
+}
+
+export interface HarnessTemplateImportPreview {
+  fingerprint: string
+  items: HarnessTemplateImportItem[]
+  duplicates: HarnessTemplateImportDuplicate[]
+  coveredCommands: HarnessTemplateImportCoveredCommand[]
+  unknownFiles: HarnessTemplateImportIssue[]
+  renderErrors: HarnessTemplateImportIssue[]
+  shadows: string[]
+  files: HarnessTemplateImportFile[]
+  blockingReasons: string[]
+}
+
+export interface HarnessTemplateImportApplyResult {
+  written: string[]
+  skipped: string[]
+  scopes: HarnessConfigScope[]
+}

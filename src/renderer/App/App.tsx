@@ -224,12 +224,16 @@ function DesktopApp(): JSX.Element {
   // show in the sidebar immediately on submit so the user sees the new entry
   // right away instead of waiting on the modal.
   const [showSettings, setShowSettings] = useState(false)
-  const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | undefined>(undefined)
+  const [settingsInitialSection, setSettingsInitialSection] = useState<'github' | 'config-folders' | undefined>(undefined)
   const [showConfig, setShowConfig] = useState(false)
   const showConfigRef = useRef(showConfig)
   showConfigRef.current = showConfig
-  const setShowSettingsUnlessConfig = useCallback<Dispatch<SetStateAction<boolean>>>((value) => {
-    if (showConfigRef.current) return
+  const setShowSettingsOverConfig = useCallback<Dispatch<SetStateAction<boolean>>>((value) => {
+    if (showConfigRef.current && value !== false) {
+      setShowConfig(false)
+      setShowSettings(true)
+      return
+    }
     setShowSettings(value)
   }, [])
   const [showGuide, setShowGuide] = useState(false)
@@ -359,7 +363,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
 
   // Open Settings from the menu (Cmd+,)
   useEffect(() => {
-    const cleanup = backend.onOpenSettings(() => setShowSettingsUnlessConfig(true))
+    const cleanup = backend.onOpenSettings(() => setShowSettingsOverConfig(true))
     return cleanup
   }, [])
 
@@ -736,7 +740,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     handleSelectTab,
     handleSplitPane,
     handleRefreshWorktrees,
-    setShowSettings: setShowSettingsUnlessConfig
+    setShowSettings: setShowSettingsOverConfig
   })
 
   // File → Close Tab (Cmd+W). The accelerator lives on the menu item
@@ -816,7 +820,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
   }
 
   const settingsOverlay = showSettings ? (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 no-drag">
       <Settings
         onClose={() => {
           setShowSettings(false)
@@ -838,8 +842,15 @@ const setQuestStep = useCallback((next: QuestStep) => {
   ) : null
 
   const configOverlay = showConfig ? (
-    <div className="fixed inset-0 z-50">
-      <Config onClose={() => setShowConfig(false)} />
+    <div className="fixed inset-0 z-50 no-drag">
+      <Config
+        onClose={() => setShowConfig(false)}
+        onOpenConfigFolders={() => {
+          setShowConfig(false)
+          setSettingsInitialSection('config-folders')
+          setShowSettings(true)
+        }}
+      />
     </div>
   ) : null
 
@@ -1084,6 +1095,30 @@ const setQuestStep = useCallback((next: QuestStep) => {
                     <InterfaceToggle
                       value={settings.defaultClaudeTabType}
                       onChange={(value) => { void backend.setDefaultClaudeTabType(value) }}
+                      size="compact"
+                    />
+                  </div>
+                )}
+                {agentChosen && defaultAgent === 'opencode' && (
+                  <div className="ml-8 mt-4 pl-4 border-l-2 border-border">
+                    <div className="text-xs text-dim mb-2">
+                      Which interface should new Opencode tabs use?
+                    </div>
+                    <InterfaceToggle
+                      value={settings.defaultOpencodeTabType}
+                      onChange={(value) => { void backend.setDefaultOpencodeTabType(value) }}
+                      size="compact"
+                    />
+                  </div>
+                )}
+                {agentChosen && defaultAgent === 'codex' && (
+                  <div className="ml-8 mt-4 pl-4 border-l-2 border-border">
+                    <div className="text-xs text-dim mb-2">
+                      Which interface should new Codex tabs use?
+                    </div>
+                    <InterfaceToggle
+                      value={settings.defaultCodexTabType}
+                      onChange={(value) => { void backend.setDefaultCodexTabType(value) }}
                       size="compact"
                     />
                   </div>

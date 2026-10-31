@@ -40,6 +40,7 @@ import type {
 } from '../../shared/transport/transport'
 import type { ElectronAPI } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
+import type { DownloadableRuntime } from '../../shared/state/runtimes'
 import type {
   HarnessConfigApplyRequest,
   HarnessConfigConversionRequest,
@@ -47,7 +48,17 @@ import type {
   HarnessConfigPrepareDeleteRequest,
   HarnessConfigPrepareUpdateRequest,
   HarnessConfigReadRequest,
-  HarnessConfigScopeRequest
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigScopeRequest,
+  HarnessConfigSyncToDiskRequest,
+  HarnessConfigSetRootRequest,
+  HarnessFragmentDeleteRequest,
+  HarnessFragmentSaveRequest,
+  HarnessFragmentUsageRequest,
+  HarnessTemplateDeleteRequest,
+  HarnessTemplateImportApplyRequest,
+  HarnessTemplateImportPreviewRequest,
+  HarnessTemplateSaveRequest
 } from '../types'
 
 export type { ElectronOnlyHelpers }
@@ -253,6 +264,10 @@ export function buildBackend(
     setBrowserToolsMode: (mode: 'view' | 'full') => req('config:setBrowserToolsMode', mode),
     setDefaultClaudeTabType: (value: 'xterm' | 'json') =>
       req('config:setDefaultClaudeTabType', value),
+    setDefaultOpencodeTabType: (value: 'xterm' | 'json') =>
+      req('config:setDefaultOpencodeTabType', value),
+    setDefaultCodexTabType: (value: 'xterm' | 'json') =>
+      req('config:setDefaultCodexTabType', value),
     setChatPromotionDismissed: (value: boolean) =>
       req('config:setChatPromotionDismissed', value),
     setJsonModeChatDensity: (value: 'compact' | 'comfy') =>
@@ -359,6 +374,11 @@ export function buildBackend(
     setEditor: (editorId: string) => req('config:setEditor', editorId),
     getAvailableEditors: () => req('config:getAvailableEditors'),
 
+    downloadRuntime: (agentKind: DownloadableRuntime) => req('runtimes:download', agentKind),
+    setExperimentalChatAgentsEnabled: (enabled: boolean) => req('config:setExperimentalChatAgentsEnabled', enabled),
+    authenticateJsonClaude: (sessionId: string, methodId: string, apiKey?: string) =>
+      req('jsonClaude:authenticate', sessionId, methodId, apiKey),
+    refreshRuntimes: () => req('runtimes:refresh'),
     snooze: (path: string, wakeAt: number) => req('snooze:snooze', path, wakeAt),
     unsnooze: (path: string) => req('snooze:unsnooze', path),
     setSnoozeDefaultDays: (days: number) => req('config:setSnoozeDefaultDays', days),
@@ -373,6 +393,11 @@ export function buildBackend(
     setGithubToken: (token: string) => req('settings:setGithubToken', token),
     clearGithubToken: () => req('settings:clearGithubToken'),
     setHarnessStarred: (starred: boolean) => req('settings:setHarnessStarred', starred),
+    setHarnessConfigRoot: (request: HarnessConfigSetRootRequest) =>
+      req('settings:setHarnessConfigRoot', request),
+    setHarnessConfigSourceDir: (path: string | null) =>
+      req('settings:setHarnessConfigSourceDir', path),
+    getHarnessConfigFolderDefaults: () => req('settings:getHarnessConfigFolderDefaults'),
 
     getVersion: () => req('updater:getVersion'),
     readRecentLog: (maxLines?: number) => req('debug:readRecentLog', maxLines),
@@ -590,10 +615,8 @@ export function buildBackend(
       req('harnessConfig:prepareUpdate', request),
     prepareHarnessConfigDelete: (request: HarnessConfigPrepareDeleteRequest) =>
       req('harnessConfig:prepareDelete', request),
-    planHarnessConfigSyncToDisk: (request: HarnessConfigScopeRequest) =>
+    planHarnessConfigSyncToDisk: (request: HarnessConfigSyncToDiskRequest) =>
       req('harnessConfig:planSyncToDisk', request),
-    planHarnessConfigAdoptFromDisk: (request: HarnessConfigScopeRequest) =>
-      req('harnessConfig:planAdoptFromDisk', request),
     createHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:createFile', request),
     updateHarnessConfigFile: (request: HarnessConfigApplyRequest) =>
@@ -602,12 +625,23 @@ export function buildBackend(
       req('harnessConfig:deleteFile', request),
     syncHarnessConfigToDisk: (request: HarnessConfigApplyRequest) =>
       req('harnessConfig:syncToDisk', request),
-    adoptHarnessConfigFromDisk: (request: HarnessConfigApplyRequest) =>
-      req('harnessConfig:adoptFromDisk', request),
     prepareHarnessConfigCommandFromSkill: (request: HarnessConfigConversionRequest) =>
       req('harnessConfig:prepareCommandFromSkill', request),
     prepareHarnessConfigSkillFromCommand: (request: HarnessConfigConversionRequest) =>
-      req('harnessConfig:prepareSkillFromCommand', request)
+      req('harnessConfig:prepareSkillFromCommand', request),
+    saveHarnessTemplate: (request: HarnessTemplateSaveRequest) => req('harnessConfig:saveTemplate', request),
+    deleteHarnessTemplate: (request: HarnessTemplateDeleteRequest) =>
+      req('harnessConfig:deleteTemplate', request),
+    saveHarnessFragment: (request: HarnessFragmentSaveRequest) => req('harnessConfig:saveFragment', request),
+    deleteHarnessFragment: (request: HarnessFragmentDeleteRequest) =>
+      req('harnessConfig:deleteFragment', request),
+    previewHarnessTemplateImport: (request: HarnessTemplateImportPreviewRequest) =>
+      req('harnessConfig:previewImport', request),
+    applyHarnessTemplateImport: (request: HarnessTemplateImportApplyRequest) =>
+      req('harnessConfig:applyImport', request),
+    resolveHarnessFragmentEdit: (request: HarnessConfigResolveFragmentEditRequest) =>
+      req('harnessConfig:resolveFragmentEdit', request),
+    harnessFragmentUsage: (request: HarnessFragmentUsageRequest) => req('harnessConfig:fragmentUsage', request)
   }
 
   return api as ElectronAPI

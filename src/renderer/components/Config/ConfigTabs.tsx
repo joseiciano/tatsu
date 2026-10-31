@@ -6,6 +6,7 @@ export function ConfigTabs({
   tabs,
   activeTab,
   onTabChange,
+  showAgentFilter = true,
   agentFilterOptions,
   agentFilter,
   onAgentFilterChange,
@@ -49,23 +50,25 @@ export function ConfigTabs({
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="config-agent-filter" className="text-xs text-dim">
-            Agent
-          </label>
-          <select
-            id="config-agent-filter"
-            value={agentFilter}
-            onChange={(e) => onAgentFilterChange(e.target.value as ConfigTabsProps['agentFilter'])}
-            className="bg-app border border-border rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent cursor-pointer"
-          >
-            {agentFilterOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {showAgentFilter && (
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="config-agent-filter" className="text-xs text-dim">
+              Agent
+            </label>
+            <select
+              id="config-agent-filter"
+              value={agentFilter}
+              onChange={(e) => onAgentFilterChange(e.target.value as ConfigTabsProps['agentFilter'])}
+              className="bg-app border border-border rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent cursor-pointer"
+            >
+              {agentFilterOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="relative flex-1 min-w-[10rem] max-w-xs">
           <Search className="icon-xs absolute left-2 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
@@ -73,8 +76,8 @@ export function ConfigTabs({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search resources…"
-            aria-label="Search resources"
+            placeholder={activeTab === 'templates' ? 'Search templates…' : 'Search resources…'}
+            aria-label={activeTab === 'templates' ? 'Search templates' : 'Search resources'}
             className="w-full bg-app border border-border rounded pl-7 pr-6 py-1 text-xs text-fg-bright placeholder-faint outline-none focus:border-accent"
           />
           {searchQuery && (

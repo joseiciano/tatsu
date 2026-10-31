@@ -31,6 +31,13 @@ export function jsonClaudeReducer(
         existing?.capabilities ??
         event.payload.capabilities ??
         defaultAcpCapabilities()
+      // Preserve agent identity on re-attach so routing stays stable even
+      // if a start payload were ever mislabeled. Fresh sessions take the
+      // kind/id the runtime requested.
+      const agentKind = existing?.agentKind ?? event.payload.agentKind
+      const runtimeId = existing?.runtimeId ?? event.payload.runtimeId
+      const agentSessionId = existing?.agentSessionId ?? event.payload.agentSessionId
+      const title = existing?.title
       return {
         ...state,
         sessions: {
@@ -38,6 +45,10 @@ export function jsonClaudeReducer(
           [sessionId]: {
             sessionId,
             worktreePath,
+            agentKind,
+            runtimeId,
+            ...(agentSessionId ? { agentSessionId } : {}),
+            ...(title ? { title } : {}),
             state: 'connecting',
             exitCode: null,
             exitReason: null,
@@ -54,6 +65,28 @@ export function jsonClaudeReducer(
             sessionAllowedDecisions: existing?.sessionAllowedDecisions ?? {},
             capabilities
           }
+        }
+      }
+    }
+    case 'jsonClaude/agentSessionIdChanged': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session || session.agentSessionId === event.payload.agentSessionId) return state
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: { ...session, agentSessionId: event.payload.agentSessionId }
+        }
+      }
+    }
+    case 'jsonClaude/sessionTitleChanged': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session || session.title === event.payload.title) return state
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: { ...session, title: event.payload.title }
         }
       }
     }
@@ -292,6 +325,29 @@ export function jsonClaudeReducer(
         void _drop
         return rest
       })
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [session.sessionId]: { ...session, entries: nextEntries }
+        }
+      }
+    }
+    case 'jsonClaude/userEntryUnqueued': {
+      const session = state.sessions[event.payload.sessionId]
+      if (!session) return state
+      const idx = session.entries.findIndex(
+        (e) => e.entryId === event.payload.entryId && e.isQueued
+      )
+      if (idx === -1) return state
+      const target = session.entries[idx]
+      const { isQueued: _drop, ...rest } = target
+      void _drop
+      const nextEntries = [
+        ...session.entries.slice(0, idx),
+        rest,
+        ...session.entries.slice(idx + 1)
+      ]
       return {
         ...state,
         sessions: {

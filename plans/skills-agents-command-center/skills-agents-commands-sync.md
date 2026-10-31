@@ -25,3 +25,17 @@ For feature goals, scope, source-of-truth rules, and shared caveats, see [implem
 | Step 13: Suggested implementation order | Not yet authored — follow the dependency order implied by the step list until this step is written. |
 | Step 14: Acceptance criteria | [step-14-acceptance-criteria.md](./step-14-acceptance-criteria.md) |
 | Step 15: Open questions to resolve during implementation | [step-15-open-questions.md](./step-15-open-questions.md) |
+
+## Templates and Configurable Folders
+
+These steps add templates: one source definition that builds agents, skills, and commands for several harnesses, with shared fragments for repeated text. They also let users choose where harness configuration and templates live. Build them in order.
+
+| Step | File |
+|---|---|
+| Step 16: Config root settings | [step-16-config-root-settings.md](./step-16-config-root-settings.md) |
+| Step 17: Symlink-aware inventory | [step-17-symlink-aware-inventory.md](./step-17-symlink-aware-inventory.md) |
+| Step 18: Template source model | [step-18-template-source-model.md](./step-18-template-source-model.md) |
+| Step 19: Template renderer | [step-19-template-renderer.md](./step-19-template-renderer.md) |
+| Step 20: Template sync | [step-20-template-sync.md](./step-20-template-sync.md) |
+| Step 21: Template editor | [step-21-template-editor.md](./step-21-template-editor.md) |
+| Step 22: Import an existing template setup | [step-22-import-existing-setup.md](./step-22-import-existing-setup.md) |

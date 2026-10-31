@@ -11,7 +11,9 @@ import {
   type HarnessConfigState,
   type HarnessConfigSyncDirection,
   type HarnessConfigSyncPlan,
-  type HarnessConfigSyncStatus
+  type HarnessConfigSyncStatus,
+  type HarnessFragment,
+  type HarnessTemplate
 } from '.'
 
 function apply(state: HarnessConfigState, event: HarnessConfigEvent): HarnessConfigState {
@@ -56,7 +58,6 @@ function comparison(overrides: Partial<HarnessConfigComparison> = {}): HarnessCo
   return {
     scope: scope(),
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [changedRef()],
     comparedAt: 200,
@@ -70,7 +71,6 @@ function syncPlan(overrides: Partial<HarnessConfigSyncPlan> = {}): HarnessConfig
     scope: scope(),
     direction: 'sync-to-disk',
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [changedRef()],
     generatedAt: 300,
@@ -90,7 +90,9 @@ function state(overrides: StateOverrides = {}): HarnessConfigState {
     loading: false,
     error: null,
     lastScannedAt: null,
-    lastSyncedAt: null
+    lastSyncedAt: null,
+    templates: initialHarnessConfig.templates,
+    templateSyncNotice: null
   }
 
   return {
@@ -109,8 +111,11 @@ describe('harnessConfigReducer', () => {
       'lastScannedAt',
       'lastSyncedAt',
       'loading',
-      'resources'
+      'resources',
+      'templateSyncNotice',
+      'templates'
     ])
+    expect(initialHarnessConfig.templates).toEqual({ templates: [], fragments: [], errors: [], loadedAt: null })
     expect(initialHarnessConfig.resources).toEqual({ agents: [], skills: [], commands: [] })
     expect(Object.keys(initialHarnessConfig.resources).sort()).toEqual([
       'agents',
@@ -361,7 +366,6 @@ describe('harnessConfigReducer', () => {
       'changed',
       'comparedAt',
       'configOnly',
-      'diskOnly',
       'scope',
       'status'
     ])
@@ -369,7 +373,6 @@ describe('harnessConfigReducer', () => {
       'changed',
       'configOnly',
       'direction',
-      'diskOnly',
       'fingerprint',
       'generatedAt',
       'planId',
@@ -518,5 +521,164 @@ describe('harnessConfigReducer', () => {
     expect(next.resources.skills[1]).toBe(third)
     expect(next.resources.agents).toBe(start.resources.agents)
     expect(next.resources.commands).toBe(start.resources.commands)
+  })
+})
+
+function template(overrides: Partial<HarnessTemplate> = {}): HarnessTemplate {
+  const kind = overrides.kind ?? 'agent'
+  const name = overrides.name ?? 'reviewer'
+  return {
+    kind,
+    name,
+    description: 'Reviews code',
+    fragments: [],
+    body: 'Body',
+    harnesses: { claude: { frontmatter: {} } },
+    references: [],
+    relativePath: kind === 'skill' ? `skills/${name}/TEMPLATE.md` : `${kind}s/${name}.md`,
+    hash: `sha256:${kind}:${name}`,
+    ...overrides
+  }
+}
+
+function fragment(overrides: Partial<HarnessFragment> = {}): HarnessFragment {
+  const name = overrides.name ?? 'style'
+  return { name, content: 'Be brief.', relativePath: `fragments/${name}.md`, hash: `sha256:${name}`, ...overrides }
+}
+
+describe('harnessConfigReducer templates', () => {
+  it('templatesLoaded sorts templates and replaces only template-file errors', () => {
+    const start = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'fragments/bad.md', message: 'bad fragment' }
+    })
+    const skill = template({ kind: 'skill', name: 'alpha' })
+    const agent = template({ kind: 'agent', name: 'zeta' })
+    const next = apply(start, {
+      type: 'harnessConfig/templatesLoaded',
+      payload: {
+        templates: [skill, agent],
+        errors: [{ relativePath: 'agents/broken.md', message: 'broken' }],
+        loadedAt: 5
+      }
+    })
+    expect(next.templates.templates).toEqual([agent, skill])
+    expect(next.templates.errors.map((error) => error.relativePath)).toEqual(['agents/broken.md', 'fragments/bad.md'])
+    expect(next.templates.loadedAt).toBe(5)
+    expect(next.templates.fragments).toBe(start.templates.fragments)
+  })
+
+  it('templateChanged inserts in order, replaces in place, and clears that file error', () => {
+    const first = template({ name: 'a' })
+    const third = template({ name: 'c' })
+    const loaded = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templatesLoaded',
+      payload: { templates: [first, third], errors: [{ relativePath: 'agents/b.md', message: 'x' }], loadedAt: 1 }
+    })
+    const second = template({ name: 'b' })
+    const inserted = apply(loaded, { type: 'harnessConfig/templateChanged', payload: second })
+    expect(inserted.templates.templates).toEqual([first, second, third])
+    expect(inserted.templates.templates[0]).toBe(first)
+    expect(inserted.templates.errors).toEqual([])
+
+    const edited = template({ name: 'b', body: 'Changed' })
+    const replaced = apply(inserted, { type: 'harnessConfig/templateChanged', payload: edited })
+    expect(replaced.templates.templates[1]).toBe(edited)
+    expect(replaced.templates.templates[2]).toBe(third)
+
+    expect(apply(replaced, { type: 'harnessConfig/templateChanged', payload: edited })).toBe(replaced)
+  })
+
+  it('templateRemoved removes one template and returns the same state when missing', () => {
+    const agent = template({ name: 'a' })
+    const command = template({ kind: 'command', name: 'a' })
+    const loaded = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templatesLoaded',
+      payload: { templates: [agent, command], errors: [], loadedAt: 1 }
+    })
+    const next = apply(loaded, { type: 'harnessConfig/templateRemoved', payload: { kind: 'command', name: 'a' } })
+    expect(next.templates.templates).toEqual([agent])
+    expect(next.templates.templates[0]).toBe(agent)
+    expect(apply(next, { type: 'harnessConfig/templateRemoved', payload: { kind: 'skill', name: 'a' } })).toBe(next)
+  })
+
+  it('fragmentsLoaded sorts fragments and replaces only fragment errors', () => {
+    const start = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'agents/bad.md', message: 'bad template' }
+    })
+    const next = apply(start, {
+      type: 'harnessConfig/fragmentsLoaded',
+      payload: {
+        fragments: [fragment({ name: 'z' }), fragment({ name: 'a' })],
+        errors: [{ relativePath: 'fragments/x.md', message: 'x' }],
+        loadedAt: 9
+      }
+    })
+    expect(next.templates.fragments.map((entry) => entry.name)).toEqual(['a', 'z'])
+    expect(next.templates.errors.map((error) => error.relativePath)).toEqual(['agents/bad.md', 'fragments/x.md'])
+    expect(next.templates.templates).toBe(start.templates.templates)
+  })
+
+  it('fragmentChanged upserts by name and clears that file error', () => {
+    const withError = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'fragments/style.md', message: 'unreadable' }
+    })
+    const style = fragment()
+    const next = apply(withError, { type: 'harnessConfig/fragmentChanged', payload: style })
+    expect(next.templates.fragments).toEqual([style])
+    expect(next.templates.errors).toEqual([])
+    expect(apply(next, { type: 'harnessConfig/fragmentChanged', payload: style })).toBe(next)
+    const edited = fragment({ content: 'New' })
+    expect(apply(next, { type: 'harnessConfig/fragmentChanged', payload: edited }).templates.fragments).toEqual([edited])
+  })
+
+  it('fragmentRemoved removes by name and returns the same state when missing', () => {
+    const loaded = apply(initialHarnessConfig, { type: 'harnessConfig/fragmentChanged', payload: fragment() })
+    const next = apply(loaded, { type: 'harnessConfig/fragmentRemoved', payload: { name: 'style' } })
+    expect(next.templates.fragments).toEqual([])
+    expect(apply(next, { type: 'harnessConfig/fragmentRemoved', payload: { name: 'style' } })).toBe(next)
+  })
+
+  it('templateSourceErrorChanged sets, replaces, dedups, and clears a file error', () => {
+    const payload = { relativePath: 'agents/a.md', message: 'broken' }
+    const set = apply(initialHarnessConfig, { type: 'harnessConfig/templateSourceErrorChanged', payload })
+    expect(set.templates.errors).toEqual([payload])
+    expect(apply(set, { type: 'harnessConfig/templateSourceErrorChanged', payload: { ...payload } })).toBe(set)
+    const replaced = apply(set, {
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'agents/a.md', message: 'still broken' }
+    })
+    expect(replaced.templates.errors).toEqual([{ relativePath: 'agents/a.md', message: 'still broken' }])
+    const cleared = apply(replaced, {
+      type: 'harnessConfig/templateSourceErrorChanged',
+      payload: { relativePath: 'agents/a.md', message: null }
+    })
+    expect(cleared.templates.errors).toEqual([])
+    expect(
+      apply(cleared, {
+        type: 'harnessConfig/templateSourceErrorChanged',
+        payload: { relativePath: 'agents/a.md', message: null }
+      })
+    ).toBe(cleared)
+  })
+})
+
+describe('harnessConfigReducer template sync notice', () => {
+  it('templateSyncNoticeChanged sets, dedups, and clears the notice', () => {
+    const set = apply(initialHarnessConfig, {
+      type: 'harnessConfig/templateSyncNoticeChanged',
+      payload: { scopes: ['claude:agents', 'opencode:agents'], changedAt: 10 }
+    })
+    expect(set.templateSyncNotice).toEqual({ scopes: ['claude:agents', 'opencode:agents'], changedAt: 10 })
+    const same = apply(set, {
+      type: 'harnessConfig/templateSyncNoticeChanged',
+      payload: { scopes: ['claude:agents', 'opencode:agents'], changedAt: 10 }
+    })
+    expect(same).toBe(set)
+    const cleared = apply(set, { type: 'harnessConfig/templateSyncNoticeChanged', payload: null })
+    expect(cleared.templateSyncNotice).toBeNull()
+    expect(apply(cleared, { type: 'harnessConfig/templateSyncNoticeChanged', payload: null })).toBe(cleared)
   })
 })

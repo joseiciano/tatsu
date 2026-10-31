@@ -3,6 +3,9 @@ import type {
   HarnessConfigChangedRef,
   HarnessConfigComparison,
   HarnessConfigFileRef,
+  HarnessConfigFragmentEditEntry,
+  HarnessConfigFragmentErrorEntry,
+  HarnessConfigRenderErrorEntry,
   HarnessConfigSyncPlan
 } from '../../../shared/state/harness-config'
 import type {
@@ -46,7 +49,10 @@ function serializeRef(ref: HarnessConfigFileRef): string {
     hash: ref.hash,
     existsOnDisk: ref.existsOnDisk,
     managed: ref.managed,
-    updatedAt: ref.updatedAt
+    updatedAt: ref.updatedAt,
+    linkedFrom: ref.linkedFrom ?? null,
+    templateRef: ref.templateRef ?? null,
+    source: ref.source ?? null
   })
 }
 
@@ -58,18 +64,33 @@ function serializeRef(ref: HarnessConfigFileRef): string {
  *  the non-authorizing comparison the user reviewed. Never mutates the
  *  input arrays. */
 export function configSyncReviewKey(review: ReviewLike): string {
-  const diskOnly = [...review.diskOnly].sort(compareRefByPathThenId).map(serializeRef)
   const configOnly = [...review.configOnly].sort(compareRefByPathThenId).map(serializeRef)
   const changed = [...review.changed]
     .sort(compareChangedPair)
     .map((pair) => `${serializeRef(pair.disk)}|${serializeRef(pair.config)}`)
 
+  const renderErrors = [...(review.renderErrors ?? [])]
+    .sort((left, right) => compareText(left.templateRef, right.templateRef))
+    .map((entry) => ({
+      templateRef: entry.templateRef,
+      message: entry.message,
+      held: [...entry.held].sort(compareRefByPathThenId).map(serializeRef)
+    }))
+  const fragmentErrors = [...(review.fragmentErrors ?? [])]
+    .sort((left, right) => compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id))
+    .map((entry) => ({ id: entry.id, message: entry.message, held: entry.held ? serializeRef(entry.held) : null }))
+  const fragmentEdits = [...(review.fragmentEdits ?? [])]
+    .sort((left, right) => compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id))
+    .map((entry) => ({ id: entry.id, fragments: [...entry.fragments].sort() }))
+
   return JSON.stringify({
     scope: review.scope,
     status: review.status,
-    diskOnly,
     configOnly,
-    changed
+    changed,
+    renderErrors,
+    fragmentErrors,
+    fragmentEdits
   })
 }
 
@@ -85,13 +106,14 @@ export function formatHash(hash: string): { shortLabel: string; fullLabel: strin
   return { shortLabel: `sha256:${hash.slice(0, 12)}`, fullLabel: `sha256:${hash}` }
 }
 
-function toFileRow(ref: HarnessConfigFileRef, sourceLabel: 'Disk' | 'Tatsu config'): ConfigSyncFileRow {
+function toFileRow(ref: HarnessConfigFileRef, side: 'Disk' | 'After sync'): ConfigSyncFileRow {
   const hash = formatHash(ref.hash)
+  const fromTemplate = side === 'After sync' && ref.source === 'template'
   return {
-    key: `${sourceLabel}:${ref.agentKind}:${ref.id}`,
+    key: `${side}:${ref.agentKind}:${ref.id}`,
     ref,
-    sourceLabel,
-    updatedAtLabel: formatUpdatedAt(ref.updatedAt),
+    sourceLabel: fromTemplate ? 'Template' : side,
+    updatedAtLabel: fromTemplate ? `Built from ${ref.templateRef ?? 'a template'}` : formatUpdatedAt(ref.updatedAt),
     hashShortLabel: hash.shortLabel,
     hashFullLabel: hash.fullLabel
   }
@@ -101,21 +123,44 @@ function toFileRow(ref: HarnessConfigFileRef, sourceLabel: 'Disk' | 'Tatsu confi
  *  construction. Reads the input arrays but never mutates or re-sorts
  *  them in place — every sort operates on a shallow copy. */
 export function buildReviewSections(
-  diskOnly: readonly HarnessConfigFileRef[],
   configOnly: readonly HarnessConfigFileRef[],
-  changed: readonly HarnessConfigChangedRef[]
+  changed: readonly HarnessConfigChangedRef[],
+  renderErrors: readonly HarnessConfigRenderErrorEntry[] = [],
+  fragmentErrors: readonly HarnessConfigFragmentErrorEntry[] = [],
+  fragmentEdits: readonly HarnessConfigFragmentEditEntry[] = []
 ): ConfigSyncReviewSections {
-  const sortedDiskOnly = [...diskOnly].sort(compareRefByPathThenId)
   const sortedConfigOnly = [...configOnly].sort(compareRefByPathThenId)
   const sortedChanged = [...changed].sort(compareChangedPair)
+  const sortedErrors = [...renderErrors].sort((left, right) => compareText(left.templateRef, right.templateRef))
+  const byPath = (left: { relativePath: string; id: string }, right: { relativePath: string; id: string }): number =>
+    compareText(left.relativePath, right.relativePath) || compareText(left.id, right.id)
 
   return {
-    diskOnly: sortedDiskOnly.map((ref) => toFileRow(ref, 'Disk')),
-    configOnly: sortedConfigOnly.map((ref) => toFileRow(ref, 'Tatsu config')),
+    configOnly: sortedConfigOnly.map((ref) => toFileRow(ref, 'After sync')),
     changed: sortedChanged.map((pair) => ({
       key: `${pair.disk.agentKind}:${pair.disk.id}`,
       disk: toFileRow(pair.disk, 'Disk'),
-      config: toFileRow(pair.config, 'Tatsu config')
+      config: toFileRow(pair.config, 'After sync')
+    })),
+    renderErrors: sortedErrors.map((entry) => ({
+      key: entry.templateRef,
+      templateRef: entry.templateRef,
+      message: entry.message,
+      held: [...entry.held].sort(compareRefByPathThenId).map((ref) => toFileRow(ref, 'Disk'))
+    })),
+    fragmentErrors: [...fragmentErrors].sort(byPath).map((entry) => ({
+      key: `FragmentError:${entry.id}`,
+      label: entry.label,
+      relativePath: entry.relativePath,
+      message: entry.message,
+      held: entry.held ? toFileRow(entry.held, 'Disk') : null
+    })),
+    fragmentEdits: [...fragmentEdits].sort(byPath).map((entry) => ({
+      key: `FragmentEdit:${entry.id}`,
+      id: entry.id,
+      label: entry.label,
+      relativePath: entry.relativePath,
+      fragments: [...entry.fragments].sort()
     }))
   }
 }
@@ -135,7 +180,13 @@ export function toConfigSyncReview(review: ReviewLike): ConfigSyncReview {
     scope: review.scope,
     scopeKey: harnessConfigScopeKey(review.scope),
     status: review.status,
-    sections: buildReviewSections(review.diskOnly, review.configOnly, review.changed),
+    sections: buildReviewSections(
+      review.configOnly,
+      review.changed,
+      review.renderErrors,
+      review.fragmentErrors,
+      review.fragmentEdits
+    ),
     reviewKey: configSyncReviewKey(review),
     timestampLabel: formatUpdatedAt(reviewTimestamp(review))
   }

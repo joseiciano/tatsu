@@ -112,6 +112,16 @@ describe('settingsReducer', () => {
     expect(next.prReviewPrompt).toBe('Focus on security issues only.')
   })
 
+  it('experimentalChatAgentsEnabledChanged gates OpenCode/Codex chat, off by default', () => {
+    expect(initialSettings.experimentalChatAgentsEnabled).toBe(false)
+    const on = apply(initialSettings, {
+      type: 'settings/experimentalChatAgentsEnabledChanged',
+      payload: true
+    })
+    expect(on.experimentalChatAgentsEnabled).toBe(true)
+    expect(apply(on, { type: 'settings/experimentalChatAgentsEnabledChanged', payload: false }).experimentalChatAgentsEnabled).toBe(false)
+  })
+
   it('autoUpdateEnabledChanged toggles auto-update flag', () => {
     expect(initialSettings.autoUpdateEnabled).toBe(true)
     const off = apply(initialSettings, {
@@ -475,6 +485,34 @@ describe('settingsReducer', () => {
     expect(xterm.defaultClaudeTabType).toBe('xterm')
   })
 
+  it('defaultOpencodeTabTypeChanged switches between xterm and json', () => {
+    expect(initialSettings.defaultOpencodeTabType).toBe('xterm')
+    const json = apply(initialSettings, {
+      type: 'settings/defaultOpencodeTabTypeChanged',
+      payload: 'json'
+    })
+    expect(json.defaultOpencodeTabType).toBe('json')
+    const xterm = apply(json, {
+      type: 'settings/defaultOpencodeTabTypeChanged',
+      payload: 'xterm'
+    })
+    expect(xterm.defaultOpencodeTabType).toBe('xterm')
+  })
+
+  it('defaultCodexTabTypeChanged switches between xterm and json', () => {
+    expect(initialSettings.defaultCodexTabType).toBe('xterm')
+    const json = apply(initialSettings, {
+      type: 'settings/defaultCodexTabTypeChanged',
+      payload: 'json'
+    })
+    expect(json.defaultCodexTabType).toBe('json')
+    const xterm = apply(json, {
+      type: 'settings/defaultCodexTabTypeChanged',
+      payload: 'xterm'
+    })
+    expect(xterm.defaultCodexTabType).toBe('xterm')
+  })
+
   it('jsonModeChatDensityChanged switches between compact and comfy', () => {
     expect(initialSettings.jsonModeChatDensity).toBe('compact')
     const comfy = apply(initialSettings, {
@@ -614,5 +652,57 @@ describe('settingsReducer', () => {
     const next = apply(start, { type: 'settings/themeDarkChanged', payload: 'nord' })
     expect(next.claudeCommand).toBe('pre-existing')
     expect(next.nameClaudeSessions).toBe(true)
+  })
+
+  it('harnessConfigRootsChanged sets, replaces, and clears one root override', () => {
+    expect(initialSettings.harnessConfigRoots).toEqual({})
+    const set = apply(initialSettings, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'claudeSkills', path: '/dotfiles/claude/skills' }
+    })
+    expect(set.harnessConfigRoots).toEqual({ claudeSkills: '/dotfiles/claude/skills' })
+    const both = apply(set, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'opencodeAgents', path: '/dotfiles/opencode/agents' }
+    })
+    expect(both.harnessConfigRoots).toEqual({
+      claudeSkills: '/dotfiles/claude/skills',
+      opencodeAgents: '/dotfiles/opencode/agents'
+    })
+    const cleared = apply(both, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'claudeSkills', path: null }
+    })
+    expect(cleared.harnessConfigRoots).toEqual({ opencodeAgents: '/dotfiles/opencode/agents' })
+    expect('claudeSkills' in cleared.harnessConfigRoots).toBe(false)
+  })
+
+  it('harnessConfigRootsChanged returns the same state for a no-op', () => {
+    const same = apply(initialSettings, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'codexHome', path: null }
+    })
+    expect(same).toBe(initialSettings)
+    const set = apply(initialSettings, {
+      type: 'settings/harnessConfigRootsChanged',
+      payload: { key: 'codexHome', path: '/x/codex' }
+    })
+    expect(
+      apply(set, {
+        type: 'settings/harnessConfigRootsChanged',
+        payload: { key: 'codexHome', path: '/x/codex' }
+      })
+    ).toBe(set)
+  })
+
+  it('harnessConfigSourceDirChanged sets and clears the template source folder', () => {
+    expect(initialSettings.harnessConfigSourceDir).toBeNull()
+    const set = apply(initialSettings, {
+      type: 'settings/harnessConfigSourceDirChanged',
+      payload: '/templates'
+    })
+    expect(set.harnessConfigSourceDir).toBe('/templates')
+    const cleared = apply(set, { type: 'settings/harnessConfigSourceDirChanged', payload: null })
+    expect(cleared.harnessConfigSourceDir).toBeNull()
   })
 })

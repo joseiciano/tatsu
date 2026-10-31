@@ -1,4 +1,4 @@
-import { Plus, RefreshCw } from 'lucide-react'
+import { FileCode, Link2, Plus, RefreshCw } from 'lucide-react'
 import { AgentIcon } from '../AgentIcon'
 import {
   harnessConfigScopeKey,
@@ -9,12 +9,62 @@ import {
 import { isHarnessConfigCapabilityEnabled } from '../../../shared/agent-registry'
 import type {
   BuildConfigResourceGroupsInput,
+  ConfigDeferredHarness,
   ConfigDriftBadge,
   ConfigResourceGroup,
   ConfigResourceListProps,
   ConfigResourceRow,
   ConfigRowConversionAction
 } from './types'
+
+export function LinkedBadge({ linkedFrom }: { linkedFrom: string }): JSX.Element {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs text-faint shrink-0"
+      title={`Linked from ${linkedFrom}`}
+    >
+      <Link2 className="icon-2xs shrink-0" />
+      Linked
+    </span>
+  )
+}
+
+const ROOT_FOLDER_ERRORS = [
+  'The resolver known root is unavailable',
+  'The resolver has multiple active configuration roots'
+]
+
+export function isRootFolderError(message: string | null | undefined): boolean {
+  return !!message && ROOT_FOLDER_ERRORS.some((text) => message.includes(text))
+}
+
+function ErrorMessage({
+  message,
+  className,
+  onOpenConfigFolders
+}: {
+  message: string
+  className: string
+  onOpenConfigFolders?: () => void
+}): JSX.Element {
+  return (
+    <div className={className}>
+      {message}
+      {onOpenConfigFolders && isRootFolderError(message) && (
+        <>
+          {' '}
+          <button
+            type="button"
+            onClick={onOpenConfigFolders}
+            className="underline hover:text-fg-bright cursor-pointer"
+          >
+            Set config folders in Settings
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
 /** Skills <-> Commands is the only first-version conversion direction
  *  (REQ-013); the Agents tab offers no row conversion action. */
@@ -55,7 +105,7 @@ function buildConversionAction(
   const disabledReason = !destinationSupported
     ? (destinationCapability?.notes ?? `${agent.displayName} does not support this yet.`)
     : configOnly
-      ? 'This resource exists only in Tatsu config, not on disk.'
+      ? 'A template builds this file, but it is not on disk yet.'
       : null
   return {
     targetResourceType: target,
@@ -88,11 +138,10 @@ export function buildConfigResourceGroups(
     const comparison = comparisons[scopeKey] ?? null
 
     // Union disk-backed refs with every public ref from the latest
-    // comparison's three difference collections (REQ-013). Disk-backed
-    // refs are inserted first so they win the same-ID dedup below.
+    // comparison's difference collections (REQ-013). Disk-backed refs
+    // are inserted first so they win the same-ID dedup below.
     const byId = new Map<string, HarnessConfigFileRef>()
     const changedIds = new Set<string>()
-    const diskOnlyIds = new Set<string>()
     const configOnlyIds = new Set<string>()
 
     for (const ref of resources) {
@@ -101,11 +150,6 @@ export function buildConfigResourceGroups(
     }
 
     if (comparison) {
-      for (const ref of comparison.diskOnly) {
-        if (ref.agentKind !== agentKind || ref.resourceType !== resourceType) continue
-        diskOnlyIds.add(ref.id)
-        if (!byId.has(ref.id)) byId.set(ref.id, ref)
-      }
       for (const ref of comparison.configOnly) {
         if (ref.agentKind !== agentKind || ref.resourceType !== resourceType) continue
         configOnlyIds.add(ref.id)
@@ -127,7 +171,6 @@ export function buildConfigResourceGroups(
       if (!matchesQuery(ref, normalizedQuery)) continue
       let badge: ConfigDriftBadge = 'synced'
       if (changedIds.has(ref.id)) badge = 'conflict'
-      else if (diskOnlyIds.has(ref.id)) badge = 'disk-only'
       else if (configOnlyIds.has(ref.id)) badge = 'config-only'
 
       rows.push({
@@ -165,37 +208,40 @@ export function buildConfigResourceGroups(
   return groups
 }
 
-const BADGE_LABEL: Record<ConfigDriftBadge, string> = {
-  synced: 'Synced',
-  'disk-only': 'Disk only',
-  'config-only': 'Config only',
-  conflict: 'Conflict'
+/** Disk is the source, so a file in sync carries no label. */
+export const DRIFT_BADGE_LABEL: Record<ConfigDriftBadge, string | null> = {
+  synced: null,
+  'config-only': 'Not on disk',
+  conflict: 'Out of sync'
 }
 
 const BADGE_CLASS: Record<ConfigDriftBadge, string> = {
   synced: 'text-success',
-  'disk-only': 'text-warning',
   'config-only': 'text-info',
-  conflict: 'text-danger'
+  conflict: 'text-warning'
 }
 
-function DriftBadge({ badge }: { badge: ConfigDriftBadge }): JSX.Element {
-  return <span className={`text-xs shrink-0 ${BADGE_CLASS[badge]}`}>{BADGE_LABEL[badge]}</span>
+function DriftBadge({ badge }: { badge: ConfigDriftBadge }): JSX.Element | null {
+  const label = DRIFT_BADGE_LABEL[badge]
+  return label ? <span className={`text-xs shrink-0 ${BADGE_CLASS[badge]}`}>{label}</span> : null
 }
 
 function ResourceRow({
   row,
   onSelect,
   onCreateCommand,
-  onCreateSkill
+  onCreateSkill,
+  onEditTemplate
 }: {
   row: ConfigResourceRow
   onSelect: (scope: HarnessConfigScope, id: string) => void
   onCreateCommand: (scope: HarnessConfigScope, id: string) => void
   onCreateSkill: (scope: HarnessConfigScope, id: string) => void
+  onEditTemplate?: (templateRef: string) => void
 }): JSX.Element {
   const scope: HarnessConfigScope = { agentKind: row.ref.agentKind, resourceType: row.ref.resourceType }
   const conversion = row.conversionAction
+  const templateRef = row.ref.templateRef
   return (
     <div
       className={`w-full flex items-center gap-1 px-2.5 py-1.5 rounded transition-colors ${
@@ -212,9 +258,27 @@ function ResourceRow({
         <span className="flex-1 min-w-0">
           <span className="block text-xs truncate">{row.ref.label}</span>
           <span className="block text-xs text-faint truncate">{row.ref.relativePath}</span>
+          {row.ref.linkedFrom && <LinkedBadge linkedFrom={row.ref.linkedFrom} />}
+          {templateRef && (
+            <span className="flex items-center gap-1 text-xs text-faint min-w-0" title={`Built from template ${templateRef}`}>
+              <FileCode className="icon-2xs shrink-0" />
+              <span className="truncate">{templateRef}</span>
+            </span>
+          )}
         </span>
         <DriftBadge badge={row.badge} />
       </button>
+      {templateRef && onEditTemplate && (
+        <button
+          type="button"
+          title={`Edit template ${templateRef}`}
+          aria-label={`Edit template ${templateRef}`}
+          onClick={() => onEditTemplate(templateRef)}
+          className="shrink-0 px-1.5 py-0.5 rounded text-xs text-dim hover:text-fg-bright hover:bg-surface-hover cursor-pointer"
+        >
+          Edit template
+        </button>
+      )}
       {conversion && (
         <button
           type="button"
@@ -279,20 +343,46 @@ function GroupHeader({
   )
 }
 
+function DeferredHarnessSection({ harness }: { harness: ConfigDeferredHarness }): JSX.Element {
+  return (
+    <div
+      className="border-b border-border/60"
+      data-testid={`config-deferred-${harness.agentKind}`}
+      aria-disabled="true"
+    >
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 opacity-60">
+        <AgentIcon kind={harness.agentKind} className="icon-sm" />
+        <span className="text-xs font-medium text-fg-bright flex-1 min-w-0 truncate">
+          {harness.displayName}
+        </span>
+        <span className="text-xs text-faint shrink-0">Deferred</span>
+      </div>
+      <div className="px-2.5 pb-1.5 text-xs text-faint">{harness.note}</div>
+    </div>
+  )
+}
+
 export function ConfigResourceList({
   groups,
+  deferredHarnesses,
   searchActive,
   sharedError,
   onSelectResource,
   onCreate,
   onSync,
   onCreateCommand,
-  onCreateSkill
+  onCreateSkill,
+  onEditTemplate,
+  onOpenConfigFolders
 }: ConfigResourceListProps): JSX.Element {
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {sharedError && (
-        <div className="px-2.5 py-2 text-xs text-danger border-b border-border">{sharedError}</div>
+        <ErrorMessage
+          message={sharedError}
+          className="px-2.5 py-2 text-xs text-danger border-b border-border"
+          onOpenConfigFolders={onOpenConfigFolders}
+        />
       )}
       {groups.map((group) => (
         <div key={group.agentKind} className="border-b border-border/60">
@@ -301,7 +391,11 @@ export function ConfigResourceList({
             <div className="px-2.5 pb-1.5 text-xs text-success">{group.notice}</div>
           )}
           {group.requestError && (
-            <div className="px-2.5 pb-1.5 text-xs text-danger">{group.requestError}</div>
+            <ErrorMessage
+              message={group.requestError}
+              className="px-2.5 pb-1.5 text-xs text-danger"
+              onOpenConfigFolders={onOpenConfigFolders}
+            />
           )}
           {!group.supported && group.note && (
             <div className="px-2.5 pb-1.5 text-xs text-faint">{group.note}</div>
@@ -314,6 +408,7 @@ export function ConfigResourceList({
                 onSelect={onSelectResource}
                 onCreateCommand={onCreateCommand}
                 onCreateSkill={onCreateSkill}
+                onEditTemplate={onEditTemplate}
               />
             ))}
             {group.supported && group.totalResourceCount === 0 && !searchActive && (
@@ -333,6 +428,9 @@ export function ConfigResourceList({
             )}
           </div>
         </div>
+      ))}
+      {deferredHarnesses.map((harness) => (
+        <DeferredHarnessSection key={harness.agentKind} harness={harness} />
       ))}
     </div>
   )

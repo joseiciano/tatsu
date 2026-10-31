@@ -8,6 +8,11 @@
   },
   "license": "MIT",
   "packageManager": "pnpm@10.34.1",
+  "pnpm": {
+    "overrides": {
+      "@openai/codex": "0.146.1"
+    }
+  },
   "description": "Tatsu - manage multiple Claude Code instances across git worktrees",
   "scripts": {
     "dev": "ELECTRON_DISABLE_SANDBOX=1 electron-vite dev",
@@ -16,7 +21,7 @@
     "log:clear": "rm -f ~/Library/Application\\ Support/harness/debug.log ~/Library/Application\\ Support/harness/debug.log.1",
     "log:perf": "tail -f ~/Library/Application\\ Support/harness/perf.log",
     "log:perf:clear": "rm -f ~/Library/Application\\ Support/harness/perf.log",
-    "build": "electron-vite build && vite build --config vite.web.config.ts",
+    "build": "node scripts/gen-runtime-manifest.mjs && electron-vite build && vite build --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts",
     "build:headless": "vite build --config vite.headless.config.ts && vite build --config vite.headless-web.config.ts",
     "dev:headless": "pnpm run build:headless && HARNESS_DATA_DIR=./.headless-data HARNESS_WS_HOST=${HARNESS_WS_HOST:-127.0.0.1} node dist-headless/main/index.js",
@@ -28,7 +33,7 @@
     "test:watch": "vitest",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:dev": "electron-rebuild -f -w node-pty",
-    "pack": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --arm64 --config.mac.identity=null",
+    "pack": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --arm64 --config.mac.identity=null && node scripts/smoke-packed-desktop.mjs",
     "postpack": "pnpm run rebuild:dev",
     "dist": "pnpm run build && dotenv -e .env -- electron-builder",
     "postdist": "pnpm run rebuild:dev",
@@ -56,12 +61,16 @@
       "!node_modules/**/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!node_modules/**/{test,__tests__,tests,powered-test,example,examples}",
       "!node_modules/**/*.d.ts",
-      "!node_modules/**/.bin"
+      "!node_modules/**/.bin",
+      "!node_modules/opencode-ai/**",
+      "!node_modules/opencode-*/**",
+      "!node_modules/@openai/**",
+      "!node_modules/@agentclientprotocol/**",
+      "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
     ],
     "asarUnpack": [
       "**/node_modules/node-pty/**/*",
-      "**/node_modules/@anthropic-ai/claude-agent-sdk/**/*",
-      "**/node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"
+      "**/node_modules/@anthropic-ai/claude-agent-sdk/**/*"
     ],
     "extraResources": [
       {
@@ -71,6 +80,10 @@
       {
         "from": "resources/permission-prompt-mcp.js",
         "to": "permission-prompt-mcp.js"
+      },
+      {
+        "from": "resources/runtime-manifest.json",
+        "to": "runtime-manifest.json"
       }
     ],
     "mac": {
@@ -138,9 +151,11 @@
       "provider": "github",
       "owner": "frenchie4111",
       "repo": "harness"
-    }
+    },
+    "afterPack": "scripts/electron-after-pack.mjs"
   },
   "dependencies": {
+    "@agentclientprotocol/codex-acp": "1.1.10",
     "@anthropic-ai/claude-agent-sdk": "^0.3.158",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
@@ -158,9 +173,11 @@
     "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
     "highlight.js": "^11.11.1",
+    "js-yaml": "4.1.1",
     "lucide-react": "^1.8.0",
     "monaco-editor": "^0.55.1",
     "node-pty": "^1.1.0",
+    "opencode-ai": "1.18.14",
     "playwright-core": "^1.59.1",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.5",
@@ -168,11 +185,13 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "tar": "^7.4.3",
     "ws": "^8.20.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
     "@tailwindcss/vite": "^4.2.2",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "^25.5.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -184,7 +203,6 @@
     "electron-vite": "^5.0.0",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.2.2",
-    "tar": "^7.4.3",
     "typescript": "^6.0.2",
     "vite": "^8.0.8",
     "vitest": "^4.1.4"

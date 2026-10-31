@@ -4,6 +4,7 @@ import {
   jsonClaudeReducer,
   stripJsonClaudeEntries,
   defaultAcpCapabilities,
+  chatRuntimeAvailable,
   type JsonClaudeState,
   type JsonClaudeChatEntry
 } from '.'
@@ -14,7 +15,12 @@ const SID = 'session-1'
 function seedSession(state: JsonClaudeState): JsonClaudeState {
   return jsonClaudeReducer(state, {
     type: 'jsonClaude/sessionStarted',
-    payload: { sessionId: SID, worktreePath: WT }
+    payload: {
+      sessionId: SID,
+      worktreePath: WT,
+      agentKind: 'claude',
+      runtimeId: 'claude'
+    }
   })
 }
 
@@ -28,6 +34,120 @@ describe('jsonClaudeReducer', () => {
     expect(next.sessions[SID].busy).toBe(false)
     expect(next.sessions[SID].capabilities).toEqual(defaultAcpCapabilities())
     expect('runtime' in next.sessions[SID]).toBe(false)
+  })
+
+  it('sessionStarted seeds agentKind + runtimeId on a fresh session', () => {
+    const next = seedSession(initialJsonClaude)
+    expect(next.sessions[SID].agentKind).toBe('claude')
+    expect(next.sessions[SID].runtimeId).toBe('claude')
+  })
+
+  it('sessionStarted preserves agentKind + runtimeId across re-attach', () => {
+    let state = seedSession(initialJsonClaude)
+    expect(state.sessions[SID].agentKind).toBe('claude')
+    // Re-attach with a (theoretical) different payload — the existing
+    // session's kind must win so routing stays stable.
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/sessionStarted',
+      payload: {
+        sessionId: SID,
+        worktreePath: WT,
+        agentKind: 'opencode',
+        runtimeId: 'opencode'
+      }
+    })
+    expect(state.sessions[SID].agentKind).toBe('claude')
+    expect(state.sessions[SID].runtimeId).toBe('claude')
+  })
+
+  it('sessionStarted seeds agentSessionId only when the payload carries one', () => {
+    const start = (agentSessionId?: string): JsonClaudeState =>
+      jsonClaudeReducer(initialJsonClaude, {
+        type: 'jsonClaude/sessionStarted',
+        payload: { sessionId: SID, worktreePath: WT, agentKind: 'opencode', runtimeId: 'opencode', agentSessionId }
+      })
+    expect(start('ses_abc').sessions[SID].agentSessionId).toBe('ses_abc')
+    expect('agentSessionId' in start().sessions[SID]).toBe(false)
+  })
+
+  it('sessionStarted keeps an existing agentSessionId over the payload on re-attach', () => {
+    const started = (state: JsonClaudeState, agentSessionId?: string): JsonClaudeState =>
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/sessionStarted',
+        payload: { sessionId: SID, worktreePath: WT, agentKind: 'opencode', runtimeId: 'opencode', agentSessionId }
+      })
+    const first = started(initialJsonClaude, 'ses_old')
+    expect(started(first, 'ses_new').sessions[SID].agentSessionId).toBe('ses_old')
+    expect(started(first).sessions[SID].agentSessionId).toBe('ses_old')
+    const none = started(initialJsonClaude)
+    expect(started(none, 'ses_new').sessions[SID].agentSessionId).toBe('ses_new')
+  })
+
+  it('agentSessionIdChanged sets agentSessionId on a known session', () => {
+    const state = seedSession(initialJsonClaude)
+    const next = jsonClaudeReducer(state, {
+      type: 'jsonClaude/agentSessionIdChanged',
+      payload: { sessionId: SID, agentSessionId: 'ses_abc' }
+    })
+    expect(next.sessions[SID].agentSessionId).toBe('ses_abc')
+    expect(next.sessions[SID].worktreePath).toBe(WT)
+  })
+
+  it('agentSessionIdChanged returns the same state when unchanged or the session is unknown', () => {
+    const state = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/agentSessionIdChanged',
+      payload: { sessionId: SID, agentSessionId: 'ses_abc' }
+    })
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/agentSessionIdChanged',
+        payload: { sessionId: SID, agentSessionId: 'ses_abc' }
+      })
+    ).toBe(state)
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/agentSessionIdChanged',
+        payload: { sessionId: 'unknown', agentSessionId: 'ses_abc' }
+      })
+    ).toBe(state)
+  })
+
+  it('sessionTitleChanged sets the title on a known session', () => {
+    const next = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/sessionTitleChanged',
+      payload: { sessionId: SID, title: 'Fix the parser' }
+    })
+    expect(next.sessions[SID].title).toBe('Fix the parser')
+    expect(next.sessions[SID].worktreePath).toBe(WT)
+  })
+
+  it('sessionTitleChanged returns the same state when unchanged or the session is unknown', () => {
+    const state = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/sessionTitleChanged',
+      payload: { sessionId: SID, title: 'Fix the parser' }
+    })
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/sessionTitleChanged',
+        payload: { sessionId: SID, title: 'Fix the parser' }
+      })
+    ).toBe(state)
+    expect(
+      jsonClaudeReducer(state, {
+        type: 'jsonClaude/sessionTitleChanged',
+        payload: { sessionId: 'unknown', title: 'Fix the parser' }
+      })
+    ).toBe(state)
+  })
+
+  it('sessionStarted preserves an existing title across re-attach', () => {
+    const titled = jsonClaudeReducer(seedSession(initialJsonClaude), {
+      type: 'jsonClaude/sessionTitleChanged',
+      payload: { sessionId: SID, title: 'Fix the parser' }
+    })
+    const next = seedSession(titled)
+    expect(next.sessions[SID].title).toBe('Fix the parser')
+    expect(next.sessions[SID].state).toBe('connecting')
   })
 
   it('sessionStateChanged updates state + exit info', () => {
@@ -734,8 +854,77 @@ describe('jsonClaudeReducer', () => {
     expect(after[1].isQueued).toBeUndefined()
   })
 
-  it('entryRemoved drops the matching entry by id', () => {
+  it('userEntryUnqueued clears isQueued from only the targeted queued entry', () => {
     let state = seedSession(initialJsonClaude)
+    const q1: JsonClaudeChatEntry = {
+      entryId: 'u1',
+      kind: 'user',
+      text: 'one',
+      timestamp: 1,
+      isQueued: true
+    }
+    const q2: JsonClaudeChatEntry = {
+      entryId: 'u2',
+      kind: 'user',
+      text: 'two',
+      timestamp: 2,
+      isQueued: true
+    }
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/entriesSeeded',
+      payload: { sessionId: SID, entries: [q1, q2] }
+    })
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/userEntryUnqueued',
+      payload: { sessionId: SID, entryId: 'u1' }
+    })
+    const entries = state.sessions[SID].entries
+    expect(entries[0].isQueued).toBeUndefined()
+    expect(entries[1].isQueued).toBe(true)
+    expect(entries[0].entryId).toBe('u1')
+  })
+
+  it('userEntryUnqueued preserves reference identity for other entries and entryId', () => {
+    let state = seedSession(initialJsonClaude)
+    const plain: JsonClaudeChatEntry = {
+      entryId: 'u1',
+      kind: 'user',
+      text: 'plain',
+      timestamp: 1
+    }
+    const queued: JsonClaudeChatEntry = {
+      entryId: 'u2',
+      kind: 'user',
+      text: 'queued',
+      timestamp: 2,
+      isQueued: true
+    }
+    state = jsonClaudeReducer(state, {
+      type: 'jsonClaude/entriesSeeded',
+      payload: { sessionId: SID, entries: [plain, queued] }
+    })
+    const before = state.sessions[SID].entries
+    const next = jsonClaudeReducer(state, {
+      type: 'jsonClaude/userEntryUnqueued',
+      payload: { sessionId: SID, entryId: 'u2' }
+    })
+    const after = next.sessions[SID].entries
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).not.toBe(before[1])
+    expect(after[1].isQueued).toBeUndefined()
+    expect(after[1].entryId).toBe('u2')
+  })
+
+  it('userEntryUnqueued is a no-op when the target entry is not queued', () => {
+    const state = seedSession(initialJsonClaude)
+    const next = jsonClaudeReducer(state, {
+      type: 'jsonClaude/userEntryUnqueued',
+      payload: { sessionId: SID, entryId: 'missing' }
+    })
+    expect(next).toBe(state)
+  })
+
+  it('entryRemoved drops the matching entry by id', () => {    let state = seedSession(initialJsonClaude)
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/entryAppended',
       payload: {
@@ -864,7 +1053,7 @@ describe('jsonClaudeReducer', () => {
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId: SID, worktreePath: WT }
+      payload: { sessionId: SID, worktreePath: WT, agentKind: 'claude', runtimeId: 'claude' }
     })
     expect(state.sessions[SID].slashCommands).toEqual(['clear', 'review'])
   })
@@ -1145,7 +1334,7 @@ describe('jsonClaudeReducer', () => {
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId: SID, worktreePath: WT }
+      payload: { sessionId: SID, worktreePath: WT, agentKind: 'claude', runtimeId: 'claude' }
     })
     expect(state.sessions[SID].sessionToolApprovals).toEqual(['Edit', 'Write'])
     expect(state.sessions[SID].sessionAllowedDecisions['toolu_1']).toEqual({
@@ -1300,7 +1489,12 @@ describe('stripJsonClaudeEntries', () => {
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/sessionStarted',
-      payload: { sessionId: 'session-2', worktreePath: '/tmp/wt2' }
+      payload: {
+        sessionId: 'session-2',
+        worktreePath: '/tmp/wt2',
+        agentKind: 'claude',
+        runtimeId: 'claude'
+      }
     })
     state = jsonClaudeReducer(state, {
       type: 'jsonClaude/entryAppended',
@@ -1333,6 +1527,8 @@ describe('stripJsonClaudeEntries', () => {
     expect(stripped.sessions[SID].sessionToolApprovals).toEqual(['Edit'])
     expect(stripped.sessions[SID].permissionMode).toBe('default')
     expect(stripped.sessions[SID].worktreePath).toBe(WT)
+    expect(stripped.sessions[SID].agentKind).toBe('claude')
+    expect(stripped.sessions[SID].runtimeId).toBe('claude')
   })
 
   it('preserves pendingApprovals untouched', () => {
@@ -1373,5 +1569,20 @@ describe('stripJsonClaudeEntries', () => {
     expect(stripped.sessions[SID]).not.toBe(state.sessions[SID])
     expect(stripped.sessions[SID].entries).toEqual([])
     expect(stripped.sessions[SID].entriesHydrated).toBe(false)
+  })
+})
+
+describe('chatRuntimeAvailable', () => {
+  it.each([
+    { name: 'claude with flag off', kind: 'claude', flag: false, expected: true },
+    { name: 'claude with flag on', kind: 'claude', flag: true, expected: true },
+    { name: 'opencode with flag off', kind: 'opencode', flag: false, expected: false },
+    { name: 'opencode with flag on', kind: 'opencode', flag: true, expected: true },
+    { name: 'codex with flag off', kind: 'codex', flag: false, expected: false },
+    { name: 'codex with flag on', kind: 'codex', flag: true, expected: true },
+    { name: 'pi with flag on', kind: 'pi', flag: true, expected: false },
+    { name: 'undefined kind with flag on', kind: undefined, flag: true, expected: false }
+  ] as const)('$name → $expected', ({ kind, flag, expected }) => {
+    expect(chatRuntimeAvailable(kind, flag)).toBe(expected)
   })
 })

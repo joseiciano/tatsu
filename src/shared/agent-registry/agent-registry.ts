@@ -3,6 +3,13 @@ import type { AgentKind } from '../state/terminals'
 export type HarnessConfigResourceType = 'agents' | 'skills' | 'commands'
 export type HarnessConfigCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
 
+/** How a template renders for a harness. `frontmatterName` is false where
+ *  the harness derives the name from the file path and would misread an
+ *  extra `name` key. */
+export interface HarnessTemplateOutput {
+  frontmatterName: boolean
+}
+
 export type AgentConfigCapability =
   | {
       resourceType: HarnessConfigResourceType
@@ -10,6 +17,10 @@ export type AgentConfigCapability =
       status: 'supported'
       notes?: string
       aliasResourceTypes?: readonly HarnessConfigResourceType[]
+      /** `single-file` means the harness keeps this resource type in one
+       *  shared file, so a template cannot own a file per resource. */
+      layout?: 'per-resource' | 'single-file'
+      templateOutput?: HarnessTemplateOutput
     }
   | {
       resourceType: HarnessConfigResourceType
@@ -17,10 +28,51 @@ export type AgentConfigCapability =
       status: 'unsupported' | 'unknown'
       notes: string
       aliasResourceTypes?: never
+      layout?: never
+      templateOutput?: never
     }
 
 export function isHarnessConfigCapabilityEnabled(capability: AgentConfigCapability): boolean {
   return capability.status === 'supported'
+}
+
+type ResourcePathKind = 'claude' | 'codex' | 'opencode'
+
+const RESOURCE_PATHS: Record<ResourcePathKind, Partial<Record<HarnessConfigResourceType, (name: string) => string>>> = {
+  claude: {
+    agents: (name) => `${name}.md`,
+    skills: (name) => `${name}/SKILL.md`,
+    commands: (name) => `${name}.md`
+  },
+  codex: {
+    agents: (name) => `${name}.md`,
+    skills: (name) => `${name}/SKILL.md`
+  },
+  opencode: {
+    agents: (name) => `${name}.md`,
+    skills: (name) => `${name}/SKILL.md`,
+    commands: (name) => `${name}.md`
+  }
+}
+
+/** Root-relative path of a named resource, shared by the main-process
+ *  resolvers and the template renderer so both agree on layouts. */
+export function resourcePathForName(
+  agentKind: AgentKind,
+  resourceType: HarnessConfigResourceType,
+  name: string
+): string | null {
+  if (agentKind !== 'claude' && agentKind !== 'codex' && agentKind !== 'opencode') return null
+  const pathFor = RESOURCE_PATHS[agentKind][resourceType]
+  return pathFor ? pathFor(name) : null
+}
+
+export function templateOutputFor(
+  agentKind: AgentKind,
+  resourceType: HarnessConfigResourceType
+): HarnessTemplateOutput | null {
+  const capability = getAgentInfo(agentKind).configCapabilities.find((entry) => entry.resourceType === resourceType)
+  return capability?.status === 'supported' ? (capability.templateOutput ?? null) : null
 }
 
 export interface AgentInfo {
@@ -41,19 +93,26 @@ export const AGENT_REGISTRY: AgentInfo[] = [
     vendor: 'Anthropic',
     assignsSessionId: true,
     configCapabilities: [
-      { resourceType: 'agents', label: 'Agents', status: 'supported' },
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        templateOutput: { frontmatterName: true }
+      },
       {
         resourceType: 'skills',
         label: 'Skills',
         status: 'supported',
         notes: 'Claude skills also appear in the Commands view as the same physical resource.',
-        aliasResourceTypes: ['commands']
+        aliasResourceTypes: ['commands'],
+        templateOutput: { frontmatterName: true }
       },
       {
         resourceType: 'commands',
         label: 'Commands',
         status: 'supported',
-        notes: 'Includes native Claude commands and aliases of Claude skills.'
+        notes: 'Includes native Claude commands and aliases of Claude skills.',
+        templateOutput: { frontmatterName: true }
       }
     ]
   },
@@ -63,8 +122,19 @@ export const AGENT_REGISTRY: AgentInfo[] = [
     vendor: 'OpenAI',
     assignsSessionId: false,
     configCapabilities: [
-      { resourceType: 'agents', label: 'Agents', status: 'supported' },
-      { resourceType: 'skills', label: 'Skills', status: 'supported' },
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        notes: 'Codex agents are one top-level AGENTS.md file, not a folder of agents.',
+        layout: 'single-file'
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'supported',
+        templateOutput: { frontmatterName: true }
+      },
       {
         resourceType: 'commands',
         label: 'Commands',
@@ -79,9 +149,24 @@ export const AGENT_REGISTRY: AgentInfo[] = [
     vendor: 'Opencode',
     assignsSessionId: false,
     configCapabilities: [
-      { resourceType: 'agents', label: 'Agents', status: 'supported' },
-      { resourceType: 'skills', label: 'Skills', status: 'supported' },
-      { resourceType: 'commands', label: 'Commands', status: 'supported' }
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        templateOutput: { frontmatterName: false }
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'supported',
+        templateOutput: { frontmatterName: true }
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'supported',
+        templateOutput: { frontmatterName: false }
+      }
     ]
   },
   {
