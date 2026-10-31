@@ -472,3 +472,170 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition(cond, ctx)).toBe(expected)
   })
 })
+
+describe('validateWorkflowDefinition: template references', () => {
+  const base = (steps: string, extra = '') => `name: x\ninputs:\n  task: { type: text }\n${extra}steps:\n${steps}`
+  const agent = (id: string, rest = '') => `  - id: ${id}\n    agent: claude\n${rest}`
+
+  it('accepts the plan example references, including on_loop into the loop span', () => {
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition).toBeDefined()
+  })
+
+  it.each([
+    {
+      name: 'unknown input',
+      text: base(agent('a', '    prompt: "Do {{inputs.nope}}"\n')),
+      expected: { code: 'unknown-ref', path: 'steps[0].prompt', line: 7, col: 17 }
+    },
+    {
+      name: 'unknown step',
+      text: base(agent('a', '    prompt: "{{steps.ghost.summary}}"\n')),
+      expected: { code: 'unknown-ref', path: 'steps[0].prompt', line: 7, col: 14 }
+    },
+    {
+      name: 'later step in a prompt',
+      text: base(agent('a', '    prompt: "{{steps.b.summary}}"\n') + agent('b', '    prompt: go\n')),
+      expected: { code: 'template-scope', path: 'steps[0].prompt', line: 7, col: 14 }
+    },
+    {
+      name: 'a step referencing itself in its prompt',
+      text: base(agent('a', '    prompt: "{{steps.a.status}}"\n')),
+      expected: { code: 'template-scope', path: 'steps[0].prompt', line: 7, col: 14 }
+    },
+    {
+      name: 'data field not declared in output',
+      text: base(
+        agent('a', '    prompt: go\n    output:\n      verdict: { enum: [pass, fail] }\n') + agent('b', '    prompt: "Use {{steps.a.data.score}}"\n')
+      ),
+      expected: { code: 'unknown-ref', path: 'steps[1].prompt', line: 12, col: 18 }
+    },
+    {
+      name: 'data field on a step with no output',
+      text: base(agent('a', '    prompt: go\n') + agent('b', '    prompt: "{{steps.a.data.verdict}}"\n')),
+      expected: { code: 'unknown-ref', path: 'steps[1].prompt', line: 10, col: 14 }
+    },
+    {
+      name: 'data.* on a shell step',
+      text: base('  - id: a\n    kind: shell\n    run: echo hi\n' + agent('b', '    prompt: "{{steps.a.data.x}}"\n')),
+      expected: { code: 'kind-mismatch', path: 'steps[1].prompt', line: 10, col: 14 }
+    },
+    {
+      name: 'item.* without item_input or foreach',
+      text: base(agent('a', '    prompt: "{{item.title}}"\n')),
+      expected: { code: 'template-scope', path: 'steps[0].prompt', line: 7, col: 14 }
+    },
+    {
+      name: 'malformed token',
+      text: base(agent('a', '    prompt: "{{ inputs.task b }}"\n')),
+      expected: { code: 'bad-template', path: 'steps[0].prompt', line: 7, col: 14 }
+    },
+    {
+      name: 'unclosed token',
+      text: base(agent('a', '    prompt: "go {{inputs.task"\n')),
+      expected: { code: 'bad-template', path: 'steps[0].prompt', line: 7, col: 17 }
+    },
+    {
+      name: 'unknown root',
+      text: base(agent('a', '    prompt: "{{env.HOME}}"\n')),
+      expected: { code: 'bad-template', path: 'steps[0].prompt', line: 7, col: 14 }
+    },
+    {
+      name: 'unknown step property',
+      text: base(agent('a', '    prompt: go\n') + agent('b', '    prompt: "{{steps.a.output}}"\n')),
+      expected: { code: 'bad-template', path: 'steps[1].prompt', line: 10, col: 14 }
+    },
+    {
+      name: 'later step in a shell run (plain scalar)',
+      text: base('  - id: a\n    kind: shell\n    run: echo {{steps.b.summary}}\n' + agent('b', '    prompt: go\n')),
+      expected: { code: 'template-scope', path: 'steps[0].run', line: 7, col: 15 }
+    },
+    {
+      name: 'on_loop outside any loop span',
+      text: base(agent('a', '    prompt: go\n    on_loop: "{{steps.b.summary}}"\n') + agent('b', '    prompt: go\n')),
+      expected: { code: 'template-scope', path: 'steps[0].on_loop', line: 8, col: 15 }
+    },
+    {
+      name: 'second token after an escape in a double-quoted scalar',
+      text: base(agent('a', '    prompt: "a\\n{{inputs.task}} {{inputs.nope}}"\n')),
+      expected: { code: 'unknown-ref', path: 'steps[0].prompt', line: 7, col: 33 }
+    },
+    {
+      name: 'token inside a literal block scalar',
+      text: base(agent('a', '    prompt: |\n      line one\n      use {{inputs.nope}}\n')),
+      expected: { code: 'unknown-ref', path: 'steps[0].prompt', line: 9, col: 11 }
+    },
+    {
+      name: 'token inside a folded block scalar',
+      text: base(agent('a', '    prompt: >-\n      first\n      then {{steps.zz.summary}}\n')),
+      expected: { code: 'unknown-ref', path: 'steps[0].prompt', line: 9, col: 12 }
+    }
+  ])('$name', ({ text, expected }) => {
+    const result = validateWorkflowDefinition(text)
+    const errors = result.diagnostics.filter((d) => d.severity === 'error')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject(expected)
+    expect(errors[0].message).not.toBe('')
+    expect(result.parsed).toBeDefined()
+    expect(result.definition).toBeUndefined()
+  })
+
+  it('reports every bad reference in one field', () => {
+    const errors = errorsOf(base(agent('a', '    prompt: "{{inputs.x}} {{inputs.y}} {{inputs.task}}"\n')))
+    expect(errors.map((e) => [e.code, e.col])).toEqual([
+      ['unknown-ref', 14],
+      ['unknown-ref', 27]
+    ])
+  })
+
+  it('falls back to the scalar start when the source cannot be mapped', () => {
+    const errors = errorsOf(base(agent('a', '    prompt: "\\x7b{inputs.nope}}"\n')))
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject({ code: 'unknown-ref', line: 7, col: 13 })
+  })
+
+  it('accepts item.* with item_input or a foreach step', () => {
+    expect(errorsOf(base(agent('a', '    prompt: "{{item.task}}"\n'), 'item_input: task\n'))).toEqual([])
+    const foreach = base(agent('a', '    prompt: "{{item.title}}"\n') + '  - id: each\n    kind: foreach\n    over: a\n')
+    expect(errorsOf(foreach).filter((d) => d.path.endsWith('.prompt'))).toEqual([])
+  })
+
+  it('accepts run.* and transitive needs in every field', () => {
+    const text = base(
+      agent('a', '    prompt: "{{run.id}} {{run.worktree}} {{run.contextPath}} {{inputs.task}}"\n    output:\n      score: { type: number }\n') +
+        '  - id: b\n    kind: shell\n    run: echo {{steps.a.summary}} {{steps.a.status}}\n' +
+        agent('c', '    prompt: "{{steps.a.data.score}} {{steps.b.summary}}"\n')
+    )
+    expect(validateWorkflowDefinition(text).diagnostics).toEqual([])
+  })
+
+  describe('loop span', () => {
+    const loop = (bOnLoop: string, cOnLoop = 'again') =>
+      base(
+        agent('a', '    prompt: go\n') +
+          agent('b', `    prompt: build\n    on_loop: "${bOnLoop}"\n`) +
+          agent('x', '    needs: [a]\n    prompt: side\n') +
+          agent('c', `    needs: [b]\n    prompt: test\n    on_loop: "${cOnLoop}"\n`) +
+          agent(
+            'd',
+            '    needs: [c, x]\n    prompt: "{{steps.x.summary}} {{steps.c.summary}}"\n    output:\n      verdict: { enum: [pass, fail] }\n    loop: { back_to: b, until: { field: verdict, equals: pass }, max: 3 }\n'
+          )
+      )
+
+    it('lets every step in the span reference the rest of the span, both ends included', () => {
+      expect(validateWorkflowDefinition(loop('{{steps.d.summary}} {{steps.c.status}} {{steps.b.summary}} {{steps.d.data.verdict}}', '{{steps.d.summary}}')).diagnostics).toEqual([])
+    })
+
+    it('rejects a step upstream of the looping step but outside the span', () => {
+      const errors = errorsOf(loop('{{steps.x.summary}}'))
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toMatchObject({ code: 'template-scope', path: 'steps[1].on_loop' })
+    })
+
+    it('keeps the span out of prompt scope', () => {
+      const text = loop('ok').replace('    prompt: build\n', '    prompt: "{{steps.d.summary}}"\n')
+      expect(errorsOf(text)).toMatchObject([{ code: 'template-scope', path: 'steps[1].prompt' }])
+    })
+  })
+})
