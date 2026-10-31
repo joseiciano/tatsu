@@ -5,6 +5,7 @@ import type { Worktree, PendingWorktree, PendingDeletion } from '../../shared/st
 export type { Worktree, PendingWorktree, PendingDeletion }
 
 import type { RepoConfig } from '../../shared/state/repo-configs'
+import type { WorkflowDefinitionDetail } from '../../shared/state/workflows'
 export type { RepoConfig }
 
 import type { WeeklyStats, TopWorktree } from '../../shared/weekly-stats'
@@ -392,6 +393,8 @@ export interface ElectronAPI {
   /** Rescan `<userData>/themes/*.json` and update the slice. Returns
    *  the new theme count. */
   reloadCustomThemes(): Promise<number>
+  reloadWorkflowDefinitions(): Promise<number>
+  getWorkflowDefinition(id: string): Promise<WorkflowDefinitionDetail | null>
   /** Reveal the themes directory in the OS file browser (Electron only).
    *  Always returns the absolute directory path so the web client can
    *  surface it manually. */

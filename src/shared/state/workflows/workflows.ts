@@ -1,3 +1,5 @@
+import type { WorkflowValidationResult } from '../../workflow-def'
+
 export type WorkflowScope = 'personal'
 
 export interface WorkflowDefinitionSummary {
@@ -8,6 +10,11 @@ export interface WorkflowDefinitionSummary {
   hash: string
   stepIds: string[]
   issues: string[]
+}
+
+export interface WorkflowDefinitionDetail extends WorkflowValidationResult {
+  summary: WorkflowDefinitionSummary
+  source: string
 }
 
 export interface WorkflowsState {
