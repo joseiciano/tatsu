@@ -41,7 +41,7 @@ const SCOPE_ROOTS: Array<[HarnessConfigScope, HarnessConfigRootKey]> = [
 ]
 
 function makeComparison(scope: HarnessConfigScope): HarnessConfigComparison {
-  return { scope, status: 'synced', diskOnly: [], configOnly: [], changed: [], comparedAt: 5 }
+  return { scope, status: 'synced', configOnly: [], changed: [], comparedAt: 5 }
 }
 
 function setup(

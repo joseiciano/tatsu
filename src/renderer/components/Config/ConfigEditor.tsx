@@ -1,14 +1,7 @@
 import { Loader2, Trash2 } from 'lucide-react'
 import { MonacoEditor } from '../MonacoEditor'
-import { LinkedBadge } from './ConfigResourceList'
+import { DRIFT_BADGE_LABEL, LinkedBadge } from './ConfigResourceList'
 import type { ConfigEditorProps } from './types'
-
-const BADGE_LABEL: Record<string, string> = {
-  synced: 'Synced',
-  'disk-only': 'Disk only',
-  'config-only': 'Config only',
-  conflict: 'Conflict'
-}
 
 function synthesizeFilePath(absolutePath: string | null, nameDraft: string): string | undefined {
   if (absolutePath) return absolutePath
@@ -75,13 +68,12 @@ export function ConfigEditor({
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
           <span className="text-sm text-fg-bright truncate">{view.ref.label}</span>
-          <span className="text-xs text-info shrink-0">{BADGE_LABEL[view.badge]}</span>
+          <span className="text-xs text-info shrink-0">{DRIFT_BADGE_LABEL[view.badge]}</span>
         </div>
         <div className="flex-1 flex items-center justify-center text-center px-6">
           <p className="text-xs text-faint max-w-sm">
-            This resource exists only in Tatsu config, not on disk, so its content can&apos;t be
-            read or edited here yet. Use Sync on {view.agentDisplayName} to resolve the
-            difference before editing it on disk.
+            A template builds this file, but it isn&apos;t on disk yet. Use Sync on{' '}
+            {view.agentDisplayName} to write it, or edit its template.
           </p>
         </div>
       </div>
@@ -152,7 +144,9 @@ export function ConfigEditor({
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
         <span className="text-sm text-fg-bright truncate">{view.ref.label}</span>
-        <span className="text-xs text-dim shrink-0">{BADGE_LABEL[view.badge]}</span>
+        {DRIFT_BADGE_LABEL[view.badge] && (
+          <span className="text-xs text-dim shrink-0">{DRIFT_BADGE_LABEL[view.badge]}</span>
+        )}
         {linkedFrom && <LinkedBadge linkedFrom={linkedFrom} />}
         {dirty && <span className="text-xs text-warning shrink-0">Unsaved</span>}
         <input
