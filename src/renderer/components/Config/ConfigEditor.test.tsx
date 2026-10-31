@@ -50,13 +50,13 @@ function editorProps(target: HarnessConfigFileRef, canEdit: boolean): ConfigEdit
 }
 
 describe('linked resources', () => {
-  it('shows the Linked badge, linked path, and write-through explanation in the editor', () => {
+  it('shows the Linked badge with its source in the tooltip and no linked note in the editor', () => {
     const html = renderToStaticMarkup(
       <ConfigEditor {...editorProps(ref({ linkedFrom: '/dotfiles/output/claude/skills/deploy' }), true)} />
     )
     expect(html).toContain('title="Linked from /dotfiles/output/claude/skills/deploy"')
-    expect(html).toContain('Linked from /dotfiles/output/claude/skills/deploy.')
-    expect(html).toContain('Edits, deletes, and sync to disk change the files at that source')
+    expect(html).not.toContain('Linked from /dotfiles/output/claude/skills/deploy.')
+    expect(html).not.toContain('symbolic link into another folder')
     expect(html).not.toContain('Read-only')
     expect(html).not.toContain('Managed elsewhere')
     expect(html).not.toContain('delete it at its source')

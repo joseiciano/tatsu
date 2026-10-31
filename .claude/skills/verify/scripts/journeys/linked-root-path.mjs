@@ -42,14 +42,14 @@ await withApp(process.argv[2], 'linked-root-path', async ({ page, state, shot, l
   const path = page.getByRole('textbox', { name: 'Absolute path' })
   await path.waitFor()
   const shown = await path.inputValue()
-  const banner = await page.getByText(/^Linked from /).innerText()
+  const badge = await page.locator('[title^="Linked from "]').first().getAttribute('title')
   log(`absolute path: ${shown}`)
-  log(`banner: ${banner}`)
+  log(`linked badge: ${badge}`)
   await shot('linked-agent')
   if (!shown.endsWith('/.config/opencode/agents/planner.md') || shown.includes('dotfiles-build')) {
     throw new Error(`path shows the link target instead of the configured folder: ${shown}`)
   }
-  if (!banner.includes('dotfiles-build/opencode/agents')) throw new Error('banner does not name the link source')
+  if (!badge?.includes('dotfiles-build/opencode/agents')) throw new Error('linked badge does not name the link source')
 
   await editAndSave(page, shot, log, 'folder-link', join(build, 'planner.md'))
   if (!lstatSync(configured).isSymbolicLink()) throw new Error('the agents folder is no longer a symlink')

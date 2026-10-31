@@ -17,9 +17,6 @@ import type {
   ConfigRowConversionAction
 } from './types'
 
-export const LINKED_RESOURCE_EXPLANATION =
-  'It is a symbolic link into another folder, such as a dotfiles build. Edits, deletes, and sync to disk change the files at that source, and a build that regenerates that folder can overwrite them.'
-
 export function LinkedBadge({ linkedFrom }: { linkedFrom: string }): JSX.Element {
   return (
     <span
