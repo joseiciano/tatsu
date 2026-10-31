@@ -20,7 +20,12 @@ import {
   resolveDefaultCompareRef,
   validateRef
 } from '.'
-import { CODE_DIFF_MAX_FILES, MAX_FILE_READ_BYTES } from './constants'
+import {
+  CODE_DIFF_MAX_EDITOR_LINES,
+  CODE_DIFF_MAX_FILES,
+  CODE_DIFF_MAX_PATCH_BYTES,
+  MAX_FILE_READ_BYTES
+} from './constants'
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, {
@@ -387,10 +392,9 @@ describe('getCodeDiffFileSides', () => {
       modifiedExists: true,
       originalBinary: false,
       modifiedBinary: false,
-      originalTruncated: false,
-      modifiedTruncated: false,
       modifiedSymlink: false
     })
+    expect(sides.large).toBeUndefined()
     expect(sides.error).toBeUndefined()
   })
 
@@ -417,20 +421,120 @@ describe('getCodeDiffFileSides', () => {
     expect(JSON.stringify(sides)).not.toContain('TOP SECRET')
   })
 
-  it('truncates an original blob larger than the read cap', async () => {
-    const bigSize = MAX_FILE_READ_BYTES + 1024 * 1024
-    commitFile(repo, 'big.txt', 'a'.repeat(bigSize), 'big')
+  function numberedLines(count: number, width: number, prefix = 'line'): string[] {
+    return Array.from({ length: count }, (_, i) => `${prefix} ${String(i).padStart(6, '0')} `.padEnd(width - 1, 'x'))
+  }
+
+  function joinLines(lines: string[]): string {
+    return lines.join('\n') + '\n'
+  }
+
+  it('returns the hunks for a change past the read cap in a file over the byte cap', async () => {
+    const lineCount = Math.ceil((MAX_FILE_READ_BYTES * 1.25) / 200)
+    expect(lineCount).toBeLessThan(CODE_DIFF_MAX_EDITOR_LINES)
+    const lines = numberedLines(lineCount, 200)
+    const changedIndex = lineCount - 10
+    expect(changedIndex * 200).toBeGreaterThan(MAX_FILE_READ_BYTES)
+    commitFile(repo, 'big.txt', joinLines(lines), 'big')
     git(repo, ['checkout', '-q', '-b', 'feature'])
-    commitFile(repo, 'big.txt', 'small now\n', 'shrink')
+    const removed = lines[changedIndex]
+    const added = `EDITED PAST THE CAP ${changedIndex}`
+    lines[changedIndex] = added
+    writeFileSync(join(repo, 'big.txt'), joinLines(lines))
 
     const sides = await getCodeDiffFileSides(repo, 'main', 'big.txt')
 
+    expect(sides.error).toBeUndefined()
+    expect(sides.original).toBe('')
+    expect(sides.modified).toBe('')
     expect(sides.originalExists).toBe(true)
-    expect(sides.originalTruncated).toBe(true)
-    expect(sides.original.length).toBe(MAX_FILE_READ_BYTES)
-    expect(sides.originalSize).toBe(bigSize)
-    expect(sides.modified).toBe('small now\n')
-    expect(sides.modifiedTruncated).toBe(false)
+    expect(sides.modifiedExists).toBe(true)
+    const patch = sides.large?.patch
+    expect(patch).toMatch(/^@@ /)
+    expect(patch).toContain(`\n-${removed}\n`)
+    expect(patch).toContain(`\n+${added}\n`)
+    expect(patch).not.toContain('diff --git')
+  })
+
+  it('returns the hunks for a file under the byte cap but over the editor line cap', async () => {
+    const lines = numberedLines(CODE_DIFF_MAX_EDITOR_LINES + 1, 20)
+    expect(joinLines(lines).length).toBeLessThan(MAX_FILE_READ_BYTES)
+    commitFile(repo, 'long.txt', joinLines(lines), 'long')
+    git(repo, ['checkout', '-q', '-b', 'feature'])
+    const removed = lines[100]
+    lines[100] = 'edited line'
+    writeFileSync(join(repo, 'long.txt'), joinLines(lines))
+
+    const sides = await getCodeDiffFileSides(repo, 'main', 'long.txt')
+
+    expect(sides.error).toBeUndefined()
+    expect(sides.original).toBe('')
+    expect(sides.modified).toBe('')
+    expect(sides.large?.patch).toMatch(/^@@ /)
+    expect(sides.large?.patch).toContain(`\n-${removed}\n`)
+    expect(sides.large?.patch).toContain('\n+edited line\n')
+  })
+
+  it('keeps both sides for a file exactly at the editor line cap', async () => {
+    const lines = numberedLines(CODE_DIFF_MAX_EDITOR_LINES, 20)
+    commitFile(repo, 'edge.txt', joinLines(lines), 'edge')
+    git(repo, ['checkout', '-q', '-b', 'feature'])
+    lines[0] = 'edited'
+    writeFileSync(join(repo, 'edge.txt'), joinLines(lines))
+
+    const sides = await getCodeDiffFileSides(repo, 'main', 'edge.txt')
+
+    expect(sides.large).toBeUndefined()
+    expect(sides.modified).toBe(joinLines(lines))
+  })
+
+  it('returns a null patch without an error when the hunks exceed the patch cap', async () => {
+    const lineCount = CODE_DIFF_MAX_EDITOR_LINES + 1
+    const before = joinLines(numberedLines(lineCount, 40, 'before'))
+    const after = joinLines(numberedLines(lineCount, 40, 'after'))
+    expect(before.length + after.length).toBeGreaterThan(CODE_DIFF_MAX_PATCH_BYTES)
+    commitFile(repo, 'rewrite.txt', before, 'before')
+    git(repo, ['checkout', '-q', '-b', 'feature'])
+    writeFileSync(join(repo, 'rewrite.txt'), after)
+
+    const sides = await getCodeDiffFileSides(repo, 'main', 'rewrite.txt')
+
+    expect(sides.large).toEqual({ patch: null })
+    expect(sides.error).toBeUndefined()
+    expect(sides.original).toBe('')
+    expect(sides.modified).toBe('')
+  })
+
+  it('returns a null patch for a large untracked file', async () => {
+    writeFileSync(join(repo, 'fresh-big.txt'), joinLines(numberedLines(CODE_DIFF_MAX_EDITOR_LINES + 1, 20)))
+
+    const sides = await getCodeDiffFileSides(repo, 'main', 'fresh-big.txt')
+
+    expect(sides.large).toEqual({ patch: null })
+    expect(sides.originalExists).toBe(false)
+    expect(sides.modifiedExists).toBe(true)
+    expect(sides.modified).toBe('')
+    expect(sides.error).toBeUndefined()
+  })
+
+  it('returns the hunks against previousPath for a large renamed file', async () => {
+    const lines = numberedLines(CODE_DIFF_MAX_EDITOR_LINES + 1, 20)
+    commitFile(repo, 'old-big.txt', joinLines(lines), 'add')
+    git(repo, ['checkout', '-q', '-b', 'feature'])
+    git(repo, ['mv', 'old-big.txt', 'new-big.txt'])
+    const removed = lines[5000]
+    lines[5000] = 'renamed and edited'
+    writeFileSync(join(repo, 'new-big.txt'), joinLines(lines))
+
+    const sides = await getCodeDiffFileSides(repo, 'main', 'new-big.txt', 'old-big.txt')
+
+    expect(sides.error).toBeUndefined()
+    expect(sides.originalExists).toBe(true)
+    const patch = sides.large?.patch
+    expect(patch).toMatch(/^@@ /)
+    expect(patch).toContain(`\n-${removed}\n`)
+    expect(patch).toContain('\n+renamed and edited\n')
+    expect(patch?.split('\n').filter((l) => /^[-+]/.test(l))).toHaveLength(2)
   })
 
   it('flags binary content on both sides', async () => {

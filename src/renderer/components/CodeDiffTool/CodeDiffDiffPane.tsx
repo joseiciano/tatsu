@@ -1,6 +1,7 @@
 import type { CodeDiffFile, CodeDiffSides } from '../../types'
 import { MonacoDiffEditor } from '../MonacoDiffEditor'
 import { BADGE_COLOR, badgeFor } from './CodeDiffFileTree'
+import { CodeDiffHunks } from './CodeDiffHunks'
 
 interface CodeDiffDiffPaneProps {
   file: CodeDiffFile | null
@@ -14,12 +15,18 @@ function Centered({ tone, children }: { tone: string; children: React.ReactNode 
   return <div className={`absolute inset-0 flex items-center justify-center text-sm ${tone}`}>{children}</div>
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function CodeDiffDiffPane({ file, sides, loading, fontFamily, fontSize }: CodeDiffDiffPaneProps): JSX.Element {
   if (!file) {
     return <div className="flex h-full items-center justify-center text-sm text-faint">Select a file</div>
   }
   const binary = sides && (sides.originalBinary || sides.modifiedBinary)
-  const truncated = sides && (sides.originalTruncated || sides.modifiedTruncated)
+  const large = sides?.large
+  const largeLabel = sides ? `Large file (${formatBytes(Math.max(sides.originalSize, sides.modifiedSize))})` : ''
 
   return (
     <div className="flex flex-col h-full">
@@ -34,9 +41,9 @@ export function CodeDiffDiffPane({ file, sides, loading, fontFamily, fontSize }:
         {(file.deletions ?? 0) > 0 && <span className="font-mono text-danger">−{file.deletions}</span>}
       </div>
 
-      {truncated && !binary && (
+      {large?.patch && !sides?.error && (
         <div className="shrink-0 px-3 py-1 text-xs text-warning bg-warning/10 border-b border-border">
-          File is larger than 2 MB; showing the first 2 MB
+          {largeLabel} — showing changed hunks only
         </div>
       )}
 
@@ -44,7 +51,14 @@ export function CodeDiffDiffPane({ file, sides, loading, fontFamily, fontSize }:
         {loading && !sides && <Centered tone="text-faint">Loading diff...</Centered>}
         {sides?.error && <Centered tone="text-danger">{sides.error}</Centered>}
         {sides && !sides.error && binary && <Centered tone="text-faint">Binary file — cannot display diff</Centered>}
-        {sides && !sides.error && !binary && (
+        {sides && !sides.error && large && (
+          large.patch ? (
+            <CodeDiffHunks patch={large.patch} filePath={file.path} />
+          ) : (
+            <Centered tone="text-faint">{largeLabel} — diff too large to display</Centered>
+          )
+        )}
+        {sides && !sides.error && !binary && !large && (
           <MonacoDiffEditor
             original={sides.original}
             modified={sides.modified}

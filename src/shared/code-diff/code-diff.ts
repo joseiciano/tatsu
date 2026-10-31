@@ -39,11 +39,13 @@ export interface CodeDiffSides {
   modifiedExists: boolean
   originalBinary: boolean
   modifiedBinary: boolean
-  originalTruncated: boolean
-  modifiedTruncated: boolean
   originalSize: number
   modifiedSize: number
   modifiedSymlink: boolean
+  /** Set when a side is too large for the side-by-side editor; `original`
+   * and `modified` are then empty. `patch` holds git's changed hunks, or
+   * null when even those are over the cap. */
+  large?: { patch: string | null }
   error?: string
 }
 

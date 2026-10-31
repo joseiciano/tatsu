@@ -46,7 +46,9 @@ import {
   MAX_FILE_BINARY_READ_BYTES,
   EXT_TO_MIME,
   MAX_FILE_WRITE_BYTES,
-  CODE_DIFF_MAX_FILES
+  CODE_DIFF_MAX_FILES,
+  CODE_DIFF_MAX_EDITOR_LINES,
+  CODE_DIFF_MAX_PATCH_BYTES
 } from './constants'
 import { parseNameStatusZ, parseNumstatZ as parseCodeDiffNumstatZ, isUnsafeRef, countLines } from './code-diff-parse'
 
@@ -1796,8 +1798,6 @@ export async function getCodeDiffFileSides(
     modifiedExists: false,
     originalBinary: false,
     modifiedBinary: false,
-    originalTruncated: false,
-    modifiedTruncated: false,
     originalSize: 0,
     modifiedSize: 0,
     modifiedSymlink: false,
@@ -1819,21 +1819,64 @@ export async function getCodeDiffFileSides(
     readBlobCapped(worktreePath, `${mergeBase}:${previousPath ?? filePath}`),
     readModifiedSide(worktreePath, filePath)
   ])
+  const tooBigForEditor =
+    !original.binary &&
+    !modified.binary &&
+    !modified.symlink &&
+    (original.truncated ||
+      modified.truncated ||
+      countLines(original.content) > CODE_DIFF_MAX_EDITOR_LINES ||
+      countLines(modified.content) > CODE_DIFF_MAX_EDITOR_LINES)
+  let large: CodeDiffSides['large']
+  let patchError: string | undefined
+  if (tooBigForEditor) {
+    // An added or deleted file's patch is the whole file, so it is over the cap anyway.
+    if (original.exists && modified.exists) {
+      try {
+        large = { patch: await readCodeDiffPatch(worktreePath, mergeBase, filePath, previousPath) }
+      } catch (err) {
+        patchError = (err as Error).message
+      }
+    } else {
+      large = { patch: null }
+    }
+  }
   const execMs = performance.now() - tExec
-  logGitOp('getCodeDiffFileSides', {}, t0, execMs, execMs, original.content.length + modified.content.length, [execMs])
+  const outputBytes = large ? (large.patch?.length ?? 0) : original.content.length + modified.content.length
+  logGitOp('getCodeDiffFileSides', { large: tooBigForEditor }, t0, execMs, execMs, outputBytes, [execMs])
 
   return {
-    original: original.content,
-    modified: modified.content,
+    original: tooBigForEditor ? '' : original.content,
+    modified: tooBigForEditor ? '' : modified.content,
     originalExists: original.exists,
     modifiedExists: modified.exists,
     originalBinary: original.binary,
     modifiedBinary: modified.binary,
-    originalTruncated: original.truncated,
-    modifiedTruncated: modified.truncated,
     originalSize: original.size,
     modifiedSize: modified.size,
     modifiedSymlink: modified.symlink,
-    error: original.error ?? modified.error
+    ...(large && { large }),
+    error: original.error ?? modified.error ?? patchError
   }
+}
+
+/** Git's changed hunks for one file, from its first `@@` line. Null when the
+ * patch is over CODE_DIFF_MAX_PATCH_BYTES or has no text hunks. */
+async function readCodeDiffPatch(
+  worktreePath: string,
+  mergeBase: string,
+  filePath: string,
+  previousPath?: string
+): Promise<string | null> {
+  const paths = previousPath ? [previousPath, filePath] : [filePath]
+  const args = ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--find-renames', '-U3', '--end-of-options', mergeBase, '--', ...paths]
+  const stdout = await execFileAsync('git', args, { cwd: worktreePath, maxBuffer: CODE_DIFF_MAX_PATCH_BYTES }).then(
+    (r) => r.stdout,
+    (err: { code?: unknown }) => {
+      if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return null
+      throw err
+    }
+  )
+  const start = stdout?.indexOf('\n@@') ?? -1
+  return stdout && start !== -1 ? stdout.slice(start + 1) : null
 }

@@ -1283,8 +1283,6 @@ function registerIpcHandlers(): void {
           modifiedExists: false,
           originalBinary: false,
           modifiedBinary: false,
-          originalTruncated: false,
-          modifiedTruncated: false,
           originalSize: 0,
           modifiedSize: 0,
           modifiedSymlink: false,
