@@ -11,6 +11,8 @@ import type {
   ResolvedDefinition,
   ResolvedStepCommon,
   ResolvedWorkflowStep,
+  TemplateField,
+  TemplateRef,
   ValidateWorkflowOptions,
   WorkflowAgent,
   WorkflowCondition,
@@ -26,6 +28,7 @@ import type {
   WorkflowStepKind,
   WorkflowValidationResult
 } from './types'
+import { formatTemplateRef, tokenizeTemplate } from './templates'
 
 const MAX_SOURCE_LENGTH = 512 * 1024
 const MAX_ALIAS_COUNT = 100
@@ -746,6 +749,128 @@ class GraphStage {
   }
 }
 
+type LocateToken = (path: string, value: string, offset: number) => { line: number; col: number }
+
+function templateFields(step: ResolvedWorkflowStep): [TemplateField, string | undefined][] {
+  switch (step.kind) {
+    case 'agent':
+      return [['prompt', step.prompt], ['on_loop', step.on_loop]]
+    case 'shell':
+      return [['run', step.run], ['on_loop', step.on_loop]]
+    default:
+      return [['prompt', step.prompt], ['run', step.run], ['on_loop', step.on_loop]]
+  }
+}
+
+class TemplateStage {
+  readonly diagnostics: WorkflowDiagnostic[] = []
+  private readonly byId: Map<string, ResolvedWorkflowStep>
+  private readonly closures: Map<string, Set<string>>
+  private readonly loopSpans: Map<string, Set<string>>
+  private readonly itemAvailable: boolean
+
+  constructor(
+    private readonly def: ResolvedDefinition,
+    private readonly locate: LocateToken
+  ) {
+    this.byId = new Map(def.steps.map((s) => [s.id, s]))
+    this.closures = new Map(def.steps.map((s) => [s.id, needsClosure(def.steps, s.id)]))
+    this.loopSpans = new Map()
+    this.itemAvailable = def.item_input !== undefined || def.steps.some((s) => s.kind === 'foreach')
+    for (const step of def.steps) {
+      if (step.loop) this.addLoopSpan(step.id, step.loop.back_to)
+    }
+  }
+
+  addLoopSpan(looping: string, backTo: string): void {
+    const upstream = this.closures.get(looping) ?? new Set<string>()
+    const span = this.def.steps
+      .map((s) => s.id)
+      .filter((id) => (id === looping || upstream.has(id)) && (id === backTo || (this.closures.get(id)?.has(backTo) ?? false)))
+    for (const id of span) {
+      const set = this.loopSpans.get(id) ?? new Set<string>()
+      for (const member of span) set.add(member)
+      this.loopSpans.set(id, set)
+    }
+  }
+
+  run(): void {
+    this.def.steps.forEach((step, i) => {
+      for (const [field, value] of templateFields(step)) {
+        if (value !== undefined) this.checkField(step, field, value, `steps[${i}].${field}`)
+      }
+    })
+  }
+
+  checkField(step: ResolvedWorkflowStep, field: TemplateField, value: string, path: string): void {
+    for (const token of tokenizeTemplate(value)) {
+      if (token.kind === 'text') continue
+      const report = (code: WorkflowDiagnosticCode, message: string) =>
+        this.diagnostics.push({ ...this.locate(path, value, token.start), severity: 'error', code, message, path })
+      if (token.kind === 'error') {
+        report('bad-template', token.message)
+        continue
+      }
+      const problem = this.checkRef(step, field, token.ref)
+      if (problem) report(problem[0], problem[1])
+    }
+  }
+
+  checkRef(step: ResolvedWorkflowStep, field: TemplateField, ref: TemplateRef): [WorkflowDiagnosticCode, string] | undefined {
+    const name = formatTemplateRef(ref)
+    switch (ref.root) {
+      case 'inputs':
+        return Object.hasOwn(this.def.inputs, ref.name) ? undefined : ['unknown-ref', `"{{${name}}}" names "${ref.name}", which is not a declared input`]
+      case 'run':
+        return undefined
+      case 'item':
+        return this.itemAvailable ? undefined : ['template-scope', `"{{${name}}}" needs "item_input" or a "foreach" step; this workflow has neither`]
+      case 'steps':
+        return this.checkStepRef(step, field, ref, name)
+      default: {
+        const _exhaustive: never = ref
+        return _exhaustive
+      }
+    }
+  }
+
+  checkStepRef(
+    step: ResolvedWorkflowStep,
+    field: TemplateField,
+    ref: Extract<TemplateRef, { root: 'steps' }>,
+    name: string
+  ): [WorkflowDiagnosticCode, string] | undefined {
+    const target = this.byId.get(ref.step)
+    if (!target) return ['unknown-ref', `"{{${name}}}" names "${ref.step}", which is not a step in this workflow`]
+    const inScope =
+      (this.closures.get(step.id)?.has(ref.step) ?? false) || (field === 'on_loop' && (this.loopSpans.get(step.id)?.has(ref.step) ?? false))
+    if (!inScope) {
+      const allowed = field === 'on_loop' ? 'steps it depends on through "needs" or steps in a loop that re-enters it' : 'steps it depends on through "needs"'
+      return ['template-scope', `"${field}" of step "${step.id}" can only reference ${allowed}; "${ref.step}" is not one of them`]
+    }
+    if (ref.property !== 'data') return undefined
+    if (target.kind === 'shell') return ['kind-mismatch', `"{{${name}}}": shell step "${ref.step}" has no data; use its "summary" or "status"`]
+    if (target.output && Object.hasOwn(target.output.fields, ref.field)) return undefined
+    return ['unknown-ref', `"{{${name}}}" names "${ref.field}", which is not declared in the "output" of step "${ref.step}"`]
+  }
+}
+
+function openPositions(text: string): number[] {
+  const out: number[] = []
+  for (let i = text.indexOf('{{'); i >= 0; i = text.indexOf('{{', i + 2)) out.push(i)
+  return out
+}
+
+function tokenPosition(source: string, lineCounter: LineCounter, node: MaybeNode, value: string, offset: number): { line: number; col: number } {
+  const start = node?.range?.[0] ?? 0
+  if (!isScalar(node) || !node.range) return positionOf(lineCounter, start)
+  const inValue = openPositions(value)
+  const inSource = openPositions(source.slice(node.range[0], node.range[1]))
+  const n = inValue.indexOf(offset)
+  if (n < 0 || inValue.length !== inSource.length) return positionOf(lineCounter, start)
+  return positionOf(lineCounter, start + inSource[n])
+}
+
 function nodeAt(doc: Document, path: string): MaybeNode {
   let node = doc.contents as MaybeNode
   for (const segment of path.match(/[^.[\]]+/g) ?? []) {
@@ -814,7 +939,11 @@ function parseStage(text: string): WorkflowValidationResult {
   const graph = new GraphStage(parsed, (path) => positionOf(lineCounter, nodeAt(doc, path)?.range?.[0] ?? 0))
   const definition = graph.run()
   diagnostics.push(...graph.diagnostics)
-  return definition ? { parsed, definition, diagnostics } : { parsed, diagnostics }
+  if (!definition) return { parsed, diagnostics }
+  const templates = new TemplateStage(definition, (path, value, offset) => tokenPosition(text, lineCounter, nodeAt(doc, path), value, offset))
+  templates.run()
+  diagnostics.push(...templates.diagnostics)
+  return templates.diagnostics.length > 0 ? { parsed, diagnostics } : { parsed, definition, diagnostics }
 }
 
 export function validateWorkflowDefinition(text: string, _opts: ValidateWorkflowOptions = {}): WorkflowValidationResult {

@@ -18,6 +18,8 @@ export type WorkflowDiagnosticCode =
   | 'bad-back-to'
   | 'kind-mismatch'
   | 'unsafe-allow'
+  | 'bad-template'
+  | 'template-scope'
   | 'internal'
 
 export interface WorkflowDiagnostic {
@@ -154,3 +156,37 @@ export interface ConditionContext {
   data?: Record<string, unknown>
   exitCode?: number
 }
+
+export type TemplateRunField = 'id' | 'worktree' | 'contextPath'
+
+export type TemplateRef =
+  | { root: 'inputs'; name: string }
+  | { root: 'steps'; step: string; property: 'summary' | 'status' }
+  | { root: 'steps'; step: string; property: 'data'; field: string }
+  | { root: 'run'; field: TemplateRunField }
+  | { root: 'item'; field: string }
+
+export type TemplateToken =
+  | { kind: 'text'; start: number; text: string }
+  | { kind: 'ref'; start: number; raw: string; ref: TemplateRef }
+  | { kind: 'error'; start: number; raw: string; message: string }
+
+export interface TemplateStepScope {
+  summary?: string
+  status?: string
+  data?: Record<string, unknown>
+}
+
+export interface TemplateScope {
+  inputs?: Record<string, string>
+  steps?: Record<string, TemplateStepScope>
+  run?: Partial<Record<TemplateRunField, string>>
+  item?: Record<string, unknown>
+}
+
+export interface RenderedTemplate {
+  text: string
+  missing: string[]
+}
+
+export type TemplateField = 'prompt' | 'run' | 'on_loop'
