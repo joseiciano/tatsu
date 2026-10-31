@@ -25,6 +25,7 @@ import type {
   HarnessConfigScope,
   HarnessConfigState,
   HarnessConfigSyncPlan,
+  HarnessTemplate,
   ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import type { BackendConnection } from '../../types'
@@ -67,7 +68,12 @@ vi.mock('../../backend', () => ({ useBackend: () => backendApi }))
 vi.mock('../../store', () => ({
   useHarnessConfig: () => storeState.harnessConfig,
   useActiveBackend: () => storeState.activeBackend,
-  useSettings: () => storeState.settings
+  useSettings: () => storeState.settings,
+  useHarnessTemplateSource: () => storeState.harnessConfig?.templates,
+  useHarnessTemplate: (kind: string | null, name: string | null) =>
+    storeState.harnessConfig?.templates.templates.find((t) => t.kind === kind && t.name === name) ?? null,
+  useHarnessFragment: (name: string | null) =>
+    storeState.harnessConfig?.templates.fragments.find((f) => f.name === name) ?? null
 }))
 
 function ref(overrides: Partial<HarnessConfigFileRef> = {}): HarnessConfigFileRef {
@@ -612,5 +618,78 @@ describe('Config template sync (Step 20)', () => {
     await flush()
     expect(backendApi.planHarnessConfigAdoptFromDisk).toHaveBeenCalledWith({ scope: agentsScope, detach: ['tmpl-1'] })
     expect(backendApi.adoptHarnessConfigFromDisk).toHaveBeenCalledWith({ scope: agentsScope, planId: 'plan-1', confirmed: true })
+  })
+})
+
+describe('Config templates view (Step 21)', () => {
+  const reviewer: HarnessTemplate = {
+    kind: 'agent',
+    name: 'reviewer',
+    description: 'Reviews code',
+    fragments: [],
+    body: 'Review carefully.',
+    harnesses: { claude: { frontmatter: {} } },
+    references: [],
+    relativePath: 'agents/reviewer.md',
+    hash: 'tmpl-hash'
+  }
+
+  function withTemplate(): void {
+    const state = storeState.harnessConfig!
+    storeState.harnessConfig = {
+      ...state,
+      resources: {
+        ...state.resources,
+        agents: [
+          ref({
+            id: 'rendered',
+            resourceType: 'agents',
+            label: 'reviewer',
+            relativePath: 'reviewer.md',
+            templateRef: 'agent/reviewer'
+          })
+        ]
+      },
+      templates: { templates: [reviewer], fragments: [], errors: [], loadedAt: 1 }
+    }
+  }
+
+  it('adds a Templates view beside the three resource tabs and hides the agent filter there', async () => {
+    withTemplate()
+    await renderConfig()
+    const labels = Array.from(container.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent)
+    expect(labels).toEqual(['Agents', 'Skills', 'Commands', 'Templates'])
+    clickTab('Templates')
+    expect(container.querySelector('#config-agent-filter')).toBeNull()
+    expect(container.querySelector('[data-testid="config-templates-agent"]')?.textContent).toContain('reviewer')
+  })
+
+  it('shows the templateRef on a rendered row and opens the template from Edit template', async () => {
+    withTemplate()
+    await renderConfig()
+    await flush()
+    expect(container.textContent).toContain('agent/reviewer')
+    click(container.querySelector('[aria-label="Edit template agent/reviewer"]'))
+    const tab = Array.from(container.querySelectorAll('[role="tab"]')).find((t) => t.textContent === 'Templates')
+    expect(tab?.getAttribute('aria-selected')).toBe('true')
+    expect(container.querySelector<HTMLInputElement>('#template-name')?.value).toBe('reviewer')
+  })
+
+  it('guards leaving the Templates view with unsaved template changes', async () => {
+    withTemplate()
+    await renderConfig()
+    clickTab('Templates')
+    click(container.querySelector('[data-testid="config-templates-agent"] button:not([aria-label])'))
+    const description = container.querySelector<HTMLInputElement>('#template-description')!
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(description, 'Changed')
+      description.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    clickTab('Agents')
+    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved changes in the Config editor?')
+    expect(container.querySelector('#template-description')).not.toBeNull()
+    confirmSpy.mockRestore()
   })
 })

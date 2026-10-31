@@ -1,4 +1,4 @@
-import { Link2, Plus, RefreshCw } from 'lucide-react'
+import { FileCode, Link2, Plus, RefreshCw } from 'lucide-react'
 import { AgentIcon } from '../AgentIcon'
 import {
   harnessConfigScopeKey,
@@ -240,15 +240,18 @@ function ResourceRow({
   row,
   onSelect,
   onCreateCommand,
-  onCreateSkill
+  onCreateSkill,
+  onEditTemplate
 }: {
   row: ConfigResourceRow
   onSelect: (scope: HarnessConfigScope, id: string) => void
   onCreateCommand: (scope: HarnessConfigScope, id: string) => void
   onCreateSkill: (scope: HarnessConfigScope, id: string) => void
+  onEditTemplate?: (templateRef: string) => void
 }): JSX.Element {
   const scope: HarnessConfigScope = { agentKind: row.ref.agentKind, resourceType: row.ref.resourceType }
   const conversion = row.conversionAction
+  const templateRef = row.ref.templateRef
   return (
     <div
       className={`w-full flex items-center gap-1 px-2.5 py-1.5 rounded transition-colors ${
@@ -266,9 +269,26 @@ function ResourceRow({
           <span className="block text-xs truncate">{row.ref.label}</span>
           <span className="block text-xs text-faint truncate">{row.ref.relativePath}</span>
           {row.ref.linkedFrom && <LinkedBadge linkedFrom={row.ref.linkedFrom} />}
+          {templateRef && (
+            <span className="flex items-center gap-1 text-xs text-faint min-w-0" title={`Built from template ${templateRef}`}>
+              <FileCode className="icon-2xs shrink-0" />
+              <span className="truncate">{templateRef}</span>
+            </span>
+          )}
         </span>
         <DriftBadge badge={row.badge} />
       </button>
+      {templateRef && onEditTemplate && (
+        <button
+          type="button"
+          title={`Edit template ${templateRef}`}
+          aria-label={`Edit template ${templateRef}`}
+          onClick={() => onEditTemplate(templateRef)}
+          className="shrink-0 px-1.5 py-0.5 rounded text-xs text-dim hover:text-fg-bright hover:bg-surface-hover cursor-pointer"
+        >
+          Edit template
+        </button>
+      )}
       {conversion && (
         <button
           type="button"
@@ -362,6 +382,7 @@ export function ConfigResourceList({
   onSync,
   onCreateCommand,
   onCreateSkill,
+  onEditTemplate,
   onOpenConfigFolders
 }: ConfigResourceListProps): JSX.Element {
   return (
@@ -397,6 +418,7 @@ export function ConfigResourceList({
                 onSelect={onSelectResource}
                 onCreateCommand={onCreateCommand}
                 onCreateSkill={onCreateSkill}
+                onEditTemplate={onEditTemplate}
               />
             ))}
             {group.supported && group.totalResourceCount === 0 && !searchActive && (

@@ -35,6 +35,7 @@ import {
 } from '../../shared/state'
 import type { AgentKind } from '../../shared/state/terminals'
 import type { RuntimeStatus } from '../../shared/state/runtimes'
+import type { HarnessTemplateKind } from '../../shared/state/harness-config'
 import type { LocalTransportHandle, BackendConnection } from '../types'
 import { WebSocketClientTransport } from '../../shared/transport/transport-websocket'
 import { initBackend, getBackend } from '../backend'
@@ -606,6 +607,24 @@ export function useBrowser() {
 
 export function useHarnessConfig() {
   return useAppState((s) => s.harnessConfig)
+}
+
+export function useHarnessTemplateSource() {
+  return useAppState((s) => s.harnessConfig.templates)
+}
+
+export function useHarnessTemplate(kind: HarnessTemplateKind | null, name: string | null) {
+  return useAppState((s) =>
+    kind && name
+      ? (s.harnessConfig.templates.templates.find((t) => t.kind === kind && t.name === name) ?? null)
+      : null
+  )
+}
+
+export function useHarnessFragment(name: string | null) {
+  return useAppState((s) =>
+    name ? (s.harnessConfig.templates.fragments.find((f) => f.name === name) ?? null) : null
+  )
 }
 
 /** Session roster (controller + spectators) for a given terminal id.
