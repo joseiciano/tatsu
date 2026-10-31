@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateCondition, needsClosure, validateWorkflowDefinition, type WorkflowCondition, type WorkflowDiagnostic } from '.'
+import { ALL_WORKFLOW_FEATURES, BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES, evaluateCondition, needsClosure, validateWorkflowDefinition, type ValidateWorkflowOptions, type WorkflowCondition, type WorkflowDiagnostic, type WorkflowFeature } from '.'
 
 const PLAN_EXAMPLE = `name: plan-build-review
 inputs:
@@ -32,13 +32,15 @@ steps:
     loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3 }
 `
 
-function errorsOf(text: string): WorkflowDiagnostic[] {
-  return validateWorkflowDefinition(text).diagnostics.filter((d) => d.severity === 'error')
+const ALL: ValidateWorkflowOptions = { supportedFeatures: ALL_WORKFLOW_FEATURES }
+
+function errorsOf(text: string, opts?: ValidateWorkflowOptions): WorkflowDiagnostic[] {
+  return validateWorkflowDefinition(text, opts).diagnostics.filter((d) => d.severity === 'error')
 }
 
 describe('validateWorkflowDefinition: plan example', () => {
   it('parses the plan example with no diagnostics', () => {
-    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE, ALL)
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.name).toBe('plan-build-review')
     expect(result.parsed?.inputs).toEqual({ task: { type: 'text' } })
@@ -306,7 +308,7 @@ steps:
 describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
   it('accepts foreach and orchestrator steps with their reserved fields', () => {
     const result = validateWorkflowDefinition(
-      'name: x\nsteps:\n  - id: split\n    agent: claude\n    prompt: split\n    output:\n      tasks: { type: array, items: { type: string } }\n      required: [tasks]\n  - id: each\n    kind: foreach\n    over: steps.split.data.tasks\n    mode: stacked\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n    timeout: 600\n    parallel_safe: false\n'
+      'name: x\nsteps:\n  - id: split\n    agent: claude\n    prompt: split\n    output:\n      tasks: { type: array, items: { type: string } }\n      required: [tasks]\n  - id: each\n    kind: foreach\n    over: steps.split.data.tasks\n    mode: stacked\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n    timeout: 600\n    parallel_safe: false\n', ALL
     )
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.steps[0].output).toEqual({ fields: { tasks: { type: 'array', items: { type: 'string' } } }, required: ['tasks'] })
@@ -323,7 +325,7 @@ describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
 
   it('accepts every condition shape', () => {
     const result = validateWorkflowDefinition(
-      'name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    when: { field: v, in: [1, two, true] }\n  - id: b\n    agent: claude\n    prompt: go\n    when: { field: v, not: fail }\n  - id: c\n    kind: shell\n    run: "true"\n    when: { exit: 0 }\n'
+      'name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    when: { field: v, in: [1, two, true] }\n  - id: b\n    agent: claude\n    prompt: go\n    when: { field: v, not: fail }\n  - id: c\n    kind: shell\n    run: "true"\n    when: { exit: 0 }\n', ALL
     )
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.steps.map((s) => s.when)).toEqual([
@@ -336,7 +338,7 @@ describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
 
 describe('validateWorkflowDefinition: resolved definition', () => {
   it('resolves the plan example', () => {
-    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE, ALL)
     expect(result.diagnostics).toEqual([])
     const steps = result.definition!.steps
     expect(steps.map((s) => s.id)).toEqual(['plan', 'build', 'test', 'review'])
@@ -382,7 +384,7 @@ describe('validateWorkflowDefinition: resolved definition', () => {
   it('fills omitted needs with the previous step in file order', () => {
     const step = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n${extra}`
     const result = validateWorkflowDefinition(
-      `name: x\nsteps:\n${step('a')}${step('b', '    needs: []\n')}${step('c')}${step('d', '    needs: [a]\n')}${step('e')}`
+      `name: x\nsteps:\n${step('a')}${step('b', '    needs: []\n')}${step('c')}${step('d', '    needs: [a]\n')}${step('e')}`, ALL
     )
     expect(result.diagnostics).toEqual([])
     expect(result.definition?.steps.map((s) => s.needs)).toEqual([[], [], ['b'], ['a'], ['d']])
@@ -436,7 +438,7 @@ describe('validateWorkflowDefinition: graph and per-kind errors', () => {
 
   it('allows an exit condition on a shell step', () => {
     const result = validateWorkflowDefinition(
-      `name: x\nsteps:\n  - id: a\n${A}  - id: t\n    kind: shell\n    run: make\n    loop: { back_to: a, until: { exit: 0 }, max: 2 }\n`
+      `name: x\nsteps:\n  - id: a\n${A}  - id: t\n    kind: shell\n    run: make\n    loop: { back_to: a, until: { exit: 0 }, max: 2 }\n`, ALL
     )
     expect(result.diagnostics).toEqual([])
     expect(result.definition?.steps[1]).toEqual({ id: 't', kind: 'shell', needs: ['a'], run: 'make', loop: { back_to: 'a', until: { exit: 0 }, max: 2 } })
@@ -478,7 +480,7 @@ describe('validateWorkflowDefinition: template references', () => {
   const agent = (id: string, rest = '') => `  - id: ${id}\n    agent: claude\n${rest}`
 
   it('accepts the plan example references, including on_loop into the loop span', () => {
-    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE, ALL)
     expect(result.diagnostics).toEqual([])
     expect(result.definition).toBeDefined()
   })
@@ -596,7 +598,7 @@ describe('validateWorkflowDefinition: template references', () => {
   })
 
   it('accepts item.* with item_input or a foreach step', () => {
-    expect(errorsOf(base(agent('a', '    prompt: "{{item.task}}"\n'), 'item_input: task\n'))).toEqual([])
+    expect(errorsOf(base(agent('a', '    prompt: "{{item.task}}"\n'), 'item_input: task\n'), ALL)).toEqual([])
     const foreach = base(agent('a', '    prompt: "{{item.title}}"\n') + '  - id: each\n    kind: foreach\n    over: a\n')
     expect(errorsOf(foreach).filter((d) => d.path.endsWith('.prompt'))).toEqual([])
   })
@@ -624,7 +626,7 @@ describe('validateWorkflowDefinition: template references', () => {
       )
 
     it('lets every step in the span reference the rest of the span, both ends included', () => {
-      expect(validateWorkflowDefinition(loop('{{steps.d.summary}} {{steps.c.status}} {{steps.b.summary}} {{steps.d.data.verdict}}', '{{steps.d.summary}}')).diagnostics).toEqual([])
+      expect(validateWorkflowDefinition(loop('{{steps.d.summary}} {{steps.c.status}} {{steps.b.summary}} {{steps.d.data.verdict}}', '{{steps.d.summary}}'), ALL).diagnostics).toEqual([])
     })
 
     it('rejects a step upstream of the looping step but outside the span', () => {
@@ -637,5 +639,97 @@ describe('validateWorkflowDefinition: template references', () => {
       const text = loop('ok').replace('    prompt: build\n', '    prompt: "{{steps.d.summary}}"\n')
       expect(errorsOf(text)).toMatchObject([{ code: 'template-scope', path: 'steps[1].prompt' }])
     })
+  })
+})
+
+describe('validateWorkflowDefinition: unsupported features', () => {
+  const featuresOf = (text: string, supportedFeatures?: readonly WorkflowFeature[]) =>
+    validateWorkflowDefinition(text, supportedFeatures ? { supportedFeatures } : {}).diagnostics.map((d) => ({
+      code: d.code,
+      feature: d.feature,
+      path: d.path,
+      line: d.line,
+      col: d.col
+    }))
+
+  it('reports each unsupported feature in the plan example once, in file order, at the key or offending value', () => {
+    expect(featuresOf(PLAN_EXAMPLE)).toEqual([
+      { code: 'unsupported-feature', feature: 'item_input', path: 'item_input', line: 4, col: 1 },
+      { code: 'unsupported-feature', feature: 'gate', path: 'steps[0].gate', line: 14, col: 5 },
+      { code: 'unsupported-feature', feature: 'agent-codex', path: 'steps[1].agent', line: 16, col: 12 },
+      { code: 'unsupported-feature', feature: 'on_loop', path: 'steps[1].on_loop', line: 18, col: 5 },
+      { code: 'unsupported-feature', feature: 'agent-opencode', path: 'steps[3].agent', line: 23, col: 12 },
+      { code: 'unsupported-feature', feature: 'loop', path: 'steps[3].loop', line: 29, col: 5 }
+    ])
+  })
+
+  it('keeps parsed but withholds the definition when only feature errors remain', () => {
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    expect(result.parsed?.name).toBe('plan-build-review')
+    expect(result.definition).toBeUndefined()
+  })
+
+  it('names the phase that adds the feature in the message', () => {
+    const loop = validateWorkflowDefinition(PLAN_EXAMPLE).diagnostics.find((d) => d.feature === 'loop')
+    expect(loop?.message).toBe(WORKFLOW_FEATURES.loop.message)
+    expect(loop?.message).toContain('phase 4')
+  })
+
+  it('validates the plan example with every feature supported', () => {
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE, { supportedFeatures: ALL_WORKFLOW_FEATURES })
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps.map((s) => s.id)).toEqual(['plan', 'build', 'test', 'review'])
+  })
+
+  it('reports only the features left out of supportedFeatures', () => {
+    const supported = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'gate')
+    expect(featuresOf(PLAN_EXAMPLE, supported).map((d) => d.feature)).toEqual(['gate'])
+  })
+
+  it('defaults to the baseline from the feature table', () => {
+    expect(BASELINE_SUPPORTED_FEATURES).toEqual(ALL_WORKFLOW_FEATURES.filter((f) => WORKFLOW_FEATURES[f].supported))
+    expect(featuresOf(PLAN_EXAMPLE, BASELINE_SUPPORTED_FEATURES)).toEqual(featuresOf(PLAN_EXAMPLE))
+  })
+
+  it('skips feature checks while other errors remain', () => {
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: codex\n    prompt: "{{inputs.nope}}"\n    gate: approve\n')
+    expect(result.diagnostics.map((d) => d.code)).toEqual(['unknown-ref'])
+  })
+
+  it('accepts a linear chain of implicit needs on claude and shell steps', () => {
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n  - id: b\n    kind: shell\n    run: make\n  - id: c\n    agent: claude\n    needs: [a, b]\n    prompt: go\n')
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps.map((s) => s.needs)).toEqual([[], ['a'], ['a', 'b']])
+  })
+
+  const step = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n${extra}`
+
+  it('reports one non-linear needs error when two steps share one parent', () => {
+    const text = `name: x\nsteps:\n${step('a')}${step('b', '    needs: [a]\n')}${step('c', '    needs: [a]\n')}`
+    expect(featuresOf(text)).toEqual([{ code: 'unsupported-feature', feature: 'nonlinear-needs', path: 'steps[2].needs', line: 13, col: 5 }])
+  })
+
+  it('reports non-linear needs for an explicit empty list after the first step', () => {
+    const text = `name: x\nsteps:\n${step('a')}${step('b', '    needs: []\n')}`
+    expect(featuresOf(text).map((d) => [d.feature, d.path])).toEqual([['nonlinear-needs', 'steps[1].needs']])
+  })
+
+  it('does not repeat the non-linear error on implicit steps that follow the break', () => {
+    const text = `name: x\nsteps:\n${step('a')}${step('b', '    needs: [a]\n')}${step('c', '    needs: [a]\n')}${step('d')}`
+    expect(featuresOf(text).map((d) => d.path)).toEqual(['steps[2].needs'])
+  })
+
+  it.each([
+    ['parallel_safe', `name: x\nsteps:\n${step('a')}  - id: b\n    kind: shell\n    run: make\n    parallel_safe: true\n`, 'steps[1].parallel_safe', 4],
+    ['timeout', `name: x\nsteps:\n${step('a', '    timeout: 60\n')}`, 'steps[0].timeout', 4],
+    ['when', `name: x\nsteps:\n${step('a', '    output:\n      ok: { type: boolean }\n')}${step('b', '    when: { field: ok, equals: true }\n')}`, 'steps[1].when', 4],
+    ['foreach', 'name: x\nsteps:\n  - id: each\n    kind: foreach\n    over: inputs.list\n', 'steps[0].kind', 6],
+    ['orchestrator', 'name: x\nsteps:\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n', 'steps[0].kind', 8]
+  ] as const)('reports one %s error naming its phase', (feature, text, path, phase) => {
+    expect(validateWorkflowDefinition(text, { supportedFeatures: ALL_WORKFLOW_FEATURES }).diagnostics).toEqual([])
+    const diagnostics = validateWorkflowDefinition(text).diagnostics
+    expect(diagnostics.map((d) => [d.code, d.feature, d.path])).toEqual([['unsupported-feature', feature, path]])
+    expect(WORKFLOW_FEATURES[feature].phase).toBe(phase)
+    expect(diagnostics[0].message).toContain(`phase ${phase}`)
   })
 })
