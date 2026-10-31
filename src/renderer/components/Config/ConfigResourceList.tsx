@@ -17,17 +17,14 @@ import type {
   ConfigRowConversionAction
 } from './types'
 
-export const LINKED_RESOURCE_EXPLANATION =
-  'It is a symbolic link managed elsewhere, such as a dotfiles build. Tatsu reads it but will not edit, delete, or sync over it, because changes written through the link would be lost when that source is rebuilt. Change it at its source instead.'
-
 export function LinkedBadge({ linkedFrom }: { linkedFrom: string }): JSX.Element {
   return (
     <span
       className="inline-flex items-center gap-1 text-xs text-faint shrink-0"
-      title={`Managed elsewhere: ${linkedFrom}`}
+      title={`Linked from ${linkedFrom}`}
     >
       <Link2 className="icon-2xs shrink-0" />
-      Managed elsewhere
+      Linked
     </span>
   )
 }

@@ -49,14 +49,7 @@ function FileRowView({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint min-w-0">
           <LinkedBadge linkedFrom={row.ref.linkedFrom} />
           <span className="break-all">{row.ref.linkedFrom}</span>
-          <span>· Excluded from sync to disk</span>
         </div>
-      )}
-      {fromTemplate && row.ref.linkedFrom && (
-        <span className="text-xs text-danger">
-          Tatsu can't write this template output because the path is a symbolic link. Remove the link, or
-          change the harness folder in Config folders, before syncing it.
-        </span>
       )}
       {note && <span className="text-xs text-dim">{note}</span>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-faint">
@@ -474,10 +467,10 @@ export function ConfigSyncDialog({
             )}
             {hasLinked && (
               <p>
-                <span className="text-fg-bright font-medium">Managed elsewhere</span> entries are
-                symbolic links into another folder, such as a dotfiles build. They are listed here
-                but excluded from sync to disk, so Tatsu never writes through them. Adopting still
-                copies their current content into Tatsu config.
+                <span className="text-fg-bright font-medium">Linked</span> entries are symbolic links
+                into another folder, such as a dotfiles build. Sync to disk writes through the link
+                to that folder and keeps the link in place. A build that regenerates that folder can
+                overwrite what Tatsu writes.
               </p>
             )}
           </div>

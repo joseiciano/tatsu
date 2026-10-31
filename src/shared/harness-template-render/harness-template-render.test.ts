@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   RENDERER_VERSION,
-  readTemplateRef,
   renderTemplates,
+  stripLegacyTemplateMarker,
   type RenderableFragment,
   type RenderableTemplate,
   type RenderedResource
@@ -77,7 +77,7 @@ function nodeSha256(value: string): string {
 }
 
 describe('renderTemplates golden output', () => {
-  it('renders an agent for each targeted harness with each marker form', () => {
+  it('renders an agent for each targeted harness', () => {
     const { resources, errors } = renderTemplates([agent], fragments)
     expect(errors).toEqual([])
     const out = byTarget(resources)
@@ -91,7 +91,6 @@ describe('renderTemplates golden output', () => {
         'description: Reviews code',
         'tools: Read, Grep',
         'model: sonnet',
-        'tatsu-template: agent/reviewer',
         '---',
         'Review the diff.',
         '',
@@ -109,7 +108,6 @@ describe('renderTemplates golden output', () => {
         'description: Reviews code for Opencode',
         'mode: subagent',
         '---',
-        '<!-- tatsu-template: agent/reviewer -->',
         'Review the diff.',
         '',
         'Prefer small diffs.',
@@ -124,7 +122,7 @@ describe('renderTemplates golden output', () => {
     expect(errors).toEqual([])
     expect(resources[0].relativePath).toBe('critic.md')
     expect(resources[0].content).toBe(
-      ['---', 'description: Reviews code', '---', '<!-- tatsu-template: agent/reviewer -->', 'Review the diff.', ''].join('\n')
+      ['---', 'description: Reviews code', '---', 'Review the diff.', ''].join('\n')
     )
   })
 
@@ -156,14 +154,13 @@ describe('renderTemplates golden output', () => {
         'description: Deploys the app',
         'allowed-tools:',
         '  - Bash',
-        'tatsu-template: skill/deploy',
         '---',
         ...body
       ].join('\n')
     )
     expect(out['codex:skills'].relativePath).toBe('deploy/SKILL.md')
     expect(out['codex:skills'].content).toBe(
-      ['---', 'name: deploy', 'description: Deploys the app', '---', '<!-- tatsu-template: skill/deploy -->', ...body].join('\n')
+      ['---', 'name: deploy', 'description: Deploys the app', '---', ...body].join('\n')
     )
     expect(out['opencode:skills'].relativePath).toBe('ship/SKILL.md')
     expect(out['opencode:skills'].content).toBe(
@@ -173,7 +170,6 @@ describe('renderTemplates golden output', () => {
         'description: Deploys the app',
         'license: MIT',
         '---',
-        '<!-- tatsu-template: skill/deploy -->',
         ...body
       ].join('\n')
     )
@@ -191,7 +187,6 @@ describe('renderTemplates golden output', () => {
         'name: fix-ci',
         'description: Fix failing CI',
         'argument-hint: \'[pr]\'',
-        'tatsu-template: command/fix-ci',
         '---',
         'Find failing checks and fix them.',
         ''
@@ -203,7 +198,6 @@ describe('renderTemplates golden output', () => {
         'description: Fix failing CI',
         'agent: build',
         '---',
-        '<!-- tatsu-template: command/fix-ci -->',
         'Find failing checks and fix them.',
         ''
       ].join('\n')
@@ -301,8 +295,7 @@ describe('renderTemplates errors', () => {
     const bare = template({ kind: 'command', name: 'bare', description: '', harnesses: { opencode: { frontmatter: {} } } })
     const { resources, errors } = renderTemplates([bare], fragments)
     expect(errors).toEqual([])
-    expect(resources[0].content).toBe('---\n---\n<!-- tatsu-template: command/bare -->\nReview the diff.\n')
-    expect(readTemplateRef(resources[0].content)).toBe('command/bare')
+    expect(resources[0].content).toBe('---\n---\nReview the diff.\n')
   })
 
   it('does not treat the same name in different harnesses or resource types as a duplicate', () => {
@@ -315,11 +308,9 @@ describe('renderTemplates errors', () => {
 
   it('reports frontmatter that does not serialize', () => {
     const bad = template({ name: 'bad', harnesses: { claude: { frontmatter: { hook: () => undefined } } } })
-    const reserved = template({ name: 'reserved', harnesses: { claude: { frontmatter: { 'tatsu-template': 'x' } } } })
-    const { resources, errors } = renderTemplates([bad, reserved, healthy], fragments)
+    const { resources, errors } = renderTemplates([bad, healthy], fragments)
     expect(errors.map(({ templateName, code }) => ({ templateName, code }))).toEqual([
-      { templateName: 'bad', code: 'invalid-frontmatter' },
-      { templateName: 'reserved', code: 'invalid-frontmatter' }
+      { templateName: 'bad', code: 'invalid-frontmatter' }
     ])
     expect(resources.map((resource) => resource.templateName)).toEqual(['healthy'])
   })
@@ -345,7 +336,6 @@ describe('renderTemplates inline fragment placeholders', () => {
         '---',
         'name: reviewer',
         'description: Reviews code',
-        'tatsu-template: agent/reviewer',
         '---',
         'Intro.',
         '',
@@ -369,7 +359,7 @@ describe('renderTemplates inline fragment placeholders', () => {
     expect(errors).toEqual([])
     const out = byTarget(resources)
     expect(out['opencode:agents'].content).toBe(
-      ['---', 'description: Reviews code', '---', '<!-- tatsu-template: agent/reviewer -->', ...styleRegion, ''].join('\n')
+      ['---', 'description: Reviews code', '---', ...styleRegion, ''].join('\n')
     )
     expect(out['claude:agents'].content).toContain([...styleRegion, '', 'Never push to main.', ''].join('\n'))
   })
@@ -409,26 +399,16 @@ describe('renderTemplates inline fragment placeholders', () => {
   })
 })
 
-describe('readTemplateRef', () => {
-  it('reads both marker forms from rendered output', () => {
-    const { resources } = renderTemplates([agent, skill, command], fragments)
-    for (const resource of resources) {
-      expect(readTemplateRef(resource.content)).toBe(`${resource.templateKind}/${resource.templateName}`)
-    }
-  })
-
-  it('ignores files without a valid marker', () => {
-    expect(readTemplateRef('---\nname: x\n---\nbody\n')).toBeNull()
-    expect(readTemplateRef('plain text')).toBeNull()
-    expect(readTemplateRef('---\ntatsu-template: widget/x\n---\n')).toBeNull()
-    expect(readTemplateRef('---\ntatsu-template: agent/../x\n---\n')).toBeNull()
-    expect(readTemplateRef('---\nname: x\n---\nintro\n<!-- tatsu-template: agent/x -->\n')).toBeNull()
-    expect(readTemplateRef('---\n: [bad\n---\n<!-- tatsu-template: agent/x -->\n')).toBe('agent/x')
-    expect(readTemplateRef('<!-- tatsu-template: skill/x -->\nbody')).toBe('skill/x')
-  })
-
-  it('reads a marker from a file saved with a UTF-8 BOM', () => {
-    expect(readTemplateRef('\uFEFF---\ntatsu-template: command/x\n---\n')).toBe('command/x')
-    expect(readTemplateRef('\uFEFF<!-- tatsu-template: skill/x -->\nbody')).toBe('skill/x')
+describe('stripLegacyTemplateMarker', () => {
+  it.each([
+    { name: 'drops a marker on the first line', body: '<!-- tatsu-template: skill/x -->\nbody\n', expected: 'body\n' },
+    { name: 'drops a marker after leading blank lines', body: '\n<!-- tatsu-template: agent/x -->\nbody', expected: '\nbody' },
+    { name: 'drops a marker with extra inner spacing', body: '<!--tatsu-template:   command/x   -->\nbody', expected: 'body' },
+    { name: 'keeps a marker that is not the first non-empty line', body: 'intro\n<!-- tatsu-template: agent/x -->\n', expected: 'intro\n<!-- tatsu-template: agent/x -->\n' },
+    { name: 'keeps an unrelated first-line comment', body: '<!-- keep me -->\nbody', expected: '<!-- keep me -->\nbody' },
+    { name: 'keeps a marker comment with no ref', body: '<!-- tatsu-template: -->\nbody', expected: '<!-- tatsu-template: -->\nbody' },
+    { name: 'leaves an empty body alone', body: '', expected: '' }
+  ])('$name', ({ body, expected }) => {
+    expect(stripLegacyTemplateMarker(body)).toBe(expected)
   })
 })

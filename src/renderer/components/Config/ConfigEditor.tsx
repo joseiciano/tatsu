@@ -1,6 +1,6 @@
-import { Link2, Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 import { MonacoEditor } from '../MonacoEditor'
-import { LINKED_RESOURCE_EXPLANATION, LinkedBadge } from './ConfigResourceList'
+import { LinkedBadge } from './ConfigResourceList'
 import type { ConfigEditorProps } from './types'
 
 const BADGE_LABEL: Record<string, string> = {
@@ -164,14 +164,6 @@ export function ConfigEditor({
           className="flex-1 min-w-0 bg-app border border-border rounded px-2 py-1 text-xs text-faint outline-none"
         />
       </div>
-      {linkedFrom && (
-        <div className="flex items-start gap-1.5 px-3 py-1.5 text-xs text-faint border-b border-border">
-          <Link2 className="icon-xs shrink-0 mt-0.5" />
-          <span className="min-w-0 break-all">
-            Read-only. Linked from {linkedFrom}. {LINKED_RESOURCE_EXPLANATION}
-          </span>
-        </div>
-      )}
       {usesInlineFragments(draft) && (
         <div className="px-3 py-1.5 text-xs text-faint border-b border-border">
           Saving turns each <code>{'{{fragment:name}}'}</code> line into a marked section with the fragment text.
@@ -195,7 +187,6 @@ export function ConfigEditor({
           type="button"
           disabled={!canDelete || busy}
           onClick={onDelete}
-          title={linkedFrom ? 'Managed elsewhere; delete it at its source' : undefined}
           aria-label="Delete resource"
           className="mr-auto px-2 py-1.5 text-xs text-danger hover:bg-surface-hover rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1"
         >

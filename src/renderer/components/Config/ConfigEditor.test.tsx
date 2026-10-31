@@ -49,21 +49,22 @@ function editorProps(target: HarnessConfigFileRef, canEdit: boolean): ConfigEdit
   }
 }
 
-describe('managed-elsewhere resources', () => {
-  it('shows the badge, linked path, and read-only explanation in the editor', () => {
+describe('linked resources', () => {
+  it('shows the Linked badge with its source in the tooltip and no linked note in the editor', () => {
     const html = renderToStaticMarkup(
-      <ConfigEditor {...editorProps(ref({ linkedFrom: '/dotfiles/output/claude/skills/deploy' }), false)} />
+      <ConfigEditor {...editorProps(ref({ linkedFrom: '/dotfiles/output/claude/skills/deploy' }), true)} />
     )
-    expect(html).toContain('Managed elsewhere')
-    expect(html).toContain('Linked from /dotfiles/output/claude/skills/deploy')
-    expect(html).toContain('Change it at its source instead')
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Delete resource"/)
+    expect(html).toContain('title="Linked from /dotfiles/output/claude/skills/deploy"')
+    expect(html).not.toContain('Linked from /dotfiles/output/claude/skills/deploy.')
+    expect(html).not.toContain('symbolic link into another folder')
+    expect(html).not.toContain('Read-only')
+    expect(html).not.toContain('Managed elsewhere')
+    expect(html).not.toContain('delete it at its source')
   })
 
-  it('omits the managed-elsewhere chrome for a regular resource', () => {
+  it('omits the linked chrome for a regular resource', () => {
     const html = renderToStaticMarkup(<ConfigEditor {...editorProps(ref(), true)} />)
-    expect(html).not.toContain('Managed elsewhere')
-    expect(html).not.toContain('Linked from')
+    expect(html).not.toContain('Linked')
   })
 
   it('badges linked rows in the resource list', () => {
@@ -99,6 +100,7 @@ describe('managed-elsewhere resources', () => {
         onCreateSkill={noop}
       />
     )
-    expect(html.match(/Managed elsewhere: \/dotfiles\/output\/claude\/skills\/deploy/g)).toHaveLength(1)
+    expect(html.match(/title="Linked from \/dotfiles\/output\/claude\/skills\/deploy"/g)).toHaveLength(1)
+    expect(html).not.toContain('Managed elsewhere')
   })
 })
