@@ -1,6 +1,7 @@
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import type { HarnessConfigService } from '../harness-config'
 import type { StateEvent } from '../../shared/state'
+import { templateFragmentNames } from '../../shared/harness-template-render'
 import { classifyTemplateSourcePath, TEMPLATE_HARNESSES } from '../../shared/harness-templates'
 import {
   harnessConfigScopeKey,
@@ -24,7 +25,7 @@ export interface TemplateSyncDeriverStore {
 
 export interface TemplateSyncDeriverDeps {
   store: TemplateSyncDeriverStore
-  service: Pick<HarnessConfigService, 'planSync' | 'scopesForTemplates'>
+  service: Pick<HarnessConfigService, 'planSync' | 'scopesForTemplates' | 'scopesForFragment'>
   schedule?: (run: () => void) => void
   now?: () => number
   log?: (category: string, message: string, data?: unknown) => void
@@ -36,8 +37,7 @@ function templateKey(template: Pick<HarnessTemplate, 'kind' | 'name'>): string {
 }
 
 function usesFragment(template: HarnessTemplate, name: string): boolean {
-  if (template.fragments.includes(name)) return true
-  return Object.values(template.harnesses).some((block) => Boolean(block && block.fragments?.includes(name)))
+  return templateFragmentNames(template).includes(name)
 }
 
 function comparisonKey(comparison: HarnessConfigComparison): string {
@@ -140,8 +140,10 @@ export class TemplateSyncDeriver {
         this.queue(this.errorTargets([event.payload]), true)
         return
       case 'harnessConfig/fragmentsLoaded':
-        // Every fragment was replaced, so every template may render differently.
+        // Every fragment was replaced, so every template and every stored
+        // file with an inline fragment may render differently.
         this.queue(this.harnessConfig().templates.templates, false)
+        this.queueScopes(() => this.deps.service.scopesForFragment(), false)
         return
       case 'harnessConfig/fragmentChanged':
       case 'harnessConfig/fragmentRemoved': {
@@ -150,6 +152,7 @@ export class TemplateSyncDeriver {
           this.harnessConfig().templates.templates.filter((template) => usesFragment(template, name)),
           true
         )
+        this.queueScopes(() => this.deps.service.scopesForFragment(name), true)
         return
       }
       default:
@@ -159,9 +162,13 @@ export class TemplateSyncDeriver {
 
   private queue(templates: readonly TemplateTargets[], notify: boolean): void {
     if (templates.length === 0) return
+    this.queueScopes(() => this.deps.service.scopesForTemplates(templates), notify)
+  }
+
+  private queueScopes(find: () => HarnessConfigScope[], notify: boolean): void {
     let scopes: HarnessConfigScope[]
     try {
-      scopes = this.deps.service.scopesForTemplates(templates)
+      scopes = find()
     } catch (error) {
       this.logFailure(error)
       return

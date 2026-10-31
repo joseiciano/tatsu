@@ -27,6 +27,7 @@ import type {
   HarnessConfigConversionResult,
   HarnessConfigEvent,
   HarnessConfigFileRef,
+  HarnessConfigFragmentResolution,
   HarnessConfigMutationPlan,
   HarnessConfigPrepareCreateRequest,
   HarnessConfigPrepareUpdateRequest,
@@ -34,11 +35,13 @@ import type {
   HarnessConfigReadRequest,
   HarnessConfigRequestError,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigResourceType,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
   HarnessConfigSyncPlan,
+  HarnessFragmentUsageResult,
   ManagedHarnessKind
 } from '../../shared/state/harness-config'
 
@@ -112,7 +115,9 @@ const CHANNEL = {
   saveFragment: 'harnessConfig:saveFragment',
   deleteFragment: 'harnessConfig:deleteFragment',
   previewImport: 'harnessConfig:previewImport',
-  applyImport: 'harnessConfig:applyImport'
+  applyImport: 'harnessConfig:applyImport',
+  resolveFragmentEdit: 'harnessConfig:resolveFragmentEdit',
+  fragmentUsage: 'harnessConfig:fragmentUsage'
 } as const
 
 type MutationChannel =
@@ -347,6 +352,15 @@ function parseImportChoices(raw: unknown): HarnessTemplateImportChoices {
       ['skip', 'replace']
     )
   }
+}
+
+const FRAGMENT_RESOLUTIONS: readonly HarnessConfigFragmentResolution[] = ['overwrite', 'detach', 'keep-edit']
+
+function parseFragmentResolution(value: unknown): HarnessConfigFragmentResolution {
+  if (typeof value !== 'string' || !(FRAGMENT_RESOLUTIONS as readonly string[]).includes(value)) {
+    throw new HarnessConfigValidationError('resolution must be overwrite, detach, or keep-edit')
+  }
+  return value as HarnessConfigFragmentResolution
 }
 
 function requireConfirmed(value: unknown): void {
@@ -664,6 +678,25 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     return { deleted: true }
   }
 
+  async function handleResolveFragmentEdit(raw: unknown): Promise<HarnessConfigResolveFragmentEditResult> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['scope', 'id', 'fragment', 'resolution', 'confirmed'])
+    const scope = parseManagedScope(obj.scope)
+    const id = parseNonEmptyString(obj.id, 'id')
+    const fragment = parseNonEmptyString(obj.fragment, 'fragment')
+    const resolution = parseFragmentResolution(obj.resolution)
+    requireConfirmed(obj.confirmed)
+    const result = await service.resolveFragmentEdit(scope, id, fragment, resolution)
+    dispatchPostApplyComparison(scope, null)
+    return result
+  }
+
+  async function handleFragmentUsage(raw: unknown): Promise<HarnessFragmentUsageResult> {
+    const obj = requireObject(raw)
+    assertExactKeys(obj, ['name'])
+    return { files: service.filesUsingFragment(parseNonEmptyString(obj.name, 'name')) }
+  }
+
   function requireTemplateImport(): HarnessTemplateImportLike {
     if (!deps.templateImport) {
       throw new HarnessConfigError('unsupported-scope', 'Importing templates is unavailable')
@@ -783,4 +816,6 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   register(CHANNEL.deleteFragment, handleDeleteFragment)
   register(CHANNEL.previewImport, handlePreviewImport)
   register(CHANNEL.applyImport, handleApplyImport)
+  register(CHANNEL.resolveFragmentEdit, handleResolveFragmentEdit)
+  register(CHANNEL.fragmentUsage, handleFragmentUsage)
 }

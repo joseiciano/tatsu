@@ -5,6 +5,7 @@ import { getAgentInfo, isHarnessConfigCapabilityEnabled, type AgentInfo } from '
 import {
   harnessConfigScopeKey,
   type HarnessConfigFileRef,
+  type HarnessConfigFragmentResolution,
   type HarnessConfigRequestError,
   type HarnessConfigResourceType,
   type HarnessConfigScope,
@@ -1021,6 +1022,70 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
     })
   }, [])
 
+  const handleResolveFragmentEdit = useCallback(
+    (id: string, fragment: string, resolution: HarnessConfigFragmentResolution) => {
+      if (!dialogReview || dialogStage !== 'idle' || !dialogReviewUsable) return
+      const token = dialogTokenRef.current
+      const backendId = activeBackend.id
+      const generation = backendGenerationRef.current
+      const scope = dialogReview.scope
+      const scopeKey = dialogReview.scopeKey
+      const isStale = (): boolean =>
+        dialogTokenRef.current !== token ||
+        activeBackendIdRef.current !== backendId ||
+        backendGenerationRef.current !== generation
+
+      setDialogStage('applying')
+      setDialogActionError(null)
+      setDialogActionNotice(null)
+
+      void (async () => {
+        let result: Awaited<ReturnType<typeof backend.resolveHarnessFragmentEdit>>
+        try {
+          result = await backend.resolveHarnessFragmentEdit({ scope, id, fragment, resolution, confirmed: true })
+        } catch (err) {
+          if (isStale()) return
+          setDialogActionError(requestFailureMessage(err))
+          setDialogStage('idle')
+          return
+        }
+        if (isStale()) return
+        if (!result.ok) {
+          setDialogActionError(result.error.message)
+          setDialogStage('idle')
+          return
+        }
+
+        let compared: Awaited<ReturnType<typeof backend.compareHarnessConfig>> | null
+        try {
+          compared = await backend.compareHarnessConfig({ scope })
+        } catch {
+          compared = null
+        }
+        if (isStale()) return
+        if (!compared || !compared.ok) {
+          setDialogReviewUsable(false)
+          setDialogActionError('Resolved, but unable to refresh this comparison — cancel and start Sync again.')
+          setDialogStage('idle')
+          return
+        }
+        if (compared.value.status === 'synced') {
+          closeDialog()
+          showScopeNotice(scopeKey, 'Already in sync', backendId, generation)
+          return
+        }
+        setDialogReview(toConfigSyncReview(compared.value))
+        setDialogActionNotice(
+          resolution === 'keep-edit'
+            ? `Saved the edit to ${fragment}. Sync to disk to update this file, and sync other folders that use it.`
+            : 'Resolved in Tatsu config. Sync to disk to update this file.'
+        )
+        setDialogStage('idle')
+      })()
+    },
+    [dialogReview, dialogStage, dialogReviewUsable, activeBackend.id, backend, closeDialog, showScopeNotice]
+  )
+
   const handleDialogCancel = useCallback(() => {
     if (dialogStage === 'applying') return
     closeDialog()
@@ -1356,7 +1421,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
           role="status"
           className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-border bg-app/30 text-xs text-dim"
         >
-          <span className="text-fg-bright">Template changes put these scopes out of sync with disk:</span>
+          <span className="text-fg-bright">Template or fragment changes put these scopes out of sync with disk:</span>
           {templateNoticeScopes.map((entry) => (
             <button
               key={entry.key}
@@ -1455,6 +1520,7 @@ export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Eleme
         actionNotice={dialogActionNotice}
         detachIds={dialogDetachIds}
         onDetachChange={handleDetachChange}
+        onResolveFragmentEdit={handleResolveFragmentEdit}
         onSyncToDisk={() => handleOutcomeClick('sync-to-disk')}
         onAdoptFromDisk={() => handleOutcomeClick('adopt-from-disk')}
         onCancel={handleDialogCancel}

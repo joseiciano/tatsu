@@ -33,6 +33,8 @@ import type {
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
@@ -41,6 +43,8 @@ import type {
   HarnessFragment,
   HarnessFragmentDeleteRequest,
   HarnessFragmentSaveRequest,
+  HarnessFragmentUsageRequest,
+  HarnessFragmentUsageResult,
   HarnessTemplate,
   HarnessTemplateDeleteRequest,
   HarnessTemplateImportApplyRequest,
@@ -65,6 +69,8 @@ export type {
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
@@ -73,6 +79,8 @@ export type {
   HarnessFragment,
   HarnessFragmentDeleteRequest,
   HarnessFragmentSaveRequest,
+  HarnessFragmentUsageRequest,
+  HarnessFragmentUsageResult,
   HarnessTemplate,
   HarnessTemplateDeleteRequest,
   HarnessTemplateImportApplyRequest,
@@ -720,6 +728,12 @@ export interface ElectronAPI {
   applyHarnessTemplateImport(
     request: HarnessTemplateImportApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessTemplateImportApplyResult>>
+  resolveHarnessFragmentEdit(
+    request: HarnessConfigResolveFragmentEditRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigResolveFragmentEditResult>>
+  harnessFragmentUsage(
+    request: HarnessFragmentUsageRequest
+  ): Promise<HarnessConfigRequestResult<HarnessFragmentUsageResult>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the

@@ -160,6 +160,15 @@ describe('fragmentUsage and parseTemplateRef', () => {
     expect(fragmentUsage(templates, 'shared').map((entry) => entry.name)).toEqual(['a', 'b'])
   })
 
+  it('finds templates that use a fragment only through a body placeholder', () => {
+    const templates = [
+      template({ name: 'inline', body: 'Intro.\n{{fragment:shared}}\n' }),
+      template({ name: 'fenced', body: '```\n{{fragment:shared}}\n```\n' }),
+      template({ name: 'other', body: '{{fragment:shared-extra}}\n' })
+    ]
+    expect(fragmentUsage(templates, 'shared').map((entry) => entry.name)).toEqual(['inline'])
+  })
+
   it('parses kind/name refs', () => {
     expect(parseTemplateRef('skill/deploy')).toEqual({ kind: 'skill', name: 'deploy' })
     expect(parseTemplateRef('plugin/x')).toBeNull()

@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { CORE_SCHEMA, load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -321,6 +322,90 @@ describe('renderTemplates errors', () => {
       { templateName: 'reserved', code: 'invalid-frontmatter' }
     ])
     expect(resources.map((resource) => resource.templateName)).toEqual(['healthy'])
+  })
+})
+
+describe('renderTemplates inline fragment placeholders', () => {
+  const styleRegion = [
+    `<!-- tatsu:fragment style sha=${nodeSha256('Prefer small diffs.').slice(0, 12)} -->`,
+    'Prefer small diffs.',
+    '<!-- /tatsu:fragment style -->'
+  ]
+
+  it('expands a body placeholder in place and still appends list fragments after the body', () => {
+    const inline = template({
+      fragments: ['safety'],
+      body: 'Intro.\n\n{{fragment:style}}\n\nOutro.\n',
+      harnesses: { claude: { frontmatter: {} } }
+    })
+    const { resources, errors } = renderTemplates([inline], fragments)
+    expect(errors).toEqual([])
+    expect(resources[0].content).toBe(
+      [
+        '---',
+        'name: reviewer',
+        'description: Reviews code',
+        'tatsu-template: agent/reviewer',
+        '---',
+        'Intro.',
+        '',
+        ...styleRegion,
+        '',
+        'Outro.',
+        '',
+        'Never push to main.',
+        ''
+      ].join('\n')
+    )
+  })
+
+  it('expands body placeholders for a harness whose block overrides the fragment list', () => {
+    const inline = template({
+      fragments: ['safety'],
+      body: '{{fragment:style}}\n',
+      harnesses: { claude: { frontmatter: {} }, opencode: { frontmatter: {}, fragments: [] } }
+    })
+    const { resources, errors } = renderTemplates([inline], fragments)
+    expect(errors).toEqual([])
+    const out = byTarget(resources)
+    expect(out['opencode:agents'].content).toBe(
+      ['---', 'description: Reviews code', '---', '<!-- tatsu-template: agent/reviewer -->', ...styleRegion, ''].join('\n')
+    )
+    expect(out['claude:agents'].content).toContain([...styleRegion, '', 'Never push to main.', ''].join('\n'))
+  })
+
+  it.each([
+    { name: 'an unknown placeholder', body: 'Intro.\n{{fragment:missing}}\n', code: 'unknown-fragment', mentions: 'missing' },
+    { name: 'a placeholder inside a line', body: 'See {{fragment:style}} here.\n', code: 'inline-fragment', mentions: 'line 1' },
+    {
+      name: 'an unknown placeholder alongside a misplaced one',
+      body: '{{fragment:missing}}\nSee {{fragment:style}} here.\n',
+      code: 'inline-fragment',
+      mentions: 'missing'
+    }
+  ])('reports $name as $code, renders nothing for that template, and still renders others', ({ body, code, mentions }) => {
+    const broken = template({ name: 'broken', body, harnesses: { claude: { frontmatter: {} } } })
+    const healthy = template({ kind: 'command', name: 'healthy', harnesses: { claude: { frontmatter: {} } } })
+    const { resources, errors } = renderTemplates([broken, healthy], fragments)
+    expect(errors).toEqual([expect.objectContaining({ templateName: 'broken', agentKind: 'claude', code })])
+    expect(errors[0].message).toContain(mentions)
+    expect(resources.map((resource) => resource.templateName)).toEqual(['healthy'])
+  })
+
+  it('leaves placeholders in the description and frontmatter as literal text', () => {
+    const literal = template({
+      description: '{{fragment:style}}',
+      body: 'Plain body.\n',
+      harnesses: { claude: { frontmatter: { note: '{{fragment:safety}}' } } }
+    })
+    const { resources, errors } = renderTemplates([literal], fragments)
+    expect(errors).toEqual([])
+    const content = resources[0].content
+    expect(content).not.toContain('tatsu:fragment')
+    expect(content).not.toContain('Prefer small diffs.')
+    expect(content).not.toContain('Never push to main.')
+    const yaml = load(content.split('---\n')[1], { schema: CORE_SCHEMA }) as Record<string, unknown>
+    expect(yaml).toMatchObject({ description: '{{fragment:style}}', note: '{{fragment:safety}}' })
   })
 })
 

@@ -49,6 +49,7 @@ function baseProps(overrides: Partial<ConfigSyncDialogProps> = {}): ConfigSyncDi
     actionNotice: null,
     detachIds: new Set(),
     onDetachChange: () => {},
+    onResolveFragmentEdit: () => {},
     onSyncToDisk: () => {},
     onAdoptFromDisk: () => {},
     onCancel: () => {},

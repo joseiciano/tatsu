@@ -457,6 +457,9 @@ const harnessConfigService = createHarnessConfigService({
   loadTemplateSource: () => store.getSnapshot().state.harnessConfig.templates,
   detachTemplateTarget: (templateRef, agentKind) => {
     templateSourceStore.detachTarget(templateRef, agentKind)
+  },
+  saveFragment: (name, content) => {
+    templateSourceStore.saveFragment(name, content)
   }
 })
 const defaultHarnessConfigSourceDir = (): string => join(userDataDir(), 'harness-config-source')
