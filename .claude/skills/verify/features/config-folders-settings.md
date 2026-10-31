@@ -43,6 +43,10 @@ The end state that proves it works:
 - Run: `journeys/config-folders.mjs`. Enter commits, a relative path shows
   "Choose an absolute folder path" and is not persisted, the override lands
   in `DATA_DIR/config.json` and rescans Skills, and Reset restores `hello`.
+- Run `config-folders.mjs` on a fresh launch. It deletes the Codex skills
+  root, and a scan that fails keeps the rows of the last good scan, so a
+  launch where Codex skills were already listed still shows Codex `hello`
+  and the journey's row count fails.
   Commit-on-blur comes from source.
 - Both entry points run. Cmd+, works on the onboarding screen and, from the
   Config page, replaces Config with Settings. The journey deletes
