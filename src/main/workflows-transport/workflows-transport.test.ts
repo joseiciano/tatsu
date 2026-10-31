@@ -55,7 +55,9 @@ describe('workflows:reloadDefinitions', () => {
     expect(await transport.call('workflows:reloadDefinitions')).toBe(2)
 
     expect(dispatched).toHaveLength(2)
-    expect(dispatched[1].payload.definitions.map((d) => d.id)).toEqual(['personal:other', 'personal:plan'])
+    const last = dispatched[1]
+    if (last.type !== 'workflows/definitionsLoaded') throw new Error('no definitions dispatched')
+    expect(last.payload.definitions.map((d) => d.id)).toEqual(['personal:other', 'personal:plan'])
   })
 })
 

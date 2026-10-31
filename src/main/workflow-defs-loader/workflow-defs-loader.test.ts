@@ -63,7 +63,7 @@ function makeLoader(target = dir) {
 
 function lastDefinitions(): WorkflowDefinitionSummary[] {
   const event = dispatched.at(-1)
-  if (!event) throw new Error('nothing dispatched')
+  if (event?.type !== 'workflows/definitionsLoaded') throw new Error('no definitions dispatched')
   return event.payload.definitions
 }
 
@@ -95,8 +95,10 @@ describe('createWorkflowDefsLoader().reload', () => {
 
     expect(count).toBe(2)
     expect(dispatched).toHaveLength(1)
-    expect(dispatched[0].type).toBe('workflows/definitionsLoaded')
-    expect(dispatched[0].payload.scope).toBe('personal')
+    expect(dispatched[0]).toMatchObject({
+      type: 'workflows/definitionsLoaded',
+      payload: { scope: 'personal' }
+    })
     const byId = Object.fromEntries(lastDefinitions().map((d) => [d.id, d]))
     expect(Object.keys(byId).sort()).toEqual(['personal:plan-example', 'personal:valid'])
 

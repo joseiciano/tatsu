@@ -1,0 +1,1 @@
+export const SUMMARY_PREVIEW_MAX = 200
