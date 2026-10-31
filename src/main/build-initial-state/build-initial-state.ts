@@ -13,6 +13,7 @@ import { initialSnooze } from '../../shared/state/snooze'
 import { initialAnnouncements } from '../../shared/state/announcements'
 import { initialScratchpad } from '../../shared/state/scratchpad'
 import { initialHarnessConfig } from '../../shared/state/harness-config'
+import { initialWorkflows } from '../../shared/state/workflows'
 import {
   initialSettings,
   DEFAULT_LIGHT_THEME,
@@ -72,6 +73,7 @@ export function buildInitialAppState(
     announcements: initialAnnouncements,
     scratchpad: { byWorktreePath: flattenScratchpadNotes(config.scratchpadNotes) },
     harnessConfig: initialHarnessConfig,
+    workflows: initialWorkflows,
     settings: {
       ...initialSettings,
       themeMode:

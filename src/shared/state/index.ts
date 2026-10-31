@@ -102,6 +102,12 @@ import {
   type HarnessConfigEvent,
   type HarnessConfigState
 } from './harness-config'
+import {
+  initialWorkflows,
+  workflowsReducer,
+  type WorkflowsEvent,
+  type WorkflowsState
+} from './workflows'
 
 
 export type { SettingsState, SettingsEvent }
@@ -191,6 +197,12 @@ export type {
   HarnessConfigEvent
 } from './harness-config'
 export { harnessConfigScopeKey } from './harness-config'
+export type {
+  WorkflowScope,
+  WorkflowDefinitionSummary,
+  WorkflowsState,
+  WorkflowsEvent
+} from './workflows'
 
 
 export interface AppState {
@@ -209,6 +221,7 @@ export interface AppState {
   announcements: AnnouncementsState
   scratchpad: ScratchpadState
   harnessConfig: HarnessConfigState
+  workflows: WorkflowsState
 }
 
 export type StateEvent =
@@ -227,6 +240,7 @@ export type StateEvent =
   | AnnouncementsEvent
   | ScratchpadEvent
   | HarnessConfigEvent
+  | WorkflowsEvent
 
 export const initialState: AppState = {
   settings: initialSettings,
@@ -243,7 +257,8 @@ export const initialState: AppState = {
   snooze: initialSnooze,
   announcements: initialAnnouncements,
   scratchpad: initialScratchpad,
-  harnessConfig: initialHarnessConfig
+  harnessConfig: initialHarnessConfig,
+  workflows: initialWorkflows
 }
 
 export function rootReducer(state: AppState, event: StateEvent): AppState {
@@ -324,6 +339,11 @@ export function rootReducer(state: AppState, event: StateEvent): AppState {
     if (harnessConfig === state.harnessConfig) return state
     return { ...state, harnessConfig }
   }
+  if (event.type.startsWith('workflows/')) {
+    const workflows = workflowsReducer(state.workflows, event as WorkflowsEvent)
+    if (workflows === state.workflows) return state
+    return { ...state, workflows }
+  }
   return state
 }
 
@@ -369,7 +389,8 @@ export function mergeWireSnapshot(state: WireSnapshotState): AppState {
     snooze: { ...initialState.snooze, ...state.snooze },
     announcements: { ...initialState.announcements, ...state.announcements },
     scratchpad: { ...initialState.scratchpad, ...state.scratchpad },
-    harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig }
+    harnessConfig: { ...initialState.harnessConfig, ...state.harnessConfig },
+    workflows: { ...initialState.workflows, ...state.workflows }
   }
 }
 

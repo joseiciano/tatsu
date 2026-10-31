@@ -595,6 +595,14 @@ export function useHarnessConfig() {
   return useAppState((s) => s.harnessConfig)
 }
 
+export function useWorkflowDefinitions() {
+  return useAppState((s) => s.workflows.definitions)
+}
+
+export function useWorkflowDefinition(id: string | null) {
+  return useAppState((s) => (id ? s.workflows.definitions[id] ?? null : null))
+}
+
 /** Session roster (controller + spectators) for a given terminal id.
  *  Re-renders only when that terminal's entry changes. Returns null if
  *  the terminal hasn't been joined yet (e.g. right after pane create
