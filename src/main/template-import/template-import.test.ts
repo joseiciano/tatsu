@@ -109,10 +109,6 @@ function run(listing = fixture(), overrides: Partial<HarnessTemplateImportChoice
   return importTemplateSetup(listing, { ...choices(overrides), existing: new Set(existing) })
 }
 
-function stripFrontmatterMarker(content: string): string {
-  return content.replace(/^tatsu-template: .*\n/m, '')
-}
-
 describe('importTemplateSetup', () => {
   it('maps agents with per-harness blocks, fragments, skills with references, and commands (TEST-001)', () => {
     const result = run()
@@ -239,7 +235,7 @@ describe('importTemplateSetup', () => {
     expect(result.templates.find((entry) => entry.item.key === 'agent/reviewer')!.draft).not.toBeNull()
   })
 
-  it('renders imported Claude agents and commands equal to the old build output apart from the marker (TEST-004)', () => {
+  it('renders imported Claude agents and commands byte-identical to the old build output (TEST-004)', () => {
     const result = run()
     const drafts = result.templates.flatMap((entry) => (entry.draft ? [entry.draft] : []))
     const fragments = result.fragments.map((entry) => ({ name: entry.item.name, content: entry.content }))
@@ -248,7 +244,7 @@ describe('importTemplateSetup', () => {
     const claude = new Map(
       rendered.resources
         .filter((resource) => resource.agentKind === 'claude')
-        .map((resource) => [`${resource.resourceType}/${resource.relativePath}`, stripFrontmatterMarker(resource.content)])
+        .map((resource) => [`${resource.resourceType}/${resource.relativePath}`, resource.content])
     )
 
     const oldBuild: Record<string, string> = {
@@ -285,6 +281,42 @@ Tag and push $ARGUMENTS.
       expect(claude.get(key), key).toBe(expected)
     }
   })
+
+
+  it('imports a file rendered with either legacy marker form without carrying the marker into the template', () => {
+    const listing = fixture()
+    listing.agents!.files['old.md'] = `---
+name: old
+description: Old agent
+model: opus
+tatsu-template: agent/old
+---
+Old body.
+`
+    listing.commands!.files['legacy.md'] = `---
+description: Old command
+---
+<!-- tatsu-template: command/legacy -->
+Legacy body.
+`
+    const drafts = run(listing).templates.flatMap((entry) =>
+      entry.draft && (entry.item.key === 'agent/old' || entry.item.key === 'command/legacy') ? [entry.draft] : []
+    )
+    expect(drafts.map((draft) => `${draft.kind}/${draft.name}`)).toEqual(['agent/old', 'command/legacy'])
+    for (const draft of drafts) {
+      for (const block of Object.values(draft.harnesses)) {
+        if (block) expect(block.frontmatter).not.toHaveProperty('tatsu-template')
+      }
+    }
+    expect(drafts.map((draft) => draft.body)).toEqual(['Old body.\n', 'Legacy body.\n'])
+
+    const rendered = renderTemplates(drafts, [])
+    expect(rendered.errors).toEqual([])
+    expect(rendered.resources.map((resource) => [resource.relativePath, resource.content])).toEqual([
+      ['old.md', '---\nname: old\ndescription: Old agent\nmodel: opus\n---\nOld body.\n'],
+      ['legacy.md', '---\nname: legacy\ndescription: Old command\n---\nLegacy body.\n']
+    ])
+  })
 })
 
 describe('planTemplateImport', () => {
@@ -301,7 +333,18 @@ describe('planTemplateImport', () => {
     expect(plan.preview.shadows).toEqual(['claude commands release.md'])
     const reviewer = plan.preview.files.find((file) => file.agentKind === 'claude' && file.relativePath === 'reviewer.md')!
     expect(reviewer.current).toBe('old')
-    expect(reviewer.rendered).toContain('tatsu-template: agent/reviewer')
+    expect(reviewer.rendered).toBe(`---
+name: reviewer
+description: Reviews diffs for correctness
+tools: Read, Grep, Bash
+model: opus
+---
+Review the staged diff and report bugs.
+
+Write plainly.
+
+Never run destructive commands.
+`)
     expect(plan.templates.map((draft) => `${draft.kind}/${draft.name}`)).toEqual([
       'agent/planner',
       'agent/reviewer',

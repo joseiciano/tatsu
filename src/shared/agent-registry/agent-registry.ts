@@ -3,13 +3,10 @@ import type { AgentKind } from '../state/terminals'
 export type HarnessConfigResourceType = 'agents' | 'skills' | 'commands'
 export type HarnessConfigCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
 
-/** How a file rendered from a template records its source. `frontmatter`
- *  adds a `tatsu-template` key and is only used where the harness ignores
- *  unknown frontmatter keys; `comment` puts an HTML comment on the first
- *  body line. `frontmatterName` is false where the harness derives the
- *  name from the file path and would misread an extra `name` key. */
+/** How a template renders for a harness. `frontmatterName` is false where
+ *  the harness derives the name from the file path and would misread an
+ *  extra `name` key. */
 export interface HarnessTemplateOutput {
-  marker: 'frontmatter' | 'comment'
   frontmatterName: boolean
 }
 
@@ -100,7 +97,7 @@ export const AGENT_REGISTRY: AgentInfo[] = [
         resourceType: 'agents',
         label: 'Agents',
         status: 'supported',
-        templateOutput: { marker: 'frontmatter', frontmatterName: true }
+        templateOutput: { frontmatterName: true }
       },
       {
         resourceType: 'skills',
@@ -108,14 +105,14 @@ export const AGENT_REGISTRY: AgentInfo[] = [
         status: 'supported',
         notes: 'Claude skills also appear in the Commands view as the same physical resource.',
         aliasResourceTypes: ['commands'],
-        templateOutput: { marker: 'frontmatter', frontmatterName: true }
+        templateOutput: { frontmatterName: true }
       },
       {
         resourceType: 'commands',
         label: 'Commands',
         status: 'supported',
         notes: 'Includes native Claude commands and aliases of Claude skills.',
-        templateOutput: { marker: 'frontmatter', frontmatterName: true }
+        templateOutput: { frontmatterName: true }
       }
     ]
   },
@@ -136,7 +133,7 @@ export const AGENT_REGISTRY: AgentInfo[] = [
         resourceType: 'skills',
         label: 'Skills',
         status: 'supported',
-        templateOutput: { marker: 'comment', frontmatterName: true }
+        templateOutput: { frontmatterName: true }
       },
       {
         resourceType: 'commands',
@@ -156,19 +153,19 @@ export const AGENT_REGISTRY: AgentInfo[] = [
         resourceType: 'agents',
         label: 'Agents',
         status: 'supported',
-        templateOutput: { marker: 'comment', frontmatterName: false }
+        templateOutput: { frontmatterName: false }
       },
       {
         resourceType: 'skills',
         label: 'Skills',
         status: 'supported',
-        templateOutput: { marker: 'comment', frontmatterName: true }
+        templateOutput: { frontmatterName: true }
       },
       {
         resourceType: 'commands',
         label: 'Commands',
         status: 'supported',
-        templateOutput: { marker: 'comment', frontmatterName: false }
+        templateOutput: { frontmatterName: false }
       }
     ]
   },

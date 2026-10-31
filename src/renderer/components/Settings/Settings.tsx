@@ -1439,7 +1439,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
         </div>
 
         {/* Main scrollable content */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto">
           <div className="max-w-2xl p-8 pb-[60vh] space-y-12">
             {/* Appearance section */}
             <section ref={(el) => { sectionRefs.current.appearance = el }} id="appearance">

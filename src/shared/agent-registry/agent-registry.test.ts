@@ -21,12 +21,11 @@ type ExpectedCapability = {
   notes?: string
   aliasResourceTypes?: readonly HarnessConfigResourceType[]
   layout?: 'per-resource' | 'single-file'
-  templateOutput?: { marker: 'frontmatter' | 'comment'; frontmatterName: boolean }
+  templateOutput?: { frontmatterName: boolean }
 }
 
-const claudeOutput = { marker: 'frontmatter', frontmatterName: true } as const
-const commentOutput = { marker: 'comment', frontmatterName: true } as const
-const commentPathNamedOutput = { marker: 'comment', frontmatterName: false } as const
+const namedOutput = { frontmatterName: true } as const
+const pathNamedOutput = { frontmatterName: false } as const
 const unsupportedCapabilityWithAlias = {
   resourceType: 'commands',
   status: 'unsupported',
@@ -54,21 +53,21 @@ const expectedAgentCapabilities: readonly {
   {
     kind: 'claude',
     capabilities: [
-      { resourceType: 'agents', status: 'supported', label: 'Agents', templateOutput: claudeOutput },
+      { resourceType: 'agents', status: 'supported', label: 'Agents', templateOutput: namedOutput },
       {
         resourceType: 'skills',
         status: 'supported',
         label: 'Skills',
         notes: 'Claude skills also appear in the Commands view as the same physical resource.',
         aliasResourceTypes: ['commands'],
-        templateOutput: claudeOutput
+        templateOutput: namedOutput
       },
       {
         resourceType: 'commands',
         status: 'supported',
         label: 'Commands',
         notes: 'Includes native Claude commands and aliases of Claude skills.',
-        templateOutput: claudeOutput
+        templateOutput: namedOutput
       }
     ]
   },
@@ -82,7 +81,7 @@ const expectedAgentCapabilities: readonly {
         notes: 'Codex agents are one top-level AGENTS.md file, not a folder of agents.',
         layout: 'single-file'
       },
-      { resourceType: 'skills', status: 'supported', label: 'Skills', templateOutput: commentOutput },
+      { resourceType: 'skills', status: 'supported', label: 'Skills', templateOutput: namedOutput },
       {
         resourceType: 'commands',
         status: 'unsupported',
@@ -94,9 +93,9 @@ const expectedAgentCapabilities: readonly {
   {
     kind: 'opencode',
     capabilities: [
-      { resourceType: 'agents', status: 'supported', label: 'Agents', templateOutput: commentPathNamedOutput },
-      { resourceType: 'skills', status: 'supported', label: 'Skills', templateOutput: commentOutput },
-      { resourceType: 'commands', status: 'supported', label: 'Commands', templateOutput: commentPathNamedOutput }
+      { resourceType: 'agents', status: 'supported', label: 'Agents', templateOutput: pathNamedOutput },
+      { resourceType: 'skills', status: 'supported', label: 'Skills', templateOutput: namedOutput },
+      { resourceType: 'commands', status: 'supported', label: 'Commands', templateOutput: pathNamedOutput }
     ]
   },
   {
@@ -156,14 +155,14 @@ describe('harness config capability metadata', () => {
       label: 'Skills',
       notes: 'Claude skills also appear in the Commands view as the same physical resource.',
       aliasResourceTypes: ['commands'],
-      templateOutput: claudeOutput
+      templateOutput: namedOutput
     })
     expect(commands).toEqual({
       resourceType: 'commands',
       status: 'supported',
       label: 'Commands',
       notes: 'Includes native Claude commands and aliases of Claude skills.',
-      templateOutput: claudeOutput
+      templateOutput: namedOutput
     })
     expect(commands).not.toHaveProperty('aliasResourceTypes')
   })
@@ -270,9 +269,9 @@ describe('resource paths and template output', () => {
     expect(resourcePathForName('pi', 'skills', 's')).toBeNull()
   })
 
-  it('records a marker form for every supported per-resource scope', () => {
-    expect(templateOutputFor('claude', 'skills')).toEqual(claudeOutput)
-    expect(templateOutputFor('opencode', 'agents')).toEqual(commentPathNamedOutput)
+  it('records whether each supported per-resource scope takes a frontmatter name', () => {
+    expect(templateOutputFor('claude', 'skills')).toEqual(namedOutput)
+    expect(templateOutputFor('opencode', 'agents')).toEqual(pathNamedOutput)
     expect(templateOutputFor('codex', 'commands')).toBeNull()
     expect(templateOutputFor('pi', 'agents')).toBeNull()
   })

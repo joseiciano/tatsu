@@ -20,7 +20,7 @@ This plan is Step 19 of the [Skills-Agents-Commands-Sync plan](./skills-agents-c
 - **REQ-004**: For skills, reference files are appended after the fragments under a heading per file (inlining, per Step 18 REQ-005).
 - **REQ-005**: Rendering errors are returned per template, never thrown: unknown fragment name, invalid target, duplicate output path, or frontmatter that does not serialize. A template with errors produces no output; other templates still render.
 - **REQ-006**: Two templates that render to the same `(agentKind, resourceType, relativePath)` is an error on both.
-- **REQ-007**: Every rendered file carries a provenance marker that the scanner can read, so a disk file can be traced back to its template. Use a frontmatter key `tatsu-template: <kind>/<name>` where the harness tolerates unknown keys; otherwise use an HTML comment on the first body line. Capability metadata records which form each harness uses.
+- **REQ-007** (superseded 2026-10-24, `RENDERER_VERSION` 3): Rendered files carry no provenance marker. The scanner traces a disk file to its template by path: the output paths of rendered templates, plus the target paths of templates that fail to render, so their earlier output is held. For a template file that no longer parses, only the default-name path per harness is known; output at a block-overridden name is not held. Import strips the legacy `tatsu-template` frontmatter key and comment from older rendered files. Originally: a `tatsu-template` frontmatter key or first-line HTML comment, chosen per harness in capability metadata.
 - **REQ-008**: The renderer exports `RENDERER_VERSION`. Any change to output format bumps it.
 - **REQ-009**: The renderer lives in `src/shared/` so the main process (sync) and renderer (preview) run the same code.
 - **CON-001**: No string templating syntax inside bodies in this version (see Step 18 ALT-003).
@@ -38,7 +38,7 @@ This plan is Step 19 of the [Skills-Agents-Commands-Sync plan](./skills-agents-c
 ## 3. Alternatives
 
 - **ALT-001**: Render in the main process only and send results to the renderer. Rejected: the editor preview would need a round trip per keystroke.
-- **ALT-002**: No provenance marker; match disk files to templates by path only. Rejected: renames and hand-copied files become ambiguous, and Step 20's adopt guard needs to know a file came from a template.
+- **ALT-002**: No provenance marker; match disk files to templates by path only. Originally rejected; adopted 2026-10-24 (see REQ-007). The adopt guard reads the template ref from the rendered (config) side of a changed pair, which path matching keeps; orphaned output of a renamed or deleted template becomes an ordinary file.
 
 ## 4. Dependencies
 

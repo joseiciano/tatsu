@@ -102,13 +102,22 @@ export function createCommandFromSkill(skill: HarnessConfigConversionSource): Ha
   return { destinationResourceType: 'commands', destinationName, content }
 }
 
-/** Generates a Claude/Codex/OpenCode skill from a command (REQ-005). */
+/** Generates a Claude/Codex/OpenCode skill from a command (REQ-005).
+ *  `name` matches the skill folder and `description` mirrors REQ-004,
+ *  because harnesses discover skills through that front matter. */
 export function createSkillFromCommand(command: HarnessConfigConversionSource): HarnessConfigConversionDraft {
   if (command.resourceType !== 'commands') {
     throw new HarnessConfigError('unknown-resource', 'createSkillFromCommand requires a commands source')
   }
   const destinationName = conversionDestinationName(command)
+  const extracted = extractFrontMatterDescription(command.content)
+  const description = extracted && extracted.length > 0 ? extracted : `Run the ${destinationName} command`
   const content =
+    `---\n` +
+    `name: ${destinationName}\n` +
+    `description: ${description}\n` +
+    `---\n` +
+    `\n` +
     `# ${destinationName}\n` +
     `\n` +
     `Use this skill when the user requests the \`${command.label}\` command behavior.\n` +

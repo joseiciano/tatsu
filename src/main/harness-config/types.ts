@@ -157,6 +157,8 @@ export interface HarnessConfigFilesystem {
   mkdirSync(path: string, options: { recursive: true }): unknown
   existsSync(path: string): boolean
   realpathSync(path: string): string
+  readlinkSync(path: string): string
+  symlinkSync(target: string, path: string): void
 }
 
 export interface HarnessConfigServiceDeps {

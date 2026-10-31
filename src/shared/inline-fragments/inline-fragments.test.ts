@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import { describe, expect, it } from 'vitest'
 
-import { readTemplateRef } from '../harness-template-render'
+import { stripLegacyTemplateMarker } from '../harness-template-render'
 import { expandInlineFragments, inlineFragmentNames, resolveInlineFragmentEdit } from '.'
 
 function sha12(value: string): string {
@@ -162,11 +162,11 @@ describe('expandInlineFragments', () => {
     ])
   })
 
-  it('writes a marker that is not read as a template provenance marker', () => {
+  it('writes a marker that legacy template marker stripping leaves in place', () => {
     const expanded = expandInlineFragments('---\nname: x\n---\n{{fragment:style}}\n', fragments).content
     expect(expanded.split('\n')[3]).toMatch(/^<!-- tatsu:fragment style /)
-    expect(readTemplateRef(expanded)).toBeNull()
-    expect(readTemplateRef(expandInlineFragments('{{fragment:safety}}\n', fragments).content)).toBeNull()
+    const bodyOnly = expandInlineFragments('{{fragment:safety}}\n', fragments).content
+    expect(stripLegacyTemplateMarker(bodyOnly)).toBe(bodyOnly)
   })
 })
 

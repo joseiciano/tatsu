@@ -1,104 +1,209 @@
 ---
 name: verify
-description: Drive a real Tatsu instance to prove the OpenCode and Codex chat-agent work (ACP runtimes, experimental chat-agents flag, login, session continuity, tool approvals, bundled runtime packaging and first-use download). Headless server over its WebSocket transport, plus the packaged-app smokes.
-disable-model-invocation: true
+description: Launch Tatsu (the Electron agent-harness app) headless with a sandboxed HOME, drive its web client with Playwright, and capture evidence that a feature works the way a user sees it. Reach for it to prove a change to the renderer, the Config page (skills, agents, commands, templates, sync, import), Settings, or any main-process behavior visible in the UI. For the OpenCode and Codex chat agents (ACP runtimes, chat-agents flag, login, session continuity, tool approvals, runtime packaging) it drives the headless server over WebSocket with `scripts/control.mjs` instead. Never touches the user's real ~/.claude, ~/.codex, ~/.agents or ~/.config/opencode.
 ---
 
-# Verify Tatsu chat agents
+# Verify Tatsu by driving the real app
 
-Tatsu is an Electron app, but every chat-agent behavior lives in the main process and is reachable over the same WebSocket transport the web client uses. So the driver is the **headless server** (`dist-headless/main/index.js`) on an ephemeral port with its own data dir, and the harness is `scripts/control.mjs`. Packaging is the one layer the headless server cannot prove, so it has its own stage.
+Tatsu has two shells around one React renderer: the Electron desktop app and
+the headless server (`dist-headless/main/index.js`), which serves the same
+renderer as a web client over WebSocket. **Drive the headless server.** It
+takes an ephemeral port and an isolated data dir, so many runs can coexist,
+and Playwright drives the web client with real ARIA handles.
 
-The feature map in [`features/README.md`](features/README.md) is the maintained list of journeys. Read it, pick the features the change touches, and run their recipes. A proof that skips a mapped entry point is incomplete.
+Do not drive `pnpm dev`. Electron dev mode always uses the shared
+`Harness (Dev)` userData folder and the real HOME, so a drive would edit the
+user's own dev session and their real harness config.
 
-Unless the user asks otherwise, run the full set: the static gate, then every mapped feature, then the packaging stage when the change touched `scripts/` or `package.json`.
+All helpers live in `.claude/skills/verify/scripts/` and run from the repo
+root. They are macOS scripts (`stat -f`, `dscl`, `ps eww`, `lsof`).
 
-## Static gate
+## Isolation: what the sandbox covers
 
-```bash
-bash .claude/skills/verify/scripts/gate.sh            # invariants, typecheck, build, unit tests
-bash .claude/skills/verify/scripts/gate.sh --pack     # + unsigned arm64 app + bundled-runtime smoke (~5 min, 2 GB)
-bash .claude/skills/verify/scripts/gate.sh --all      # + first-use download smoke (network, ~160 MB)
-```
-
-One PASS/FAIL line per stage, full logs in the temp dir it names. The invariants are the rules packaging and gating depend on (flag default off, every chat entry point gated, no runtime natives in `asarUnpack`, manifest regenerates from the lockfile, CI runs both smokes). Fix a FAIL in the code, not in the check, unless the check itself is wrong.
+- **`HOME` is the only thing that moves the harness roots.** The main process
+  builds the harness-config service without `env` (`src/main/index.ts`), so
+  every default root comes from `os.homedir()`, which reads `$HOME`.
+  `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `OPENCODE_CONFIG_DIR` have no effect
+  on this process today. `launch.sh` unsets all three anyway, so a future
+  change that honors them cannot point a run at your real folders, and
+  `doctor.sh` fails if any of them reaches the server.
+- `HARNESS_DATA_DIR` holds `config.json`, auth tokens, and the template
+  source folder (`<data>/harness-config-source` by default).
+- **Not isolated:** `/tmp/harness-status` (status-hook NDJSON) is hardcoded
+  and shared with any running Tatsu. Do not click **Install hooks** and do
+  not open terminal tabs during a drive.
+- `home-guard.sh` fingerprints the real harness roots before launch and
+  checks them at cleanup. That covers the resource `.md` files, plus
+  `~/.claude/settings.json` and `~/.codex/hooks.json`, which is where
+  **Install hooks** writes. A changed fingerprint fails cleanup.
+  `settings.json` also changes when your other Claude sessions edit it, so
+  read the diff before you blame the run.
 
 ## Launch
 
 ```bash
-pnpm build:headless                                   # once per code change; control.mjs refuses a missing bundle
-RUN=$(node .claude/skills/verify/scripts/control.mjs start)
+STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 ```
 
-`start` launches the server with `HARNESS_DATA_DIR=$RUN/data` on `--port 0`, waits for the `[web-client] open http://127.0.0.1:<port>/?token=…` line, and records pid, port and token in `$RUN/instance.json`. Ready means the first `doctor` returns `problems: []`. Later commands find the newest run automatically; set `TATSU_VERIFY_RUN=$RUN` when two runs exist.
+- `--build` runs `pnpm build:headless` first. Pass it whenever `src/` changed
+  since the last build; `doctor.sh` tells you when the build is stale. On a
+  fresh worktree run `pnpm install` once before that.
+- The run id (`my-run`) is optional; the default is timestamp plus PID.
+- `launch.sh` creates `$TMPDIR/tatsu-verify/<run>/{home,data}`, seeds all
+  eight harness roots plus fixtures (`scripts/seed.sh`), starts the server on
+  `127.0.0.1:<ephemeral>`, and waits up to 15 s for the
+  `[web-client] open http://127.0.0.1:<port>/?token=<hex>` line.
+- **Ready** means that line printed **and** `doctor.sh` passes. The web client
+  then answers 200, and a WebSocket state snapshot round-trips. Journeys still
+  wait for their own first element, such as the `Resource type` tablist,
+  before they act.
+- The last stdout line is the state file. It holds `PID URL PORT SCRATCH
+  SANDBOX_HOME DATA_DIR EVIDENCE LOG`. Every other script takes it.
 
-A fresh data dir has no repos. Give the run its own fixture repo so no user repo is touched:
+Seed fixtures (`scripts/seed.sh`):
 
-```bash
-REPO=$RUN/fixture-repo
-git init -q -b main "$REPO" && echo hello > "$REPO/README.md" \
-  && git -C "$REPO" -c user.email=v@example.com -c user.name=verify add . \
-  && git -C "$REPO" -c user.email=v@example.com -c user.name=verify commit -qm init
-node .claude/skills/verify/scripts/control.mjs req repo:addAtPath "$REPO"
-node .claude/skills/verify/scripts/control.mjs wait worktrees.list 'v.length > 0'
-WT=$(node .claude/skills/verify/scripts/control.mjs get worktrees.list | node -pe 'JSON.parse(require("fs").readFileSync(0))[0].path')
-node .claude/skills/verify/scripts/control.mjs req panes:ensureInitialized "$WT"
-```
-
-`$WT` is the realpath (`/private/var/...` on macOS), which is the key every panes and session call uses.
+| Fixture | Path under sandbox HOME |
+|---|---|
+| Claude skill `hello` | `.claude/skills/hello/SKILL.md` |
+| Claude skill `linked-skill` (symlink) | `.claude/skills/linked-skill` → `<scratch>/dotfiles/skills/linked-skill` |
+| Claude command `run-tests` | `.claude/commands/run-tests.md` |
+| Claude agent `reviewer` | `.claude/agents/reviewer.md` |
+| Codex skill `hello` | `.agents/skills/hello/SKILL.md` |
+| Opencode skill `release-notes` | `.config/opencode/skills/release-notes/SKILL.md` |
+| Opencode command `run-tests` | `.config/opencode/commands/run-tests.md` |
+| Import source for Step 22 | `<scratch>/import-source/{skills,commands}` |
 
 ## Doctor
 
 ```bash
-node .claude/skills/verify/scripts/control.mjs doctor
+.claude/skills/verify/scripts/doctor.sh "$STATE"
 ```
 
-Read-only. Reports pid liveness, that `dist-headless` was not rebuilt under the running instance, a WebSocket snapshot round-trip, the flag value, repo roots, runtime statuses and open chat sessions. Exit 1 with a `problems` list means stop and relaunch; do not drive it.
+Read-only. Run it after launch, and again whenever anything looks off. It
+checks these things:
+
+- The PID is alive.
+- The process environment has `HOME=<sandbox>` and `HARNESS_DATA_DIR=<sandbox>`.
+- `lsof` shows the port owned by that PID.
+- None of `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `OPENCODE_CONFIG_DIR` is set.
+- The tokenized URL returns 200.
+- `scripts/ws-smoke.mjs` completes a read-only snapshot round-trip.
+- `dist-headless` is newer than `src/`, and the launch commit is still HEAD.
+- All sandbox roots exist.
+
+Any `FAIL` line means do not drive this instance. Clean it up and relaunch.
 
 ## Drive
 
-Requests are the main process's `transport.onRequest` names; signals are `transport.onSignal` names. Arguments are JSON when they parse, strings otherwise.
+Journeys are Node scripts on top of `scripts/browser.mjs`. It launches
+system Chrome through the repo's `playwright-core`, auto-accepts
+`window.confirm` dialogs and logs each one, records console errors, and
+numbers screenshots.
 
 ```bash
-C=.claude/skills/verify/scripts/control.mjs
-node $C req config:setExperimentalChatAgentsEnabled true
-node $C req panes:addTab "$WT" '{"id":"oc-1","type":"json-claude","label":"Chat","sessionId":"oc-1","agentKind":"opencode"}'
-node $C req jsonClaude:start oc-1 "$WT"
-node $C signal jsonClaude:send oc-1 "Reply with the single word pong."
-node $C wait jsonClaude.sessions.oc-1 'v && !v.busy && v.state === "idle"' --timeout 60000
-node $C req jsonClaude:getEntries oc-1 --save oc-1-entries
+node .claude/skills/verify/scripts/journeys/convert-skill-to-command.mjs "$STATE"
 ```
 
-Two facts shape every recipe:
+- `VERIFY_HEADED=1` shows the browser.
+- `HARNESS_PLAYWRIGHT_BROWSER=/path/to/chrome` overrides the system Chrome.
+- A journey prints `PASS` and exits 0, or prints `FAIL <reason>` and exits 1.
 
-- **Snapshots omit chat entries.** `get jsonClaude.sessions.<id>` shows `entries: []` and `entriesHydrated: false` even after turns completed. Entries come from `req jsonClaude:getEntries <id>`, the same call the renderer makes.
-- **Panes hydrate per worktree.** After a restart, `terminals.panes` is empty until `wait worktrees.list` succeeds and `panes:ensureInitialized $WT` runs. A `jsonClaude:start` before that fails with "No agent kind".
+Writing a new journey:
 
-`wait <dot.path> <jsExpr>` polls the snapshot every 500 ms and evaluates the expression over `v`. Keep expressions to the fields the recipe names.
+```js
+import { openConfig, withApp } from '../browser.mjs'
+await withApp(process.argv[2], 'my-journey', async ({ page, state, shot, log }) => {
+  await openConfig(page)                       // fresh data dir -> onboarding "Open Config…" button
+  await page.getByRole('tab', { name: 'Skills' }).click()
+  await shot('before')
+  // act through the UI, then assert on disk under state.SANDBOX_HOME / state.DATA_DIR
+})
+```
+
+Prefer these stable handles; `features/` lists them per feature:
+
+- `getByRole('tab', { name })` on the `Resource type` tablist.
+- `aria-label`s such as `Sync <Harness>`, `Create in <Harness>`,
+  `Create command from <name>`, `Edit template <ref>`, and `Open Config`.
+- Element ids such as `#config-create-name`, `#config-agent-filter`,
+  `#config-folder-<rootKey>`, and `#import-folder-<key>`.
 
 ## Evidence
 
-Artifacts live in `$RUN/artifacts/` and survive `stop`. Capture:
+Everything goes to `.verify-evidence/<run>/` at the repo root. The folder is
+gitignored and survives cleanup:
 
-- the state that proves the action (`--save` on `req`/`get`, or `save <dot.path> <name>`), both before and after the action when the recipe is a transition;
-- side effects outside the store: files the agent wrote in `$REPO`, `config.json` in the data dir for persistence claims, `server.log` lines (`control.mjs log 40`);
-- for the packaging stage, the gate's log dir and the `release/mac-arm64/...app/Contents/Resources/runtimes` listing.
+- `journal.log` holds timestamped steps, dialogs, console errors, and PASS or FAIL.
+- `<journey>-NN-<step>.png` holds before and after screenshots of each action.
+- Copies of every file a journey wrote, such as `release-notes.command.md`.
+- `sandbox-home/` and `sandbox-home-tree.txt` hold the final sandbox harness roots, copied by cleanup.
+- `real-home-before.txt` and `real-home-check.txt` hold the proof that real roots were untouched.
+- `server.log` and `git-rev.txt` record the server output and the commit that was tested.
 
-Drive the user path: `jsonClaude:send`, `jsonClaude:resolveApproval`, `panes:convertTabType`, never a reducer event or a test-only setter. A reply from the agent counts only when it comes from the agent's own session; this machine's credentials decide how far the agent gets, and a journey the credentials block is reported as a failure with that reason, not as passed.
+Proof standards:
+
+- Act through the UI the user clicks. Never call `window.api` or transport
+  requests from the page to set state.
+- Capture the action and the resulting state: a screenshot before, one after,
+  and the on-disk result. A screenshot alone proves nothing for a feature
+  that writes files.
+- Assert side effects on disk under `SANDBOX_HOME` or `DATA_DIR`. A file must
+  be created, changed, or left alone exactly as the feature promises.
+- Assert state through ARIA (`aria-selected`, `aria-busy`), not colors.
+  Tab buttons use `transition-colors`, so a screenshot taken right after a
+  click can show the old tab still highlighted.
+- If the seed lacks a precondition a journey needs, fail and record why in
+  that feature's Gotchas. Never weaken the journey.
 
 ## Cleanup
 
 ```bash
-node .claude/skills/verify/scripts/control.mjs stop              # SIGTERM our pid, delete $RUN/data, keep artifacts
-node .claude/skills/verify/scripts/control.mjs stop --keep-data  # for restart-based recipes
+.claude/skills/verify/scripts/cleanup.sh "$STATE"
 ```
 
-`stop` only signals the pid in `instance.json`. Other `dist-headless` processes on the machine belong to other runs; leave them. `$RUN/fixture-repo` stays with the artifacts because entries and approvals reference its paths. Delete the whole `$RUN` by hand when the evidence has been read.
+It stops only this run's PID, after re-checking that the process `HOME` is
+the sandbox. It never kills by name. It copies the server log and the sandbox
+harness roots into evidence, runs the real-home check, and deletes
+`$TMPDIR/tatsu-verify/<run>`. Evidence stays. A non-zero exit means the
+real-home check found changes; read `real-home-check.txt`.
 
-## Report
+Run cleanup after every failed attempt too, so no server or port is left behind.
 
-```
-Gate: PASS (typecheck, build, N tests) / FAIL <stage> <log>
-<feature id>: pass / fail <one line> / not run <reason>   (one line per driven feature)
-Packaging: PASS / FAIL / not run <reason>
-Artifacts: $RUN/artifacts
-```
+## Helpers
+
+All of these are executable. Run them from the repo root.
+
+| Helper | Invocation | Does |
+|---|---|---|
+| `scripts/launch.sh` | `launch.sh [--build] [run-id]` | Builds if asked, creates and seeds the sandbox, starts the server, and prints the state-file path as its last line |
+| `scripts/seed.sh` | `seed.sh <sandbox-home> <scratch-dir>` | Creates all eight harness roots and the fixtures. `launch.sh` calls it; run it by hand only to rebuild a sandbox |
+| `scripts/doctor.sh` | `doctor.sh <state.env>` | Read-only readiness and isolation check; exits 1 on any FAIL |
+| `scripts/home-guard.sh` | `home-guard.sh snapshot > before.txt` / `home-guard.sh check before.txt` | Read-only fingerprint of the real harness roots; `check` exits 1 and prints a diff on change |
+| `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops this run's server, saves evidence, runs the guard, and deletes scratch |
+| `scripts/browser.mjs` | `import { withApp, openConfig, readState } from '../browser.mjs'` | `withApp(stateFile, name, fn)` runs `fn({ page, state, shot, log })` in a fresh Chrome page; `openConfig(page)` goes from onboarding to Config; `readState(file)` parses state.env |
+| `scripts/journeys/*.mjs` | `node <journey> <state.env>` | One feature journey each; exits 0 on PASS |
+
+## Not covered by this harness
+
+- The Electron shell: native menus, `WebContentsView` browser panes, the
+  auto-updater, and native folder pickers. **Choose…** buttons in Config
+  folders and the import wizard open the native picker, which the web client
+  cannot drive, so type absolute paths into the inputs instead. The picker
+  itself stays unverified.
+- Agent CLIs and terminal tabs, which need real `claude`/`codex` binaries and
+  write to `/tmp/harness-status`. OpenCode and Codex chat tabs are covered by
+  `chat-agents.md`.
+- Linux. The helper scripts are macOS-only.
+
+## Chat agents and packaging
+
+The chat-agent features are driven by a second harness, `scripts/control.mjs`,
+which sends transport requests and signals over WebSocket instead of clicking
+the web client. Its static gate (`scripts/gate.sh`), launch, doctor, drive,
+evidence and report steps are in [`chat-agents.md`](chat-agents.md). Run that
+gate when a change touches packaging, `scripts/` or `package.json`.
+
+## Feature map
+
+See `features/README.md`. When a proof drives one entry point and the map
+lists others, the proof is incomplete.

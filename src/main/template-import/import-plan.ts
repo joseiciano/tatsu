@@ -1,5 +1,5 @@
 import { classifyTemplateSourcePath, type HarnessTemplateDraft } from '../../shared/harness-templates'
-import { renderTemplates, templateMarker } from '../../shared/harness-template-render'
+import { renderTemplates, templateRefOf } from '../../shared/harness-template-render'
 import { sha256Hex } from '../../shared/sha256'
 import type {
   HarnessConfigResourceType,
@@ -76,16 +76,16 @@ export function planTemplateImport(
   const rendered = renderTemplates(renderSet, fragmentSet)
 
   const renderErrors: HarnessTemplateImportIssue[] = rendered.errors
-    .filter((error) => importedKeys.has(templateMarker(error.templateKind, error.templateName)))
+    .filter((error) => importedKeys.has(templateRefOf(error.templateKind, error.templateName)))
     .map((error) => ({
-      sourcePath: templateMarker(error.templateKind, error.templateName),
+      sourcePath: templateRefOf(error.templateKind, error.templateName),
       message: error.agentKind ? `${error.agentKind}: ${error.message}` : error.message
     }))
 
   const files: HarnessTemplateImportFile[] = rendered.resources
-    .filter((resource) => importedKeys.has(templateMarker(resource.templateKind, resource.templateName)))
+    .filter((resource) => importedKeys.has(templateRefOf(resource.templateKind, resource.templateName)))
     .map((resource) => ({
-      templateRef: templateMarker(resource.templateKind, resource.templateName),
+      templateRef: templateRefOf(resource.templateKind, resource.templateName),
       agentKind: resource.agentKind,
       resourceType: resource.resourceType,
       relativePath: resource.relativePath,
