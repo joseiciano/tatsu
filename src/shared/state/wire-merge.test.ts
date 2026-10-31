@@ -44,6 +44,23 @@ describe('mergeWireSnapshot', () => {
     expect(merged.jsonClaude).toEqual(initialState.jsonClaude)
     expect(merged.settings).toEqual(initialState.settings)
     expect(merged.harnessConfig).toEqual(initialState.harnessConfig)
+    expect(merged.workflows).toEqual(initialState.workflows)
+  })
+
+  it('preserves the definitions of a partial workflows snapshot', () => {
+    const definitions = {
+      'personal:a': {
+        id: 'personal:a',
+        name: 'a',
+        scope: 'personal' as const,
+        path: '/home/u/.tatsu/workflows/a.yaml',
+        hash: 'hash-a',
+        stepIds: ['plan'],
+        issues: []
+      }
+    }
+    const merged = mergeWireSnapshot({ workflows: { definitions } })
+    expect(merged.workflows.definitions).toBe(definitions)
   })
 
   it('preserves partial harness config snapshots while filling omitted fields', () => {
