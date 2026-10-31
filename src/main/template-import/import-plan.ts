@@ -19,7 +19,7 @@ export interface TemplateImportPlanDeps {
   /** Source files that exist but failed to parse; their names still
    *  count as taken (REQ-007). */
   existingErrors?: readonly { relativePath: string }[]
-  /** Stored entries a template would hide, as display strings. */
+  /** Existing files a template would write over, as display strings. */
   templateShadows(draft: HarnessTemplateDraft): string[]
   /** The file now in the harness folder at that path, if any. */
   currentContent(agentKind: ManagedHarnessKind, resourceType: HarnessConfigResourceType, relativePath: string): string | null

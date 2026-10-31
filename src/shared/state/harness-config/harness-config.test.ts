@@ -58,7 +58,6 @@ function comparison(overrides: Partial<HarnessConfigComparison> = {}): HarnessCo
   return {
     scope: scope(),
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [changedRef()],
     comparedAt: 200,
@@ -72,7 +71,6 @@ function syncPlan(overrides: Partial<HarnessConfigSyncPlan> = {}): HarnessConfig
     scope: scope(),
     direction: 'sync-to-disk',
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [changedRef()],
     generatedAt: 300,
@@ -368,7 +366,6 @@ describe('harnessConfigReducer', () => {
       'changed',
       'comparedAt',
       'configOnly',
-      'diskOnly',
       'scope',
       'status'
     ])
@@ -376,7 +373,6 @@ describe('harnessConfigReducer', () => {
       'changed',
       'configOnly',
       'direction',
-      'diskOnly',
       'fingerprint',
       'generatedAt',
       'planId',

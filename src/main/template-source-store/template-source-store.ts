@@ -247,7 +247,7 @@ export class TemplateSourceStore {
     return saved
   }
 
-  /** Adopt "Detach from template" (Step 20 REQ-006): the template stops
+  /** Sync "Keep the disk file and detach": the template stops
    *  targeting `agentKind`, everything else is kept. */
   detachTarget(templateRef: string, agentKind: ManagedHarnessKind): HarnessTemplate {
     const slash = templateRef.indexOf('/')

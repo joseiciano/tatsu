@@ -15,7 +15,7 @@ writes nothing until confirmed, and the source folders are never changed.
   - Templates and fragments
   - Skills in more than one source folder
   - Commands covered by a skill
-  - Stored config the import will hide
+  - Existing files the import will write over
   - Templates that will not render yet
   - Files not imported
   - Rendered files compared with the harness folders
@@ -56,7 +56,7 @@ The end state that proves it works:
   agent keeps `shared:` as `fragments:`, the fragments land under
   `fragments/`, and a skill's linked reference lands in
   `skills/<name>/references/`.
-- The duplicate-skill, covered-command, and hidden-stored-config preview
+- The duplicate-skill, covered-command, and write-over preview
   sections still have no fixtures.
 - Run: `journeys/import-existing-setup.mjs`. Import asks a `window.confirm`
   ("Import 2 templates and fragments…"), which `browser.mjs` accepts. Output

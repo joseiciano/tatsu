@@ -98,7 +98,6 @@ function comparison(overrides: Partial<HarnessConfigComparison> = {}): HarnessCo
   return {
     scope: { agentKind: 'claude', resourceType: 'skills' },
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [],
     comparedAt: 1,
@@ -174,8 +173,7 @@ describe('buildConfigResourceGroups', () => {
     expect(groups.every((g) => g.rows.length === 0)).toBe(true)
   })
 
-  it('merges refs from diskOnly, configOnly, and both sides of changed even when absent from the scan inventory', () => {
-    const diskOnlyRef = ref({ id: 'disk-only', relativePath: 'skills/disk-only.md' })
+  it('merges refs from configOnly and changed even when absent from the scan inventory', () => {
     const configOnlyRef = ref({ id: 'config-only', relativePath: 'skills/config-only.md' })
     const changedPair = changed({
       disk: { relativePath: 'skills/changed.md' },
@@ -183,7 +181,6 @@ describe('buildConfigResourceGroups', () => {
     })
     const comparisons: HarnessConfigState['comparisons'] = {
       'claude:skills': comparison({
-        diskOnly: [diskOnlyRef],
         configOnly: [configOnlyRef],
         changed: [changedPair]
       })
@@ -193,15 +190,15 @@ describe('buildConfigResourceGroups', () => {
     )
     const claude = groups.find((g) => g.agentKind === 'claude')!
     const ids = claude.rows.map((r) => r.ref.id).sort()
-    expect(ids).toEqual(['config-only', 'disk-only', 'ref:changed'])
-    expect(claude.totalResourceCount).toBe(3)
+    expect(ids).toEqual(['config-only', 'ref:changed'])
+    expect(claude.totalResourceCount).toBe(2)
   })
 
   it('prefers the disk-backed ref on a same-ID collision with a comparison entry', () => {
     const scannedRef = ref({ id: 'dup', hash: 'sha256:fresh-from-disk', label: 'Fresh' })
     const staleComparisonRef = ref({ id: 'dup', hash: 'sha256:stale', label: 'Stale' })
     const comparisons: HarnessConfigState['comparisons'] = {
-      'claude:skills': comparison({ diskOnly: [staleComparisonRef] })
+      'claude:skills': comparison({ configOnly: [staleComparisonRef] })
     }
     const groups = buildConfigResourceGroups(
       baseInput({ agentFilter: 'claude', resources: [scannedRef], comparisons })
@@ -209,9 +206,9 @@ describe('buildConfigResourceGroups', () => {
     const claude = groups.find((g) => g.agentKind === 'claude')!
     expect(claude.rows).toHaveLength(1)
     expect(claude.rows[0].ref.hash).toBe('sha256:fresh-from-disk')
-    // Membership in diskOnly still drives the badge even though the
+    // Membership in configOnly still drives the badge even though the
     // disk-backed ref object won the identity collision.
-    expect(claude.rows[0].badge).toBe('disk-only')
+    expect(claude.rows[0].badge).toBe('config-only')
   })
 
   it('derives Conflict only for rows in `changed`, leaving unrelated rows Synced under an overall conflict status', () => {
@@ -234,17 +231,17 @@ describe('buildConfigResourceGroups', () => {
     expect(changedRow.badge).toBe('conflict')
   })
 
-  it('derives diskOnly/configOnly badges from exact comparison membership', () => {
-    const diskOnlyRef = ref({ id: 'd1', relativePath: 'skills/d1.md' })
+  it('derives the config-only badge from exact comparison membership and leaves scanned-only rows synced', () => {
+    const scannedRef = ref({ id: 'd1', relativePath: 'skills/d1.md' })
     const configOnlyRef = ref({ id: 'c1', relativePath: 'skills/c1.md' })
     const comparisons: HarnessConfigState['comparisons'] = {
-      'claude:skills': comparison({ diskOnly: [diskOnlyRef], configOnly: [configOnlyRef] })
+      'claude:skills': comparison({ status: 'config-only', configOnly: [configOnlyRef] })
     }
     const groups = buildConfigResourceGroups(
-      baseInput({ agentFilter: 'claude', resources: [], comparisons })
+      baseInput({ agentFilter: 'claude', resources: [scannedRef], comparisons })
     )
     const claude = groups.find((g) => g.agentKind === 'claude')!
-    expect(claude.rows.find((r) => r.ref.id === 'd1')!.badge).toBe('disk-only')
+    expect(claude.rows.find((r) => r.ref.id === 'd1')!.badge).toBe('synced')
     expect(claude.rows.find((r) => r.ref.id === 'c1')!.badge).toBe('config-only')
   })
 
@@ -338,7 +335,7 @@ describe('buildConfigResourceGroups', () => {
       })
     })
 
-    it('disables the conversion action with an accessible reason for a config-only row', () => {
+    it('disables the conversion action with an accessible reason for a ref that is not on disk', () => {
       const resources = [ref({ id: 'one', agentKind: 'claude', resourceType: 'skills', existsOnDisk: false })]
       const groups = buildConfigResourceGroups(
         baseInput({ resourceType: 'skills', agentFilter: 'claude', resources })
@@ -346,7 +343,7 @@ describe('buildConfigResourceGroups', () => {
       const row = groups.find((g) => g.agentKind === 'claude')!.rows[0]
       expect(row.conversionAction?.disabled).toBe(true)
       expect(row.conversionAction?.disabledReason).toBe(
-        'This resource exists only in Tatsu config, not on disk.'
+        'A template builds this file, but it is not on disk yet.'
       )
     })
 

@@ -52,11 +52,11 @@ import { conversionDestinationName, createCommandFromSkill, createSkillFromComma
 import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
-  HarnessConfigAdoptOptions,
   HarnessConfigApplyResult,
   HarnessConfigConversionResult,
   HarnessConfigConversionSource,
   HarnessConfigDesiredResource,
+  HarnessConfigSyncOptions,
   HarnessConfigFilesystem,
   HarnessConfigErrorCode,
   HarnessConfigMutationDirection,
@@ -231,6 +231,7 @@ type DiskEntry = {
   ref: HarnessConfigFileRef
   descriptor: HarnessConfigResourceResolver
   root: string
+  bytes: Buffer
 }
 
 type ConfigEntry = {
@@ -264,18 +265,8 @@ type PrivatePlan = {
   resolverIdentity: string
   templateFingerprint: string
   operations: DiskOperation[]
-  adoptedResources?: HarnessConfigDesiredResource[]
   detachTargets?: DetachTarget[]
   attempted: boolean
-}
-
-type MutationOutcome = {
-  operation: DiskOperation
-  applied: HarnessConfigAppliedOperation
-  existed: boolean
-  before?: Buffer
-  target: string
-  removedLink?: { path: string; linkTarget: string }
 }
 type ScopeRenderError = { templateRef: string; message: string }
 type StoredFragmentError = { resource: HarnessConfigDesiredResource; message: string }
@@ -285,7 +276,6 @@ type SnapshotState = {
   scope: HarnessConfigScope
   disk: DiskEntry[]
   desired: HarnessConfigDesiredResource[]
-  shadowed: HarnessConfigDesiredResource[]
   renderErrors: ScopeRenderError[]
   sourceErrors: ScopeRenderError[]
   fragmentErrors: StoredFragmentError[]
@@ -299,7 +289,6 @@ type SnapshotState = {
 type ScopeTemplateState = {
   desired: HarnessConfigDesiredResource[]
   rendered: HarnessConfigDesiredResource[]
-  shadowed: HarnessConfigDesiredResource[]
   renderErrors: ScopeRenderError[]
   sourceErrors: ScopeRenderError[]
   fragmentErrors: StoredFragmentError[]
@@ -309,7 +298,6 @@ type ScopeTemplateState = {
 
 type ComparisonState = SnapshotState & {
   comparison: HarnessConfigComparison
-  diskOnly: DiskEntry[]
   configOnly: ConfigEntry[]
   changed: Array<{ disk: DiskEntry; config: ConfigEntry }>
   config: ConfigEntry[]
@@ -358,15 +346,9 @@ function compareRefs(a: HarnessConfigFileRef, b: HarnessConfigFileRef): number {
     lexicalCompare(a.id, b.id)
 }
 
-function comparisonStatus(
-  diskOnly: readonly unknown[],
-  configOnly: readonly unknown[],
-  changed: readonly unknown[]
-): HarnessConfigSyncStatus {
-  const categories = Number(diskOnly.length > 0) + Number(configOnly.length > 0) + Number(changed.length > 0)
-  if (categories === 0) return 'synced'
-  if (categories > 1 || changed.length > 0) return 'conflict'
-  return diskOnly.length > 0 ? 'disk-only' : 'config-only'
+function comparisonStatus(configOnly: readonly unknown[], changed: readonly unknown[]): HarnessConfigSyncStatus {
+  if (changed.length > 0) return 'conflict'
+  return configOnly.length > 0 ? 'config-only' : 'synced'
 }
 
 function cloneScope(scope: HarnessConfigScope): HarnessConfigScope {
@@ -379,17 +361,15 @@ function cloneRef(ref: HarnessConfigFileRef): HarnessConfigFileRef {
 
 type ReviewFields = Pick<
   HarnessConfigSyncPlan,
-  'status' | 'diskOnly' | 'configOnly' | 'changed' | 'shadowed' | 'renderErrors' | 'fragmentErrors' | 'fragmentEdits'
+  'status' | 'configOnly' | 'changed' | 'renderErrors' | 'fragmentErrors' | 'fragmentEdits'
 >
 
 function cloneReviewFields(comparison: HarnessConfigComparison): ReviewFields {
   const fields: ReviewFields = {
     status: comparison.status,
-    diskOnly: comparison.diskOnly.map(cloneRef),
     configOnly: comparison.configOnly.map(cloneRef),
     changed: comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) }))
   }
-  if (comparison.shadowed) fields.shadowed = comparison.shadowed.map(cloneRef)
   if (comparison.renderErrors) {
     fields.renderErrors = comparison.renderErrors.map((entry) => ({ ...entry, held: entry.held.map(cloneRef) }))
   }
@@ -452,12 +432,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof id !== 'string' || id.length === 0) {
         throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
       }
-      const desired = this.loadDesired()
       let scopeError: HarnessConfigError | undefined
       for (const scope of this.availableScopes()) {
         let entry: DiskEntry | undefined
         try {
-          entry = this.scanDisk(scope, desired).find((candidate) => candidate.ref.id === id)
+          entry = this.scanDisk(scope).find((candidate) => candidate.ref.id === id)
         } catch (error) {
           if (!(error instanceof HarnessConfigError)) throw error
           if (error.code !== 'unsupported-scope') scopeError ??= error
@@ -492,61 +471,15 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return this.guard('planSync', () => this.buildComparison(scope).comparison)
   }
 
-  planSyncToDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan {
+  /** Disk is the source for hand-written files, so sync to disk only
+   *  writes template output and refreshed fragment sections. It never
+   *  deletes a file. */
+  planSyncToDisk(scope: HarnessConfigScope, options: HarnessConfigSyncOptions = {}): HarnessConfigSyncPlan {
     return this.guard('planSyncToDisk', () => {
       const state = this.buildComparison(scope)
-      const operations: DiskOperation[] = []
-      for (const entry of state.configOnly) {
-        operations.push({
-          type: 'create',
-          id: entry.ref.id,
-          relativePath: entry.ref.relativePath,
-          content: entry.resource.content,
-          descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
-        })
-      }
-      for (const pair of state.changed) {
-        operations.push({
-          type: 'overwrite',
-          id: pair.config.ref.id,
-          relativePath: pair.config.ref.relativePath,
-          content: pair.config.resource.content,
-          descriptorResourceType: this.descriptorResourceType(scope, pair.config.descriptor)
-        })
-      }
-      for (const entry of state.diskOnly) {
-        operations.push({
-          type: 'delete',
-          id: entry.ref.id,
-          relativePath: entry.ref.relativePath,
-          descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
-        })
-      }
-      operations.sort((a, b) => lexicalCompare(a.relativePath, b.relativePath) || lexicalCompare(a.type, b.type))
-      const generatedAt = this.clock()
-      const fingerprint = this.planFingerprint(state)
-      const publicPlan: HarnessConfigSyncPlan = {
-        planId: this.uuid(),
-        scope: cloneScope(scope),
-        direction: 'sync-to-disk',
-        ...cloneReviewFields(state.comparison),
-        generatedAt,
-        fingerprint
-      }
-      this.storePlan(publicPlan, state, operations)
-      return publicPlan
-    })
-  }
-
-  planAdoptFromDisk(scope: HarnessConfigScope, options: HarnessConfigAdoptOptions = {}): HarnessConfigSyncPlan {
-    return this.guard('planAdoptFromDisk', () => {
-      const state = this.buildComparison(scope)
-      // REQ-006: adopt never rewrites a template. Template-built files are
-      // skipped ("Keep template") unless the user chose to detach them.
       const templateEntries = new Map(
         state.config.filter(({ resource }) => resource.source === 'template').map((entry) => [entry.ref.id, entry])
       )
-      const heldIds = new Set(state.heldIds)
       const diskIds = new Set(state.disk.map(({ ref }) => ref.id))
       const detach = [...new Set(options.detach ?? [])].sort(lexicalCompare)
       for (const id of detach) {
@@ -558,17 +491,27 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         throw new HarnessConfigError('desired-state-failed', 'Detaching from a template is unavailable')
       }
       const detachSet = new Set(detach)
-      const adoptedResources = state.disk
-        .filter(({ ref }) => !heldIds.has(ref.id) && (!templateEntries.has(ref.id) || detachSet.has(ref.id)))
-        .map(({ ref }) => {
-          const bytes = this.readInventoryBytes(ref.absolutePath)
-          return this.desiredFromRef(ref, bytes.toString('utf8'))
+      const operations: DiskOperation[] = []
+      for (const entry of state.configOnly) {
+        operations.push({
+          type: 'create',
+          id: entry.ref.id,
+          relativePath: entry.ref.relativePath,
+          content: entry.resource.content,
+          descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
         })
-      // REQ-002: a stored entry hidden by a kept template stays stored.
-      const keptShadowed = state.shadowed.filter((resource) => !detachSet.has(resource.id))
-      const uniqueResources = [
-        ...new Map([...adoptedResources, ...keptShadowed].map((resource) => [resource.id, resource])).values()
-      ]
+      }
+      for (const pair of state.changed) {
+        if (detachSet.has(pair.config.ref.id)) continue
+        operations.push({
+          type: 'overwrite',
+          id: pair.config.ref.id,
+          relativePath: pair.config.ref.relativePath,
+          content: pair.config.resource.content,
+          descriptorResourceType: this.descriptorResourceType(scope, pair.config.descriptor)
+        })
+      }
+      operations.sort((a, b) => lexicalCompare(a.relativePath, b.relativePath) || lexicalCompare(a.type, b.type))
       const detachTargets: DetachTarget[] = detach.map((id) => {
         const entry = templateEntries.get(id)!
         return {
@@ -583,25 +526,13 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const publicPlan: HarnessConfigSyncPlan = {
         planId: this.uuid(),
         scope: cloneScope(scope),
-        direction: 'adopt-from-disk',
+        direction: 'sync-to-disk',
         ...cloneReviewFields(state.comparison),
         generatedAt,
         fingerprint
       }
       if (detach.length > 0) publicPlan.detach = detach
-      this.rememberPlan(publicPlan.planId, {
-        publicPlan,
-        scopeKey: harnessConfigScopeKey(scope),
-        direction: 'adopt-from-disk',
-        diskFingerprint: state.diskFingerprint,
-        configFingerprint: state.configFingerprint,
-        resolverIdentity: state.resolverIdentity,
-        templateFingerprint: state.templateFingerprint,
-        operations: [],
-        adoptedResources: uniqueResources,
-        detachTargets,
-        attempted: false
-      })
+      this.storePlan(publicPlan, state, operations, detachTargets)
       return publicPlan
     })
   }
@@ -724,19 +655,16 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       this.preflight(scope, plan.operations)
       const applied: HarnessConfigAppliedOperation[] = []
 
-      if (plan.direction === 'adopt-from-disk') {
-        try {
-          await this.replaceDesired(scope, plan.adoptedResources ?? [])
-          applied.push({ type: 'adopt' })
-        } catch (error) {
-          throw new HarnessConfigError('desired-state-failed', 'Unable to persist adopted harness resources', {
-            cause: error,
-            applied,
-            requiresRescan: true
-          })
+      if (plan.direction === 'sync-to-disk') {
+        for (const operation of plan.operations) {
+          try {
+            applied.push(this.applyDiskOperation(scope, operation))
+          } catch (error) {
+            throw this.withPartialResult(error, applied)
+          }
         }
-        // Stored first, then detached: a failed detach leaves a stored copy
-        // the template still shadows, never lost disk content.
+        // Detached files are never written, so a failed detach leaves the
+        // disk file as it was and the template still claiming it.
         for (const target of plan.detachTargets ?? []) {
           try {
             await this.deps.detachTemplateTarget!(target.templateRef, target.agentKind)
@@ -749,37 +677,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
             })
           }
         }
-      } else if (plan.direction === 'sync-to-disk') {
-        for (const operation of plan.operations) {
-          try {
-            this.applyDiskOperation(scope, operation)
-            applied.push(this.appliedSummary(operation))
-          } catch (error) {
-            throw this.withPartialResult(error, applied)
-          }
-        }
       } else {
-        const operation = plan.operations[0]
-        let outcome: MutationOutcome
         try {
-          outcome = this.applyDiskOperation(scope, operation)
-          applied.push(outcome.applied)
+          applied.push(this.applyDiskOperation(scope, plan.operations[0]))
         } catch (error) {
           throw this.withPartialResult(error, applied)
-        }
-        try {
-          await this.persistDirectMutation(scope, plan.direction, outcome)
-        } catch (error) {
-          try {
-            this.rollback(outcome)
-          } catch (rollbackError) {
-            this.logFailure('rollback', rollbackError)
-          }
-          throw new HarnessConfigError('desired-state-failed', 'Unable to persist the harness resource', {
-            cause: error,
-            applied,
-            requiresRescan: true
-          })
         }
       }
 
@@ -862,11 +764,26 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return scopes
   }
 
-  /** Sweeps every stored file; fragment saves are rare user actions, so
-   *  the cost is paid once per save, not per streaming event. */
+  /** Sweeps every hand-written disk file; fragment saves are rare user
+   *  actions, so the cost is paid once per save, not per streaming event. */
+  private allHandWritten(): HarnessConfigDesiredResource[] {
+    const byId = new Map<string, HarnessConfigDesiredResource>()
+    for (const scope of this.availableScopes()) {
+      let disk: DiskEntry[]
+      try {
+        disk = this.scanDisk(scope)
+      } catch (error) {
+        if (error instanceof HarnessConfigError) continue
+        throw error
+      }
+      for (const resource of this.handWritten(disk)) byId.set(resource.id, resource)
+    }
+    return [...byId.values()]
+  }
+
   scopesForFragment(name?: string): HarnessConfigScope[] {
     return this.guard('scopesForFragment', () => {
-      const stored = this.loadDesired().filter((resource) => {
+      const stored = this.allHandWritten().filter((resource) => {
         const names = inlineFragmentNames(resource.content)
         return name === undefined ? names.length > 0 : names.includes(name)
       })
@@ -877,7 +794,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   filesUsingFragment(name: string): HarnessConfigFragmentFileUse[] {
     return this.guard('filesUsingFragment', () =>
-      this.loadDesired()
+      this.allHandWritten()
         .filter((resource) => inlineFragmentNames(resource.content).includes(name))
         .map((resource) => ({
           id: resource.id,
@@ -902,40 +819,34 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     resolution: HarnessConfigFragmentResolution
   ): Promise<HarnessConfigResolveFragmentEditResult> {
     return this.guardAsync('resolveFragmentEdit', async () => {
-      const descriptor = this.getDescriptor(scope)
-      const canonicalScope: HarnessConfigScope = {
-        agentKind: scope.agentKind,
-        resourceType: descriptor.canonicalResourceType ?? scope.resourceType
-      }
-      const current = this.desiredForScope(canonicalScope, this.loadDesired())
-      const index = current.findIndex((resource) => resource.id === id)
-      if (index === -1) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
+      const entry = this.scanDisk(scope).find(({ ref }) => ref.id === id && !ref.templateRef)
+      if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
+      const content = entry.bytes.toString('utf8')
       const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
       const fragments = this.fragmentContents(source)
       const fragmentContent = fragments.get(fragment)
       if (fragmentContent === undefined) {
         throw new HarnessConfigError('invalid-fragment', `Unknown fragment "${fragment}"`)
       }
-      const stored = current[index]
-      if (!expandInlineFragments(stored.content, fragments).edited.includes(fragment)) {
+      if (!expandInlineFragments(content, fragments).edited.includes(fragment)) {
         throw new HarnessConfigError('stale-plan', `No edited section of fragment "${fragment}" remains in this file`)
       }
-      const result = resolveInlineFragmentEdit(stored.content, fragment, resolution, fragmentContent)
+      const result = resolveInlineFragmentEdit(content, fragment, resolution, fragmentContent)
       if (resolution === 'keep-edit') {
         if (!this.deps.saveFragment) {
           throw new HarnessConfigError('desired-state-failed', 'Saving fragments is unavailable')
         }
-        // Fragment first: if storing the file then fails, the section
+        // Fragment first: if writing the file then fails, the section
         // still reads as edited instead of being reset to the old text.
         await this.deps.saveFragment(fragment, result.fragmentContent ?? '')
       }
-      const updated: HarnessConfigDesiredResource = {
-        ...stored,
+      this.applyDiskOperation(scope, {
+        type: 'overwrite',
+        id,
+        relativePath: entry.ref.relativePath,
         content: result.content,
-        hash: sha256(Buffer.from(result.content, 'utf8')),
-        updatedAt: this.clock()
-      }
-      await this.replaceDesired(canonicalScope, [...current.slice(0, index), updated, ...current.slice(index + 1)])
+        descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
+      })
       return { scope: cloneScope(scope), id, fragment, resolution }
     })
   }
@@ -961,12 +872,21 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const { source } = this.templateRender()
       const render = this.deps.render ?? renderTemplates
       const { resources } = render([template], source.fragments)
-      const storedIds = new Set(this.loadDesired().map((resource) => resource.id))
+      const provenance = this.templateProvenance()
+      const ownRef = templateRefOf(template.kind, template.name)
       const shadows: HarnessConfigShadowedEntry[] = []
       for (const resource of resources) {
         const descriptor = this.getHarness(resource.agentKind).resources[resource.resourceType]
         if (!descriptor?.supported || !descriptor.rootKey) continue
-        if (storedIds.has(physicalId(resource.agentKind, descriptor.rootKey, resource.relativePath))) {
+        if (provenance.get(physicalId(resource.agentKind, descriptor.rootKey, resource.relativePath)) === ownRef) continue
+        let root: string
+        try {
+          root = this.resolveRoot(descriptor)
+        } catch (error) {
+          if (error instanceof HarnessConfigError) continue
+          throw error
+        }
+        if (this.fs.existsSync(resolve(root, ...resource.relativePath.split('/')))) {
           shadows.push({
             agentKind: resource.agentKind,
             resourceType: resource.resourceType,
@@ -1270,14 +1190,12 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   private snapshot(scope: HarnessConfigScope): SnapshotState {
     this.getDescriptor(scope)
-    const desired = this.loadDesired()
-    const templates = this.templateStateForScope(scope, this.desiredForScope(scope, desired))
-    const disk = this.scanDisk(scope, [...desired, ...templates.rendered])
+    const disk = this.scanDisk(scope)
+    const templates = this.templateStateForScope(scope, this.handWritten(disk))
     return {
       scope: cloneScope(scope),
       disk,
       desired: templates.desired,
-      shadowed: templates.shadowed,
       renderErrors: templates.renderErrors,
       sourceErrors: templates.sourceErrors,
       fragmentErrors: templates.fragmentErrors,
@@ -1285,7 +1203,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       diskFingerprint: this.diskFingerprint(disk),
       configFingerprint: this.configFingerprint([
         ...templates.desired,
-        ...templates.shadowed,
         ...templates.fragmentErrors.map(({ resource }) => resource)
       ]),
       resolverIdentity: this.resolverIdentity(scope),
@@ -1320,12 +1237,18 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return templateTargets(template).some((agentKind) => this.outputLandsInScope(scope, agentKind, resourceType))
   }
 
-  /** REQ-001/REQ-002/REQ-003: Tatsu config for a scope is the stored
-   *  entries plus the template output landing in it. Template output wins
-   *  a shared path and the stored entry is reported as shadowed. */
+  /** Disk files no template claims, as their content stands on disk. */
+  private handWritten(disk: DiskEntry[]): HarnessConfigDesiredResource[] {
+    return disk
+      .filter(({ ref }) => !ref.templateRef)
+      .map(({ ref, bytes }) => this.desiredFromRef(ref, bytes.toString('utf8')))
+  }
+
+  /** The desired state of a scope is the template output landing in it plus
+   *  each hand-written disk file with its fragment sections refreshed. */
   private templateStateForScope(
     scope: HarnessConfigScope,
-    stored: HarnessConfigDesiredResource[]
+    handWritten: HarnessConfigDesiredResource[]
   ): ScopeTemplateState {
     const { source, result } = this.templateRender()
     const rendered: HarnessConfigDesiredResource[] = []
@@ -1350,9 +1273,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       })
     }
     const renderedIds = new Set(rendered.map((resource) => resource.id))
-    const shadowed = stored.filter((resource) => renderedIds.has(resource.id))
     const plain = this.expandStoredFragments(
-      stored.filter((resource) => !renderedIds.has(resource.id)),
+      handWritten.filter((resource) => !renderedIds.has(resource.id)),
       source
     )
     const desired = [...plain.resources, ...rendered].sort(
@@ -1393,7 +1315,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return {
       desired,
       rendered,
-      shadowed,
       renderErrors,
       sourceErrors,
       fragmentErrors: plain.errors,
@@ -1410,9 +1331,9 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return contents
   }
 
-  /** Stored files carry their fragment sections as written; each compare
-   *  refreshes sections whose fragment changed. A file whose placeholders
-   *  cannot expand contributes nothing to Tatsu config until fixed. */
+  /** Hand-written files carry their fragment sections as written; each
+   *  compare refreshes sections whose fragment changed. A file whose
+   *  placeholders cannot expand is left alone until fixed. */
   private expandStoredFragments(
     resources: HarnessConfigDesiredResource[],
     source: HarnessConfigTemplateSource
@@ -1449,7 +1370,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   /** Which template each harness file comes from, keyed by physical id:
    *  rendered output first, then the paths a template that fails to render
    *  would write (REQ-007), so that earlier output is held rather than
-   *  treated as disk-only. A template file that no longer parses has unknown
+   *  treated as hand-written. A template file that no longer parses has unknown
    *  harness blocks, so only its default-name path per harness is known. */
   private templateProvenance(): Map<string, string> {
     const { source, result } = this.templateRender()
@@ -1520,18 +1441,13 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     ]))
   }
 
-  private scanDisk(scope: HarnessConfigScope, desired: HarnessConfigDesiredResource[]): DiskEntry[] {
+  private scanDisk(scope: HarnessConfigScope): DiskEntry[] {
     const primary = this.getDescriptor(scope)
     const descriptors: HarnessConfigResourceResolver[] = [primary]
     for (const sourceType of primary.aliasSourceResourceTypes ?? []) {
       const source = this.getHarness(scope.agentKind).resources[sourceType]
       if (source?.supported && source.rootKey) descriptors.push(source)
     }
-    const desiredIds = new Set(
-      desired
-        .filter((resource) => resource.agentKind === scope.agentKind)
-        .map((resource) => resource.id)
-    )
     const byId = new Map<string, DiskEntry>()
     const provenance = this.templateProvenance()
     for (const descriptor of descriptors) {
@@ -1568,14 +1484,14 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           absolutePath: target.displayPath,
           hash: sha256(bytes),
           existsOnDisk: true,
-          managed: desiredIds.has(id),
+          managed: provenance.has(id),
           updatedAt: info.mtimeMs
         }
         const resourceLinkedFrom = rootLinkedFrom ?? linkedFrom
         if (resourceLinkedFrom) ref.linkedFrom = resourceLinkedFrom
         const templateRef = provenance.get(id)
         if (templateRef) ref.templateRef = templateRef
-        byId.set(id, { ref, descriptor, root })
+        byId.set(id, { ref, descriptor, root, bytes })
       }
     }
     return [...byId.values()].sort((a, b) => compareRefs(a.ref, b.ref))
@@ -1640,18 +1556,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     } catch (error) {
       throw new HarnessConfigError('read-failed', 'Unable to read a harness resource', { cause: error })
     }
-  }
-
-  private loadDesired(): HarnessConfigDesiredResource[] {
-    const resources = this.deps.loadDesiredResources?.() ?? []
-    if (!Array.isArray(resources)) {
-      throw new HarnessConfigError('read-failed', 'Desired harness resources are unavailable')
-    }
-    return resources.map((resource) => ({
-      ...resource,
-      canonicalResourceType: resource.canonicalResourceType ?? resource.resourceType,
-      aliasResourceTypes: [...(resource.aliasResourceTypes ?? [])]
-    }))
   }
 
   private desiredForScope(
@@ -1729,12 +1633,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const diskById = new Map(state.disk.map((entry) => [entry.ref.id, entry]))
     const configById = new Map(config.map((entry) => [entry.ref.id, entry]))
     // REQ-007: earlier output of a template that no longer renders is held
-    // back from disk-only, so sync to disk never deletes it.
+    // and listed with its render error.
     const erroredRefs = new Set([...state.renderErrors, ...state.sourceErrors].map(({ templateRef }) => templateRef))
     const held = new Map<string, DiskEntry[]>()
     const fragmentErrorIds = new Set(state.fragmentErrors.map(({ resource }) => resource.id))
     const fragmentHeld = new Map<string, DiskEntry>()
-    const diskOnly: DiskEntry[] = []
     for (const entry of state.disk) {
       if (configById.has(entry.ref.id)) continue
       if (fragmentErrorIds.has(entry.ref.id)) {
@@ -1743,7 +1646,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
       const templateRef = entry.ref.templateRef
       if (templateRef && erroredRefs.has(templateRef)) held.set(templateRef, [...(held.get(templateRef) ?? []), entry])
-      else diskOnly.push(entry)
     }
     const renderedRefs = new Set(state.renderErrors.map(({ templateRef }) => templateRef))
     const renderErrors = [
@@ -1755,19 +1657,15 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const desired = configById.get(disk.ref.id)
       return desired && desired.ref.hash !== disk.ref.hash ? [{ disk, config: desired }] : []
     })
-    let status = comparisonStatus(diskOnly, configOnly, changed)
+    let status = comparisonStatus(configOnly, changed)
     const needsAttention = renderErrors.length > 0 || state.fragmentErrors.length > 0 || state.fragmentEdits.length > 0
     if (status === 'synced' && needsAttention) status = 'conflict'
     const comparison: HarnessConfigComparison = {
       scope: cloneScope(scope),
       status,
-      diskOnly: diskOnly.map(({ ref }) => cloneRef(ref)),
       configOnly: configOnly.map(({ ref }) => cloneRef(ref)),
       changed: changed.map(({ disk, config }) => ({ disk: cloneRef(disk.ref), config: cloneRef(config.ref) })),
       comparedAt: this.clock()
-    }
-    if (state.shadowed.length > 0) {
-      comparison.shadowed = this.configEntries(scope, state.shadowed).map(({ ref }) => cloneRef(ref))
     }
     if (renderErrors.length > 0) {
       comparison.renderErrors = renderErrors.map(({ templateRef, message }) => ({
@@ -1798,7 +1696,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }))
     }
     const heldIds = [...held.values()].flatMap((entries) => entries.map(({ ref }) => ref.id))
-    return { ...state, comparison, diskOnly, configOnly, changed, config, heldIds }
+    return { ...state, comparison, configOnly, changed, config, heldIds }
   }
 
   private diskFingerprint(entries: DiskEntry[]): string {
@@ -1849,7 +1747,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private storePlan(
     publicPlan: HarnessConfigSyncPlan,
     state: SnapshotState,
-    operations: DiskOperation[]
+    operations: DiskOperation[],
+    detachTargets: DetachTarget[]
   ): void {
     this.rememberPlan(publicPlan.planId, {
       publicPlan,
@@ -1860,6 +1759,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       resolverIdentity: state.resolverIdentity,
       templateFingerprint: state.templateFingerprint,
       operations,
+      detachTargets,
       attempted: false
     })
   }
@@ -1923,7 +1823,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (scope.resourceType !== sourceType) {
       throw new HarnessConfigError('unknown-resource', 'The requested resource is not in the conversion source scope')
     }
-    const source = this.scanDisk(scope, this.loadDesired()).find(({ ref }) => ref.id === id)
+    const source = this.scanDisk(scope).find(({ ref }) => ref.id === id)
     if (!source) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
     if (
       scope.agentKind === 'claude' &&
@@ -1951,7 +1851,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         throw new HarnessConfigError('unsafe-path', 'Unable to verify the conversion destination', { cause: error })
       }
     }
-    const destinationEntries = existingTarget ? this.scanDisk(destinationScope, this.loadDesired()) : []
+    const destinationEntries = existingTarget ? this.scanDisk(destinationScope) : []
     const foldedTarget = destinationPath.toLowerCase()
     const existing =
       destinationEntries.find(({ ref }) => ref.relativePath === destinationPath) ??
@@ -2051,13 +1951,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return descriptor
   }
 
-  private applyDiskOperation(scope: HarnessConfigScope, operation: DiskOperation): MutationOutcome {
+  private applyDiskOperation(scope: HarnessConfigScope, operation: DiskOperation): HarnessConfigAppliedOperation {
     const descriptor = this.operationDescriptor(scope, operation)
     const target = this.resolveCandidate(descriptor, operation.relativePath, operation.type !== 'create')
     const existed = this.fs.existsSync(target.absolutePath)
-    let before: Buffer | undefined
-    if (existed) before = this.createBackup(target.absolutePath)
-    const outcome: MutationOutcome = { operation, applied: this.appliedSummary(operation), existed, before, target: target.absolutePath }
+    if (existed) this.createBackup(target.absolutePath)
 
     if (operation.type === 'delete') {
       try {
@@ -2068,7 +1966,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const link = resolve(target.root, ...operation.relativePath.split('/'))
       if (link !== target.absolutePath && this.isBrokenLink(link)) {
         try {
-          outcome.removedLink = { path: link, linkTarget: this.fs.readlinkSync(link) }
           this.fs.unlinkSync(link)
         } catch (error) {
           throw new HarnessConfigError('delete-failed', 'Unable to remove the link to the deleted resource', { cause: error })
@@ -2081,7 +1978,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       this.removeBrokenLinks(target.root, operation.relativePath)
       this.atomicWrite(target.absolutePath, Buffer.from(operation.content ?? '', 'utf8'))
     }
-    return outcome
+    return this.appliedSummary(operation)
   }
 
   private isBrokenLink(path: string): boolean {
@@ -2120,7 +2017,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     }
   }
 
-  private createBackup(target: string): Buffer {
+  private createBackup(target: string): void {
     let bytes: Buffer
     try {
       bytes = this.fs.readFileSync(target)
@@ -2133,7 +2030,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (this.fs.existsSync(backup)) continue
       try {
         this.fs.writeFileSync(backup, bytes, { flag: 'wx' })
-        return bytes
+        return
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
         try {
@@ -2165,67 +2062,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   private appliedSummary(operation: DiskOperation): HarnessConfigAppliedOperation {
     return { type: operation.type, id: operation.id, relativePath: operation.relativePath }
-  }
-
-  private async persistDirectMutation(
-    requestedScope: HarnessConfigScope,
-    direction: 'create' | 'update' | 'delete',
-    outcome: MutationOutcome
-  ): Promise<void> {
-    const descriptor = this.operationDescriptor(requestedScope, outcome.operation)
-    const canonicalResourceType = descriptor.canonicalResourceType ?? requestedScope.resourceType
-    const canonicalScope: HarnessConfigScope = {
-      agentKind: requestedScope.agentKind,
-      resourceType: canonicalResourceType
-    }
-    const current = this.desiredForScope(canonicalScope, this.loadDesired())
-    const resources = current.filter((resource) => resource.id !== outcome.operation.id)
-    if (direction !== 'delete') {
-      const target = this.resolveCandidate(descriptor, outcome.operation.relativePath, true)
-      const bytes = this.readInventoryBytes(target.absolutePath)
-      const info = this.fs.lstatSync(target.absolutePath)
-      const ref: HarnessConfigFileRef = {
-        id: outcome.operation.id,
-        agentKind: requestedScope.agentKind,
-        resourceType: requestedScope.resourceType,
-        canonicalResourceType,
-        aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
-        label: this.labelFor(target.relativePath, canonicalResourceType),
-        relativePath: target.relativePath,
-        absolutePath: target.displayPath,
-        hash: sha256(bytes),
-        existsOnDisk: true,
-        managed: true,
-        updatedAt: info.mtimeMs
-      }
-      resources.push(this.desiredFromRef(ref, bytes.toString('utf8')))
-    }
-    resources.sort((a, b) => lexicalCompare(a.id, b.id))
-    await this.replaceDesired(canonicalScope, resources)
-  }
-
-  private async replaceDesired(scope: HarnessConfigScope, resources: HarnessConfigDesiredResource[]): Promise<void> {
-    if (!this.deps.replaceDesiredScope) {
-      throw new HarnessConfigError('desired-state-failed', 'Desired harness configuration persistence is unavailable')
-    }
-    await this.deps.replaceDesiredScope(cloneScope(scope), resources.map((resource) => ({
-      ...resource,
-      aliasResourceTypes: [...(resource.aliasResourceTypes ?? [])]
-    })))
-  }
-
-  private rollback(outcome: MutationOutcome): void {
-    const target = outcome.target
-    if (!outcome.existed) {
-      if (this.fs.existsSync(target)) this.fs.unlinkSync(target)
-      return
-    }
-    if (!outcome.before) throw new Error('Backup bytes are unavailable for rollback')
-    this.atomicWrite(target, outcome.before)
-    const link = outcome.removedLink
-    if (link && !this.fs.existsSync(link.path) && !this.isBrokenLink(link.path)) {
-      this.fs.symlinkSync(link.linkTarget, link.path)
-    }
   }
 
   private withPartialResult(error: unknown, applied: HarnessConfigAppliedOperation[]): HarnessConfigError {

@@ -105,7 +105,7 @@ function buildConversionAction(
   const disabledReason = !destinationSupported
     ? (destinationCapability?.notes ?? `${agent.displayName} does not support this yet.`)
     : configOnly
-      ? 'This resource exists only in Tatsu config, not on disk.'
+      ? 'A template builds this file, but it is not on disk yet.'
       : null
   return {
     targetResourceType: target,
@@ -138,11 +138,10 @@ export function buildConfigResourceGroups(
     const comparison = comparisons[scopeKey] ?? null
 
     // Union disk-backed refs with every public ref from the latest
-    // comparison's three difference collections (REQ-013). Disk-backed
-    // refs are inserted first so they win the same-ID dedup below.
+    // comparison's difference collections (REQ-013). Disk-backed refs
+    // are inserted first so they win the same-ID dedup below.
     const byId = new Map<string, HarnessConfigFileRef>()
     const changedIds = new Set<string>()
-    const diskOnlyIds = new Set<string>()
     const configOnlyIds = new Set<string>()
 
     for (const ref of resources) {
@@ -151,11 +150,6 @@ export function buildConfigResourceGroups(
     }
 
     if (comparison) {
-      for (const ref of comparison.diskOnly) {
-        if (ref.agentKind !== agentKind || ref.resourceType !== resourceType) continue
-        diskOnlyIds.add(ref.id)
-        if (!byId.has(ref.id)) byId.set(ref.id, ref)
-      }
       for (const ref of comparison.configOnly) {
         if (ref.agentKind !== agentKind || ref.resourceType !== resourceType) continue
         configOnlyIds.add(ref.id)
@@ -177,7 +171,6 @@ export function buildConfigResourceGroups(
       if (!matchesQuery(ref, normalizedQuery)) continue
       let badge: ConfigDriftBadge = 'synced'
       if (changedIds.has(ref.id)) badge = 'conflict'
-      else if (diskOnlyIds.has(ref.id)) badge = 'disk-only'
       else if (configOnlyIds.has(ref.id)) badge = 'config-only'
 
       rows.push({
@@ -215,22 +208,22 @@ export function buildConfigResourceGroups(
   return groups
 }
 
-const BADGE_LABEL: Record<ConfigDriftBadge, string> = {
-  synced: 'Synced',
-  'disk-only': 'Disk only',
-  'config-only': 'Config only',
-  conflict: 'Conflict'
+/** Disk is the source, so a file in sync carries no label. */
+export const DRIFT_BADGE_LABEL: Record<ConfigDriftBadge, string | null> = {
+  synced: null,
+  'config-only': 'Not on disk',
+  conflict: 'Out of sync'
 }
 
 const BADGE_CLASS: Record<ConfigDriftBadge, string> = {
   synced: 'text-success',
-  'disk-only': 'text-warning',
   'config-only': 'text-info',
-  conflict: 'text-danger'
+  conflict: 'text-warning'
 }
 
-function DriftBadge({ badge }: { badge: ConfigDriftBadge }): JSX.Element {
-  return <span className={`text-xs shrink-0 ${BADGE_CLASS[badge]}`}>{BADGE_LABEL[badge]}</span>
+function DriftBadge({ badge }: { badge: ConfigDriftBadge }): JSX.Element | null {
+  const label = DRIFT_BADGE_LABEL[badge]
+  return label ? <span className={`text-xs shrink-0 ${BADGE_CLASS[badge]}`}>{label}</span> : null
 }
 
 function ResourceRow({

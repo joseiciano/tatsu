@@ -9,7 +9,6 @@ import {
   type TemplateImportPlan
 } from '../template-import'
 import type {
-  HarnessConfigAdoptRequest,
   HarnessFragment,
   HarnessTemplate,
   HarnessTemplateHarnessBlock,
@@ -40,6 +39,7 @@ import type {
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
+  HarnessConfigSyncToDiskRequest,
   HarnessConfigSyncPlan,
   HarnessFragmentUsageResult,
   ManagedHarnessKind
@@ -102,12 +102,10 @@ const CHANNEL = {
   prepareUpdate: 'harnessConfig:prepareUpdate',
   prepareDelete: 'harnessConfig:prepareDelete',
   planSyncToDisk: 'harnessConfig:planSyncToDisk',
-  planAdoptFromDisk: 'harnessConfig:planAdoptFromDisk',
   createFile: 'harnessConfig:createFile',
   updateFile: 'harnessConfig:updateFile',
   deleteFile: 'harnessConfig:deleteFile',
   syncToDisk: 'harnessConfig:syncToDisk',
-  adoptFromDisk: 'harnessConfig:adoptFromDisk',
   prepareCommandFromSkill: 'harnessConfig:prepareCommandFromSkill',
   prepareSkillFromCommand: 'harnessConfig:prepareSkillFromCommand',
   saveTemplate: 'harnessConfig:saveTemplate',
@@ -125,7 +123,6 @@ type MutationChannel =
   | typeof CHANNEL.updateFile
   | typeof CHANNEL.deleteFile
   | typeof CHANNEL.syncToDisk
-  | typeof CHANNEL.adoptFromDisk
 
 class HarnessConfigValidationError extends Error {}
 
@@ -190,7 +187,7 @@ function parseScopeOnlyRequest(raw: unknown): HarnessConfigScopeRequest {
   return { scope: parseManagedScope(obj.scope) }
 }
 
-function parseAdoptRequest(raw: unknown): HarnessConfigAdoptRequest {
+function parseSyncToDiskRequest(raw: unknown): HarnessConfigSyncToDiskRequest {
   const obj = requireObject(raw)
   if (!('detach' in obj)) {
     assertExactKeys(obj, ['scope'])
@@ -398,11 +395,11 @@ function collectRefreshScopes(scope: HarnessConfigScope, refs: readonly HarnessC
 }
 
 function syncPlanRefs(plan: HarnessConfigSyncPlan): HarnessConfigFileRef[] {
-  return [...plan.diskOnly, ...plan.configOnly, ...plan.changed.flatMap((entry) => [entry.disk, entry.config])]
+  return [...plan.configOnly, ...plan.changed.flatMap((entry) => [entry.disk, entry.config])]
 }
 
 function isDirectionalChannel(channel: MutationChannel): boolean {
-  return channel === CHANNEL.syncToDisk || channel === CHANNEL.adoptFromDisk
+  return channel === CHANNEL.syncToDisk
 }
 
 export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfigRequestHandlersDeps): void {
@@ -562,21 +559,10 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   }
 
   async function handlePlanSyncToDisk(raw: unknown): Promise<HarnessConfigSyncPlan> {
-    const { scope } = parseScopeOnlyRequest(raw)
-    const plan = service.planSyncToDisk(scope)
+    const { scope, detach } = parseSyncToDiskRequest(raw)
+    const plan = detach ? service.planSyncToDisk(scope, { detach }) : service.planSyncToDisk(scope)
     bindPlan(plan.planId, {
       mutationChannel: CHANNEL.syncToDisk,
-      scopeKey: harnessConfigScopeKey(scope),
-      refreshScopes: collectRefreshScopes(scope, syncPlanRefs(plan))
-    })
-    return plan
-  }
-
-  async function handlePlanAdoptFromDisk(raw: unknown): Promise<HarnessConfigSyncPlan> {
-    const { scope, detach } = parseAdoptRequest(raw)
-    const plan = detach ? service.planAdoptFromDisk(scope, { detach }) : service.planAdoptFromDisk(scope)
-    bindPlan(plan.planId, {
-      mutationChannel: CHANNEL.adoptFromDisk,
       scopeKey: harnessConfigScopeKey(scope),
       refreshScopes: collectRefreshScopes(scope, syncPlanRefs(plan))
     })
@@ -638,13 +624,13 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     requireConfirmed(obj.confirmed)
     const allowShadowing = 'allowShadowing' in obj ? parseBooleanFlag(obj.allowShadowing, 'allowShadowing') : false
     const templateSource = requireTemplateSource()
-    // REQ-002: warn before a template hides stored entries at its paths.
+    // REQ-002: warn before a template overwrites hand-written files at its paths.
     const shadows = service.templateShadows(draft)
     if (shadows.length > 0 && !allowShadowing) {
       const paths = shadows.map((entry) => `${entry.agentKind} ${entry.resourceType} ${entry.relativePath}`)
       throw new HarnessConfigError(
         'template-shadows',
-        `This template replaces stored Tatsu config at ${paths.join(', ')}. Save again to confirm.`
+        `This template writes over existing files at ${paths.join(', ')} on the next sync. Save again to confirm.`
       )
     }
     return templateSource.saveTemplate(draft)
@@ -767,7 +753,7 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
     if (plan.preview.shadows.length > 0 && !allowShadowing) {
       throw new HarnessConfigError(
         'template-shadows',
-        `The import replaces stored Tatsu config at ${plan.preview.shadows.join(', ')}. Import again to confirm.`
+        `The import writes over existing files at ${plan.preview.shadows.join(', ')} on the next sync. Import again to confirm.`
       )
     }
 
@@ -802,12 +788,10 @@ export function registerHarnessConfigRequestHandlers(deps: RegisterHarnessConfig
   register(CHANNEL.prepareUpdate, handlePrepareUpdate)
   register(CHANNEL.prepareDelete, handlePrepareDelete)
   register(CHANNEL.planSyncToDisk, handlePlanSyncToDisk)
-  register(CHANNEL.planAdoptFromDisk, handlePlanAdoptFromDisk)
   register(CHANNEL.createFile, makeApplyHandler(CHANNEL.createFile))
   register(CHANNEL.updateFile, makeApplyHandler(CHANNEL.updateFile))
   register(CHANNEL.deleteFile, makeApplyHandler(CHANNEL.deleteFile))
   register(CHANNEL.syncToDisk, makeApplyHandler(CHANNEL.syncToDisk))
-  register(CHANNEL.adoptFromDisk, makeApplyHandler(CHANNEL.adoptFromDisk))
   register(CHANNEL.prepareCommandFromSkill, handlePrepareCommandFromSkill)
   register(CHANNEL.prepareSkillFromCommand, handlePrepareSkillFromCommand)
   register(CHANNEL.saveTemplate, handleSaveTemplate)

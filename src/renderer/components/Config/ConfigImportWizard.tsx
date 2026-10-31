@@ -349,7 +349,7 @@ function PreviewStep({
         </Section>
       )}
       {preview.shadows.length > 0 && (
-        <Section title="Stored config the import will hide">
+        <Section title="Existing files the import will write over">
           {preview.shadows.map((shadow) => (
             <span key={shadow} className="text-xs text-warning break-all">
               {shadow}
