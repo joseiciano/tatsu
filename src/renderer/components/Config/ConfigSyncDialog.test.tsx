@@ -153,4 +153,28 @@ describe('ConfigSyncDialog', () => {
     const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps()} />)
     expect(html).toContain('aria-label="Close"')
   })
+
+  it('lists managed-elsewhere entries as excluded from sync to disk', () => {
+    const plain = renderToStaticMarkup(<ConfigSyncDialog {...baseProps()} />)
+    expect(plain).not.toContain('Excluded from sync to disk')
+    expect(plain).not.toContain('Managed elsewhere')
+
+    const linkedReview = toConfigSyncReview({
+      ...comparison,
+      diskOnly: [ref({ id: 'linked-1', relativePath: 'deploy/SKILL.md', linkedFrom: '/dotfiles/output/deploy' })]
+    })
+    const html = renderToStaticMarkup(<ConfigSyncDialog {...baseProps({ review: linkedReview })} />)
+    expect(html).toContain('Managed elsewhere')
+    expect(html).toContain('/dotfiles/output/deploy')
+    expect(html).toContain('Excluded from sync to disk')
+    expect(html).toContain('excluded from sync to disk, so Tatsu never writes through them')
+  })
+
+  it('changes the review key when only linkedFrom differs', () => {
+    const linked = toConfigSyncReview({
+      ...comparison,
+      diskOnly: [ref({ id: 'disk-only-1', relativePath: 'skills/disk-only.md', linkedFrom: '/dotfiles/one' })]
+    })
+    expect(linked.reviewKey).not.toBe(toConfigSyncReview(comparison).reviewKey)
+  })
 })

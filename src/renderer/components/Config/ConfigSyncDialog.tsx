@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
+import { LinkedBadge } from './ConfigResourceList'
 import type { ConfigSyncChangedRow, ConfigSyncDialogProps, ConfigSyncFileRow } from './types'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -20,6 +21,13 @@ function FileRowView({ row, scopeLabel }: { row: ConfigSyncFileRow; scopeLabel: 
         <span className="text-xs text-faint shrink-0">{row.sourceLabel}</span>
       </div>
       <span className="text-xs text-dim break-all">{row.ref.relativePath}</span>
+      {row.ref.linkedFrom && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint min-w-0">
+          <LinkedBadge linkedFrom={row.ref.linkedFrom} />
+          <span className="break-all">{row.ref.linkedFrom}</span>
+          <span>· Excluded from sync to disk</span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-faint">
         <span>{scopeLabel}</span>
         <span>{row.updatedAtLabel}</span>
@@ -179,6 +187,10 @@ export function ConfigSyncDialog({
   const scopeLabel = `${agentDisplayName} · ${resourceLabel}`
   const titleId = 'config-sync-dialog-title'
   const descId = 'config-sync-dialog-desc'
+  const hasLinked =
+    review.sections.diskOnly.some((row) => row.ref.linkedFrom) ||
+    review.sections.configOnly.some((row) => row.ref.linkedFrom) ||
+    review.sections.changed.some((pair) => pair.disk.ref.linkedFrom || pair.config.ref.linkedFrom)
   const busyLabel = stage === 'planning' ? 'Preparing plan…' : stage === 'applying' ? 'Applying…' : null
 
   return (
@@ -236,6 +248,14 @@ export function ConfigSyncDialog({
               disk-only entries, replacing content-changed desired content, and removing
               config-only entries. It performs no harness-directory writes.
             </p>
+            {hasLinked && (
+              <p>
+                <span className="text-fg-bright font-medium">Managed elsewhere</span> entries are
+                symbolic links into another folder, such as a dotfiles build. They are listed here
+                but excluded from sync to disk, so Tatsu never writes through them. Adopting still
+                copies their current content into Tatsu config.
+              </p>
+            )}
           </div>
 
           <DiffSection

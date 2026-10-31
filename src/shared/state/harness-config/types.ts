@@ -49,6 +49,9 @@ export interface HarnessConfigFileRef {
   existsOnDisk: boolean
   managed: boolean
   updatedAt: number
+  /** Real path of the symlink that makes this resource managed elsewhere
+   *  (Step 17). Display-only; never trusted as a write target. */
+  linkedFrom?: string
 }
 
 export type HarnessConfigSyncDirection = 'sync-to-disk' | 'adopt-from-disk'
@@ -102,6 +105,7 @@ export type HarnessConfigErrorCode =
   | 'write-failed'
   | 'delete-failed'
   | 'desired-state-failed'
+  | 'linked-resource'
 
 export interface HarnessConfigAppliedOperation {
   type: 'create' | 'overwrite' | 'delete' | 'adopt'
