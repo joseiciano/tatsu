@@ -38,7 +38,7 @@ await page.locator('#template-name').fill('greet')
 await page.locator('#template-description').fill('Greet the user.')
 // Body is a Monaco editor: click into it, then page.keyboard.type(...)
 await shot('preview')
-// save, then Skills tab -> Sync <Harness> -> Sync Tatsu config to disk
+// save, then Skills tab -> Sync <Harness> -> Sync to disk
 ```
 
 The end state that proves it works:
@@ -82,11 +82,11 @@ body) is expanded on Save into a marked section:
 - The fragment editor lists the files that use it in
   `[data-testid="fragment-usage"]` ("Used in N file(s): …").
 - Saving a fragment never writes harness files. The scopes that use it show
-  `Content changed` in the sync dialog until `Sync Tatsu config to disk`.
+  `Content changed` in the sync dialog until `Sync to disk`.
 - A section edited by hand appears under `Edited fragment sections` in the
   sync dialog, with `Use fragment`, `Save edit to fragment`, and `Detach`.
 - Run: `journeys/inline-fragments.mjs` against a Step 23 build. The section
   sha changes after a fragment sync; text outside the section is untouched;
-  Adopt keeps the hand edit on disk, and `Use fragment` then Sync restores the
-  file byte for byte. A file whose only issue is an edited section shows
-  `Synced` on its row while the group heading says `Conflict`.
+  opening Sync leaves the hand edit on disk, and `Use fragment` writes the
+  file back byte for byte. A file whose only issue is an edited section shows
+  no badge on its row while the scope reads `Out of sync`.

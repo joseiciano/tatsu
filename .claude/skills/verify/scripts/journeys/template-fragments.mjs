@@ -70,7 +70,7 @@ await withApp(process.argv[2], 'template-fragments', async ({ page, state, shot,
   await page.getByRole('tab', { name: 'Skills' }).click()
   await page.getByRole('button', { name: 'Sync Claude Code' }).click()
   const dialog = page.getByRole('dialog')
-  const sync = dialog.getByRole('button', { name: 'Sync Tatsu config to disk' })
+  const sync = dialog.getByRole('button', { name: 'Sync to disk' })
   await sync.waitFor()
   for (let i = 0; i < 50 && (await sync.isDisabled()); i++) await page.waitForTimeout(100)
   await sync.click()

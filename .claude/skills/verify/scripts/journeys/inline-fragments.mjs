@@ -2,7 +2,7 @@
 // Inline fragments, end to end through the Config page:
 // 1. create fragment "commit-rules"; 2. put {{fragment:commit-rules}} in the
 // Claude skill "hello" and Save; 3. change the fragment, Sync to disk;
-// 4. hand-edit the section on disk, Adopt, then "Use fragment" + Sync.
+// 4. hand-edit the section on disk, then "Use fragment" in the Sync dialog.
 // Needs a build that has inline fragments (Step 23).
 //
 // Usage: node .claude/skills/verify/scripts/journeys/inline-fragments.mjs <state.env>
@@ -75,8 +75,7 @@ await withApp(process.argv[2], 'inline-fragments', async ({ page, state, shot, l
     throw new Error('saved file lacks the marked commit-rules section')
   }
   if (!saved.startsWith(before.trimEnd())) throw new Error('text outside the section changed on save')
-  await page.getByRole('button', { name: /^hello .*Synced/ }).first().waitFor({ timeout: 5000 })
-  await shot('saved-synced')
+  await shot('saved')
 
   // Step 3: change the fragment in its editor; the file follows after Sync.
   await page.getByRole('tab', { name: 'Templates' }).click()
@@ -96,7 +95,7 @@ await withApp(process.argv[2], 'inline-fragments', async ({ page, state, shot, l
   await page.getByRole('tab', { name: 'Skills' }).click()
   const syncDialog = await openSync(page, log, shot, 'after-fragment-change')
   await syncDialog.getByText(/Content changed/).waitFor()
-  await clickWhenEnabled(page, syncDialog.getByRole('button', { name: 'Sync Tatsu config to disk' }))
+  await clickWhenEnabled(page, syncDialog.getByRole('button', { name: 'Sync to disk' }))
   await syncDialog.waitFor({ state: 'detached', timeout: 10000 })
   const refreshed = read()
   copyFileSync(skill, join(state.EVIDENCE, 'hello.after-fragment-sync.SKILL.md'))
@@ -105,28 +104,18 @@ await withApp(process.argv[2], 'inline-fragments', async ({ page, state, shot, l
   if (OPEN.exec(refreshed)[1] === OPEN.exec(saved)[1]) throw new Error('section hash did not change')
   if (!refreshed.startsWith(before.trimEnd())) throw new Error('text outside the section changed on sync')
 
-  // Step 4: hand edit inside the section, adopt it, then restore the fragment.
+  // Step 4: hand edit inside the section on disk, then restore the fragment.
   writeFileSync(skill, refreshed.replace(V2, HAND))
   await page.getByRole('tab', { name: 'Agents' }).click()
   await page.getByRole('tab', { name: 'Skills' }).click()
-  const adoptDialog = await openSync(page, log, shot, 'hand-edit')
-  await clickWhenEnabled(page, adoptDialog.getByRole('button', { name: 'Adopt current disk files into Tatsu config' }))
-  await page.waitForTimeout(1000)
-  let resolveDialog = page.getByRole('dialog')
-  if (!(await resolveDialog.isVisible())) resolveDialog = await openSync(page, log, shot, 'after-adopt')
+  const resolveDialog = await openSync(page, log, shot, 'hand-edit')
   await resolveDialog.getByText(/Edited fragment sections/).waitFor({ timeout: 5000 })
-  log(`after adopt:\n${await resolveDialog.ariaSnapshot()}`)
   await shot('edited-section')
-  if (!read().includes(HAND)) throw new Error('adopt changed the disk file')
+  if (!read().includes(HAND)) throw new Error('opening Sync changed the disk file')
   await clickWhenEnabled(page, resolveDialog.getByRole('button', { name: 'Use fragment' }))
-  await resolveDialog.getByText(/Resolved in Tatsu config/).waitFor({ timeout: 5000 })
-  await shot('resolved')
-  await clickWhenEnabled(page, resolveDialog.getByRole('button', { name: 'Sync Tatsu config to disk' }))
-  await resolveDialog.waitFor({ state: 'detached', timeout: 10000 })
-  const restored = read()
+  await waitFor(page, () => read() === refreshed, 'Use fragment to restore the fragment text on disk')
+  await page.getByText(/Already in sync|Resolved and updated this file on disk/).first().waitFor({ timeout: 5000 })
   copyFileSync(skill, join(state.EVIDENCE, 'hello.after-resolve.SKILL.md'))
-  log(`after Use fragment + Sync:\n${restored}`)
-  if (restored !== refreshed) throw new Error('Use fragment + Sync did not restore the fragment text')
-  await page.getByRole('button', { name: /^hello .*Synced/ }).first().waitFor({ timeout: 5000 })
-  await shot('final-synced')
+  log(`after Use fragment:\n${read()}`)
+  await shot('resolved')
 })
