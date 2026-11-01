@@ -21,7 +21,7 @@ export interface StepExecution {
 
 export type StepDriverEvent =
   | { type: 'turnEnded'; executionId: string; lastMessage?: string }
-  | { type: 'exited'; executionId: string; code: number | null }
+  | { type: 'exited'; executionId: string; code: number | null; summary?: string }
 
 export type StepDriverListener = (event: StepDriverEvent) => void
 
@@ -30,4 +30,11 @@ export interface StepDriver {
   continue(executionId: string, prompt: string): void
   cancel(executionId: string): void
   onEvent(listener: StepDriverListener): () => void
+}
+
+export class StepStartError extends Error {
+  constructor(readonly summary: string) {
+    super(summary)
+    this.name = 'StepStartError'
+  }
 }

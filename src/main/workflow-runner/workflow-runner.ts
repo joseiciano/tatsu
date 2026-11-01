@@ -7,7 +7,7 @@ import type {
   StartRunResult,
   StepResult
 } from './types'
-import type { RunnableStep, StepDriverEvent, StepDriverKind, StepExecution } from './drivers/types'
+import { StepStartError, type RunnableStep, type StepDriverEvent, type StepDriverKind, type StepExecution } from './drivers'
 import { runContextPath } from './run-artifacts'
 import type { ResolvedWorkflowStep, TemplateScope, TemplateStepScope } from '../../shared/workflow-def'
 import type { StateEvent } from '../../shared/state'
@@ -109,7 +109,11 @@ export class WorkflowRunner {
         continue
       }
       const step = this.currentStep(state)
-      if (step && state.stepStatus[step.id] === 'queued') {
+      const status = step && state.stepStatus[step.id]
+      if (step && (status === 'queued' || status === 'pending') && !this.labsOn()) {
+        this.hold(state, step)
+        outcomes.set(state, 'held')
+      } else if (step && state.stepStatus[step.id] === 'queued') {
         this.queue.push({ runId: state.record.runId, stepId: step.id })
         outcomes.set(state, 'requeued')
       } else if (!step || state.stepStatus[step.id] === 'pending') {
@@ -128,7 +132,7 @@ export class WorkflowRunner {
 
   start(request: StartRunRequest): StartRunResult {
     const { store, loader, now, newId } = this.deps
-    if (!store.getSnapshot().state.settings.labs.workflows) return this.refuse('labs-off')
+    if (!this.labsOn()) return this.refuse('labs-off')
     const detail = loader.getDefinition(request.defId)
     if (!detail) return this.refuse('unknown-definition')
     const definition = detail.definition
@@ -246,7 +250,7 @@ export class WorkflowRunner {
 
   retry(runId: string): boolean {
     const state = this.runs.get(runId)
-    if (!state || state.record.status !== 'paused') return false
+    if (!state || state.record.status !== 'paused' || !this.labsOn()) return false
     this.resume(state)
     if (state.live) this.endAttempt(state, 'cancelled', undefined, true)
     this.enterStep(state)
@@ -351,6 +355,16 @@ export class WorkflowRunner {
     const runId = this.liveAttempts.get(attemptId)
     const state = runId === undefined ? undefined : this.runs.get(runId)
     return state?.live?.record.attemptId === attemptId ? state : undefined
+  }
+
+  private labsOn(): boolean {
+    return this.deps.store.getSnapshot().state.settings.labs.workflows
+  }
+
+  private hold(state: RunState, step: RunnableStep): void {
+    this.setStep(state, step.id, 'pending')
+    this.pause(state, 'interrupted')
+    this.log('step held labs-off', { runId: state.record.runId, stepId: step.id })
   }
 
   private agentCap(): number {
@@ -485,6 +499,10 @@ export class WorkflowRunner {
   }
 
   private launch(state: RunState, step: RunnableStep): void {
+    if (!this.labsOn()) {
+      this.hold(state, step)
+      return
+    }
     const { store, now, newId, drivers } = this.deps
     const { runId, worktreePath, inputs } = state.record
     const n = state.record.attempts.filter((attempt) => attempt.stepId === step.id).length + 1
@@ -522,7 +540,7 @@ export class WorkflowRunner {
         (execution) => {
           if (execution) this.onStarted(attemptId, step.kind, execution.executionId)
         },
-        () => this.onStartFailed(attemptId)
+        (err: unknown) => this.onStartFailed(attemptId, err)
       )
       .catch(() => this.log('driver callback failed', { runId, stepId: step.id, attemptId }))
   }
@@ -540,12 +558,14 @@ export class WorkflowRunner {
     this.persist(state.record)
   }
 
-  private onStartFailed(attemptId: string): void {
+  private onStartFailed(attemptId: string, err: unknown): void {
     const state = this.runForLiveAttempt(attemptId)
     if (!state?.live) return
     const { stepId } = state.live.record
     this.log('attempt start failed', { runId: state.record.runId, stepId, attemptId })
-    this.endAttempt(state, 'failed', undefined, false)
+    const result: StepResult | undefined =
+      err instanceof StepStartError ? { status: 'failed', summary: err.summary, completedBy: 'exit' } : undefined
+    this.endAttempt(state, 'failed', result, false)
     this.setStep(state, stepId, 'failed')
     this.pause(state, 'step-failed')
     this.settle(state)
@@ -559,7 +579,7 @@ export class WorkflowRunner {
         const kind = this.runForLiveAttempt(attemptId)?.live?.kind
         this.complete(attemptId, {
           status: kind === 'shell' && event.code === 0 ? 'done' : 'failed',
-          summary: '',
+          summary: event.summary ?? '',
           completedBy: 'exit',
           ...(event.code === null ? {} : { exitCode: event.code })
         })

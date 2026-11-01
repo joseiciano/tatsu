@@ -2,14 +2,17 @@ import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
 import {
   WorkflowRunner,
+  createShellStepDriver,
   type RunArtifacts,
   type StepAttempt,
+  type StepDriver,
   type StepResult,
   type WorkflowRunnerDeps,
   type WorkflowRunRecord
 } from '.'
 import { FakeStepDriver, type FakeStartBehavior } from './fake-step-driver'
 import { initialState, type StateEvent } from '../../shared/state'
+import type { TerminalTab } from '../../shared/state/terminals'
 import type {
   WorkflowAttemptStatus,
   WorkflowDefinitionDetail,
@@ -50,6 +53,14 @@ steps:
   - id: test
     kind: shell
     run: "echo ${PROMPT_SECRET}"
+`,
+  'shell-input': `name: shell-input
+inputs:
+  task: { type: text }
+steps:
+  - id: test
+    kind: shell
+    run: "printf '%s' {{inputs.task}}"
 `,
   handoff: `name: handoff
 steps:
@@ -94,9 +105,18 @@ interface SetupOptions {
   shellScript?: (attempt: StepAttempt) => FakeStartBehavior
   artifacts?: RunArtifacts
   runs?: Record<string, WorkflowRun>
+  shellDriver?: StepDriver
 }
 
-function setup({ labs = true, cap = 4, agentScript, shellScript, artifacts, runs = {} }: SetupOptions = {}) {
+function setup({
+  labs = true,
+  cap = 4,
+  agentScript,
+  shellScript,
+  artifacts,
+  runs = {},
+  shellDriver
+}: SetupOptions = {}) {
   const store = new Store({
     ...initialState,
     workflows: { ...initialState.workflows, runs },
@@ -123,7 +143,7 @@ function setup({ labs = true, cap = 4, agentScript, shellScript, artifacts, runs
   const runner = new WorkflowRunner({
     store,
     loader,
-    drivers: { agent, shell },
+    drivers: { agent, shell: shellDriver ?? shell },
     now: () => ++clock,
     newId: () => `id-${++ids}`,
     log: (category, message, data) => {
@@ -549,8 +569,99 @@ describe('WorkflowRunner driver exits', () => {
       expect(ctx.wf().attempts[attemptId].status).toBe('failed')
       expect(ctx.stepStatus(runId, 'plan')).toBe('failed')
       expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+      expect(ctx.wf().attempts[attemptId].summaryPreview).toBe('')
+      expect(ctx.records.at(-1)?.attempts[0].result).toBeUndefined()
     }
   )
+})
+
+function exitingPty(code: number, history: string, signal?: number) {
+  const tabs: Array<{ tab: TerminalTab; command?: string; env?: Record<string, string> }> = []
+  const listeners = new Set<(id: string, exitCode: number, signal?: number) => void>()
+  const alive = new Set<string>()
+  let ids = 0
+  const driver = createShellStepDriver({
+    addTab: (_worktreePath, tab, spawn) => {
+      tabs.push({ tab, command: spawn.command, env: spawn.env })
+      alive.add(tab.id)
+      setTimeout(() => {
+        alive.delete(tab.id)
+        for (const listener of [...listeners]) listener(tab.id, code, signal)
+      }, 0)
+    },
+    hasTerminal: (id) => alive.has(id),
+    getHistory: () => history,
+    onExit: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    kill: () => {},
+    newTabId: () => `shell-tab-${++ids}`
+  })
+  return { driver, tabs }
+}
+
+describe('WorkflowRunner with the shell driver', () => {
+  it.each([
+    [0, 'done', 'done', undefined],
+    [1, 'failed', 'paused', 'step-failed']
+  ] as const)('exit %i ends the attempt %s with the PTY summary', async (code, attemptStatus, runStatus, reason) => {
+    const history = Array.from({ length: 60 }, (_, i) => `\u001b[2Kline ${i}\r\n`).join('')
+    const pty = exitingPty(code, history)
+    const ctx = setup({ shellDriver: pty.driver })
+    const runId = ctx.startRun('shell-input')
+    await flush()
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'test')
+    expect(pty.tabs).toHaveLength(1)
+    expect(pty.tabs[0].tab).toMatchObject({
+      label: '⚙ test · shell',
+      workflow: { runId, stepId: 'test', attemptId }
+    })
+    expect(pty.tabs[0].command).toBe(`printf '%s' "\${HARNESS_WF_0}"`)
+    expect(pty.tabs[0].env).toEqual({ HARNESS_WF_0: INPUT_SECRET })
+    const expected = Array.from({ length: 50 }, (_, i) => `line ${i + 10}`).join('\n')
+    const result = ctx.records.at(-1)?.attempts[0].result
+    expect(result).toEqual({
+      status: attemptStatus,
+      summary: expected,
+      completedBy: 'exit',
+      exitCode: code
+    })
+    expect(ctx.wf().attempts[attemptId].status).toBe(attemptStatus)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: runStatus, ...(reason ? { pausedReason: reason } : {}) })
+    expect(ctx.logs.join('\n')).not.toContain(INPUT_SECRET)
+  })
+
+  it('fails the step when the PTY dies from a signal', async () => {
+    const pty = exitingPty(0, 'partial\r\n', 9)
+    const ctx = setup({ shellDriver: pty.driver })
+    const runId = ctx.startRun('shell-input')
+    await flush()
+    await flush()
+    expect(ctx.records.at(-1)?.attempts[0].result).toEqual({ status: 'failed', summary: 'partial', completedBy: 'exit' })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+  })
+
+  it('fails an oversize value before opening a tab, with a value-free summary', async () => {
+    const pty = exitingPty(0, '')
+    const ctx = setup({ shellDriver: pty.driver })
+    const big = `${INPUT_SECRET} `.repeat(20000)
+    const started = ctx.runner.start({ defId: 'personal:shell-input', worktreePath: '/wt/big', inputs: { task: big } })
+    if (!started.ok) throw new Error(started.reason)
+    await flush()
+    const attemptId = ctx.attemptOf(started.runId, 'test')
+    expect(pty.tabs).toEqual([])
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ status: 'failed', summaryPreview: 'interpolated value too large' })
+    expect(ctx.records.at(-1)?.attempts[0].result).toEqual({
+      status: 'failed',
+      summary: 'interpolated value too large',
+      completedBy: 'exit'
+    })
+    expect(ctx.wf().runs[started.runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+  })
 })
 
 describe('WorkflowRunner concurrency cap', () => {
