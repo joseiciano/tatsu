@@ -96,7 +96,12 @@ import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
-import { WorkflowRunner, createGitRunArtifacts, type StepDriver } from './workflow-runner'
+import {
+  WorkflowRunner,
+  createGitRunArtifacts,
+  createShellStepDriver,
+  type StepDriver
+} from './workflow-runner'
 import {
   createWorkflowRunLookup,
   createWorkflowRunRecords,
@@ -779,10 +784,18 @@ const unavailableStepDriver = (): StepDriver => ({
   cancel: () => {},
   onEvent: () => () => {}
 })
+const shellStepDriver = createShellStepDriver({
+  addTab: (wtPath, tab, spawn) => panesFSM.addTab(wtPath, tab, undefined, { fromMain: true, spawn }),
+  hasTerminal: (id) => ptyManager.hasTerminal(id),
+  getHistory: (id) => ptyManager.getHistory(id),
+  onExit: (listener) => ptyManager.onExit(listener),
+  kill: (id, signal) => ptyManager.kill(id, signal),
+  newTabId: () => `shell-${randomUUID()}`
+})
 const workflowRunner = new WorkflowRunner({
   store,
   loader: workflowDefsLoader,
-  drivers: { agent: unavailableStepDriver(), shell: unavailableStepDriver() },
+  drivers: { agent: unavailableStepDriver(), shell: shellStepDriver },
   now: () => Date.now(),
   newId: () => randomUUID(),
   log,
@@ -3552,6 +3565,7 @@ if (desktopShellMod && desktopEarly) {
     onBeforeQuit: () => {
       codexHookTrustMonitor?.stop()
       workflowRunner.dispose()
+      shellStepDriver.dispose()
       chatRuntimeRegistry.killAll()
     },
     flushBeforeQuit: flushWorkflowRunRecords
@@ -3573,6 +3587,7 @@ if (desktopShellMod && desktopEarly) {
     shuttingDown = true
     codexHookTrustMonitor?.stop()
     workflowRunner.dispose()
+    shellStepDriver.dispose()
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')
