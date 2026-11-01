@@ -5,23 +5,26 @@ import { getAgentInfo, isHarnessConfigCapabilityEnabled, type AgentInfo } from '
 import {
   harnessConfigScopeKey,
   type HarnessConfigFileRef,
+  type HarnessConfigFragmentResolution,
   type HarnessConfigRequestError,
   type HarnessConfigResourceType,
   type HarnessConfigScope,
   type HarnessConfigScopeKey,
-  type HarnessConfigSyncDirection,
   type ManagedHarnessKind
 } from '../../../shared/state/harness-config'
 import { ConfigTabs } from './ConfigTabs'
 import { ConfigResourceList, buildConfigResourceGroups } from './ConfigResourceList'
 import { ConfigEditor } from './ConfigEditor'
 import { ConfigSyncDialog } from './ConfigSyncDialog'
+import { ConfigTemplates } from './ConfigTemplates'
+import { ConfigImportWizard } from './ConfigImportWizard'
 import { decideFreshPlanOutcome, toConfigSyncReview } from './config-sync-review'
 import { deriveConfigConversionOutcome } from './config-conversion'
 import type {
   ConfigAgentFilter,
   ConfigAgentFilterOption,
   ConfigConversionSourceInfo,
+  ConfigDeferredHarness,
   ConfigDriftBadge,
   ConfigEditorView,
   ConfigProps,
@@ -29,7 +32,9 @@ import type {
   ConfigSelection,
   ConfigSyncReview,
   ConfigSyncStage,
-  ConfigTabDefinition
+  ConfigTabDefinition,
+  ConfigViewId,
+  ConfigViewTabDefinition
 } from './types'
 
 const TABS: readonly ConfigTabDefinition[] = [
@@ -37,6 +42,8 @@ const TABS: readonly ConfigTabDefinition[] = [
   { id: 'skills', label: 'Skills' },
   { id: 'commands', label: 'Commands' }
 ]
+
+const VIEW_TABS: readonly ConfigViewTabDefinition[] = [...TABS, { id: 'templates', label: 'Templates' }]
 
 const AGENT_FILTER_OPTIONS: readonly ConfigAgentFilterOption[] = [
   { id: 'all', label: 'All' },
@@ -47,6 +54,19 @@ const AGENT_FILTER_OPTIONS: readonly ConfigAgentFilterOption[] = [
 
 const MANAGED_KINDS: readonly ManagedHarnessKind[] = ['claude', 'codex', 'opencode']
 const MANAGED_REGISTRY: readonly AgentInfo[] = MANAGED_KINDS.map((kind) => getAgentInfo(kind))
+const DEFERRED_KINDS = ['pi'] as const
+
+function deferredHarnessesFor(resourceType: HarnessConfigResourceType): ConfigDeferredHarness[] {
+  return DEFERRED_KINDS.map((kind) => {
+    const info = getAgentInfo(kind)
+    const capability = info.configCapabilities.find((c) => c.resourceType === resourceType)
+    return {
+      agentKind: kind,
+      displayName: info.displayName,
+      note: capability?.notes ?? `${info.displayName} config management is deferred.`
+    }
+  })
+}
 
 interface ScopeStatus {
   busy: boolean
@@ -99,7 +119,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return false
 }
 
-export function Config({ onClose }: ConfigProps): JSX.Element {
+export function Config({ onClose, onOpenConfigFolders }: ConfigProps): JSX.Element {
   const backend = useBackend()
   const harnessConfig = useHarnessConfig()
   const settings = useSettings()
@@ -108,6 +128,11 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<HarnessConfigResourceType>('agents')
   const [agentFilter, setAgentFilter] = useState<ConfigAgentFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [templatesDirty, setTemplatesDirty] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [templateOpenRef, setTemplateOpenRef] = useState<string | null>(null)
+  const activeView: ConfigViewId = templatesOpen ? 'templates' : activeTab
 
   const [selected, setSelected] = useState<ConfigSelection | null>(null)
   const [selectedRef, setSelectedRef] = useState<HarnessConfigFileRef | null>(null)
@@ -146,6 +171,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   const [dialogActionError, setDialogActionError] = useState<string | null>(null)
   const [dialogActionNotice, setDialogActionNotice] = useState<string | null>(null)
   const [dialogReviewUsable, setDialogReviewUsable] = useState(true)
+  const [dialogDetachIds, setDialogDetachIds] = useState<ReadonlySet<string>>(new Set())
+  const [dismissedTemplateNoticeAt, setDismissedTemplateNoticeAt] = useState<number | null>(null)
 
   // Session bookkeeping — plain refs so they never themselves trigger a
   // render; every async chain captures these at call time and re-checks
@@ -223,6 +250,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDialogActionError(null)
     setDialogActionNotice(null)
     setDialogReviewUsable(true)
+    setTemplateOpenRef(null)
   }, [invalidateRead])
 
   // REQ-009: an active-backend switch invalidates every page-local
@@ -250,9 +278,22 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         : false
 
   const confirmDiscard = useCallback((): boolean => {
-    if (!isDirty) return true
+    if (!isDirty && !templatesDirty) return true
     return window.confirm('Discard unsaved changes in the Config editor?')
-  }, [isDirty])
+  }, [isDirty, templatesDirty])
+
+  // A config-folder change in Settings moves the roots under every scope,
+  // so drop the per-session scanned bookkeeping and per-scope errors and
+  // let the scan effect below rescan what's visible.
+  const rootsRef = useRef(settings.harnessConfigRoots)
+  const [rootsVersion, setRootsVersion] = useState(0)
+  useEffect(() => {
+    if (rootsRef.current === settings.harnessConfigRoots) return
+    rootsRef.current = settings.harnessConfigRoots
+    scannedRef.current.delete(activeBackend.id)
+    setScopeStatusState({})
+    setRootsVersion((v) => v + 1)
+  }, [settings.harnessConfigRoots, activeBackend.id])
 
   // ---- Scanning (REQ-010) ----
 
@@ -303,7 +344,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       void runScopeScan(scope, backendId, generation)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, agentFilter, activeBackend.id, runScopeScan])
+  }, [activeTab, agentFilter, activeBackend.id, runScopeScan, rootsVersion])
 
   const refreshComparisons = useCallback(
     async (
@@ -432,7 +473,6 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     const existsInComparison =
       !!comparison &&
       (comparison.configOnly.some((r) => r.id === selected.id) ||
-        comparison.diskOnly.some((r) => r.id === selected.id) ||
         comparison.changed.some((c) => c.disk.id === selected.id))
     if (existsInComparison) return
     invalidateRead()
@@ -460,13 +500,46 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   }, [invalidateRead])
 
   const handleTabChange = useCallback(
-    (tab: HarnessConfigResourceType) => {
-      if (tab === activeTab) return
+    (view: ConfigViewId) => {
+      if (view === activeView) return
       if (!confirmDiscard()) return
-      setActiveTab(tab)
-      clearSelectionAndEditor()
+      if (view === 'templates') {
+        clearSelectionAndEditor()
+        setTemplateOpenRef(null)
+        setTemplatesOpen(true)
+        return
+      }
+      setTemplatesOpen(false)
+      setTemplatesDirty(false)
+      setImportOpen(false)
+      if (view !== activeTab) {
+        setActiveTab(view)
+        clearSelectionAndEditor()
+      }
     },
-    [activeTab, confirmDiscard, clearSelectionAndEditor]
+    [activeView, activeTab, confirmDiscard, clearSelectionAndEditor]
+  )
+
+  const handleOpenImport = useCallback(() => {
+    if (!confirmDiscard()) return
+    setTemplateOpenRef(null)
+    setImportOpen(true)
+  }, [confirmDiscard])
+
+  const handleCloseImport = useCallback(() => {
+    setTemplatesDirty(false)
+    setImportOpen(false)
+  }, [])
+
+  const handleEditTemplate = useCallback(
+    (templateRef: string) => {
+      if (!confirmDiscard()) return
+      clearSelectionAndEditor()
+      setTemplateOpenRef(templateRef)
+      setImportOpen(false)
+      setTemplatesOpen(true)
+    },
+    [confirmDiscard, clearSelectionAndEditor]
   )
 
   const handleAgentFilterChange = useCallback(
@@ -668,7 +741,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
   // REQ-014: the *only* two callers of the conversion prepare channels.
   // Nothing else — mount, tab/filter change, scan, Tatsu-config refresh,
-  // sync/adopt, conflict completion, plugin metadata — may invoke this.
+  // sync, conflict completion, plugin metadata — may invoke this.
   // An `alias`/`existing` result is a pure notice with zero mutation
   // (REQ-017); a `draft` result enters the existing create flow without
   // ever applying itself (REQ-015/REQ-016).
@@ -934,7 +1007,82 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     setDialogActionError(null)
     setDialogActionNotice(null)
     setDialogReviewUsable(true)
+    setDialogDetachIds(new Set())
   }, [])
+
+  const handleDetachChange = useCallback((id: string, detach: boolean) => {
+    setDialogDetachIds((current) => {
+      if (current.has(id) === detach) return current
+      const next = new Set(current)
+      if (detach) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }, [])
+
+  const handleResolveFragmentEdit = useCallback(
+    (id: string, fragment: string, resolution: HarnessConfigFragmentResolution) => {
+      if (!dialogReview || dialogStage !== 'idle' || !dialogReviewUsable) return
+      const token = dialogTokenRef.current
+      const backendId = activeBackend.id
+      const generation = backendGenerationRef.current
+      const scope = dialogReview.scope
+      const scopeKey = dialogReview.scopeKey
+      const isStale = (): boolean =>
+        dialogTokenRef.current !== token ||
+        activeBackendIdRef.current !== backendId ||
+        backendGenerationRef.current !== generation
+
+      setDialogStage('applying')
+      setDialogActionError(null)
+      setDialogActionNotice(null)
+
+      void (async () => {
+        let result: Awaited<ReturnType<typeof backend.resolveHarnessFragmentEdit>>
+        try {
+          result = await backend.resolveHarnessFragmentEdit({ scope, id, fragment, resolution, confirmed: true })
+        } catch (err) {
+          if (isStale()) return
+          setDialogActionError(requestFailureMessage(err))
+          setDialogStage('idle')
+          return
+        }
+        if (isStale()) return
+        if (!result.ok) {
+          setDialogActionError(result.error.message)
+          setDialogStage('idle')
+          return
+        }
+
+        let compared: Awaited<ReturnType<typeof backend.compareHarnessConfig>> | null
+        try {
+          compared = await backend.compareHarnessConfig({ scope })
+        } catch {
+          compared = null
+        }
+        if (isStale()) return
+        if (!compared || !compared.ok) {
+          setDialogReviewUsable(false)
+          setDialogActionError('Resolved, but unable to refresh this comparison — cancel and start Sync again.')
+          setDialogStage('idle')
+          return
+        }
+        if (compared.value.status === 'synced') {
+          closeDialog()
+          showScopeNotice(scopeKey, 'Already in sync', backendId, generation)
+          return
+        }
+        setDialogReview(toConfigSyncReview(compared.value))
+        setDialogActionNotice(
+          resolution === 'keep-edit'
+            ? `Saved the edit to ${fragment} and updated this file. Sync other folders that use it.`
+            : 'Resolved and updated this file on disk.'
+        )
+        setDialogStage('idle')
+      })()
+    },
+    [dialogReview, dialogStage, dialogReviewUsable, activeBackend.id, backend, closeDialog, showScopeNotice]
+  )
 
   const handleDialogCancel = useCallback(() => {
     if (dialogStage === 'applying') return
@@ -987,6 +1135,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         setDialogActionError(null)
         setDialogActionNotice(null)
         setDialogReviewUsable(true)
+        setDialogDetachIds(new Set())
         setDialogOpen(true)
       })()
     },
@@ -997,8 +1146,8 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
   // mutation buttons. Every identity/token check in REQ-021 runs after
   // each awaited planner/apply/recovery call before the next request is
   // issued or local UI state is committed.
-  const handleOutcomeClick = useCallback(
-    (direction: HarnessConfigSyncDirection) => {
+  const handleSyncClick = useCallback(
+    () => {
       if (!dialogReview || dialogStage !== 'idle' || !dialogReviewUsable) return
 
       const token = dialogTokenRef.current
@@ -1009,6 +1158,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       const displayedReviewKey = dialogReview.reviewKey
       const agentName = dialogAgentName
       const resourceLabel = dialogResourceLabel
+      const templateConfigIds = new Set(
+        dialogReview.sections.changed.filter((pair) => pair.config.ref.source === 'template').map((pair) => pair.config.ref.id)
+      )
+      const detach = [...dialogDetachIds].filter((id) => templateConfigIds.has(id)).sort()
 
       const isStale = (): boolean =>
         dialogTokenRef.current !== token ||
@@ -1022,10 +1175,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       void (async () => {
         let planResult: Awaited<ReturnType<typeof backend.planHarnessConfigSyncToDisk>>
         try {
-          planResult =
-            direction === 'sync-to-disk'
-              ? await backend.planHarnessConfigSyncToDisk({ scope })
-              : await backend.planHarnessConfigAdoptFromDisk({ scope })
+          planResult = await backend.planHarnessConfigSyncToDisk(detach.length > 0 ? { scope, detach } : { scope })
         } catch (err) {
           if (isStale()) return
           setDialogActionError(requestFailureMessage(err))
@@ -1057,23 +1207,15 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
           return
         }
 
-        // apply-fresh-plan: a review-equivalent, drift-bearing plan from
-        // the direction-specific planner that matches this outcome.
+        // apply-fresh-plan: a review-equivalent, drift-bearing plan.
         setDialogStage('applying')
         let applyResult: Awaited<ReturnType<typeof backend.syncHarnessConfigToDisk>>
         try {
-          applyResult =
-            direction === 'sync-to-disk'
-              ? await backend.syncHarnessConfigToDisk({
-                  scope: freshPlan.scope,
-                  planId: freshPlan.planId,
-                  confirmed: true
-                })
-              : await backend.adoptHarnessConfigFromDisk({
-                  scope: freshPlan.scope,
-                  planId: freshPlan.planId,
-                  confirmed: true
-                })
+          applyResult = await backend.syncHarnessConfigToDisk({
+            scope: freshPlan.scope,
+            planId: freshPlan.planId,
+            confirmed: true
+          })
         } catch (err) {
           applyResult = { ok: false, error: { code: 'internal-error', message: requestFailureMessage(err) } }
         }
@@ -1086,11 +1228,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
 
         if (applyResult.ok) {
           closeDialog()
-          const notice =
-            direction === 'sync-to-disk'
-              ? `Synced ${agentName} ${resourceLabel} to disk`
-              : `Adopted current disk ${resourceLabel} into Tatsu config`
-          showScopeNotice(scopeKey, notice, backendId, generation)
+          showScopeNotice(scopeKey, `Synced ${agentName} ${resourceLabel} to disk`, backendId, generation)
           return
         }
 
@@ -1138,6 +1276,7 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
       backend,
       dialogAgentName,
       dialogResourceLabel,
+      dialogDetachIds,
       closeDialog,
       showScopeNotice,
       setScopeStatus
@@ -1222,9 +1361,27 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     return { kind: 'empty' }
   }, [editorMode, createScope, selected, selectedRef, readBusy, groupsNoSearch, conversionSubmitLabel, conversionSource])
 
+  const deferredHarnesses = useMemo(
+    () => (agentFilter === 'all' ? deferredHarnessesFor(activeTab) : []),
+    [agentFilter, activeTab]
+  )
+
+  const templateNotice = harnessConfig.templateSyncNotice
+  const templateNoticeScopes = useMemo(() => {
+    if (!templateNotice || templateNotice.changedAt === dismissedTemplateNoticeAt) return []
+    return templateNotice.scopes.flatMap((key) => {
+      const comparison = harnessConfig.comparisons[key]
+      if (!comparison || comparison.status === 'synced') return []
+      const agentName = getAgentInfo(comparison.scope.agentKind).displayName
+      const resourceLabel = TABS.find((t) => t.id === comparison.scope.resourceType)?.label ?? comparison.scope.resourceType
+      return [{ key, scope: comparison.scope, label: `${agentName} · ${resourceLabel}` }]
+    })
+  }, [templateNotice, dismissedTemplateNoticeAt, harnessConfig.comparisons])
+
   const canCreate =
     editorView.kind === 'create' && createName.trim().length > 0 && !mutationBusy
-  const canEdit = editorView.kind === 'edit' && !readBusy && !readFailed && !mutationBusy
+  const canEdit =
+    editorView.kind === 'edit' && !readBusy && !readFailed && !mutationBusy
   const canSave = canEdit && draft !== savedContent
   const canDelete = canEdit
 
@@ -1232,58 +1389,109 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
     <div className="flex flex-col h-full min-h-0 bg-panel">
       <ConfigTabs
         onClose={handleClose}
-        tabs={TABS}
-        activeTab={activeTab}
+        tabs={VIEW_TABS}
+        activeTab={activeView}
         onTabChange={handleTabChange}
+        showAgentFilter={!templatesOpen}
         agentFilterOptions={AGENT_FILTER_OPTIONS}
         agentFilter={agentFilter}
         onAgentFilterChange={handleAgentFilterChange}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
       />
-      <div className="flex flex-1 min-h-0">
-        <div className="w-72 shrink-0 border-r border-border min-h-0 overflow-hidden">
-          <ConfigResourceList
-            groups={displayGroups}
-            searchActive={searchActive}
-            sharedError={harnessConfig.error}
-            onSelectResource={handleSelectResource}
-            onCreate={handleEnterCreate}
-            onSync={handleSync}
-            onCreateCommand={handleCreateCommand}
-            onCreateSkill={handleCreateSkill}
-          />
+      {templateNotice && templateNoticeScopes.length > 0 && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-border bg-app/30 text-xs text-dim"
+        >
+          <span className="text-fg-bright">Template or fragment changes put these scopes out of sync with disk:</span>
+          {templateNoticeScopes.map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              onClick={() => handleSync(entry.scope)}
+              className="text-accent hover:underline cursor-pointer"
+            >
+              Review {entry.label}
+            </button>
+          ))}
+          <span className="text-faint">Each scope is synced on its own.</span>
+          <button
+            type="button"
+            onClick={() => setDismissedTemplateNoticeAt(templateNotice.changedAt)}
+            className="ml-auto text-dim hover:text-fg cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          <ConfigEditor
-            view={editorView}
-            draft={draft}
-            onDraftChange={setDraft}
-            nameDraft={createName}
-            onNameDraftChange={setCreateName}
-            dirty={isDirty}
-            busy={mutationBusy || readBusy}
-            canEdit={canEdit}
-            canSave={canSave}
-            canCreate={canCreate}
-            canDelete={canDelete}
-            error={actionError}
-            fontFamily={settings.terminalFontFamily}
-            fontSize={settings.terminalFontSize}
-            onSave={() => {
-              if (canSave) void handleSave()
-            }}
-            onCreate={() => {
-              if (canCreate) void handleSubmitCreate()
-            }}
-            onDelete={() => {
-              if (canDelete) void handleDelete()
-            }}
-            onCancel={handleCancelCreate}
-            onReset={handleResetDraft}
-          />
+      )}
+      {templatesOpen && importOpen ? (
+        <ConfigImportWizard
+          key={activeBackend.id}
+          onClose={handleCloseImport}
+          onReviewScope={handleSync}
+          onDirtyChange={setTemplatesDirty}
+          fontFamily={settings.terminalFontFamily}
+          fontSize={settings.terminalFontSize}
+        />
+      ) : templatesOpen ? (
+        <ConfigTemplates
+          key={activeBackend.id}
+          initialTemplateRef={templateOpenRef}
+          searchQuery={searchQuery}
+          onDirtyChange={setTemplatesDirty}
+          onImport={handleOpenImport}
+          fontFamily={settings.terminalFontFamily}
+          fontSize={settings.terminalFontSize}
+        />
+      ) : (
+        <div className="flex flex-1 min-h-0">
+          <div className="w-72 shrink-0 border-r border-border min-h-0 overflow-hidden">
+            <ConfigResourceList
+              groups={displayGroups}
+              deferredHarnesses={deferredHarnesses}
+              searchActive={searchActive}
+              sharedError={harnessConfig.error}
+              onSelectResource={handleSelectResource}
+              onCreate={handleEnterCreate}
+              onSync={handleSync}
+              onCreateCommand={handleCreateCommand}
+              onCreateSkill={handleCreateSkill}
+              onEditTemplate={handleEditTemplate}
+              onOpenConfigFolders={onOpenConfigFolders}
+            />
+          </div>
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+            <ConfigEditor
+              view={editorView}
+              draft={draft}
+              onDraftChange={setDraft}
+              nameDraft={createName}
+              onNameDraftChange={setCreateName}
+              dirty={isDirty}
+              busy={mutationBusy || readBusy}
+              canEdit={canEdit}
+              canSave={canSave}
+              canCreate={canCreate}
+              canDelete={canDelete}
+              error={actionError}
+              fontFamily={settings.terminalFontFamily}
+              fontSize={settings.terminalFontSize}
+              onSave={() => {
+                if (canSave) void handleSave()
+              }}
+              onCreate={() => {
+                if (canCreate) void handleSubmitCreate()
+              }}
+              onDelete={() => {
+                if (canDelete) void handleDelete()
+              }}
+              onCancel={handleCancelCreate}
+              onReset={handleResetDraft}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <ConfigSyncDialog
         open={dialogOpen}
         review={dialogReview}
@@ -1293,8 +1501,10 @@ export function Config({ onClose }: ConfigProps): JSX.Element {
         reviewUsable={dialogReviewUsable}
         actionError={dialogActionError}
         actionNotice={dialogActionNotice}
-        onSyncToDisk={() => handleOutcomeClick('sync-to-disk')}
-        onAdoptFromDisk={() => handleOutcomeClick('adopt-from-disk')}
+        detachIds={dialogDetachIds}
+        onDetachChange={handleDetachChange}
+        onResolveFragmentEdit={handleResolveFragmentEdit}
+        onSyncToDisk={handleSyncClick}
         onCancel={handleDialogCancel}
       />
     </div>

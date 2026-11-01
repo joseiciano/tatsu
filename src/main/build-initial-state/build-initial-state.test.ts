@@ -77,4 +77,30 @@ describe('buildInitialAppState', () => {
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
   })
 
+  it('seeds config folder settings and drops unknown keys and relative paths', () => {
+    const result = buildInitialAppState(
+      {
+        ...emptyConfig,
+        harnessConfigRoots: {
+          claudeSkills: '/dotfiles/claude/skills',
+          codexHome: 'relative/codex',
+          opencodeAgents: 42,
+          bogusKey: '/tmp/bogus'
+        } as unknown as Config['harnessConfigRoots'],
+        harnessConfigSourceDir: '/templates/source'
+      },
+      { hasGithubToken: false }
+    )
+    expect(result.settings.harnessConfigRoots).toEqual({ claudeSkills: '/dotfiles/claude/skills' })
+    expect(result.settings.harnessConfigSourceDir).toBe('/templates/source')
+  })
+
+  it('treats a non-absolute template source folder as the default', () => {
+    const result = buildInitialAppState(
+      { ...emptyConfig, harnessConfigSourceDir: 'templates' },
+      { hasGithubToken: false }
+    )
+    expect(result.settings.harnessConfigSourceDir).toBeNull()
+    expect(result.settings.harnessConfigRoots).toEqual({})
+  })
 })

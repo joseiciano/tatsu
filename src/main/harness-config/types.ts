@@ -1,6 +1,11 @@
 import type { Dirent, Stats } from 'fs'
 import type { HarnessConfigResourceType } from '../../shared/agent-registry'
 import type {
+  RenderableFragment,
+  RenderableTemplate,
+  TemplateRenderResult
+} from '../../shared/harness-template-render'
+import type {
   HarnessConfigAppliedOperation,
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
@@ -8,11 +13,16 @@ import type {
   HarnessConfigConversionResult,
   HarnessConfigErrorCode,
   HarnessConfigFileRef,
+  HarnessConfigFragmentFileUse,
+  HarnessConfigFragmentResolution,
   HarnessConfigMutationDirection,
   HarnessConfigMutationPlan,
   HarnessConfigReadFileResult,
+  HarnessConfigResolveFragmentEditResult,
+  HarnessConfigRootKey,
   HarnessConfigScope,
   HarnessConfigSyncPlan,
+  HarnessTemplate,
   ManagedHarnessKind
 } from '../../shared/state/harness-config'
 
@@ -111,6 +121,26 @@ export interface HarnessConfigDesiredResource {
   content: string
   hash: string
   updatedAt: number
+  /** Set only on entries rendered from a template; never persisted. */
+  source?: 'template'
+  templateRef?: string
+}
+
+export interface HarnessConfigTemplateSource {
+  templates: readonly (RenderableTemplate & { hash?: string })[]
+  fragments: readonly (RenderableFragment & { hash?: string })[]
+  errors?: readonly { relativePath: string; message: string }[]
+}
+
+export interface HarnessConfigShadowedEntry {
+  agentKind: ManagedHarnessKind
+  resourceType: HarnessConfigResourceType
+  relativePath: string
+}
+
+export interface HarnessConfigSyncOptions {
+  /** Template-built ids to keep as they are on disk and detach. */
+  detach?: readonly string[]
 }
 
 /** Local alias kept so existing main-side call sites don't need to
@@ -120,6 +150,7 @@ export type HarnessConfigReadResult = HarnessConfigReadFileResult
 export interface HarnessConfigFilesystem {
   readdirSync(path: string, options: { withFileTypes: true }): Dirent[]
   lstatSync(path: string): Stats
+  statSync(path: string): Stats
   readFileSync(path: string): Buffer
   writeFileSync(path: string, data: string | Uint8Array, options?: { flag?: string }): void
   renameSync(oldPath: string, newPath: string): void
@@ -127,20 +158,26 @@ export interface HarnessConfigFilesystem {
   mkdirSync(path: string, options: { recursive: true }): unknown
   existsSync(path: string): boolean
   realpathSync(path: string): string
+  readlinkSync(path: string): string
+  symlinkSync(target: string, path: string): void
 }
 
 export interface HarnessConfigServiceDeps {
-  knownRoots?: Record<string, string | undefined>
+  knownRoots?: () => Partial<Record<HarnessConfigRootKey, string>>
   resolvers?: Partial<Record<ManagedHarnessKind, HarnessResolver>>
   homeDir?: string
   env?: Record<string, string | undefined>
   clock?: () => number
   uuid?: () => string
-  loadDesiredResources?: () => HarnessConfigDesiredResource[]
-  replaceDesiredScope?: (
-    scope: HarnessConfigScope,
-    resources: HarnessConfigDesiredResource[]
-  ) => void | Promise<void>
+  loadTemplateSource?: () => HarnessConfigTemplateSource
+  render?: (
+    templates: readonly RenderableTemplate[],
+    fragments: readonly RenderableFragment[]
+  ) => TemplateRenderResult
+  /** Removes `agentKind` from the template's targets (sync "Detach"). */
+  detachTemplateTarget?: (templateRef: string, agentKind: ManagedHarnessKind) => void | Promise<void>
+  /** Stores a fragment in the template source folder (resolve "keep edit"). */
+  saveFragment?: (name: string, content: string) => void | Promise<void>
   filesystem?: HarnessConfigFilesystem
   log?: (category: string, message: string, data?: unknown) => void
   formatErr?: (error: unknown) => string
@@ -150,12 +187,28 @@ export interface HarnessConfigService {
   scan(scope: HarnessConfigScope): HarnessConfigFileRef[]
   readFile(id: string): HarnessConfigReadResult
   planSync(scope: HarnessConfigScope): HarnessConfigComparison
-  planSyncToDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan
-  planAdoptFromDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan
+  planSyncToDisk(scope: HarnessConfigScope, options?: HarnessConfigSyncOptions): HarnessConfigSyncPlan
   prepareCreate(scope: HarnessConfigScope, name: string, content: string): HarnessConfigMutationPlan
   prepareUpdate(scope: HarnessConfigScope, id: string, content: string): HarnessConfigMutationPlan
   prepareDelete(scope: HarnessConfigScope, id: string): HarnessConfigMutationPlan
   prepareCommandFromSkill(scope: HarnessConfigScope, id: string): HarnessConfigConversionResult
   prepareSkillFromCommand(scope: HarnessConfigScope, id: string): HarnessConfigConversionResult
   applyPlan(request: HarnessConfigApplyRequest): Promise<HarnessConfigApplyResult>
+  defaultRoots(): Record<HarnessConfigRootKey, string>
+  scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[]
+  /** Supported scopes that a template's output lands in, aliases included. */
+  scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[]
+  /** Disk files outside this template that its output would overwrite. */
+  templateShadows(template: RenderableTemplate): HarnessConfigShadowedEntry[]
+  /** Supported scopes with a hand-written disk file that uses `name` as an
+   *  inline fragment, or any inline fragment when `name` is omitted. */
+  scopesForFragment(name?: string): HarnessConfigScope[]
+  /** Hand-written disk files that use the fragment, sorted by harness and path. */
+  filesUsingFragment(name: string): HarnessConfigFragmentFileUse[]
+  resolveFragmentEdit(
+    scope: HarnessConfigScope,
+    id: string,
+    fragment: string,
+    resolution: HarnessConfigFragmentResolution
+  ): Promise<HarnessConfigResolveFragmentEditResult>
 }

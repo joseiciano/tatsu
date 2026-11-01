@@ -7,24 +7,46 @@ import {
   readdirSync,
   realpathSync,
   renameSync,
+  statSync,
   unlinkSync,
-  writeFileSync
+  writeFileSync,
+  readlinkSync,
+  symlinkSync
 } from 'fs'
 import type { Stats } from 'fs'
 import { homedir } from 'os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path'
 
-import type { HarnessConfigResourceType } from '../../shared/agent-registry'
+import { resourcePathForName, templateOutputFor, type HarnessConfigResourceType } from '../../shared/agent-registry'
 import {
   harnessConfigScopeKey,
   type HarnessConfigComparison,
   type HarnessConfigFileRef,
+  type HarnessConfigFragmentErrorEntry,
+  type HarnessConfigFragmentFileUse,
+  type HarnessConfigFragmentResolution,
+  type HarnessConfigResolveFragmentEditResult,
+  type HarnessConfigRootKey,
   type HarnessConfigScope,
   type HarnessConfigSyncDirection,
   type HarnessConfigSyncPlan,
   type HarnessConfigSyncStatus,
   type ManagedHarnessKind
 } from '../../shared/state/harness-config'
+import {
+  renderTemplates,
+  templateFragmentNames,
+  templateRefOf,
+  type RenderableTemplate,
+  type TemplateRenderResult
+} from '../../shared/harness-template-render'
+import { classifyTemplateSourcePath, TEMPLATE_KIND_RESOURCE_TYPE, templateTargets } from '../../shared/harness-templates'
+import {
+  expandInlineFragments,
+  inlineFragmentNames,
+  resolveInlineFragmentEdit
+} from '../../shared/inline-fragments'
+import type { HarnessTemplate } from '../../shared/state/harness-config'
 import { formatErr as defaultFormatErr, log as defaultLog } from '../debug'
 import { conversionDestinationName, createCommandFromSkill, createSkillFromCommand } from './conversion'
 import type {
@@ -34,6 +56,7 @@ import type {
   HarnessConfigConversionResult,
   HarnessConfigConversionSource,
   HarnessConfigDesiredResource,
+  HarnessConfigSyncOptions,
   HarnessConfigFilesystem,
   HarnessConfigErrorCode,
   HarnessConfigMutationDirection,
@@ -42,6 +65,8 @@ import type {
   HarnessConfigResourceResolver,
   HarnessConfigService,
   HarnessConfigServiceDeps,
+  HarnessConfigShadowedEntry,
+  HarnessConfigTemplateSource,
   HarnessResolver
 } from './types'
 import { HarnessConfigError } from './types'
@@ -51,6 +76,7 @@ const MANAGED_HARNESSES: readonly ManagedHarnessKind[] = ['claude', 'codex', 'op
 const BACKUP_SUFFIX = /\.x-backup-\d{8}T\d{9}Z(?:-\d+)?$/
 const MAX_LIVE_PLANS = 64
 const MAX_ATTEMPTED_PLAN_IDS = 512
+const EMPTY_TEMPLATE_SOURCE: HarnessConfigTemplateSource = { templates: [], fragments: [] }
 
 const unsupported = (identity: string, reason: string): HarnessConfigResourceResolver => ({
   supported: false,
@@ -83,6 +109,13 @@ const markdownResolver = (
   nameToRelativePath
 })
 
+const sharedPath = (agentKind: ManagedHarnessKind, resourceType: HarnessConfigResourceType) =>
+  (name: string): string => {
+    const relativePath = resourcePathForName(agentKind, resourceType, name)
+    if (relativePath === null) throw new HarnessConfigError('invalid-name', 'The resolver cannot derive a resource path')
+    return relativePath
+  }
+
 const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
   claude: {
     agentKind: 'claude',
@@ -94,7 +127,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://code.claude.com/docs/en/sub-agents.md',
         'agents',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`
+        sharedPath('claude', 'agents')
       ),
       skills: markdownResolver(
         'claudeSkills',
@@ -102,7 +135,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://code.claude.com/docs/en/skills',
         'skills',
         /(?:^|\/)SKILL\.md$/,
-        (name) => `${name}/SKILL.md`,
+        sharedPath('claude', 'skills'),
         { aliasResourceTypes: ['commands'], maxDepth: 1 }
       ),
       commands: markdownResolver(
@@ -111,7 +144,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://code.claude.com/docs/en/skills',
         'commands',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('claude', 'commands'),
         { aliasSourceResourceTypes: ['skills'] }
       )
     }
@@ -126,7 +159,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://learn.chatgpt.com/docs/agent-configuration/agents-md.md',
         'agents',
         /^AGENTS(?:\.override)?\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('codex', 'agents'),
         { maxDepth: 0 }
       ),
       skills: markdownResolver(
@@ -135,7 +168,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://learn.chatgpt.com/docs/build-skills.md',
         'skills',
         /(?:^|\/)SKILL\.md$/,
-        (name) => `${name}/SKILL.md`,
+        sharedPath('codex', 'skills'),
         { maxDepth: 1 }
       ),
       commands: unsupported('codex-commands-unsupported-v1', 'Codex commands have no verified managed entrypoint')
@@ -151,7 +184,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://opencode.ai/docs/agents',
         'agents',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('opencode', 'agents'),
         { maxDepth: 0 }
       ),
       skills: markdownResolver(
@@ -160,7 +193,7 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://opencode.ai/docs/skills',
         'skills',
         /(?:^|\/)SKILL\.md$/,
-        (name) => `${name}/SKILL.md`,
+        sharedPath('opencode', 'skills'),
         { maxDepth: 1 }
       ),
       commands: markdownResolver(
@@ -169,17 +202,36 @@ const BUILTIN_RESOLVERS: Record<ManagedHarnessKind, HarnessResolver> = {
         'https://opencode.ai/docs/commands',
         'commands',
         /(?:^|\/)[^/]+\.md$/,
-        (name) => `${name}.md`,
+        sharedPath('opencode', 'commands'),
         { maxDepth: 0 }
       )
     }
   }
 }
 
+type WalkEntry = {
+  relativePath: string
+  linkedFrom?: string
+}
+
+type RootInfo = {
+  root: string
+  lexicalRoot: string
+  rootLinkedFrom?: string
+}
+
+type ContainmentMode = 'read' | 'write'
+
+// absolutePath is the real location every read, write and containment check
+// uses; displayPath keeps the configured root so a symlinked root is shown
+// where the user configured it rather than at its target.
+type ResolvedCandidate = { root: string; relativePath: string; absolutePath: string; displayPath: string }
+
 type DiskEntry = {
   ref: HarnessConfigFileRef
   descriptor: HarnessConfigResourceResolver
   root: string
+  bytes: Buffer
 }
 
 type ConfigEntry = {
@@ -197,6 +249,13 @@ type DiskOperation = {
   descriptorResourceType: HarnessConfigResourceType
 }
 
+type DetachTarget = {
+  id: string
+  relativePath: string
+  templateRef: string
+  agentKind: ManagedHarnessKind
+}
+
 type PrivatePlan = {
   publicPlan: HarnessConfigSyncPlan | HarnessConfigMutationPlan
   scopeKey: string
@@ -204,44 +263,60 @@ type PrivatePlan = {
   diskFingerprint: string
   configFingerprint: string
   resolverIdentity: string
+  templateFingerprint: string
   operations: DiskOperation[]
-  adoptedResources?: HarnessConfigDesiredResource[]
+  detachTargets?: DetachTarget[]
   attempted: boolean
 }
+type ScopeRenderError = { templateRef: string; message: string }
+type StoredFragmentError = { resource: HarnessConfigDesiredResource; message: string }
+type StoredFragmentEdit = { resource: HarnessConfigDesiredResource; fragments: string[] }
 
-type MutationOutcome = {
-  operation: DiskOperation
-  applied: HarnessConfigAppliedOperation
-  existed: boolean
-  before?: Buffer
-}
 type SnapshotState = {
   scope: HarnessConfigScope
   disk: DiskEntry[]
   desired: HarnessConfigDesiredResource[]
+  renderErrors: ScopeRenderError[]
+  sourceErrors: ScopeRenderError[]
+  fragmentErrors: StoredFragmentError[]
+  fragmentEdits: StoredFragmentEdit[]
   diskFingerprint: string
   configFingerprint: string
   resolverIdentity: string
+  templateFingerprint: string
+}
+
+type ScopeTemplateState = {
+  desired: HarnessConfigDesiredResource[]
+  rendered: HarnessConfigDesiredResource[]
+  renderErrors: ScopeRenderError[]
+  sourceErrors: ScopeRenderError[]
+  fragmentErrors: StoredFragmentError[]
+  fragmentEdits: StoredFragmentEdit[]
+  templateFingerprint: string
 }
 
 type ComparisonState = SnapshotState & {
   comparison: HarnessConfigComparison
-  diskOnly: DiskEntry[]
   configOnly: ConfigEntry[]
   changed: Array<{ disk: DiskEntry; config: ConfigEntry }>
   config: ConfigEntry[]
+  heldIds: string[]
 }
 
 const nodeFilesystem: HarnessConfigFilesystem = {
   readdirSync: (path, options) => readdirSync(path, options),
   lstatSync,
+  statSync,
   readFileSync: (path) => nodeReadFileSync(path),
   writeFileSync: (path, data, options) => writeFileSync(path, data, options),
   renameSync,
   unlinkSync,
   mkdirSync,
   existsSync,
-  realpathSync: (path) => realpathSync.native(path)
+  realpathSync: (path) => realpathSync.native(path),
+  readlinkSync: (path) => readlinkSync(path),
+  symlinkSync: (target, path) => symlinkSync(target, path)
 }
 
 function sha256(value: string | Buffer): string {
@@ -271,15 +346,9 @@ function compareRefs(a: HarnessConfigFileRef, b: HarnessConfigFileRef): number {
     lexicalCompare(a.id, b.id)
 }
 
-function comparisonStatus(
-  diskOnly: readonly unknown[],
-  configOnly: readonly unknown[],
-  changed: readonly unknown[]
-): HarnessConfigSyncStatus {
-  const categories = Number(diskOnly.length > 0) + Number(configOnly.length > 0) + Number(changed.length > 0)
-  if (categories === 0) return 'synced'
-  if (categories > 1 || changed.length > 0) return 'conflict'
-  return diskOnly.length > 0 ? 'disk-only' : 'config-only'
+function comparisonStatus(configOnly: readonly unknown[], changed: readonly unknown[]): HarnessConfigSyncStatus {
+  if (changed.length > 0) return 'conflict'
+  return configOnly.length > 0 ? 'config-only' : 'synced'
 }
 
 function cloneScope(scope: HarnessConfigScope): HarnessConfigScope {
@@ -290,6 +359,31 @@ function cloneRef(ref: HarnessConfigFileRef): HarnessConfigFileRef {
   return { ...ref, aliasResourceTypes: [...ref.aliasResourceTypes] }
 }
 
+type ReviewFields = Pick<
+  HarnessConfigSyncPlan,
+  'status' | 'configOnly' | 'changed' | 'renderErrors' | 'fragmentErrors' | 'fragmentEdits'
+>
+
+function cloneReviewFields(comparison: HarnessConfigComparison): ReviewFields {
+  const fields: ReviewFields = {
+    status: comparison.status,
+    configOnly: comparison.configOnly.map(cloneRef),
+    changed: comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) }))
+  }
+  if (comparison.renderErrors) {
+    fields.renderErrors = comparison.renderErrors.map((entry) => ({ ...entry, held: entry.held.map(cloneRef) }))
+  }
+  if (comparison.fragmentErrors) {
+    fields.fragmentErrors = comparison.fragmentErrors.map((entry) =>
+      entry.held ? { ...entry, held: cloneRef(entry.held) } : { ...entry }
+    )
+  }
+  if (comparison.fragmentEdits) {
+    fields.fragmentEdits = comparison.fragmentEdits.map((entry) => ({ ...entry, fragments: [...entry.fragments] }))
+  }
+  return fields
+}
+
 export class HarnessConfigServiceImpl implements HarnessConfigService {
   private readonly deps: HarnessConfigServiceDeps
   private readonly fs: HarnessConfigFilesystem
@@ -298,6 +392,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private readonly plans = new Map<string, PrivatePlan>()
   private readonly attemptedPlanIds = new Set<string>()
   private tempSequence = 0
+  private renderCache: { source: HarnessConfigTemplateSource; result: TemplateRenderResult } | null = null
+  private fragmentCache: {
+    fragments: HarnessConfigTemplateSource['fragments']
+    contents: ReadonlyMap<string, string>
+  } | null = null
 
   constructor(deps: HarnessConfigServiceDeps = {}) {
     this.deps = deps
@@ -333,21 +432,29 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof id !== 'string' || id.length === 0) {
         throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
       }
+      let scopeError: HarnessConfigError | undefined
       for (const scope of this.availableScopes()) {
+        let entry: DiskEntry | undefined
         try {
-          const desired = this.loadDesired()
-          const entry = this.scanDisk(scope, desired).find((candidate) => candidate.ref.id === id)
-          if (!entry) continue
-          const target = this.resolveCandidate(entry.descriptor, entry.ref.relativePath, true)
+          entry = this.scanDisk(scope).find((candidate) => candidate.ref.id === id)
+        } catch (error) {
+          if (!(error instanceof HarnessConfigError)) throw error
+          if (error.code !== 'unsupported-scope') scopeError ??= error
+          continue
+        }
+        if (!entry) continue
+        try {
+          const target = this.resolveCandidate(entry.descriptor, entry.ref.relativePath, true, 'read')
           let bytes: Buffer
           try {
+            if (!this.fs.statSync(target.absolutePath).isFile()) throw new Error('not a regular file')
             bytes = this.fs.readFileSync(target.absolutePath)
           } catch (error) {
             throw new HarnessConfigError('read-failed', 'Unable to read the harness resource', { cause: error })
           }
           const hash = sha256(bytes)
           return {
-            ref: { ...entry.ref, absolutePath: target.absolutePath, hash },
+            ref: { ...entry.ref, absolutePath: target.displayPath, hash },
             content: bytes.toString('utf8'),
             hash
           }
@@ -356,7 +463,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           throw error
         }
       }
-      throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
+      throw scopeError ?? new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
     })
   }
 
@@ -364,9 +471,26 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return this.guard('planSync', () => this.buildComparison(scope).comparison)
   }
 
-  planSyncToDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan {
+  /** Disk is the source for hand-written files, so sync to disk only
+   *  writes template output and refreshed fragment sections. It never
+   *  deletes a file. */
+  planSyncToDisk(scope: HarnessConfigScope, options: HarnessConfigSyncOptions = {}): HarnessConfigSyncPlan {
     return this.guard('planSyncToDisk', () => {
       const state = this.buildComparison(scope)
+      const templateEntries = new Map(
+        state.config.filter(({ resource }) => resource.source === 'template').map((entry) => [entry.ref.id, entry])
+      )
+      const diskIds = new Set(state.disk.map(({ ref }) => ref.id))
+      const detach = [...new Set(options.detach ?? [])].sort(lexicalCompare)
+      for (const id of detach) {
+        if (!templateEntries.has(id) || !diskIds.has(id)) {
+          throw new HarnessConfigError('unknown-resource', 'Only template-built files that exist on disk can be detached')
+        }
+      }
+      if (detach.length > 0 && !this.deps.detachTemplateTarget) {
+        throw new HarnessConfigError('desired-state-failed', 'Detaching from a template is unavailable')
+      }
+      const detachSet = new Set(detach)
       const operations: DiskOperation[] = []
       for (const entry of state.configOnly) {
         operations.push({
@@ -378,6 +502,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         })
       }
       for (const pair of state.changed) {
+        if (detachSet.has(pair.config.ref.id)) continue
         operations.push({
           type: 'overwrite',
           id: pair.config.ref.id,
@@ -386,65 +511,28 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           descriptorResourceType: this.descriptorResourceType(scope, pair.config.descriptor)
         })
       }
-      for (const entry of state.diskOnly) {
-        operations.push({
-          type: 'delete',
-          id: entry.ref.id,
-          relativePath: entry.ref.relativePath,
-          descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
-        })
-      }
       operations.sort((a, b) => lexicalCompare(a.relativePath, b.relativePath) || lexicalCompare(a.type, b.type))
+      const detachTargets: DetachTarget[] = detach.map((id) => {
+        const entry = templateEntries.get(id)!
+        return {
+          id,
+          relativePath: entry.ref.relativePath,
+          templateRef: entry.resource.templateRef!,
+          agentKind: scope.agentKind
+        }
+      })
       const generatedAt = this.clock()
-      const fingerprint = this.planFingerprint(state.diskFingerprint, state.configFingerprint, state.resolverIdentity)
+      const fingerprint = this.planFingerprint(state)
       const publicPlan: HarnessConfigSyncPlan = {
         planId: this.uuid(),
         scope: cloneScope(scope),
         direction: 'sync-to-disk',
-        status: state.comparison.status,
-        diskOnly: state.comparison.diskOnly.map(cloneRef),
-        configOnly: state.comparison.configOnly.map(cloneRef),
-        changed: state.comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) })),
+        ...cloneReviewFields(state.comparison),
         generatedAt,
         fingerprint
       }
-      this.storePlan(publicPlan, state, operations)
-      return publicPlan
-    })
-  }
-
-  planAdoptFromDisk(scope: HarnessConfigScope): HarnessConfigSyncPlan {
-    return this.guard('planAdoptFromDisk', () => {
-      const state = this.buildComparison(scope)
-      const adoptedResources = state.disk.map(({ ref }) => {
-        const bytes = this.readInventoryBytes(ref.absolutePath)
-        return this.desiredFromRef(ref, bytes.toString('utf8'))
-      })
-      const uniqueResources = [...new Map(adoptedResources.map((resource) => [resource.id, resource])).values()]
-      const generatedAt = this.clock()
-      const fingerprint = this.planFingerprint(state.diskFingerprint, state.configFingerprint, state.resolverIdentity)
-      const publicPlan: HarnessConfigSyncPlan = {
-        planId: this.uuid(),
-        scope: cloneScope(scope),
-        direction: 'adopt-from-disk',
-        status: state.comparison.status,
-        diskOnly: state.comparison.diskOnly.map(cloneRef),
-        configOnly: state.comparison.configOnly.map(cloneRef),
-        changed: state.comparison.changed.map((entry) => ({ disk: cloneRef(entry.disk), config: cloneRef(entry.config) })),
-        generatedAt,
-        fingerprint
-      }
-      this.rememberPlan(publicPlan.planId, {
-        publicPlan,
-        scopeKey: harnessConfigScopeKey(scope),
-        direction: 'adopt-from-disk',
-        diskFingerprint: state.diskFingerprint,
-        configFingerprint: state.configFingerprint,
-        resolverIdentity: state.resolverIdentity,
-        operations: [],
-        adoptedResources: uniqueResources,
-        attempted: false
-      })
+      if (detach.length > 0) publicPlan.detach = detach
+      this.storePlan(publicPlan, state, operations, detachTargets)
       return publicPlan
     })
   }
@@ -454,6 +542,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof content !== 'string') {
         throw new HarnessConfigError('write-failed', 'Harness resource content must be text')
       }
+      content = this.expandForWrite(content)
       const descriptor = this.getDescriptor(scope)
       this.validateLogicalName(name)
       if (!descriptor.nameToRelativePath) {
@@ -461,6 +550,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       }
       const relativePath = descriptor.nameToRelativePath(name)
       this.assertDiscoverableDepth(descriptor, relativePath)
+      this.validateRelativePath(relativePath, descriptor)
       const target = this.resolveCandidate(descriptor, relativePath, false)
       const state = this.snapshot(scope)
       if (this.fs.existsSync(target.absolutePath) || state.disk.some(({ ref }) => ref.relativePath === target.relativePath)) {
@@ -475,7 +565,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
         label: this.labelFor(target.relativePath, canonicalResourceType),
         relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
+        absolutePath: target.displayPath,
         hash: sha256(Buffer.from(content, 'utf8')),
         existsOnDisk: false,
         managed: true,
@@ -490,6 +580,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (typeof content !== 'string') {
         throw new HarnessConfigError('write-failed', 'Harness resource content must be text')
       }
+      content = this.expandForWrite(content)
       const state = this.snapshot(scope)
       const entry = state.disk.find(({ ref }) => ref.id === id)
       if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
@@ -552,7 +643,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (
         current.diskFingerprint !== plan.diskFingerprint ||
         current.configFingerprint !== plan.configFingerprint ||
-        current.resolverIdentity !== plan.resolverIdentity
+        current.resolverIdentity !== plan.resolverIdentity ||
+        current.templateFingerprint !== plan.templateFingerprint
       ) {
         this.consumePlan(request.planId)
         throw new HarnessConfigError('stale-plan', 'The plan no longer matches current harness configuration')
@@ -563,48 +655,33 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       this.preflight(scope, plan.operations)
       const applied: HarnessConfigAppliedOperation[] = []
 
-      if (plan.direction === 'adopt-from-disk') {
-        try {
-          await this.replaceDesired(scope, plan.adoptedResources ?? [])
-          applied.push({ type: 'adopt' })
-        } catch (error) {
-          throw new HarnessConfigError('desired-state-failed', 'Unable to persist adopted harness resources', {
-            cause: error,
-            applied,
-            requiresRescan: true
-          })
-        }
-      } else if (plan.direction === 'sync-to-disk') {
+      if (plan.direction === 'sync-to-disk') {
         for (const operation of plan.operations) {
           try {
-            this.applyDiskOperation(scope, operation)
-            applied.push(this.appliedSummary(operation))
+            applied.push(this.applyDiskOperation(scope, operation))
           } catch (error) {
             throw this.withPartialResult(error, applied)
           }
         }
+        // Detached files are never written, so a failed detach leaves the
+        // disk file as it was and the template still claiming it.
+        for (const target of plan.detachTargets ?? []) {
+          try {
+            await this.deps.detachTemplateTarget!(target.templateRef, target.agentKind)
+            applied.push({ type: 'detach', id: target.id, relativePath: target.relativePath })
+          } catch (error) {
+            throw new HarnessConfigError('desired-state-failed', 'Unable to detach the resource from its template', {
+              cause: error,
+              applied,
+              requiresRescan: true
+            })
+          }
+        }
       } else {
-        const operation = plan.operations[0]
-        let outcome: MutationOutcome
         try {
-          outcome = this.applyDiskOperation(scope, operation)
-          applied.push(outcome.applied)
+          applied.push(this.applyDiskOperation(scope, plan.operations[0]))
         } catch (error) {
           throw this.withPartialResult(error, applied)
-        }
-        try {
-          await this.persistDirectMutation(scope, plan.direction, outcome)
-        } catch (error) {
-          try {
-            this.rollback(scope, outcome)
-          } catch (rollbackError) {
-            this.logFailure('rollback', rollbackError)
-          }
-          throw new HarnessConfigError('desired-state-failed', 'Unable to persist the harness resource', {
-            cause: error,
-            applied,
-            requiresRescan: true
-          })
         }
       }
 
@@ -687,7 +764,149 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return scopes
   }
 
-  private defaultRoots(): Record<string, string> {
+  /** Sweeps every hand-written disk file; fragment saves are rare user
+   *  actions, so the cost is paid once per save, not per streaming event. */
+  private allHandWritten(): HarnessConfigDesiredResource[] {
+    const byId = new Map<string, HarnessConfigDesiredResource>()
+    for (const scope of this.availableScopes()) {
+      let disk: DiskEntry[]
+      try {
+        disk = this.scanDisk(scope)
+      } catch (error) {
+        if (error instanceof HarnessConfigError) continue
+        throw error
+      }
+      for (const resource of this.handWritten(disk)) byId.set(resource.id, resource)
+    }
+    return [...byId.values()]
+  }
+
+  scopesForFragment(name?: string): HarnessConfigScope[] {
+    return this.guard('scopesForFragment', () => {
+      const stored = this.allHandWritten().filter((resource) => {
+        const names = inlineFragmentNames(resource.content)
+        return name === undefined ? names.length > 0 : names.includes(name)
+      })
+      if (stored.length === 0) return []
+      return this.availableScopes().filter((scope) => this.desiredForScope(scope, stored).length > 0)
+    })
+  }
+
+  filesUsingFragment(name: string): HarnessConfigFragmentFileUse[] {
+    return this.guard('filesUsingFragment', () =>
+      this.allHandWritten()
+        .filter((resource) => inlineFragmentNames(resource.content).includes(name))
+        .map((resource) => ({
+          id: resource.id,
+          agentKind: resource.agentKind,
+          resourceType: resource.canonicalResourceType ?? resource.resourceType,
+          label: resource.label,
+          relativePath: resource.relativePath
+        }))
+        .sort(
+          (a, b) =>
+            lexicalCompare(a.agentKind, b.agentKind) ||
+            lexicalCompare(a.resourceType, b.resourceType) ||
+            lexicalCompare(a.relativePath, b.relativePath)
+        )
+    )
+  }
+
+  async resolveFragmentEdit(
+    scope: HarnessConfigScope,
+    id: string,
+    fragment: string,
+    resolution: HarnessConfigFragmentResolution
+  ): Promise<HarnessConfigResolveFragmentEditResult> {
+    return this.guardAsync('resolveFragmentEdit', async () => {
+      const entry = this.scanDisk(scope).find(({ ref }) => ref.id === id && !ref.templateRef)
+      if (!entry) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
+      const content = entry.bytes.toString('utf8')
+      const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
+      const fragments = this.fragmentContents(source)
+      const fragmentContent = fragments.get(fragment)
+      if (fragmentContent === undefined) {
+        throw new HarnessConfigError('invalid-fragment', `Unknown fragment "${fragment}"`)
+      }
+      if (!expandInlineFragments(content, fragments).edited.includes(fragment)) {
+        throw new HarnessConfigError('stale-plan', `No edited section of fragment "${fragment}" remains in this file`)
+      }
+      const result = resolveInlineFragmentEdit(content, fragment, resolution, fragmentContent)
+      if (resolution === 'keep-edit') {
+        if (!this.deps.saveFragment) {
+          throw new HarnessConfigError('desired-state-failed', 'Saving fragments is unavailable')
+        }
+        // Fragment first: if writing the file then fails, the section
+        // still reads as edited instead of being reset to the old text.
+        await this.deps.saveFragment(fragment, result.fragmentContent ?? '')
+      }
+      this.applyDiskOperation(scope, {
+        type: 'overwrite',
+        id,
+        relativePath: entry.ref.relativePath,
+        content: result.content,
+        descriptorResourceType: this.descriptorResourceType(scope, entry.descriptor)
+      })
+      return { scope: cloneScope(scope), id, fragment, resolution }
+    })
+  }
+
+  scopesForTemplates(templates: readonly Pick<HarnessTemplate, 'kind' | 'harnesses'>[]): HarnessConfigScope[] {
+    return this.guard('scopesForTemplates', () => {
+      const scopes = this.availableScopes()
+      const selected = new Map<string, HarnessConfigScope>()
+      for (const template of templates) {
+        const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[template.kind]
+        for (const agentKind of templateTargets(template)) {
+          for (const scope of scopes) {
+            if (this.outputLandsInScope(scope, agentKind, resourceType)) selected.set(harnessConfigScopeKey(scope), scope)
+          }
+        }
+      }
+      return [...selected.values()]
+    })
+  }
+
+  templateShadows(template: RenderableTemplate): HarnessConfigShadowedEntry[] {
+    return this.guard('templateShadows', () => {
+      const { source } = this.templateRender()
+      const render = this.deps.render ?? renderTemplates
+      const { resources } = render([template], source.fragments)
+      const provenance = this.templateProvenance()
+      const ownRef = templateRefOf(template.kind, template.name)
+      const shadows: HarnessConfigShadowedEntry[] = []
+      for (const resource of resources) {
+        const descriptor = this.getHarness(resource.agentKind).resources[resource.resourceType]
+        if (!descriptor?.supported || !descriptor.rootKey) continue
+        if (provenance.get(physicalId(resource.agentKind, descriptor.rootKey, resource.relativePath)) === ownRef) continue
+        let root: string
+        try {
+          root = this.resolveRoot(descriptor)
+        } catch (error) {
+          if (error instanceof HarnessConfigError) continue
+          throw error
+        }
+        if (this.fs.existsSync(resolve(root, ...resource.relativePath.split('/')))) {
+          shadows.push({
+            agentKind: resource.agentKind,
+            resourceType: resource.resourceType,
+            relativePath: resource.relativePath
+          })
+        }
+      }
+      return shadows
+    })
+  }
+
+  scopesForRootKeys(keys: readonly HarnessConfigRootKey[]): HarnessConfigScope[] {
+    const wanted = new Set<string>(keys)
+    return this.availableScopes().filter((scope) => {
+      const rootKey = this.getHarness(scope.agentKind).resources[scope.resourceType]?.rootKey
+      return rootKey !== undefined && wanted.has(rootKey)
+    })
+  }
+
+  defaultRoots(): Record<HarnessConfigRootKey, string> {
     const home = this.deps.homeDir ?? this.deps.env?.HOME ?? homedir()
     const codexHome = this.deps.env?.CODEX_HOME || join(home, '.codex')
     const claudeHome = this.deps.env?.CLAUDE_CONFIG_DIR || join(home, '.claude')
@@ -709,9 +928,13 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   }
 
   private resolveRoot(descriptor: HarnessConfigResourceResolver): string {
+    return this.resolveRootInfo(descriptor).root
+  }
+
+  private resolveRootInfo(descriptor: HarnessConfigResourceResolver): RootInfo {
     const rootKey = descriptor.rootKey
     if (!rootKey) throw new HarnessConfigError('unsupported-scope', 'The resolver has no verified known root')
-    const configured = this.deps.knownRoots?.[rootKey]
+    const configured = (this.deps.knownRoots?.() as Record<string, string | undefined> | undefined)?.[rootKey]
     // OPENCODE_CONFIG_DIR has no verified contract with the managed entrypoints this
     // service knows (agents/skills/commands subdirectories). Honoring it would point
     // scans at a root whose layout we cannot verify; silently ignoring it would scan
@@ -725,18 +948,22 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     ) {
       throw new HarnessConfigError('unsupported-scope', 'The resolver has multiple active configuration roots')
     }
-    const value = configured === undefined ? this.defaultRoots()[rootKey] : configured
+    const value = configured === undefined ? (this.defaultRoots() as Record<string, string>)[rootKey] : configured
     if (!value || value.trim() === '' || !isAbsolute(value)) {
       throw new HarnessConfigError('unsupported-scope', 'The resolver known root is unavailable')
     }
-    const root = resolve(value)
+    const lexicalRoot = resolve(value)
+    let root: string
+    let rootIsLink: boolean
     try {
-      const info = this.fs.lstatSync(root)
-      if (!info.isDirectory()) throw new Error('not a directory')
+      rootIsLink = this.fs.lstatSync(lexicalRoot).isSymbolicLink()
+      if (!this.fs.statSync(lexicalRoot).isDirectory()) throw new Error('not a directory')
+      root = resolve(this.fs.realpathSync(lexicalRoot))
     } catch (error) {
       throw new HarnessConfigError('unsupported-scope', 'The resolver known root is unavailable', { cause: error })
     }
-    return root
+    // Without a Step 16 override, a symlinked root reports where it links from.
+    return rootIsLink && configured === undefined ? { root, lexicalRoot, rootLinkedFrom: root } : { root, lexicalRoot }
   }
 
   private descriptorMatches(descriptor: HarnessConfigResourceResolver, relativePath: string): boolean {
@@ -746,7 +973,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return descriptor.pattern.test(relativePath)
   }
 
-  private validateRelativePath(value: string, descriptor: HarnessConfigResourceResolver, root?: string): string {
+  private validateRelativePath(value: string, descriptor: HarnessConfigResourceResolver): string {
     if (
       typeof value !== 'string' ||
       value.length === 0 ||
@@ -762,13 +989,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path is unsafe')
     }
-    // Reject sibling-prefix confusion: a first segment named "<root-basename>-…"
-    // (e.g. "agents-backup/", "agents-helper/" beside an "agents" root) is the shape
-    // of a sibling directory masquerading as managed content. TEST-006 requires
-    // rejecting prefix-sibling paths rather than trusting config-supplied refs.
-    if (root && segments[0].startsWith(`${basename(root)}-`)) {
-      throw new HarnessConfigError('unsafe-path', 'The harness resource path is unsafe')
-    }
     if (!this.descriptorMatches(descriptor, normalized)) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path is outside the managed entrypoint')
     }
@@ -778,16 +998,113 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   private resolveCandidate(
     descriptor: HarnessConfigResourceResolver,
     suppliedRelativePath: string,
-    mustExist: boolean
-  ): { root: string; relativePath: string; absolutePath: string } {
-    const root = this.resolveRoot(descriptor)
-    const relativePath = this.validateRelativePath(suppliedRelativePath, descriptor, root)
+    mustExist: boolean,
+    mode: ContainmentMode = 'write'
+  ): ResolvedCandidate {
+    const { root, lexicalRoot } = this.resolveRootInfo(descriptor)
+    const relativePath = this.validateRelativePath(suppliedRelativePath, descriptor)
     const absolutePath = resolve(root, ...relativePath.split('/'))
     if (absolutePath !== root && !absolutePath.startsWith(root + sep)) {
       throw new HarnessConfigError('unsafe-path', 'The harness resource path escapes its known root')
     }
-    this.assertRealContainment(root, absolutePath, mustExist)
-    return { root, relativePath, absolutePath }
+    const displayPath = resolve(lexicalRoot, ...relativePath.split('/'))
+    const base = this.assertReadContainment(root, relativePath, mustExist)
+    if (mode === 'read') return { root, relativePath, absolutePath, displayPath }
+    const writePath = this.realWriteTarget(root, relativePath)
+    this.assertRealContainment(base, writePath, mustExist)
+    return { root, relativePath, absolutePath: writePath, displayPath }
+  }
+
+  private isWithin(base: string, candidate: string): boolean {
+    return candidate === base || candidate.startsWith(base + sep)
+  }
+
+  /** Containment (Step 17 REQ-005): each symlink component below the root
+   *  moves the allowed base to that link's real target, and every existing
+   *  component must resolve inside the current base. Returns the final base. */
+  private assertReadContainment(root: string, relativePath: string, mustExist: boolean): string {
+    let base: string
+    try {
+      base = resolve(this.fs.realpathSync(root))
+    } catch (error) {
+      throw new HarnessConfigError('unsafe-path', 'Unable to verify the harness resource path', { cause: error })
+    }
+    const segments = relativePath.split('/')
+    let cursor = root
+    for (let index = 0; index < segments.length; index += 1) {
+      cursor = join(cursor, segments[index])
+      let info: Stats
+      try {
+        info = this.fs.lstatSync(cursor)
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'ENOENT') {
+          if (mustExist) {
+            throw new HarnessConfigError('unknown-resource', 'The requested harness resource is no longer present')
+          }
+          return base
+        }
+        if (code === 'ENOTDIR') {
+          throw new HarnessConfigError('unsafe-path', 'The harness resource path crosses a non-directory', { cause: error })
+        }
+        throw new HarnessConfigError('unsafe-path', 'Unable to verify the harness resource path', { cause: error })
+      }
+      if (info.isSymbolicLink() && !mustExist && this.isBrokenLink(cursor)) return base
+      let real: string
+      try {
+        real = resolve(this.fs.realpathSync(cursor))
+      } catch (error) {
+        throw new HarnessConfigError('unsafe-path', 'A broken symbolic link makes the harness resource path unsafe', { cause: error })
+      }
+      if (info.isSymbolicLink()) {
+        try {
+          this.fs.statSync(cursor)
+        } catch (error) {
+          throw new HarnessConfigError('unsafe-path', 'A broken symbolic link makes the harness resource path unsafe', { cause: error })
+        }
+        base = real
+      } else if (!this.isWithin(base, real)) {
+        throw new HarnessConfigError('unsafe-path', 'The harness resource path escapes its known root')
+      }
+    }
+    return base
+  }
+
+  /** Where a write lands once every existing component is resolved, so a
+   *  write through a symlink changes the link's target and leaves the link in
+   *  place instead of replacing it with a regular file. */
+  private realWriteTarget(root: string, relativePath: string): string {
+    const segments = relativePath.split('/')
+    let cursor = root
+    for (let index = 0; index < segments.length; index += 1) {
+      const next = join(cursor, segments[index])
+      try {
+        cursor = resolve(this.fs.realpathSync(next))
+      } catch {
+        return join(cursor, ...segments.slice(index))
+      }
+    }
+    return cursor
+  }
+
+  /** Real path a resource is linked from, shown as linkedFrom: the symlinked
+   *  root when no override is set, else the first live symlink component below
+   *  the root. Broken links return undefined. */
+  private linkedTargetFor(descriptor: HarnessConfigResourceResolver, relativePath: string): string | undefined {
+    const { root, rootLinkedFrom } = this.resolveRootInfo(descriptor)
+    if (rootLinkedFrom) return rootLinkedFrom
+    let cursor = root
+    for (const segment of relativePath.split('/')) {
+      cursor = join(cursor, segment)
+      try {
+        if (!this.fs.lstatSync(cursor).isSymbolicLink()) continue
+        this.fs.statSync(cursor)
+        return resolve(this.fs.realpathSync(cursor))
+      } catch {
+        return undefined
+      }
+    }
+    return undefined
   }
 
   private assertRealContainment(root: string, candidate: string, mustExist: boolean): void {
@@ -796,7 +1113,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       try {
         const info = this.fs.lstatSync(existing)
         if (info.isSymbolicLink()) {
-          throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the harness resource path unsafe')
+          if (mustExist || !this.isBrokenLink(existing)) {
+            throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the harness resource path unsafe')
+          }
+          existing = dirname(existing)
+          continue
         }
         break
       } catch (error) {
@@ -869,45 +1190,285 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   private snapshot(scope: HarnessConfigScope): SnapshotState {
     this.getDescriptor(scope)
-    const desired = this.loadDesired()
-    const disk = this.scanDisk(scope, desired)
-    const scopedDesired = this.desiredForScope(scope, desired)
+    const disk = this.scanDisk(scope)
+    const templates = this.templateStateForScope(scope, this.handWritten(disk))
     return {
       scope: cloneScope(scope),
       disk,
-      desired: scopedDesired,
+      desired: templates.desired,
+      renderErrors: templates.renderErrors,
+      sourceErrors: templates.sourceErrors,
+      fragmentErrors: templates.fragmentErrors,
+      fragmentEdits: templates.fragmentEdits,
       diskFingerprint: this.diskFingerprint(disk),
-      configFingerprint: this.configFingerprint(scopedDesired),
-      resolverIdentity: this.resolverIdentity(scope)
+      configFingerprint: this.configFingerprint([
+        ...templates.desired,
+        ...templates.fragmentErrors.map(({ resource }) => resource)
+      ]),
+      resolverIdentity: this.resolverIdentity(scope),
+      templateFingerprint: templates.templateFingerprint
     }
   }
 
-  private scanDisk(scope: HarnessConfigScope, desired: HarnessConfigDesiredResource[]): DiskEntry[] {
+  private templateRender(): { source: HarnessConfigTemplateSource; result: TemplateRenderResult } {
+    const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
+    const cached = this.renderCache
+    if (cached && cached.source.templates === source.templates && cached.source.fragments === source.fragments) {
+      return cached
+    }
+    const render = this.deps.render ?? renderTemplates
+    this.renderCache = { source, result: render(source.templates, source.fragments) }
+    return this.renderCache
+  }
+
+  private outputLandsInScope(
+    scope: HarnessConfigScope,
+    agentKind: ManagedHarnessKind,
+    resourceType: HarnessConfigResourceType
+  ): boolean {
+    if (agentKind !== scope.agentKind) return false
+    if (resourceType === scope.resourceType) return true
+    const descriptor = this.getHarness(agentKind).resources[resourceType]
+    return Boolean(descriptor?.supported && descriptor.aliasResourceTypes?.includes(scope.resourceType))
+  }
+
+  private templateTouchesScope(scope: HarnessConfigScope, template: Pick<HarnessTemplate, 'kind' | 'harnesses'>): boolean {
+    const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[template.kind]
+    return templateTargets(template).some((agentKind) => this.outputLandsInScope(scope, agentKind, resourceType))
+  }
+
+  /** Disk files no template claims, as their content stands on disk. */
+  private handWritten(disk: DiskEntry[]): HarnessConfigDesiredResource[] {
+    return disk
+      .filter(({ ref }) => !ref.templateRef)
+      .map(({ ref, bytes }) => this.desiredFromRef(ref, bytes.toString('utf8')))
+  }
+
+  /** The desired state of a scope is the template output landing in it plus
+   *  each hand-written disk file with its fragment sections refreshed. */
+  private templateStateForScope(
+    scope: HarnessConfigScope,
+    handWritten: HarnessConfigDesiredResource[]
+  ): ScopeTemplateState {
+    const { source, result } = this.templateRender()
+    const rendered: HarnessConfigDesiredResource[] = []
+    for (const resource of result.resources) {
+      if (!this.outputLandsInScope(scope, resource.agentKind, resource.resourceType)) continue
+      const descriptor = this.getHarness(resource.agentKind).resources[resource.resourceType]
+      if (!descriptor?.supported || !descriptor.rootKey) continue
+      const canonicalResourceType = descriptor.canonicalResourceType ?? resource.resourceType
+      rendered.push({
+        id: physicalId(resource.agentKind, descriptor.rootKey, resource.relativePath),
+        agentKind: resource.agentKind,
+        resourceType: canonicalResourceType,
+        canonicalResourceType,
+        aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
+        relativePath: resource.relativePath,
+        label: this.labelFor(resource.relativePath, canonicalResourceType),
+        content: resource.content,
+        hash: resource.hash,
+        updatedAt: 0,
+        source: 'template',
+        templateRef: templateRefOf(resource.templateKind, resource.templateName)
+      })
+    }
+    const renderedIds = new Set(rendered.map((resource) => resource.id))
+    const plain = this.expandStoredFragments(
+      handWritten.filter((resource) => !renderedIds.has(resource.id)),
+      source
+    )
+    const desired = [...plain.resources, ...rendered].sort(
+      (a, b) => lexicalCompare(a.id, b.id) || lexicalCompare(a.relativePath, b.relativePath)
+    )
+
+    const contributing = source.templates
+      .filter((template) => this.templateTouchesScope(scope, template))
+      .map((template) => ({ template, ref: templateRefOf(template.kind, template.name) }))
+      .sort((a, b) => lexicalCompare(a.ref, b.ref))
+    const contributingRefs = new Set(contributing.map(({ ref }) => ref))
+    const messages = new Map<string, string[]>()
+    for (const error of result.errors) {
+      const ref = templateRefOf(error.templateKind, error.templateName)
+      if (!contributingRefs.has(ref)) continue
+      messages.set(ref, [...(messages.get(ref) ?? []), error.message])
+    }
+    const renderErrors = [...messages.entries()]
+      .sort(([a], [b]) => lexicalCompare(a, b))
+      .map(([templateRef, list]) => ({ templateRef, message: list.join(' ') }))
+
+    const sourceErrors = this.templateSourceErrors(source)
+
+    const fragmentNames = new Set<string>()
+    for (const { template } of contributing) {
+      for (const name of templateFragmentNames(template)) fragmentNames.add(name)
+    }
+    const fragments = new Map(source.fragments.map((fragment) => [fragment.name, fragment]))
+    const templateFingerprint = sha256(JSON.stringify([
+      result.rendererVersion,
+      contributing.map(({ template, ref }) => [ref, template.hash ?? this.renderableHash(template)]),
+      sourceErrors.map(({ templateRef, message }) => [templateRef, message]),
+      [...fragmentNames].sort(lexicalCompare).map((name) => {
+        const fragment = fragments.get(name)
+        return [name, fragment ? fragment.hash ?? sha256(fragment.content) : null]
+      })
+    ]))
+    return {
+      desired,
+      rendered,
+      renderErrors,
+      sourceErrors,
+      fragmentErrors: plain.errors,
+      fragmentEdits: plain.edits,
+      templateFingerprint
+    }
+  }
+
+  private fragmentContents(source: HarnessConfigTemplateSource): ReadonlyMap<string, string> {
+    const cached = this.fragmentCache
+    if (cached && cached.fragments === source.fragments) return cached.contents
+    const contents = new Map(source.fragments.map((fragment) => [fragment.name, fragment.content]))
+    this.fragmentCache = { fragments: source.fragments, contents }
+    return contents
+  }
+
+  /** Hand-written files carry their fragment sections as written; each
+   *  compare refreshes sections whose fragment changed. A file whose
+   *  placeholders cannot expand is left alone until fixed. */
+  private expandStoredFragments(
+    resources: HarnessConfigDesiredResource[],
+    source: HarnessConfigTemplateSource
+  ): { resources: HarnessConfigDesiredResource[]; errors: StoredFragmentError[]; edits: StoredFragmentEdit[] } {
+    const fragments = this.fragmentContents(source)
+    const expanded: HarnessConfigDesiredResource[] = []
+    const errors: StoredFragmentError[] = []
+    const edits: StoredFragmentEdit[] = []
+    for (const resource of resources) {
+      const expansion = expandInlineFragments(resource.content, fragments)
+      if (expansion.errors.length > 0) {
+        errors.push({ resource, message: expansion.errors.map(({ message }) => message).join('. ') })
+        continue
+      }
+      if (expansion.edited.length > 0) edits.push({ resource, fragments: expansion.edited })
+      expanded.push(
+        expansion.content === resource.content
+          ? resource
+          : { ...resource, content: expansion.content, hash: sha256(Buffer.from(expansion.content, 'utf8')) }
+      )
+    }
+    return { resources: expanded, errors, edits }
+  }
+
+  private expandForWrite(content: string): string {
+    const source = this.deps.loadTemplateSource?.() ?? EMPTY_TEMPLATE_SOURCE
+    const expansion = expandInlineFragments(content, this.fragmentContents(source))
+    if (expansion.errors.length > 0) {
+      throw new HarnessConfigError('invalid-fragment', expansion.errors.map(({ message }) => message).join('. '))
+    }
+    return expansion.content
+  }
+
+  /** Which template each harness file comes from, keyed by physical id:
+   *  rendered output first, then the paths a template that fails to render
+   *  would write (REQ-007), so that earlier output is held rather than
+   *  treated as hand-written. A template file that no longer parses has unknown
+   *  harness blocks, so only its default-name path per harness is known. */
+  private templateProvenance(): Map<string, string> {
+    const { source, result } = this.templateRender()
+    const provenance = new Map<string, string>()
+    const claim = (
+      agentKind: ManagedHarnessKind,
+      resourceType: HarnessConfigResourceType,
+      relativePath: string | null,
+      ref: string
+    ): void => {
+      const descriptor = this.getHarness(agentKind).resources[resourceType]
+      if (!descriptor?.supported || !descriptor.rootKey || relativePath === null) return
+      const id = physicalId(agentKind, descriptor.rootKey, relativePath)
+      if (!provenance.has(id)) provenance.set(id, ref)
+    }
+    for (const resource of result.resources) {
+      claim(resource.agentKind, resource.resourceType, resource.relativePath, templateRefOf(resource.templateKind, resource.templateName))
+    }
+    const failed = new Set(result.errors.map((error) => templateRefOf(error.templateKind, error.templateName)))
+    for (const template of source.templates) {
+      const ref = templateRefOf(template.kind, template.name)
+      if (!failed.has(ref)) continue
+      const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[template.kind]
+      for (const agentKind of templateTargets(template)) {
+        const block = template.harnesses[agentKind]
+        const name = (block ? block.name : undefined) ?? template.name
+        claim(agentKind, resourceType, resourcePathForName(agentKind, resourceType, name), ref)
+      }
+    }
+    for (const { templateRef } of this.templateSourceErrors(source)) {
+      const [kind, name] = [templateRef.slice(0, templateRef.indexOf('/')), templateRef.slice(templateRef.indexOf('/') + 1)]
+      const resourceType = TEMPLATE_KIND_RESOURCE_TYPE[kind as HarnessTemplate['kind']]
+      for (const agentKind of MANAGED_HARNESSES) {
+        if (!templateOutputFor(agentKind, resourceType)) continue
+        claim(agentKind, resourceType, resourcePathForName(agentKind, resourceType, name), templateRef)
+      }
+    }
+    return provenance
+  }
+
+  /** REQ-007: a template file that no longer parses is missing from the
+   *  template list, so its harness targets are unknown. Its parse error is
+   *  keyed by template ref so any earlier output on disk can be held. */
+  private templateSourceErrors(source: HarnessConfigTemplateSource): ScopeRenderError[] {
+    const loaded = new Set(source.templates.map((template) => templateRefOf(template.kind, template.name)))
+    const messages = new Map<string, string[]>()
+    for (const error of source.errors ?? []) {
+      const entry = classifyTemplateSourcePath(error.relativePath)
+      if (!entry || entry.type === 'fragment') continue
+      const ref = templateRefOf(entry.type === 'reference' ? 'skill' : entry.kind, entry.name)
+      if (loaded.has(ref)) continue
+      messages.set(ref, [...(messages.get(ref) ?? []), error.message])
+    }
+    return [...messages.entries()]
+      .sort(([a], [b]) => lexicalCompare(a, b))
+      .map(([templateRef, list]) => ({ templateRef, message: list.join(' ') }))
+  }
+
+  private renderableHash(template: RenderableTemplate): string {
+    return sha256(JSON.stringify([
+      template.kind,
+      template.name,
+      template.description,
+      template.fragments,
+      template.body,
+      template.harnesses,
+      template.references
+    ]))
+  }
+
+  private scanDisk(scope: HarnessConfigScope): DiskEntry[] {
     const primary = this.getDescriptor(scope)
     const descriptors: HarnessConfigResourceResolver[] = [primary]
     for (const sourceType of primary.aliasSourceResourceTypes ?? []) {
       const source = this.getHarness(scope.agentKind).resources[sourceType]
       if (source?.supported && source.rootKey) descriptors.push(source)
     }
-    const desiredIds = new Set(
-      desired
-        .filter((resource) => resource.agentKind === scope.agentKind)
-        .map((resource) => resource.id)
-    )
     const byId = new Map<string, DiskEntry>()
+    const provenance = this.templateProvenance()
     for (const descriptor of descriptors) {
-      const root = this.resolveRoot(descriptor)
-      const paths: string[] = []
-      this.walk(root, '', 0, descriptor, paths)
-      for (const relativePath of paths) {
-        const target = this.resolveCandidate(descriptor, relativePath, true)
+      const { root, rootLinkedFrom } = this.resolveRootInfo(descriptor)
+      const walked: WalkEntry[] = []
+      this.walk(root, '', 0, descriptor, walked, new Set([root]))
+      for (const { relativePath, linkedFrom } of walked) {
+        let target: ResolvedCandidate
+        try {
+          target = this.resolveCandidate(descriptor, relativePath, true, 'read')
+        } catch (error) {
+          if (error instanceof HarnessConfigError && error.code === 'unsafe-path') continue
+          throw error
+        }
         let info: Stats
         try {
-          info = this.fs.lstatSync(target.absolutePath)
+          info = this.fs.statSync(target.absolutePath)
         } catch {
           continue
         }
-        if (!info.isFile() || info.isSymbolicLink()) continue
+        if (!info.isFile()) continue
         const bytes = this.readInventoryBytes(target.absolutePath)
         const canonicalResourceType = descriptor.canonicalResourceType ?? scope.resourceType
         const aliasResourceTypes = [...new Set(descriptor.aliasResourceTypes ?? [])].sort()
@@ -920,13 +1481,17 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
           aliasResourceTypes,
           label: this.labelFor(target.relativePath, canonicalResourceType),
           relativePath: target.relativePath,
-          absolutePath: target.absolutePath,
+          absolutePath: target.displayPath,
           hash: sha256(bytes),
           existsOnDisk: true,
-          managed: desiredIds.has(id),
+          managed: provenance.has(id),
           updatedAt: info.mtimeMs
         }
-        byId.set(id, { ref, descriptor, root })
+        const resourceLinkedFrom = rootLinkedFrom ?? linkedFrom
+        if (resourceLinkedFrom) ref.linkedFrom = resourceLinkedFrom
+        const templateRef = provenance.get(id)
+        if (templateRef) ref.templateRef = templateRef
+        byId.set(id, { ref, descriptor, root, bytes })
       }
     }
     return [...byId.values()].sort((a, b) => compareRefs(a.ref, b.ref))
@@ -937,7 +1502,9 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     currentRelative: string,
     depth: number,
     descriptor: HarnessConfigResourceResolver,
-    output: string[]
+    output: WalkEntry[],
+    ancestors: Set<string>,
+    linkedFrom?: string
   ): void {
     const current = currentRelative ? join(root, ...currentRelative.split('/')) : root
     let entries
@@ -951,19 +1518,34 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       const nextRelative = currentRelative ? `${currentRelative}/${entry.name}` : entry.name
       if (BACKUP_SUFFIX.test(nextRelative)) continue
       const absolutePath = join(root, ...nextRelative.split('/'))
-      let info
+      let info: Stats
+      let entryLinkedFrom = linkedFrom
       try {
         info = this.fs.lstatSync(absolutePath)
+        if (info.isSymbolicLink()) {
+          info = this.fs.statSync(absolutePath)
+          entryLinkedFrom ??= resolve(this.fs.realpathSync(absolutePath))
+        }
       } catch {
         continue
       }
-      if (info.isSymbolicLink()) continue
       if (info.isDirectory()) {
-        if (depth < (descriptor.maxDepth ?? Number.POSITIVE_INFINITY)) {
-          this.walk(root, nextRelative, depth + 1, descriptor, output)
+        if (depth >= (descriptor.maxDepth ?? Number.POSITIVE_INFINITY)) continue
+        let realDirectory: string
+        try {
+          realDirectory = resolve(this.fs.realpathSync(absolutePath))
+        } catch {
+          continue
+        }
+        if (ancestors.has(realDirectory)) continue
+        ancestors.add(realDirectory)
+        try {
+          this.walk(root, nextRelative, depth + 1, descriptor, output, ancestors, entryLinkedFrom)
+        } finally {
+          ancestors.delete(realDirectory)
         }
       } else if (info.isFile() && this.descriptorMatches(descriptor, nextRelative)) {
-        output.push(nextRelative)
+        output.push(entryLinkedFrom ? { relativePath: nextRelative, linkedFrom: entryLinkedFrom } : { relativePath: nextRelative })
       }
     }
   }
@@ -974,18 +1556,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     } catch (error) {
       throw new HarnessConfigError('read-failed', 'Unable to read a harness resource', { cause: error })
     }
-  }
-
-  private loadDesired(): HarnessConfigDesiredResource[] {
-    const resources = this.deps.loadDesiredResources?.() ?? []
-    if (!Array.isArray(resources)) {
-      throw new HarnessConfigError('read-failed', 'Desired harness resources are unavailable')
-    }
-    return resources.map((resource) => ({
-      ...resource,
-      canonicalResourceType: resource.canonicalResourceType ?? resource.resourceType,
-      aliasResourceTypes: [...(resource.aliasResourceTypes ?? [])]
-    }))
   }
 
   private desiredForScope(
@@ -1007,7 +1577,8 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const entries = new Map<string, ConfigEntry>()
     for (const resource of resources) {
       const descriptor = this.descriptorForDesired(scope, selected, resource)
-      const target = this.resolveCandidate(descriptor, resource.relativePath, false)
+      const target = this.resolveCandidate(descriptor, resource.relativePath, false, 'read')
+      const linkedFrom = this.linkedTargetFor(descriptor, target.relativePath)
       const expectedId = physicalId(scope.agentKind, descriptor.rootKey!, target.relativePath)
       if (resource.id !== expectedId) {
         throw new HarnessConfigError('unsafe-path', 'The desired harness resource identity is invalid')
@@ -1023,12 +1594,15 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
         aliasResourceTypes,
         label: resource.label || this.labelFor(target.relativePath, canonicalResourceType),
         relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
+        absolutePath: target.displayPath,
         hash: contentHash,
         existsOnDisk: false,
         managed: true,
         updatedAt: resource.updatedAt
       }
+      if (linkedFrom) ref.linkedFrom = linkedFrom
+      if (resource.templateRef) ref.templateRef = resource.templateRef
+      if (resource.source === 'template') ref.source = 'template'
       entries.set(expectedId, {
         resource: { ...resource, id: expectedId, hash: contentHash },
         ref,
@@ -1058,21 +1632,71 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     const config = this.configEntries(scope, state.desired)
     const diskById = new Map(state.disk.map((entry) => [entry.ref.id, entry]))
     const configById = new Map(config.map((entry) => [entry.ref.id, entry]))
-    const diskOnly = state.disk.filter((entry) => !configById.has(entry.ref.id))
+    // REQ-007: earlier output of a template that no longer renders is held
+    // and listed with its render error.
+    const erroredRefs = new Set([...state.renderErrors, ...state.sourceErrors].map(({ templateRef }) => templateRef))
+    const held = new Map<string, DiskEntry[]>()
+    const fragmentErrorIds = new Set(state.fragmentErrors.map(({ resource }) => resource.id))
+    const fragmentHeld = new Map<string, DiskEntry>()
+    for (const entry of state.disk) {
+      if (configById.has(entry.ref.id)) continue
+      if (fragmentErrorIds.has(entry.ref.id)) {
+        fragmentHeld.set(entry.ref.id, entry)
+        continue
+      }
+      const templateRef = entry.ref.templateRef
+      if (templateRef && erroredRefs.has(templateRef)) held.set(templateRef, [...(held.get(templateRef) ?? []), entry])
+    }
+    const renderedRefs = new Set(state.renderErrors.map(({ templateRef }) => templateRef))
+    const renderErrors = [
+      ...state.renderErrors,
+      ...state.sourceErrors.filter(({ templateRef }) => !renderedRefs.has(templateRef) && held.has(templateRef))
+    ].sort((a, b) => lexicalCompare(a.templateRef, b.templateRef))
     const configOnly = config.filter((entry) => !diskById.has(entry.ref.id))
     const changed = state.disk.flatMap((disk) => {
       const desired = configById.get(disk.ref.id)
       return desired && desired.ref.hash !== disk.ref.hash ? [{ disk, config: desired }] : []
     })
+    let status = comparisonStatus(configOnly, changed)
+    const needsAttention = renderErrors.length > 0 || state.fragmentErrors.length > 0 || state.fragmentEdits.length > 0
+    if (status === 'synced' && needsAttention) status = 'conflict'
     const comparison: HarnessConfigComparison = {
       scope: cloneScope(scope),
-      status: comparisonStatus(diskOnly, configOnly, changed),
-      diskOnly: diskOnly.map(({ ref }) => cloneRef(ref)),
+      status,
       configOnly: configOnly.map(({ ref }) => cloneRef(ref)),
       changed: changed.map(({ disk, config }) => ({ disk: cloneRef(disk.ref), config: cloneRef(config.ref) })),
       comparedAt: this.clock()
     }
-    return { ...state, comparison, diskOnly, configOnly, changed, config }
+    if (renderErrors.length > 0) {
+      comparison.renderErrors = renderErrors.map(({ templateRef, message }) => ({
+        templateRef,
+        message,
+        held: (held.get(templateRef) ?? []).map(({ ref }) => cloneRef(ref))
+      }))
+    }
+    if (state.fragmentErrors.length > 0) {
+      comparison.fragmentErrors = state.fragmentErrors.map(({ resource, message }) => {
+        const entry: HarnessConfigFragmentErrorEntry = {
+          id: resource.id,
+          label: resource.label,
+          relativePath: resource.relativePath,
+          message
+        }
+        const disk = fragmentHeld.get(resource.id)
+        if (disk) entry.held = cloneRef(disk.ref)
+        return entry
+      })
+    }
+    if (state.fragmentEdits.length > 0) {
+      comparison.fragmentEdits = state.fragmentEdits.map(({ resource, fragments }) => ({
+        id: resource.id,
+        label: resource.label,
+        relativePath: resource.relativePath,
+        fragments: [...fragments]
+      }))
+    }
+    const heldIds = [...held.values()].flatMap((entries) => entries.map(({ ref }) => ref.id))
+    return { ...state, comparison, configOnly, changed, config, heldIds }
   }
 
   private diskFingerprint(entries: DiskEntry[]): string {
@@ -1090,7 +1714,9 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       resource.label,
       resource.content,
       resource.hash,
-      resource.updatedAt
+      resource.updatedAt,
+      resource.source ?? null,
+      resource.templateRef ?? null
     ])))
   }
 
@@ -1112,14 +1738,17 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     ]))
   }
 
-  private planFingerprint(diskFingerprint: string, configFingerprint: string, resolverIdentity: string): string {
-    return sha256(`${diskFingerprint}\0${configFingerprint}\0${resolverIdentity}`)
+  private planFingerprint(state: SnapshotState): string {
+    return sha256(
+      `${state.diskFingerprint}\0${state.configFingerprint}\0${state.resolverIdentity}\0${state.templateFingerprint}`
+    )
   }
 
   private storePlan(
     publicPlan: HarnessConfigSyncPlan,
     state: SnapshotState,
-    operations: DiskOperation[]
+    operations: DiskOperation[],
+    detachTargets: DetachTarget[]
   ): void {
     this.rememberPlan(publicPlan.planId, {
       publicPlan,
@@ -1128,7 +1757,9 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       diskFingerprint: state.diskFingerprint,
       configFingerprint: state.configFingerprint,
       resolverIdentity: state.resolverIdentity,
+      templateFingerprint: state.templateFingerprint,
       operations,
+      detachTargets,
       attempted: false
     })
   }
@@ -1148,7 +1779,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       content,
       descriptorResourceType: this.descriptorResourceType(scope, descriptor)
     }
-    const fingerprint = this.planFingerprint(state.diskFingerprint, state.configFingerprint, state.resolverIdentity)
+    const fingerprint = this.planFingerprint(state)
     const publicPlan: HarnessConfigMutationPlan = {
       planId: this.uuid(),
       scope: cloneScope(scope),
@@ -1164,6 +1795,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       diskFingerprint: state.diskFingerprint,
       configFingerprint: state.configFingerprint,
       resolverIdentity: state.resolverIdentity,
+      templateFingerprint: state.templateFingerprint,
       operations: [operation],
       attempted: false
     })
@@ -1191,7 +1823,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     if (scope.resourceType !== sourceType) {
       throw new HarnessConfigError('unknown-resource', 'The requested resource is not in the conversion source scope')
     }
-    const source = this.scanDisk(scope, this.loadDesired()).find(({ ref }) => ref.id === id)
+    const source = this.scanDisk(scope).find(({ ref }) => ref.id === id)
     if (!source) throw new HarnessConfigError('unknown-resource', 'The requested harness resource is unknown')
     if (
       scope.agentKind === 'claude' &&
@@ -1208,24 +1840,27 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       name: this.conversionName(source.ref),
       label: source.ref.label
     })
-    const target = this.resolveCandidate(descriptor, descriptor.nameToRelativePath(destinationName), false)
+    const destinationRoot = this.resolveRoot(descriptor)
+    const destinationPath = this.validateRelativePath(descriptor.nameToRelativePath(destinationName), descriptor)
     let existingTarget
     try {
-      existingTarget = this.fs.lstatSync(target.absolutePath)
+      existingTarget = this.fs.lstatSync(resolve(destinationRoot, ...destinationPath.split('/')))
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
         throw new HarnessConfigError('unsafe-path', 'Unable to verify the conversion destination', { cause: error })
       }
     }
+    const destinationEntries = existingTarget ? this.scanDisk(destinationScope) : []
+    const foldedTarget = destinationPath.toLowerCase()
+    const existing =
+      destinationEntries.find(({ ref }) => ref.relativePath === destinationPath) ??
+      destinationEntries.find(({ ref }) => ref.relativePath.toLowerCase() === foldedTarget)
+    if (existing) return { status: 'existing', ref: cloneRef(existing.ref) }
     if (existingTarget?.isSymbolicLink()) {
       throw new HarnessConfigError('unsafe-path', 'A symbolic link makes the conversion destination unsafe')
     }
-    const destinationEntries = existingTarget ? this.scanDisk(destinationScope, this.loadDesired()) : []
-    const foldedTarget = target.relativePath.toLowerCase()
-    const existing =
-      destinationEntries.find(({ ref }) => ref.relativePath === target.relativePath) ??
-      destinationEntries.find(({ ref }) => ref.relativePath.toLowerCase() === foldedTarget)
-    if (existing) return { status: 'existing', ref: cloneRef(existing.ref) }
+    const target = this.resolveCandidate(descriptor, destinationPath, false)
     // Fresh content is read only now that alias/existing resolution has
     // determined generation is actually required (REQ-008).
     const content = this.readInventoryBytes(source.ref.absolutePath).toString('utf8')
@@ -1316,12 +1951,11 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     return descriptor
   }
 
-  private applyDiskOperation(scope: HarnessConfigScope, operation: DiskOperation): MutationOutcome {
+  private applyDiskOperation(scope: HarnessConfigScope, operation: DiskOperation): HarnessConfigAppliedOperation {
     const descriptor = this.operationDescriptor(scope, operation)
     const target = this.resolveCandidate(descriptor, operation.relativePath, operation.type !== 'create')
     const existed = this.fs.existsSync(target.absolutePath)
-    let before: Buffer | undefined
-    if (existed) before = this.createBackup(target.absolutePath)
+    if (existed) this.createBackup(target.absolutePath)
 
     if (operation.type === 'delete') {
       try {
@@ -1329,16 +1963,61 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       } catch (error) {
         throw new HarnessConfigError('delete-failed', 'Unable to delete the harness resource', { cause: error })
       }
+      const link = resolve(target.root, ...operation.relativePath.split('/'))
+      if (link !== target.absolutePath && this.isBrokenLink(link)) {
+        try {
+          this.fs.unlinkSync(link)
+        } catch (error) {
+          throw new HarnessConfigError('delete-failed', 'Unable to remove the link to the deleted resource', { cause: error })
+        }
+      }
     } else {
       if (operation.type === 'create' && existed) {
         throw new HarnessConfigError('collision', 'A harness resource already exists at that destination')
       }
+      this.removeBrokenLinks(target.root, operation.relativePath)
       this.atomicWrite(target.absolutePath, Buffer.from(operation.content ?? '', 'utf8'))
     }
-    return { operation, applied: this.appliedSummary(operation), existed, before }
+    return this.appliedSummary(operation)
   }
 
-  private createBackup(target: string): Buffer {
+  private isBrokenLink(path: string): boolean {
+    try {
+      if (!this.fs.lstatSync(path).isSymbolicLink()) return false
+    } catch {
+      return false
+    }
+    try {
+      this.fs.statSync(path)
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  /** A write replaces any broken symlink on its path with the real file or
+   *  folder it creates; live links are followed. */
+  private removeBrokenLinks(root: string, relativePath: string): void {
+    let cursor = root
+    for (const segment of relativePath.split('/')) {
+      const next = join(cursor, segment)
+      if (this.isBrokenLink(next)) {
+        try {
+          this.fs.unlinkSync(next)
+        } catch (error) {
+          throw new HarnessConfigError('write-failed', 'Unable to remove a broken symbolic link', { cause: error })
+        }
+        return
+      }
+      try {
+        cursor = resolve(this.fs.realpathSync(next))
+      } catch {
+        return
+      }
+    }
+  }
+
+  private createBackup(target: string): void {
     let bytes: Buffer
     try {
       bytes = this.fs.readFileSync(target)
@@ -1351,7 +2030,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
       if (this.fs.existsSync(backup)) continue
       try {
         this.fs.writeFileSync(backup, bytes, { flag: 'wx' })
-        return bytes
+        return
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
         try {
@@ -1383,64 +2062,6 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
 
   private appliedSummary(operation: DiskOperation): HarnessConfigAppliedOperation {
     return { type: operation.type, id: operation.id, relativePath: operation.relativePath }
-  }
-
-  private async persistDirectMutation(
-    requestedScope: HarnessConfigScope,
-    direction: 'create' | 'update' | 'delete',
-    outcome: MutationOutcome
-  ): Promise<void> {
-    const descriptor = this.operationDescriptor(requestedScope, outcome.operation)
-    const canonicalResourceType = descriptor.canonicalResourceType ?? requestedScope.resourceType
-    const canonicalScope: HarnessConfigScope = {
-      agentKind: requestedScope.agentKind,
-      resourceType: canonicalResourceType
-    }
-    const current = this.desiredForScope(canonicalScope, this.loadDesired())
-    const resources = current.filter((resource) => resource.id !== outcome.operation.id)
-    if (direction !== 'delete') {
-      const target = this.resolveCandidate(descriptor, outcome.operation.relativePath, true)
-      const bytes = this.readInventoryBytes(target.absolutePath)
-      const info = this.fs.lstatSync(target.absolutePath)
-      const ref: HarnessConfigFileRef = {
-        id: outcome.operation.id,
-        agentKind: requestedScope.agentKind,
-        resourceType: requestedScope.resourceType,
-        canonicalResourceType,
-        aliasResourceTypes: [...(descriptor.aliasResourceTypes ?? [])],
-        label: this.labelFor(target.relativePath, canonicalResourceType),
-        relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
-        hash: sha256(bytes),
-        existsOnDisk: true,
-        managed: true,
-        updatedAt: info.mtimeMs
-      }
-      resources.push(this.desiredFromRef(ref, bytes.toString('utf8')))
-    }
-    resources.sort((a, b) => lexicalCompare(a.id, b.id))
-    await this.replaceDesired(canonicalScope, resources)
-  }
-
-  private async replaceDesired(scope: HarnessConfigScope, resources: HarnessConfigDesiredResource[]): Promise<void> {
-    if (!this.deps.replaceDesiredScope) {
-      throw new HarnessConfigError('desired-state-failed', 'Desired harness configuration persistence is unavailable')
-    }
-    await this.deps.replaceDesiredScope(cloneScope(scope), resources.map((resource) => ({
-      ...resource,
-      aliasResourceTypes: [...(resource.aliasResourceTypes ?? [])]
-    })))
-  }
-
-  private rollback(scope: HarnessConfigScope, outcome: MutationOutcome): void {
-    const descriptor = this.operationDescriptor(scope, outcome.operation)
-    const target = this.resolveCandidate(descriptor, outcome.operation.relativePath, false)
-    if (!outcome.existed) {
-      if (this.fs.existsSync(target.absolutePath)) this.fs.unlinkSync(target.absolutePath)
-      return
-    }
-    if (!outcome.before) throw new Error('Backup bytes are unavailable for rollback')
-    this.atomicWrite(target.absolutePath, outcome.before)
   }
 
   private withPartialResult(error: unknown, applied: HarnessConfigAppliedOperation[]): HarnessConfigError {

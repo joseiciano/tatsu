@@ -1,18 +1,39 @@
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
-import type { ConfigSyncChangedRow, ConfigSyncDialogProps, ConfigSyncFileRow } from './types'
+import { LinkedBadge } from './ConfigResourceList'
+import type {
+  ConfigSyncChangedRow,
+  ConfigSyncDialogProps,
+  ConfigSyncFileRow,
+  ConfigSyncFragmentEditRow,
+  ConfigSyncFragmentErrorRow,
+  ConfigSyncRenderErrorRow
+} from './types'
+import type { HarnessConfigFragmentResolution } from '../../../shared/state/harness-config'
 
 const STATUS_LABEL: Record<string, string> = {
   synced: 'Synced',
-  'disk-only': 'Disk only',
-  'config-only': 'Config only',
-  conflict: 'Conflict'
+  'config-only': 'Not on disk',
+  conflict: 'Out of sync'
 }
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-function FileRowView({ row, scopeLabel }: { row: ConfigSyncFileRow; scopeLabel: string }): JSX.Element {
+function isTemplateRow(row: ConfigSyncFileRow): boolean {
+  return row.ref.source === 'template'
+}
+
+function FileRowView({
+  row,
+  scopeLabel,
+  note
+}: {
+  row: ConfigSyncFileRow
+  scopeLabel: string
+  note?: string
+}): JSX.Element {
+  const fromTemplate = isTemplateRow(row)
   return (
     <div className="flex flex-col gap-0.5 rounded border border-border/60 bg-app/30 px-2.5 py-2 min-w-0">
       <div className="flex items-center justify-between gap-2">
@@ -20,6 +41,16 @@ function FileRowView({ row, scopeLabel }: { row: ConfigSyncFileRow; scopeLabel: 
         <span className="text-xs text-faint shrink-0">{row.sourceLabel}</span>
       </div>
       <span className="text-xs text-dim break-all">{row.ref.relativePath}</span>
+      {fromTemplate && row.ref.templateRef && (
+        <span className="text-xs text-info break-all">Template: {row.ref.templateRef}</span>
+      )}
+      {row.ref.linkedFrom && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-faint min-w-0">
+          <LinkedBadge linkedFrom={row.ref.linkedFrom} />
+          <span className="break-all">{row.ref.linkedFrom}</span>
+        </div>
+      )}
+      {note && <span className="text-xs text-dim">{note}</span>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-faint">
         <span>{scopeLabel}</span>
         <span>{row.updatedAtLabel}</span>
@@ -60,12 +91,65 @@ function DiffSection({
   )
 }
 
+function DetachChoice({
+  row,
+  detach,
+  disabled,
+  onChange
+}: {
+  row: ConfigSyncChangedRow
+  detach: boolean
+  disabled: boolean
+  onChange: (id: string, detach: boolean) => void
+}): JSX.Element {
+  const id = row.config.ref.id
+  const name = `config-sync-detach-${id}`
+  return (
+    <fieldset className="sm:col-span-2 flex flex-col gap-1 px-1 text-xs text-dim">
+      <legend className="sr-only">Sync choice for {row.config.ref.label}</legend>
+      <span>
+        This file differs from {row.config.ref.templateRef ?? 'its template'}. Choose what sync does with it:
+      </span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="radio"
+            name={name}
+            className="icon-base"
+            checked={!detach}
+            disabled={disabled}
+            onChange={() => onChange(id, false)}
+          />
+          Overwrite it from the template
+        </label>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="radio"
+            name={name}
+            className="icon-base"
+            checked={detach}
+            disabled={disabled}
+            onChange={() => onChange(id, true)}
+          />
+          Keep the disk file and detach it from the template
+        </label>
+      </div>
+    </fieldset>
+  )
+}
+
 function ChangedSection({
   rows,
-  scopeLabel
+  scopeLabel,
+  detachIds,
+  choicesDisabled,
+  onDetachChange
 }: {
   rows: readonly ConfigSyncChangedRow[]
   scopeLabel: string
+  detachIds: ReadonlySet<string>
+  choicesDisabled: boolean
+  onDetachChange: (id: string, detach: boolean) => void
 }): JSX.Element {
   return (
     <section className="flex flex-col gap-1.5">
@@ -83,6 +167,14 @@ function ChangedSection({
             >
               <FileRowView row={pair.disk} scopeLabel={scopeLabel} />
               <FileRowView row={pair.config} scopeLabel={scopeLabel} />
+              {isTemplateRow(pair.config) && (
+                <DetachChoice
+                  row={pair}
+                  detach={detachIds.has(pair.config.ref.id)}
+                  disabled={choicesDisabled}
+                  onChange={onDetachChange}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -91,10 +183,123 @@ function ChangedSection({
   )
 }
 
+function RenderErrorSection({
+  rows,
+  scopeLabel
+}: {
+  rows: readonly ConfigSyncRenderErrorRow[]
+  scopeLabel: string
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="text-xs font-semibold text-danger uppercase tracking-wide">
+        Template errors <span className="text-faint normal-case font-normal">({rows.length})</span>
+      </h3>
+      {rows.map((row) => (
+        <div key={row.key} className="flex flex-col gap-1.5 rounded border border-danger/40 p-1.5">
+          <div className="text-xs text-fg-bright">{row.templateRef}</div>
+          <div className="text-xs text-danger break-words">{row.message}</div>
+          <div className="text-xs text-dim">
+            This template builds nothing until the error is fixed.{' '}
+            {row.held.length > 0
+              ? 'Its earlier files stay on disk: sync to disk leaves them alone.'
+              : 'Nothing it built earlier is on disk.'}
+          </div>
+          {row.held.map((held) => (
+            <FileRowView key={held.key} row={held} scopeLabel={scopeLabel} />
+          ))}
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function FragmentErrorSection({
+  rows,
+  scopeLabel
+}: {
+  rows: readonly ConfigSyncFragmentErrorRow[]
+  scopeLabel: string
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="text-xs font-semibold text-danger uppercase tracking-wide">
+        Fragment errors <span className="text-faint normal-case font-normal">({rows.length})</span>
+      </h3>
+      {rows.map((row) => (
+        <div key={row.key} className="flex flex-col gap-1.5 rounded border border-danger/40 p-1.5">
+          <div className="text-xs text-fg-bright">{row.label}</div>
+          <span className="text-xs text-dim break-all">{row.relativePath}</span>
+          <div className="text-xs text-danger break-words">{row.message}</div>
+          <div className="text-xs text-dim">
+            Sync to disk leaves this file as it is until its fragment placeholders are fixed.
+          </div>
+          {row.held && <FileRowView row={row.held} scopeLabel={scopeLabel} />}
+        </div>
+      ))}
+    </section>
+  )
+}
+
+const FRAGMENT_RESOLUTIONS: ReadonlyArray<{ resolution: HarnessConfigFragmentResolution; label: string; hint: string }> = [
+  { resolution: 'overwrite', label: 'Use fragment', hint: 'Replace the edited text with the fragment' },
+  { resolution: 'keep-edit', label: 'Save edit to fragment', hint: 'Every file using the fragment gets this text' },
+  { resolution: 'detach', label: 'Detach', hint: 'Keep the text here as plain text, no longer linked to the fragment' }
+]
+
+function FragmentEditSection({
+  rows,
+  disabled,
+  onResolve
+}: {
+  rows: readonly ConfigSyncFragmentEditRow[]
+  disabled: boolean
+  onResolve: (id: string, fragment: string, resolution: HarnessConfigFragmentResolution) => void
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="text-xs font-semibold text-fg-bright uppercase tracking-wide">
+        Edited fragment sections <span className="text-faint normal-case font-normal">({rows.length})</span>
+      </h3>
+      {rows.map((row) => (
+        <div key={row.key} className="flex flex-col gap-1.5 rounded border border-border/60 p-1.5">
+          <div className="text-xs text-fg-bright">{row.label}</div>
+          <span className="text-xs text-dim break-all">{row.relativePath}</span>
+          {row.fragments.map((fragment) => (
+            <div key={fragment} className="flex flex-col gap-1">
+              <span className="text-xs text-dim">
+                The <span className="text-fg-bright">{fragment}</span> section was edited by hand, so it no
+                longer follows the fragment.
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {FRAGMENT_RESOLUTIONS.map((option) => (
+                  <button
+                    key={option.resolution}
+                    type="button"
+                    title={option.hint}
+                    disabled={disabled}
+                    onClick={() => onResolve(row.id, fragment, option.resolution)}
+                    className="px-2 py-1 text-xs rounded bg-app/40 hover:bg-app/60 text-fg-bright border border-border cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </section>
+  )
+}
+
 /** Scoped conflict review + confirmed-apply dialog (Step 9). Stays
  *  presentational: every backend call, plan, and race guard lives in
  *  `Config.tsx` (REQ-010). This component only renders the supplied
- *  review, reports the three outcomes through props, and owns its own
+ *  review, reports the sync outcome through props, and owns its own
  *  focus/keyboard/ARIA behavior (REQ-024, REQ-025, PAT-001). */
 export function ConfigSyncDialog({
   open,
@@ -105,8 +310,10 @@ export function ConfigSyncDialog({
   reviewUsable,
   actionError,
   actionNotice,
+  detachIds,
+  onDetachChange,
+  onResolveFragmentEdit,
   onSyncToDisk,
-  onAdoptFromDisk,
   onCancel
 }: ConfigSyncDialogProps): JSX.Element | null {
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -179,6 +386,11 @@ export function ConfigSyncDialog({
   const scopeLabel = `${agentDisplayName} · ${resourceLabel}`
   const titleId = 'config-sync-dialog-title'
   const descId = 'config-sync-dialog-desc'
+  const hasLinked =
+    review.sections.configOnly.some((row) => row.ref.linkedFrom) ||
+    review.sections.changed.some((pair) => pair.disk.ref.linkedFrom || pair.config.ref.linkedFrom)
+  const hasTemplateRows =
+    review.sections.configOnly.some(isTemplateRow) || review.sections.changed.some((pair) => isTemplateRow(pair.config))
   const busyLabel = stage === 'planning' ? 'Preparing plan…' : stage === 'applying' ? 'Applying…' : null
 
   return (
@@ -224,33 +436,48 @@ export function ConfigSyncDialog({
 
           <div className="flex flex-col gap-1.5 text-xs text-dim bg-app/30 rounded px-2.5 py-2">
             <p>
-              <span className="text-fg-bright font-medium">Sync Tatsu config to disk</span> creates
-              config-only files on disk, overwrites content-changed disk files, and removes
-              disk-only files — backing up every existing file before it's overwritten or removed.
+              <span className="text-fg-bright font-medium">Sync to disk</span> writes template
+              output that is missing or out of date and refreshes fragment sections in your files,
+              backing up every file before it's overwritten. It never deletes a file.
             </p>
-            <p>
-              <span className="text-fg-bright font-medium">
-                Adopt current disk files into Tatsu config
-              </span>{' '}
-              replaces this scope in Tatsu config with the current disk inventory — adding
-              disk-only entries, replacing content-changed desired content, and removing
-              config-only entries. It performs no harness-directory writes.
-            </p>
+            {hasTemplateRows && (
+              <p>
+                <span className="text-fg-bright font-medium">Template</span> entries are built from
+                a template in the template source folder. For each template file that differs on
+                disk, choose to overwrite it from the template or keep the disk file and detach it
+                from the template.
+              </p>
+            )}
+            {hasLinked && (
+              <p>
+                <span className="text-fg-bright font-medium">Linked</span> entries are symbolic links
+                into another folder, such as a dotfiles build. Sync to disk writes through the link
+                to that folder and keeps the link in place. A build that regenerates that folder can
+                overwrite what Tatsu writes.
+              </p>
+            )}
           </div>
 
           <DiffSection
-            title="Disk only"
-            rows={review.sections.diskOnly}
-            emptyLabel="No disk-only files"
-            scopeLabel={scopeLabel}
-          />
-          <DiffSection
-            title="Config only"
+            title="Not on disk"
             rows={review.sections.configOnly}
-            emptyLabel="No config-only files"
+            emptyLabel="No missing files"
             scopeLabel={scopeLabel}
           />
-          <ChangedSection rows={review.sections.changed} scopeLabel={scopeLabel} />
+          <ChangedSection
+            rows={review.sections.changed}
+            scopeLabel={scopeLabel}
+            detachIds={detachIds}
+            choicesDisabled={mutationsDisabled}
+            onDetachChange={onDetachChange}
+          />
+          <RenderErrorSection rows={review.sections.renderErrors} scopeLabel={scopeLabel} />
+          <FragmentErrorSection rows={review.sections.fragmentErrors} scopeLabel={scopeLabel} />
+          <FragmentEditSection
+            rows={review.sections.fragmentEdits}
+            disabled={mutationsDisabled}
+            onResolve={onResolveFragmentEdit}
+          />
 
           <div aria-live="polite" className="flex flex-col gap-1">
             {actionNotice && <div className="text-xs text-info">{actionNotice}</div>}
@@ -273,19 +500,10 @@ export function ConfigSyncDialog({
             type="button"
             disabled={mutationsDisabled}
             aria-busy={stage !== 'idle'}
-            onClick={onAdoptFromDisk}
-            className="px-3 py-1.5 text-xs font-medium rounded bg-app/40 hover:bg-app/60 text-fg-bright border border-border cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Adopt current disk files into Tatsu config
-          </button>
-          <button
-            type="button"
-            disabled={mutationsDisabled}
-            aria-busy={stage !== 'idle'}
             onClick={onSyncToDisk}
             className="px-3 py-1.5 text-xs font-medium rounded bg-accent/20 hover:bg-accent/30 text-fg-bright border border-accent/40 cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Sync Tatsu config to disk
+            Sync to disk
           </button>
         </div>
       </div>

@@ -4,14 +4,37 @@ import type {
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
-/** Main-process chat runtime abstraction. Current implementation:
- *  - ClaudeAcpRuntime (uses @anthropic-ai/claude-agent-sdk)
+/** The renderer's answer to a pending tool approval (JsonClaudeApprovalCard). */
+export interface ApprovalDecision {
+  behavior: 'allow' | 'deny'
+  updatedInput?: Record<string, unknown>
+  message?: string
+  interrupt?: boolean
+}
+
+/** Main-process chat runtime abstraction. Current implementations:
+ *  - ClaudeSdkRuntime (ClaudeAcpRuntime): @anthropic-ai/claude-agent-sdk transport
+ *  - AcpStdioRuntime: shared ACP stdio JSON-RPC transport (OpenCode/Codex)
  *
  *  Renderer still talks to same `jsonClaude:*` backend API; registry keeps
- *  IPC surface stable even though ACP is only registered runtime today. */
+ *  IPC surface stable. Despite the name, ClaudeAcpRuntime is NOT generic ACP
+ *  stdio — it drives the SDK's query() stream. Generic ACP stdio is the
+ *  AcpStdioRuntime + AcpStdioClient pair. */
 export interface ChatRuntime {
   /** Returns true if this runtime currently owns a live session. */
   hasSession(sessionId: string): boolean
+
+  /** Complete an agent login method advertised on an `auth-failure` card.
+   *  Resolves `{ ok: true }` once the agent accepted it and any prompt that
+   *  failed on auth has been retried. Optional: runtimes without
+   *  in-process login omit it. */
+  authenticate?(sessionId: string, methodId: string): Promise<{ ok: boolean; error?: string }>
+
+  /** Answer a pending tool approval raised by this runtime through
+   *  `jsonClaude/approvalRequested`. Returns false when the request id is
+   *  unknown (already answered, or raised by another runtime). Optional:
+   *  runtimes whose transport handles permissions itself omit it. */
+  resolveApproval?(requestId: string, decision: ApprovalDecision): boolean
 
   /** Start a new session. The runtime should dispatch `sessionStarted`
    *  and subsequent state events through the store. */
@@ -21,6 +44,8 @@ export interface ChatRuntime {
     opts?: {
       permissionMode?: JsonClaudePermissionMode
       modelOverride?: string
+      /** ACP agent session to continue via `session/load`. */
+      agentSessionId?: string
     }
   ): void
 

@@ -12,8 +12,11 @@ import type {
   HarnessConfigMutationPlan,
   HarnessConfigReadFileResult,
   HarnessConfigScope,
-  HarnessConfigSyncPlan
+  HarnessConfigSyncPlan,
+  HarnessTemplate,
+  HarnessTemplateImportPreview
 } from '../../shared/state/harness-config'
+import type { TemplateImportListing } from '../template-import'
 import type { HarnessConfigConnectionContext } from './harness-config-transport'
 
 type Handler = (ctx: HarnessConfigConnectionContext, payload: unknown) => unknown | Promise<unknown>
@@ -42,7 +45,6 @@ function makeComparison(overrides: Partial<HarnessConfigComparison> = {}): Harne
   return {
     scope: { agentKind: 'claude', resourceType: 'skills' },
     status: 'synced',
-    diskOnly: [],
     configOnly: [],
     changed: [],
     comparedAt: 100,
@@ -68,7 +70,6 @@ function makeSyncPlan(overrides: Partial<HarnessConfigSyncPlan> = {}): HarnessCo
     scope: { agentKind: 'claude', resourceType: 'skills' },
     direction: 'sync-to-disk',
     status: 'conflict',
-    diskOnly: [],
     configOnly: [],
     changed: [],
     generatedAt: 10,
@@ -116,9 +117,6 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
     readFile: vi.fn((): HarnessConfigReadFileResult => ({ ref: makeRef(), content: 'secret content', hash: 'hash-1' })),
     planSync: vi.fn((scope: HarnessConfigScope) => makeComparison({ scope })),
     planSyncToDisk: vi.fn((scope: HarnessConfigScope) => makeSyncPlan({ scope })),
-    planAdoptFromDisk: vi.fn((scope: HarnessConfigScope) =>
-      makeSyncPlan({ scope, planId: 'adopt-plan-1', direction: 'adopt-from-disk' })
-    ),
     prepareCreate: vi.fn((scope: HarnessConfigScope) => makeMutationPlan({ scope, direction: 'create' })),
     prepareUpdate: vi.fn((scope: HarnessConfigScope) =>
       makeMutationPlan({ scope, direction: 'update', planId: 'plan-update-1' })
@@ -129,6 +127,27 @@ function createFakeService(overrides: Partial<HarnessConfigService> = {}): Harne
     prepareCommandFromSkill: vi.fn((): HarnessConfigConversionResult => ({ status: 'draft', agentKind: 'claude', resourceType: 'commands', name: 'foo', relativePath: 'foo.md', label: 'foo', content: 'c' })),
     prepareSkillFromCommand: vi.fn((): HarnessConfigConversionResult => ({ status: 'draft', agentKind: 'claude', resourceType: 'skills', name: 'foo', relativePath: 'foo/SKILL.md', label: 'foo', content: 'c' })),
     applyPlan: vi.fn(async () => makeApplyResult()),
+    defaultRoots: vi.fn(() => ({
+      claudeAgents: '/home/.claude/agents',
+      claudeSkills: '/home/.claude/skills',
+      claudeCommands: '/home/.claude/commands',
+      codexHome: '/home/.codex',
+      codexSkills: '/home/.agents/skills',
+      opencodeAgents: '/home/.config/opencode/agents',
+      opencodeSkills: '/home/.config/opencode/skills',
+      opencodeCommands: '/home/.config/opencode/commands'
+    })),
+    scopesForRootKeys: vi.fn(() => [] as HarnessConfigScope[]),
+    scopesForTemplates: vi.fn(() => [] as HarnessConfigScope[]),
+    templateShadows: vi.fn(() => []),
+    scopesForFragment: vi.fn(() => [] as HarnessConfigScope[]),
+    filesUsingFragment: vi.fn(() => []),
+    resolveFragmentEdit: vi.fn(async (scope: HarnessConfigScope, id: string, fragment: string, resolution) => ({
+      scope,
+      id,
+      fragment,
+      resolution
+    })),
     ...overrides
   }
 }
@@ -308,7 +327,6 @@ describe('registerHarnessConfigRequestHandlers', () => {
       ['harnessConfig:prepareUpdate', { scope: SKILLS_SCOPE, id: 'ref-1', content: 'c' }],
       ['harnessConfig:prepareDelete', { scope: SKILLS_SCOPE, id: 'ref-1' }],
       ['harnessConfig:planSyncToDisk', { scope: SKILLS_SCOPE }],
-      ['harnessConfig:planAdoptFromDisk', { scope: SKILLS_SCOPE }],
       ['harnessConfig:prepareCommandFromSkill', { scope: SKILLS_SCOPE, id: 'ref-1' }],
       ['harnessConfig:prepareSkillFromCommand', { scope: { agentKind: 'claude', resourceType: 'commands' }, id: 'ref-1' }]
     ])('%s never calls applyPlan and dispatches no resource/comparison/sync events', async (channel, payload) => {
@@ -477,7 +495,7 @@ describe('registerHarnessConfigRequestHandlers', () => {
     })
   })
 
-  describe('sync/adopt directional mutations (TEST-005/TEST-007)', () => {
+  describe('sync directional mutations (TEST-005/TEST-007)', () => {
     it('confirmed syncToDisk refreshes inventory, dispatches a fresh comparison, and dispatches syncApplied', async () => {
       const plan = makeSyncPlan()
       const freshComparison = makeComparison({ status: 'synced' })
@@ -537,20 +555,6 @@ describe('registerHarnessConfigRequestHandlers', () => {
       const applied = store.eventsOfType('harnessConfig/syncApplied')
       expect(applied).toHaveLength(1)
       expect((applied[0] as { payload: { syncedAt: number } }).payload.syncedAt).toBe(applyResolvedAt)
-    })
-
-    it('a sync-to-disk plan cannot be applied through adoptFromDisk', async () => {
-      const plan = makeSyncPlan()
-      const { transport, service } = setup({ planSyncToDisk: vi.fn(() => plan) })
-      await transport.call('harnessConfig:planSyncToDisk', { scope: SKILLS_SCOPE })
-
-      const result = (await transport.call('harnessConfig:adoptFromDisk', {
-        scope: SKILLS_SCOPE,
-        planId: plan.planId,
-        confirmed: true
-      })) as { ok: false; error: { code: string } }
-      expect(result.error.code).toBe('unknown-plan')
-      expect(service.applyPlan).not.toHaveBeenCalled()
     })
 
     it('a partial apply failure still rescans and may refresh comparison, but withholds syncApplied and keeps the original error', async () => {
@@ -773,5 +777,438 @@ describe('registerHarnessConfigRequestHandlers', () => {
       expect(store.eventsOfType('harnessConfig/resourcesLoaded')).toHaveLength(0)
       expect(store.eventsOfType('harnessConfig/syncApplied')).toHaveLength(0)
     })
+  })
+})
+
+describe('template source channels', () => {
+  const TEMPLATE = {
+    kind: 'agent',
+    name: 'reviewer',
+    description: 'Reviews code',
+    fragments: ['style'],
+    body: 'Body',
+    harnesses: { claude: { frontmatter: { model: 'opus' }, name: 'code-reviewer' }, codex: false },
+    references: []
+  }
+
+  function setupTemplates(overrides: Record<string, unknown> = {}, service = createFakeService()) {
+    const transport = new FakeTransport()
+    const store = new FakeStore()
+    const templateSource = {
+      saveTemplate: vi.fn((draft) => ({ ...draft, relativePath: 'agents/reviewer.md', hash: 'h' })),
+      deleteTemplate: vi.fn(),
+      saveFragment: vi.fn((name: string, content: string) => ({
+        name,
+        content,
+        relativePath: `fragments/${name}.md`,
+        hash: 'h'
+      })),
+      deleteFragment: vi.fn(),
+      ...overrides
+    }
+    registerHarnessConfigRequestHandlers({
+      transport,
+      store,
+      service,
+      templateSource,
+      log: vi.fn(),
+      formatErr: vi.fn()
+    })
+    return { transport, store, templateSource }
+  }
+
+  it('saveTemplate warns before writing over existing files and saves once allowed (REQ-002)', async () => {
+    const service = createFakeService({
+      templateShadows: vi.fn(() => [{ agentKind: 'claude' as const, resourceType: 'agents' as const, relativePath: 'code-reviewer.md' }])
+    })
+    const { transport, templateSource } = setupTemplates({}, service)
+    const warned = (await transport.call('harnessConfig:saveTemplate', { template: TEMPLATE, confirmed: true })) as {
+      ok: boolean
+      error: { code: string; message: string }
+    }
+    expect(warned.ok).toBe(false)
+    expect(warned.error.code).toBe('template-shadows')
+    expect(warned.error.message).toContain('claude agents code-reviewer.md')
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+
+    const saved = (await transport.call('harnessConfig:saveTemplate', {
+      template: TEMPLATE,
+      confirmed: true,
+      allowShadowing: true
+    })) as { ok: boolean }
+    expect(saved.ok).toBe(true)
+    expect(templateSource.saveTemplate).toHaveBeenCalledWith(TEMPLATE)
+  })
+
+  it('saveTemplate rejects a non-boolean allowShadowing', async () => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call('harnessConfig:saveTemplate', {
+      template: TEMPLATE,
+      confirmed: true,
+      allowShadowing: 'yes'
+    })) as { ok: boolean; error: { code: string } }
+    expect(result.error.code).toBe('invalid-request')
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('planSyncToDisk passes detach ids through and validates them', async () => {
+    const service = createFakeService()
+    const { transport } = setupTemplates({}, service)
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    await transport.call('harnessConfig:planSyncToDisk', { scope, detach: ['id-1'] })
+    expect(service.planSyncToDisk).toHaveBeenCalledWith(scope, { detach: ['id-1'] })
+    await transport.call('harnessConfig:planSyncToDisk', { scope })
+    expect(service.planSyncToDisk).toHaveBeenLastCalledWith(scope)
+    const invalid = (await transport.call('harnessConfig:planSyncToDisk', { scope, detach: [1] })) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(invalid.error.code).toBe('invalid-request')
+  })
+
+  it('saveTemplate passes a validated draft to the template source', async () => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call('harnessConfig:saveTemplate', { template: TEMPLATE, confirmed: true })) as {
+      ok: boolean
+      value: { relativePath: string }
+    }
+    expect(result.ok).toBe(true)
+    expect(result.value.relativePath).toBe('agents/reviewer.md')
+    expect(templateSource.saveTemplate).toHaveBeenCalledWith(TEMPLATE)
+  })
+
+  it.each([
+    ['saveTemplate', { template: TEMPLATE, confirmed: false }],
+    ['deleteTemplate', { kind: 'agent', name: 'reviewer', confirmed: false }],
+    ['saveFragment', { name: 'style', content: 'x', confirmed: false }],
+    ['deleteFragment', { name: 'style', confirmed: false }]
+  ])('%s requires an explicit confirmation', async (channel, payload) => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call(`harnessConfig:${channel}`, payload)) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unconfirmed-plan' }) })
+    for (const fn of Object.values(templateSource)) expect(fn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['an unknown kind', { template: { ...TEMPLATE, kind: 'workflow' }, confirmed: true }],
+    ['an unknown harness', { template: { ...TEMPLATE, harnesses: { pi: false } }, confirmed: true }],
+    ['a block without frontmatter', { template: { ...TEMPLATE, harnesses: { claude: {} } }, confirmed: true }],
+    ['an extra field', { template: TEMPLATE, confirmed: true, force: true }],
+    ['a missing field', { template: { ...TEMPLATE, body: undefined }, confirmed: true }]
+  ])('saveTemplate rejects %s', async (_label, payload) => {
+    const { transport, templateSource } = setupTemplates()
+    const result = (await transport.call('harnessConfig:saveTemplate', payload)) as { ok: boolean; error: { code: string } }
+    expect(result.ok).toBe(false)
+    expect(result.error.code).toBe('invalid-request')
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('surfaces invalid target errors from the template source', async () => {
+    const { transport, store } = setupTemplates({
+      saveTemplate: vi.fn(() => {
+        throw new HarnessConfigError('invalid-target', 'Codex agents are one AGENTS.md file')
+      })
+    })
+    const result = await transport.call('harnessConfig:saveTemplate', { template: TEMPLATE, confirmed: true })
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'invalid-target', message: 'Codex agents are one AGENTS.md file' }
+    })
+    expect(store.eventsOfType('harnessConfig/errorChanged').at(-1)).toEqual({
+      type: 'harnessConfig/errorChanged',
+      payload: 'Codex agents are one AGENTS.md file'
+    })
+  })
+
+  it('deleteTemplate, saveFragment, and deleteFragment call through when confirmed', async () => {
+    const { transport, templateSource } = setupTemplates()
+    expect(await transport.call('harnessConfig:deleteTemplate', { kind: 'skill', name: 'x', confirmed: true })).toEqual({
+      ok: true,
+      value: { deleted: true }
+    })
+    expect(templateSource.deleteTemplate).toHaveBeenCalledWith('skill', 'x')
+    await transport.call('harnessConfig:saveFragment', { name: 'style', content: 'Be brief.', confirmed: true })
+    expect(templateSource.saveFragment).toHaveBeenCalledWith('style', 'Be brief.')
+    await transport.call('harnessConfig:deleteFragment', { name: 'style', confirmed: true })
+    expect(templateSource.deleteFragment).toHaveBeenCalledWith('style')
+  })
+
+  it('reports an unavailable template source when none is wired', async () => {
+    const { transport } = setup()
+    const result = await transport.call('harnessConfig:saveFragment', { name: 'style', content: 'x', confirmed: true })
+    expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unsupported-scope' }) })
+  })
+})
+
+describe('template import channels (Step 22)', () => {
+  const FOLDERS = { agents: '/dots/agents', agentFragments: null, skills: [], references: null, commands: null }
+  const CHOICES = { harnesses: ['claude'], duplicateChoices: {}, conflictChoices: {} }
+  const AGENT = '---\nname: reviewer\ndescription: Reviews\nclaude:\n  model: opus\n---\nReview.\n'
+
+  function listing(files: Record<string, string>): TemplateImportListing {
+    return {
+      agents: { root: '/dots/agents', files, links: {}, skipped: [] },
+      agentFragments: null,
+      skills: [],
+      references: null,
+      commands: null
+    }
+  }
+
+  function setupImport(options: { existing?: HarnessTemplate[]; service?: HarnessConfigService } = {}) {
+    const transport = new FakeTransport()
+    const store = new FakeStore()
+    const service = options.service ?? createFakeService()
+    let files: Record<string, string> = { 'reviewer.md': AGENT }
+    const templateSource = {
+      saveTemplate: vi.fn((draft) => ({ ...draft, relativePath: `agents/${draft.name}.md`, hash: 'h' })),
+      deleteTemplate: vi.fn(),
+      saveFragment: vi.fn((name: string, content: string) => ({
+        name,
+        content,
+        relativePath: `fragments/${name}.md`,
+        hash: 'h'
+      })),
+      deleteFragment: vi.fn()
+    }
+    const readListing = vi.fn(() => listing(files))
+    registerHarnessConfigRequestHandlers({
+      transport,
+      store,
+      service,
+      templateSource,
+      templateImport: { readListing, existing: () => ({ templates: options.existing ?? [], fragments: [] }) },
+      log: vi.fn(),
+      formatErr: vi.fn()
+    })
+    return {
+      transport,
+      templateSource,
+      readListing,
+      setFiles: (next: Record<string, string>) => {
+        files = next
+      }
+    }
+  }
+
+  async function preview(transport: FakeTransport, choices: unknown = CHOICES) {
+    return (await transport.call('harnessConfig:previewImport', { folders: FOLDERS, choices })) as {
+      ok: true
+      value: HarnessTemplateImportPreview
+    }
+  }
+
+  it('previews without writing and applies only after confirmation', async () => {
+    const { transport, templateSource, readListing } = setupImport()
+    const result = await preview(transport)
+    expect(result.ok).toBe(true)
+    expect(result.value.items.map((item) => [item.key, item.action])).toEqual([['agent/reviewer', 'create']])
+    expect(readListing).toHaveBeenCalledWith(FOLDERS)
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+
+    const unconfirmed = await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: false
+    })
+    expect(unconfirmed).toEqual({ ok: false, error: expect.objectContaining({ code: 'unconfirmed-plan' }) })
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+
+    const applied = (await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: true
+    })) as { ok: true; value: { written: string[] } }
+    expect(applied.value.written).toEqual(['agent/reviewer'])
+    expect(templateSource.saveTemplate).toHaveBeenCalledWith(expect.objectContaining({ kind: 'agent', name: 'reviewer' }))
+  })
+
+  it('refuses to apply when the source folders changed since the preview', async () => {
+    const { transport, templateSource, setFiles } = setupImport()
+    const result = await preview(transport)
+    setFiles({ 'reviewer.md': AGENT.replace('Review.', 'Review carefully.') })
+    const applied = await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: true
+    })
+    expect(applied).toEqual({ ok: false, error: expect.objectContaining({ code: 'stale-plan' }) })
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('refuses to apply while an existing template has no skip or replace choice', async () => {
+    const existing = [
+      {
+        kind: 'agent',
+        name: 'reviewer',
+        description: '',
+        fragments: [],
+        body: '',
+        harnesses: {},
+        references: [],
+        relativePath: 'agents/reviewer.md',
+        hash: 'h'
+      } as HarnessTemplate
+    ]
+    const { transport, templateSource } = setupImport({ existing })
+    const result = await preview(transport)
+    expect(result.value.items[0]).toMatchObject({ conflict: true, action: 'undecided' })
+    expect(result.value.blockingReasons).toHaveLength(1)
+    const blocked = await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: CHOICES,
+      fingerprint: result.value.fingerprint,
+      confirmed: true
+    })
+    expect(blocked).toEqual({ ok: false, error: expect.objectContaining({ code: 'invalid-template' }) })
+
+    const replaceChoices = { ...CHOICES, conflictChoices: { 'agent/reviewer': 'replace' } }
+    const replace = await preview(transport, replaceChoices)
+    const applied = (await transport.call('harnessConfig:applyImport', {
+      folders: FOLDERS,
+      choices: replaceChoices,
+      fingerprint: replace.value.fingerprint,
+      confirmed: true
+    })) as { ok: boolean }
+    expect(applied.ok).toBe(true)
+    expect(templateSource.saveTemplate).toHaveBeenCalledTimes(1)
+  })
+
+  it('requires allowShadowing when an imported template writes over existing files', async () => {
+    const service = createFakeService({
+      templateShadows: vi.fn(() => [
+        { agentKind: 'claude' as const, resourceType: 'agents' as const, relativePath: 'reviewer.md' }
+      ])
+    })
+    const { transport, templateSource } = setupImport({ service })
+    const result = await preview(transport)
+    expect(result.value.shadows).toEqual(['claude agents reviewer.md'])
+    const request = { folders: FOLDERS, choices: CHOICES, fingerprint: result.value.fingerprint, confirmed: true }
+    expect(await transport.call('harnessConfig:applyImport', request)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'template-shadows' })
+    })
+    expect(templateSource.saveTemplate).not.toHaveBeenCalled()
+    const allowed = (await transport.call('harnessConfig:applyImport', { ...request, allowShadowing: true })) as {
+      ok: boolean
+    }
+    expect(allowed.ok).toBe(true)
+  })
+
+  it('shows the current harness file next to the rendered output', async () => {
+    const service = createFakeService({
+      scan: vi.fn(() => [makeRef({ id: 'disk-1', resourceType: 'agents', relativePath: 'reviewer.md' })]),
+      readFile: vi.fn(() => ({ ref: makeRef(), content: 'old build output', hash: 'x' }))
+    })
+    const { transport } = setupImport({ service })
+    const result = await preview(transport)
+    expect(result.value.files).toEqual([
+      expect.objectContaining({ agentKind: 'claude', relativePath: 'reviewer.md', current: 'old build output' })
+    ])
+  })
+
+  it.each([
+    ['an unmanaged harness', { folders: FOLDERS, choices: { ...CHOICES, harnesses: ['pi'] } }],
+    ['a bad conflict choice', { folders: FOLDERS, choices: { ...CHOICES, conflictChoices: { 'agent/x': 'merge' } } }],
+    ['missing folders', { choices: CHOICES }]
+  ])('previewImport rejects %s', async (_label, payload) => {
+    const { transport, readListing } = setupImport()
+    const result = (await transport.call('harnessConfig:previewImport', payload)) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(result.error.code).toBe('invalid-request')
+    expect(readListing).not.toHaveBeenCalled()
+  })
+})
+
+describe('inline fragment channels', () => {
+  const AGENTS_SCOPE: HarnessConfigScope = { agentKind: 'claude', resourceType: 'agents' }
+  const RESOLVE = { scope: AGENTS_SCOPE, id: 'ref-1', fragment: 'tone', resolution: 'keep-edit', confirmed: true }
+
+  it('resolveFragmentEdit settles the edit and then publishes a fresh comparison for the scope', async () => {
+    const fresh = makeComparison({ scope: AGENTS_SCOPE, status: 'config-only' })
+    const { transport, store, service } = setup({ planSync: vi.fn(() => fresh) })
+    const result = (await transport.call('harnessConfig:resolveFragmentEdit', RESOLVE)) as { ok: boolean; value: unknown }
+
+    expect(result).toEqual({
+      ok: true,
+      value: { scope: AGENTS_SCOPE, id: 'ref-1', fragment: 'tone', resolution: 'keep-edit' }
+    })
+    expect(service.resolveFragmentEdit).toHaveBeenCalledWith(AGENTS_SCOPE, 'ref-1', 'tone', 'keep-edit')
+    expect(service.planSync).toHaveBeenCalledWith(AGENTS_SCOPE)
+    expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toEqual([
+      { type: 'harnessConfig/comparisonLoaded', payload: fresh }
+    ])
+    expect(store.eventsOfType('harnessConfig/syncApplied')).toEqual([])
+  })
+
+  it.each([
+    ['an unknown resolution', { ...RESOLVE, resolution: 'merge' }],
+    ['a missing resolution', { scope: AGENTS_SCOPE, id: 'ref-1', fragment: 'tone', confirmed: true }],
+    ['an empty fragment name', { ...RESOLVE, fragment: '' }],
+    ['an empty id', { ...RESOLVE, id: '' }],
+    ['an extra field', { ...RESOLVE, content: 'Be terse.' }],
+    ['an unmanaged scope', { ...RESOLVE, scope: { agentKind: 'pi', resourceType: 'agents' } }]
+  ])('resolveFragmentEdit rejects %s without calling the service', async (_label, payload) => {
+    const { transport, store, service } = setup()
+    const result = (await transport.call('harnessConfig:resolveFragmentEdit', payload)) as { ok: boolean; error: { code: string } }
+    expect(result.ok).toBe(false)
+    expect(result.error.code).toBe('invalid-request')
+    expect(service.resolveFragmentEdit).not.toHaveBeenCalled()
+    expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toEqual([])
+  })
+
+  it('resolveFragmentEdit requires an explicit confirmation', async () => {
+    const { transport, service } = setup()
+    const result = (await transport.call('harnessConfig:resolveFragmentEdit', { ...RESOLVE, confirmed: false })) as {
+      ok: boolean
+      error: { code: string }
+    }
+    expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'unconfirmed-plan' }) })
+    expect(service.resolveFragmentEdit).not.toHaveBeenCalled()
+  })
+
+  it('resolveFragmentEdit surfaces a service refusal and publishes no comparison', async () => {
+    const { transport, store } = setup({
+      resolveFragmentEdit: vi.fn(async () => {
+        throw new HarnessConfigError('stale-plan', 'No edited section of fragment "tone" remains in this file')
+      })
+    })
+    const result = await transport.call('harnessConfig:resolveFragmentEdit', RESOLVE)
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'stale-plan', message: 'No edited section of fragment "tone" remains in this file' }
+    })
+    expect(store.eventsOfType('harnessConfig/comparisonLoaded')).toEqual([])
+  })
+
+  it('fragmentUsage returns the files using the named fragment', async () => {
+    const files = [
+      { id: 'ref-1', agentKind: 'claude' as const, resourceType: 'agents' as const, label: 'reviewer', relativePath: 'reviewer.md' }
+    ]
+    const filesUsingFragment = vi.fn((name: string) => (name === 'tone' ? files : []))
+    const { transport } = setup({ filesUsingFragment })
+    expect(await transport.call('harnessConfig:fragmentUsage', { name: 'tone' })).toEqual({ ok: true, value: { files } })
+    expect(await transport.call('harnessConfig:fragmentUsage', { name: 'style' })).toEqual({ ok: true, value: { files: [] } })
+  })
+
+  it.each([
+    ['an empty name', { name: '' }],
+    ['a non-string name', { name: 1 }],
+    ['an extra field', { name: 'tone', scope: SKILLS_SCOPE }],
+    ['a missing name', {}]
+  ])('fragmentUsage rejects %s', async (_label, payload) => {
+    const { transport, service } = setup()
+    const result = (await transport.call('harnessConfig:fragmentUsage', payload)) as { ok: boolean; error: { code: string } }
+    expect(result.ok).toBe(false)
+    expect(result.error.code).toBe('invalid-request')
+    expect(service.filesUsingFragment).not.toHaveBeenCalled()
   })
 })

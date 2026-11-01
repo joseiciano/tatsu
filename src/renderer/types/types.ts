@@ -1,4 +1,5 @@
 import type { StateEvent, StateSnapshot } from '../../shared/state'
+import type { DownloadableRuntime } from '../../shared/state/runtimes'
 export type { StateEvent, StateSnapshot }
 
 import type { Worktree, PendingWorktree, PendingDeletion } from '../../shared/state/worktrees'
@@ -22,6 +23,8 @@ import type {
   HarnessConfigComparison,
   HarnessConfigConversionRequest,
   HarnessConfigConversionResult,
+  HarnessConfigFolderDefaults,
+  HarnessConfigFolderSettingResult,
   HarnessConfigMutationPlan,
   HarnessConfigPrepareCreateRequest,
   HarnessConfigPrepareDeleteRequest,
@@ -29,10 +32,26 @@ import type {
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
-  HarnessConfigSyncPlan
+  HarnessConfigSyncToDiskRequest,
+  HarnessConfigSetRootRequest,
+  HarnessConfigSyncPlan,
+  HarnessFragment,
+  HarnessFragmentDeleteRequest,
+  HarnessFragmentSaveRequest,
+  HarnessFragmentUsageRequest,
+  HarnessFragmentUsageResult,
+  HarnessTemplate,
+  HarnessTemplateDeleteRequest,
+  HarnessTemplateImportApplyRequest,
+  HarnessTemplateImportApplyResult,
+  HarnessTemplateImportPreview,
+  HarnessTemplateImportPreviewRequest,
+  HarnessTemplateSaveRequest
 } from '../../shared/state/harness-config'
 export type {
   HarnessConfigApplyRequest,
@@ -40,6 +59,8 @@ export type {
   HarnessConfigComparison,
   HarnessConfigConversionRequest,
   HarnessConfigConversionResult,
+  HarnessConfigFolderDefaults,
+  HarnessConfigFolderSettingResult,
   HarnessConfigMutationPlan,
   HarnessConfigPrepareCreateRequest,
   HarnessConfigPrepareDeleteRequest,
@@ -47,10 +68,26 @@ export type {
   HarnessConfigReadFileResult,
   HarnessConfigReadRequest,
   HarnessConfigRequestResult,
+  HarnessConfigResolveFragmentEditRequest,
+  HarnessConfigResolveFragmentEditResult,
   HarnessConfigScanResult,
   HarnessConfigScope,
   HarnessConfigScopeRequest,
-  HarnessConfigSyncPlan
+  HarnessConfigSyncToDiskRequest,
+  HarnessConfigSetRootRequest,
+  HarnessConfigSyncPlan,
+  HarnessFragment,
+  HarnessFragmentDeleteRequest,
+  HarnessFragmentSaveRequest,
+  HarnessFragmentUsageRequest,
+  HarnessFragmentUsageResult,
+  HarnessTemplate,
+  HarnessTemplateDeleteRequest,
+  HarnessTemplateImportApplyRequest,
+  HarnessTemplateImportApplyResult,
+  HarnessTemplateImportPreview,
+  HarnessTemplateImportPreviewRequest,
+  HarnessTemplateSaveRequest
 }
 
 /** Per-kind dirtiness flags for a worktree. `git` reflects
@@ -346,6 +383,8 @@ export interface ElectronAPI {
   setBrowserToolsEnabled(enabled: boolean): Promise<boolean>
   setBrowserToolsMode(mode: 'view' | 'full'): Promise<boolean>
   setDefaultClaudeTabType(value: 'xterm' | 'json'): Promise<boolean>
+  setDefaultOpencodeTabType(value: 'xterm' | 'json'): Promise<boolean>
+  setDefaultCodexTabType(value: 'xterm' | 'json'): Promise<boolean>
   setChatPromotionDismissed(value: boolean): Promise<boolean>
   setJsonModeChatDensity(value: 'compact' | 'comfy'): Promise<boolean>
   setUiScale(value: 'x-small' | 'small' | 'medium' | 'large' | 'x-large'): Promise<boolean>
@@ -404,6 +443,14 @@ export interface ElectronAPI {
   setWorktreeDetail(detail: WorktreeDetail): Promise<boolean>
   setEditor(editorId: string): Promise<boolean>
   getAvailableEditors(): Promise<{ id: string; name: string }[]>
+  downloadRuntime(agentKind: DownloadableRuntime): Promise<boolean>
+  setExperimentalChatAgentsEnabled(enabled: boolean): Promise<boolean>
+  authenticateJsonClaude(
+    sessionId: string,
+    methodId: string,
+    apiKey?: string
+  ): Promise<{ ok: boolean; error?: string }>
+  refreshRuntimes(): Promise<boolean>
   snooze(path: string, wakeAt: number): Promise<boolean>
   unsnooze(path: string): Promise<boolean>
   setSnoozeDefaultDays(days: number): Promise<boolean>
@@ -461,6 +508,9 @@ export interface ElectronAPI {
   setGithubToken(token: string): Promise<{ ok: boolean; username?: string; error?: string }>
   clearGithubToken(): Promise<boolean>
   setHarnessStarred(starred: boolean): Promise<{ ok: boolean; error?: string }>
+  setHarnessConfigRoot(request: HarnessConfigSetRootRequest): Promise<HarnessConfigFolderSettingResult>
+  setHarnessConfigSourceDir(path: string | null): Promise<HarnessConfigFolderSettingResult>
+  getHarnessConfigFolderDefaults(): Promise<HarnessConfigFolderDefaults>
 
   getVersion(): Promise<string>
   readRecentLog(maxLines?: number): Promise<string>
@@ -638,10 +688,7 @@ export interface ElectronAPI {
     request: HarnessConfigPrepareDeleteRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigMutationPlan>>
   planHarnessConfigSyncToDisk(
-    request: HarnessConfigScopeRequest
-  ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
-  planHarnessConfigAdoptFromDisk(
-    request: HarnessConfigScopeRequest
+    request: HarnessConfigSyncToDiskRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigSyncPlan>>
   createHarnessConfigFile(
     request: HarnessConfigApplyRequest
@@ -655,15 +702,32 @@ export interface ElectronAPI {
   syncHarnessConfigToDisk(
     request: HarnessConfigApplyRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
-  adoptHarnessConfigFromDisk(
-    request: HarnessConfigApplyRequest
-  ): Promise<HarnessConfigRequestResult<HarnessConfigApplyResult>>
   prepareHarnessConfigCommandFromSkill(
     request: HarnessConfigConversionRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
   prepareHarnessConfigSkillFromCommand(
     request: HarnessConfigConversionRequest
   ): Promise<HarnessConfigRequestResult<HarnessConfigConversionResult>>
+  saveHarnessTemplate(request: HarnessTemplateSaveRequest): Promise<HarnessConfigRequestResult<HarnessTemplate>>
+  deleteHarnessTemplate(
+    request: HarnessTemplateDeleteRequest
+  ): Promise<HarnessConfigRequestResult<{ deleted: true }>>
+  saveHarnessFragment(request: HarnessFragmentSaveRequest): Promise<HarnessConfigRequestResult<HarnessFragment>>
+  deleteHarnessFragment(
+    request: HarnessFragmentDeleteRequest
+  ): Promise<HarnessConfigRequestResult<{ deleted: true }>>
+  previewHarnessTemplateImport(
+    request: HarnessTemplateImportPreviewRequest
+  ): Promise<HarnessConfigRequestResult<HarnessTemplateImportPreview>>
+  applyHarnessTemplateImport(
+    request: HarnessTemplateImportApplyRequest
+  ): Promise<HarnessConfigRequestResult<HarnessTemplateImportApplyResult>>
+  resolveHarnessFragmentEdit(
+    request: HarnessConfigResolveFragmentEditRequest
+  ): Promise<HarnessConfigRequestResult<HarnessConfigResolveFragmentEditResult>>
+  harnessFragmentUsage(
+    request: HarnessFragmentUsageRequest
+  ): Promise<HarnessConfigRequestResult<HarnessFragmentUsageResult>>
 }
 
 /** A configured backend (multi-backend UX). Kept in sync with the

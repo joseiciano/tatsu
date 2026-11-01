@@ -5,6 +5,8 @@ import {
   getAgentInfo,
   getNextAgentKind,
   isHarnessConfigCapabilityEnabled,
+  resourcePathForName,
+  templateOutputFor,
   type AgentConfigCapability,
   type HarnessConfigCapabilityStatus,
   type HarnessConfigResourceType
@@ -18,7 +20,12 @@ type ExpectedCapability = {
   label: string
   notes?: string
   aliasResourceTypes?: readonly HarnessConfigResourceType[]
+  layout?: 'per-resource' | 'single-file'
+  templateOutput?: { frontmatterName: boolean }
 }
+
+const namedOutput = { frontmatterName: true } as const
+const pathNamedOutput = { frontmatterName: false } as const
 const unsupportedCapabilityWithAlias = {
   resourceType: 'commands',
   status: 'unsupported',
@@ -46,27 +53,35 @@ const expectedAgentCapabilities: readonly {
   {
     kind: 'claude',
     capabilities: [
-      { resourceType: 'agents', status: 'supported', label: 'Agents' },
+      { resourceType: 'agents', status: 'supported', label: 'Agents', templateOutput: namedOutput },
       {
         resourceType: 'skills',
         status: 'supported',
         label: 'Skills',
         notes: 'Claude skills also appear in the Commands view as the same physical resource.',
-        aliasResourceTypes: ['commands']
+        aliasResourceTypes: ['commands'],
+        templateOutput: namedOutput
       },
       {
         resourceType: 'commands',
         status: 'supported',
         label: 'Commands',
-        notes: 'Includes native Claude commands and aliases of Claude skills.'
+        notes: 'Includes native Claude commands and aliases of Claude skills.',
+        templateOutput: namedOutput
       }
     ]
   },
   {
     kind: 'codex',
     capabilities: [
-      { resourceType: 'agents', status: 'supported', label: 'Agents' },
-      { resourceType: 'skills', status: 'supported', label: 'Skills' },
+      {
+        resourceType: 'agents',
+        status: 'supported',
+        label: 'Agents',
+        notes: 'Codex agents are one top-level AGENTS.md file, not a folder of agents.',
+        layout: 'single-file'
+      },
+      { resourceType: 'skills', status: 'supported', label: 'Skills', templateOutput: namedOutput },
       {
         resourceType: 'commands',
         status: 'unsupported',
@@ -78,9 +93,9 @@ const expectedAgentCapabilities: readonly {
   {
     kind: 'opencode',
     capabilities: [
-      { resourceType: 'agents', status: 'supported', label: 'Agents' },
-      { resourceType: 'skills', status: 'supported', label: 'Skills' },
-      { resourceType: 'commands', status: 'supported', label: 'Commands' }
+      { resourceType: 'agents', status: 'supported', label: 'Agents', templateOutput: pathNamedOutput },
+      { resourceType: 'skills', status: 'supported', label: 'Skills', templateOutput: namedOutput },
+      { resourceType: 'commands', status: 'supported', label: 'Commands', templateOutput: pathNamedOutput }
     ]
   },
   {
@@ -139,13 +154,15 @@ describe('harness config capability metadata', () => {
       status: 'supported',
       label: 'Skills',
       notes: 'Claude skills also appear in the Commands view as the same physical resource.',
-      aliasResourceTypes: ['commands']
+      aliasResourceTypes: ['commands'],
+      templateOutput: namedOutput
     })
     expect(commands).toEqual({
       resourceType: 'commands',
       status: 'supported',
       label: 'Commands',
-      notes: 'Includes native Claude commands and aliases of Claude skills.'
+      notes: 'Includes native Claude commands and aliases of Claude skills.',
+      templateOutput: namedOutput
     })
     expect(commands).not.toHaveProperty('aliasResourceTypes')
   })
@@ -236,6 +253,27 @@ describe('harness config capability metadata', () => {
 
   it.each(predicateCases)('$name', ({ capability, expected }) => {
     expect(isHarnessConfigCapabilityEnabled(capability)).toBe(expected)
+  })
+})
+
+describe('resource paths and template output', () => {
+  it('derives root-relative paths for every managed per-resource scope', () => {
+    expect(resourcePathForName('claude', 'agents', 'a')).toBe('a.md')
+    expect(resourcePathForName('claude', 'skills', 's')).toBe('s/SKILL.md')
+    expect(resourcePathForName('claude', 'commands', 'c')).toBe('c.md')
+    expect(resourcePathForName('codex', 'skills', 's')).toBe('s/SKILL.md')
+    expect(resourcePathForName('codex', 'commands', 'c')).toBeNull()
+    expect(resourcePathForName('opencode', 'agents', 'a')).toBe('a.md')
+    expect(resourcePathForName('opencode', 'skills', 's')).toBe('s/SKILL.md')
+    expect(resourcePathForName('opencode', 'commands', 'c')).toBe('c.md')
+    expect(resourcePathForName('pi', 'skills', 's')).toBeNull()
+  })
+
+  it('records whether each supported per-resource scope takes a frontmatter name', () => {
+    expect(templateOutputFor('claude', 'skills')).toEqual(namedOutput)
+    expect(templateOutputFor('opencode', 'agents')).toEqual(pathNamedOutput)
+    expect(templateOutputFor('codex', 'commands')).toBeNull()
+    expect(templateOutputFor('pi', 'agents')).toBeNull()
   })
 })
 

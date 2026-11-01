@@ -1,7 +1,7 @@
 ---
 goal: Define the skills, agents, and commands sync product boundary and source-of-truth contract
 date_created: 2026-09-24
-last_updated: 2026-09-26
+last_updated: 2026-10-22
 status: 'Completed'
 tags: [feature, architecture, product-boundary, harness-config]
 ---
@@ -32,6 +32,7 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
 - **REQ-016**: Existing files MUST be backed up before destructive disk writes, including overwrite, delete, and sync-to-disk replacement. New-file creation does not require a backup when no prior file exists.
 - **REQ-017**: Claude skill and command views MUST model synonymy as aliases of the same underlying resource where Claude exposes one file through both concepts. Conversion MUST return the existing resource reference and MUST NOT create a duplicate file.
 - **REQ-018**: Plugin-provided resources MAY be inventoried for their originating harness, but plugins are not a fourth managed resource type and MUST NOT be copied, installed, or translated across harnesses automatically.
+- **REQ-019**: A template ([Step 18](./step-18-template-source-model.md)) MAY produce resources for several harnesses, but only for the harnesses the user lists as its targets, each using harness settings the user wrote. This is not automatic cross-harness copying or translation; ALT-004 and REQ-018 still apply. Each produced resource is still compared and synced within its own `${agentKind}:${resourceType}` scope (REQ-011).
 - **SEC-001**: Destructive writes MUST preserve the complete pre-change file in a dated backup before replacing or deleting the original. Failure to create the backup MUST abort the destructive write.
 - **SEC-002**: All later filesystem implementations MUST restrict writes to main-process-resolved, normalized paths inside known harness configuration roots; renderer input MUST NOT supply trusted absolute paths.
 - **CON-001**: This step MUST define product semantics only. Exact per-version directories, filenames, nested asset support, and resolver behavior belong to Steps 2 and 3 and MUST NOT be guessed here.
@@ -104,7 +105,7 @@ This plan establishes the binding product contract for Tatsu's skills, agent def
 
 ## 3. Alternatives
 
-- **ALT-001**: Treat disk as the only source of truth and use Tatsu solely as a file editor. Rejected because it cannot represent desired resources that are temporarily missing from disk and cannot provide a deterministic sync-to-disk direction.
+- **ALT-001**: Treat disk as the only source of truth and use Tatsu solely as a file editor. Rejected because it cannot represent desired resources that are temporarily missing from disk and cannot provide a deterministic sync-to-disk direction. Superseded: once templates landed, disk became the source for hand-written files and adopt from disk (REQ-010) was removed; see the source-of-truth rules in [implementation-details.md](./implementation-details.md).
 - **ALT-002**: Treat Tatsu config as authoritative and automatically overwrite drift on scan. Rejected because it can destroy existing user-authored harness configuration without informed consent.
 - **ALT-003**: Provide one global sync action across all harnesses and resource types. Rejected for the first implementation because the blast radius is too large and plugin/capability differences make a single confirmation ambiguous.
 - **ALT-004**: Convert plugin and resource formats between harnesses automatically. Rejected because plugin schemas and runtime assumptions are not portable across vendors.

@@ -101,10 +101,41 @@ describe('resolveClaudeAgentSdkExecutablePath', () => {
     const path = resolveClaudeAgentSdkExecutablePath({
       platform: 'darwin',
       arch: 'arm64',
+      runtimesRoot: null,
       resolveFromSdk: () => '/Applications/Harness.app/Contents/Resources/app.asar/node_modules/pkg/package.json'
     })
 
     expect(path).toBe('/Applications/Harness.app/Contents/Resources/app.asar.unpacked/node_modules/pkg/claude')
+  })
+
+  const RUNTIMES = '/Applications/Harness.app/Contents/Resources/runtimes'
+  const STAGED = `${RUNTIMES}/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude`
+  const SDK_PKG = '/Applications/Harness.app/Contents/Resources/app.asar/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/package.json'
+
+  it('prefers the staged runtimes-root binary over SDK-relative resolution', () => {
+    const path = resolveClaudeAgentSdkExecutablePath({
+      platform: 'linux',
+      arch: 'x64',
+      runtimesRoot: RUNTIMES,
+      exists: (p) => p === STAGED,
+      resolveFromSdk: () => SDK_PKG
+    })
+
+    expect(path).toBe(STAGED)
+  })
+
+  it('falls back to the SDK-relative binary when nothing was staged', () => {
+    const path = resolveClaudeAgentSdkExecutablePath({
+      platform: 'linux',
+      arch: 'x64',
+      runtimesRoot: RUNTIMES,
+      exists: () => false,
+      resolveFromSdk: () => SDK_PKG
+    })
+
+    expect(path).toBe(
+      '/Applications/Harness.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'
+    )
   })
 })
 
@@ -849,7 +880,7 @@ describe('ClaudeAcpRuntime', () => {
     it('uses stored permission mode when creating ACP query options', () => {
       store.dispatch({
         type: 'jsonClaude/sessionStarted',
-        payload: { sessionId: 's1', worktreePath: '/wt', defaultPermissionMode: 'acceptEdits' }
+        payload: { sessionId: 's1', worktreePath: '/wt', agentKind: 'claude', runtimeId: 'claude', defaultPermissionMode: 'acceptEdits' }
       })
       runtime.start('s1', '/wt')
       runtime.send('s1', 'hello')
