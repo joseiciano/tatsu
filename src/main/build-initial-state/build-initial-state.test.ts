@@ -8,7 +8,12 @@ vi.mock('electron', () => ({
   }
 }))
 
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { buildInitialAppState } from '.'
+import { loadRunRecordsSync } from '../workflow-run-records'
+import type { WorkflowRunRecord } from '../../shared/state/workflows'
 import type { Config } from '../persistence'
 import { initialPRs } from '../../shared/state/prs'
 import { initialOnboarding } from '../../shared/state/onboarding'
@@ -105,4 +110,52 @@ describe('buildInitialAppState', () => {
     expect(bad.settings.workflows.maxConcurrentAgents).toBe(4)
   })
 
+  it('hydrates live runs and the 50 newest finished runs from records on disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'initial-runs-'))
+    try {
+      const record = (runId: string, patch: Partial<WorkflowRunRecord>): WorkflowRunRecord => ({
+        version: 1,
+        runId,
+        defId: 'personal:flow',
+        defHash: 'hash',
+        definition: { name: 'flow', inputs: {}, steps: [] },
+        inputs: {},
+        worktreePath: `/wt/${runId}`,
+        contextPath: `/wt/${runId}/.harness/runs/${runId}/context.md`,
+        status: 'done',
+        cursor: 0,
+        steps: { plan: 'done' },
+        startedAt: 1,
+        attempts: [],
+        ...patch
+      })
+      for (let i = 0; i < 60; i++) {
+        const runId = `done-${String(i).padStart(2, '0')}`
+        writeFileSync(join(dir, `${runId}.json`), JSON.stringify(record(runId, { finishedAt: 100 + i })))
+      }
+      writeFileSync(
+        join(dir, 'paused-1.json'),
+        JSON.stringify(record('paused-1', { status: 'paused', pausedReason: 'step-failed', steps: { plan: 'failed' } }))
+      )
+      writeFileSync(join(dir, 'broken.json'), '{')
+      const logs: string[] = []
+
+      const records = loadRunRecordsSync(dir, (_c, message, data) => logs.push(`${message} ${data?.file}`))
+      const state = buildInitialAppState(emptyConfig, { hasGithubToken: false, workflowRuns: records })
+
+      const runIds = Object.keys(state.workflows.runs)
+      expect(runIds).toHaveLength(51)
+      expect(state.workflows.runs['paused-1']).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+      expect(runIds.filter((id) => id.startsWith('done-')).sort()[0]).toBe('done-10')
+      expect(logs).toEqual(['run record skipped unreadable broken.json'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('seeds an empty workflows slice when no run records are passed', () => {
+    const state = buildInitialAppState(emptyConfig, { hasGithubToken: false })
+    expect(state.workflows.runs).toEqual({})
+    expect(state.workflows.attempts).toEqual({})
+  })
 })
