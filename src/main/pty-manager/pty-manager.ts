@@ -92,6 +92,7 @@ export class PtyManager {
   private historyDirty = new Set<string>()
   private historyFlushTimer: NodeJS.Timeout | null = null
   private perfMonitor: PerfMonitor | null = null
+  private exitListeners = new Set<(id: string, exitCode: number) => void>()
 
   /** Wire the authoritative store after it's constructed. PTY status,
    * shell activity, and cleanup events dispatch through it. */
@@ -101,6 +102,13 @@ export class PtyManager {
 
   setPerfMonitor(monitor: PerfMonitor): void {
     this.perfMonitor = monitor
+  }
+
+  onExit(listener: (id: string, exitCode: number) => void): () => void {
+    this.exitListeners.add(listener)
+    return () => {
+      this.exitListeners.delete(listener)
+    }
   }
 
   getActivePtyCount(): number {
@@ -128,7 +136,7 @@ export class PtyManager {
     cols: number = 120,
     rows: number = 30
   ): boolean {
-    log('pty', `create id=${id} cmd=${command} args=${JSON.stringify(args)} cwd=${cwd} cols=${cols} rows=${rows}`)
+    log('pty', `create id=${id} cmd=${command} argc=${args.length} cwd=${cwd} cols=${cols} rows=${rows}`)
     if (this.ptys.has(id)) {
       // A PTY for this id is already running — most likely a second
       // client (web) just connected and its XTerminal mounted for the
@@ -217,6 +225,13 @@ export class PtyManager {
 
     ptyProcess.onExit(({ exitCode }) => {
       log('pty', `exit id=${id} code=${exitCode}`)
+      for (const listener of [...this.exitListeners]) {
+        try {
+          listener(id, exitCode)
+        } catch (err) {
+          log('pty', `exit listener failed id=${id}`, err instanceof Error ? err.message : err)
+        }
+      }
       this.store?.dispatch({
         type: 'terminals/statusChanged',
         payload: { id, status: 'idle', pendingTool: null }

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
-import { PanesFSM } from '.'
-import { createAgentSpawner } from '../agent-spawn'
-import type { AgentSpawnerDeps } from '../agent-spawn'
+import { PanesFSM, treeToPersistedNode } from '.'
+import { agentRequestForTab, createAgentSpawner, shellRequestForTab } from '../agent-spawn'
+import type { AgentSpawnerDeps, StepSpawnExtras } from '../agent-spawn'
+import { log } from '../debug'
+import type { StateEvent } from '../../shared/state'
 import type { AgentModule, AgentSpawnOpts } from '../agents'
 import type { PaneLeaf, PaneNode, TerminalTab } from '../../shared/state/terminals'
 import { getLeaves } from '../../shared/state/terminals'
@@ -383,6 +385,76 @@ describe('PanesFSM.restoreFromConfig', () => {
   })
 })
 
+describe('workflow step tab persistence', () => {
+  const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+
+  it('keeps the workflow tag through persist and restore', async () => {
+    const wtPath = '/wt/step'
+    const tree: PaneLeaf = {
+      type: 'leaf',
+      id: 'pane-1',
+      tabs: [
+        { id: 'step-agent', type: 'agent', agentKind: 'claude', label: 'Claude', sessionId: 's-1', workflow },
+        { id: 'step-shell', type: 'shell', label: 'Shell', command: 'npm test', workflow },
+        { id: 'user-shell', type: 'shell', label: 'Shell' }
+      ],
+      activeTabId: 'step-agent'
+    }
+    const persisted = treeToPersistedNode(tree, () => null)
+    const onDisk = JSON.parse(JSON.stringify({ repo: { [wtPath]: persisted } }))
+
+    const { fsm, store } = buildFSM()
+    await fsm.restoreFromConfig(onDisk)
+    fsm.ensureInitialized(wtPath)
+
+    expect(allTabs(store, wtPath).map((t) => [t.id, t.workflow])).toEqual([
+      ['step-agent', workflow],
+      ['step-shell', workflow],
+      ['user-shell', undefined]
+    ])
+  })
+
+  it.each([
+    { name: 'a missing attemptId', raw: { runId: 'run-1', stepId: 'plan' } },
+    { name: 'an empty runId', raw: { runId: '', stepId: 'plan', attemptId: 'att-1' } },
+    { name: 'a non-object', raw: 'run-1' }
+  ])('drops a persisted workflow tag with $name', async ({ raw }) => {
+    const wtPath = '/wt/bad-tag'
+    const { fsm, store } = buildFSM()
+    await fsm.restoreFromConfig({
+      repo: {
+        [wtPath]: {
+          type: 'leaf',
+          id: 'pane-1',
+          tabs: [{ id: 'sh-1', type: 'shell', label: 'Shell', workflow: raw as never }],
+          activeTabId: 'sh-1'
+        }
+      }
+    })
+    fsm.ensureInitialized(wtPath)
+    expect(allTabs(store, wtPath)[0]).not.toHaveProperty('workflow')
+  })
+
+  it('does not hand the latest Claude session to a step tab that has no session id', async () => {
+    const wtPath = '/wt/backfill'
+    const getLatestClaudeSessionId = vi.fn(async () => 'users-latest')
+    const { fsm, store } = buildFSM({ getLatestClaudeSessionId })
+    await fsm.restoreFromConfig({
+      repo: {
+        [wtPath]: {
+          type: 'leaf',
+          id: 'pane-1',
+          tabs: [{ id: 'step-agent', type: 'agent', label: 'Claude', workflow }],
+          activeTabId: 'step-agent'
+        }
+      }
+    })
+    fsm.ensureInitialized(wtPath)
+    expect(getLatestClaudeSessionId).not.toHaveBeenCalled()
+    expect(allTabs(store, wtPath)[0].sessionId).toBeUndefined()
+  })
+})
+
 describe('PanesFSM.addTab', () => {
   it('adopts a sleeping tree instead of replacing it', async () => {
     const persisted: Record<string, PaneNode>[] = []
@@ -515,15 +587,32 @@ describe('PanesFSM main-side agent start', () => {
       expect(startAgentTab).not.toHaveBeenCalled()
     })
 
-    it.each<{ name: string; tab: TerminalTab }>([
-      { name: 'shell', tab: { id: 'sh-new', type: 'shell', label: 'Shell' } },
-      { name: 'browser', tab: { id: 'br-new', type: 'browser', label: 'Browser', url: 'https://x' } }
-    ])('addTab of a $name tab with fromMain does not start anything', ({ tab }) => {
+    it('addTab of a shell tab with fromMain starts it as a shell, not an agent', () => {
       const startAgentTab = startSpy()
-      const { fsm, store } = buildFSM({ startAgentTab })
+      const startShellTab = vi.fn<NonNullable<PanesFSMOptions['startShellTab']>>()
+      const { fsm, store } = buildFSM({ startAgentTab, startShellTab })
+      fsm.addTab('/wt/shell', { id: 'sh-new', type: 'shell', label: 'Shell' }, undefined, { fromMain: true })
+      expect(allTabs(store, '/wt/shell').map((t) => t.id)).toEqual(['sh-new'])
+      expect(startAgentTab).not.toHaveBeenCalled()
+      expect(startShellTab.mock.calls.map(([wt, tab]) => [wt, tab.id])).toEqual([['/wt/shell', 'sh-new']])
+    })
+
+    it('addTab of a shell tab without fromMain does not start it', () => {
+      const startShellTab = vi.fn<NonNullable<PanesFSMOptions['startShellTab']>>()
+      const { fsm } = buildFSM({ startShellTab })
+      fsm.addTab('/wt/shell', { id: 'sh-new', type: 'shell', label: 'Shell' })
+      expect(startShellTab).not.toHaveBeenCalled()
+    })
+
+    it('addTab of a browser tab with fromMain does not start anything', () => {
+      const startAgentTab = startSpy()
+      const startShellTab = vi.fn<NonNullable<PanesFSMOptions['startShellTab']>>()
+      const { fsm, store } = buildFSM({ startAgentTab, startShellTab })
+      const tab: TerminalTab = { id: 'br-new', type: 'browser', label: 'Browser', url: 'https://x' }
       fsm.addTab('/wt/non-agent', tab, undefined, { fromMain: true })
       expect(allTabs(store, '/wt/non-agent').map((t) => t.id)).toEqual([tab.id])
       expect(startAgentTab).not.toHaveBeenCalled()
+      expect(startShellTab).not.toHaveBeenCalled()
     })
 
     it('restartAgentTab does not start the restarted agent tab', () => {
@@ -706,5 +795,118 @@ describe('PanesFSM main-side agent start', () => {
       expect(store.getSnapshot().state.terminals.panes).toBe(panesBefore)
       expect(startAgentTab).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe('PanesFSM step tab spawn extras (REQ-203, CON-205)', () => {
+  const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+  const PROMPT = 'SENTINEL_RENDERED_PROMPT'
+  const ALLOW = 'SENTINEL_ALLOW_ENTRY'
+  const extras: StepSpawnExtras = {
+    permissionLevel: 'edit',
+    bashAllow: [ALLOW],
+    initialPrompt: PROMPT,
+    sessionId: 'step-session',
+    model: 'step-model',
+    env: { STEP_ENV: 'SENTINEL_ENV' },
+    command: 'SENTINEL_COMMAND'
+  }
+
+  function buildStepHarness() {
+    const store = new Store()
+    const running = new Set<string>()
+    const createCalls: Parameters<AgentSpawnerDeps['pty']['create']>[] = []
+    const pty: AgentSpawnerDeps['pty'] = {
+      hasTerminal: (id) => running.has(id),
+      create: (...args) => {
+        createCalls.push(args)
+        running.add(args[0])
+        return true
+      },
+      getHistory: () => ''
+    }
+    const agentOpts: AgentSpawnOpts[] = []
+    const spawner = createAgentSpawner({
+      pty,
+      store,
+      getConfig: () => ({}),
+      writeMcpConfig: () => '/mcp.json',
+      mcpServerSpec: (configPath) => ({ command: '/bin/el', args: ['--config', configPath], env: {} }),
+      inheritedEnv: {},
+      getAgent: () =>
+        ({
+          defaultCommand: 'claude',
+          buildSpawnArgs: (opts: AgentSpawnOpts) => {
+            agentOpts.push(opts)
+            return `${opts.command} --perm ${opts.permissionLevel} ${opts.initialPrompt}`
+          }
+        }) as unknown as AgentModule
+    })
+    const size = { cols: 100, rows: 30 }
+    const persisted: Record<string, PaneNode>[] = []
+    const events: StateEvent[] = []
+    store.subscribe((event) => events.push(event))
+    const { fsm } = buildFSM(
+      {
+        persist: (p) => persisted.push(p),
+        startAgentTab: (wtPath, tab, _wt, x) =>
+          spawner.spawnAgentTerminal(agentRequestForTab({ wtPath, tab, extras: x, size, defaultPermission: {} })),
+        startShellTab: (wtPath, tab, x) => spawner.spawnShellTerminal(shellRequestForTab({ wtPath, tab, extras: x, size }))
+      },
+      store
+    )
+    return { fsm, store, createCalls, agentOpts, persisted, events }
+  }
+
+  const agentStep: TerminalTab = { id: 'step-agent', type: 'agent', agentKind: 'claude', label: 'Claude', workflow }
+  const shellStep: TerminalTab = { id: 'step-shell', type: 'shell', label: 'Shell', workflow }
+
+  it('starts an agent step tab with the permission level, allowlist, prompt, session, model, env and command', () => {
+    const { fsm, createCalls, agentOpts } = buildStepHarness()
+
+    fsm.addTab('/wt', agentStep, undefined, { fromMain: true, spawn: extras })
+
+    expect(agentOpts).toHaveLength(1)
+    expect(agentOpts[0]).toMatchObject({
+      permissionLevel: 'edit',
+      bashAllow: [ALLOW],
+      initialPrompt: PROMPT,
+      sessionId: 'step-session',
+      model: 'step-model',
+      command: 'SENTINEL_COMMAND'
+    })
+    expect(createCalls).toHaveLength(1)
+    expect(createCalls[0][0]).toBe('step-agent')
+    expect(createCalls[0][4]).toMatchObject({ STEP_ENV: 'SENTINEL_ENV' })
+  })
+
+  it('starts a shell step tab with the step command and env', () => {
+    const { fsm, createCalls } = buildStepHarness()
+
+    fsm.addTab('/wt', shellStep, undefined, { fromMain: true, spawn: extras })
+
+    expect(createCalls).toEqual([
+      ['step-shell', '/wt', '', ['-ilc', 'SENTINEL_COMMAND'], { STEP_ENV: 'SENTINEL_ENV' }, true, 100, 30]
+    ])
+  })
+
+  it('keeps the prompt and permission extras out of every dispatched event, the persisted panes and the log', () => {
+    vi.mocked(log).mockClear()
+    const { fsm, store, events, persisted } = buildStepHarness()
+
+    fsm.addTab('/wt', agentStep, undefined, { fromMain: true, spawn: extras })
+    fsm.addTab('/wt', shellStep, undefined, { fromMain: true, spawn: extras })
+
+    const leaks = (text: string): string[] =>
+      [PROMPT, ALLOW, 'SENTINEL_ENV', 'permissionLevel', 'bashAllow', 'initialPrompt'].filter((s) =>
+        text.includes(s)
+      )
+    expect(events.some((e) => e.type === 'terminals/panesForWorktreeChanged')).toBe(true)
+    expect(leaks(JSON.stringify(events))).toEqual([])
+    expect(leaks(JSON.stringify(persisted))).toEqual([])
+    const onDisk = treeToPersistedNode(store.getSnapshot().state.terminals.panes['/wt'], () => null)
+    expect(leaks(JSON.stringify(onDisk))).toEqual([])
+    expect(leaks(JSON.stringify(vi.mocked(log).mock.calls))).toEqual([])
+    expect(allTabs(store, '/wt').map((t) => t.workflow)).toEqual([workflow, workflow])
   })
 })

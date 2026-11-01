@@ -89,6 +89,28 @@ describe('mergeWireSnapshot', () => {
     expect(merged.workflows.attempts).toEqual({})
   })
 
+  it('keeps a workflow step tab tag in the panes and leaves untagged tabs untagged', () => {
+    const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+    const merged = mergeWireSnapshot({
+      terminals: {
+        panes: {
+          '/wt': {
+            type: 'leaf',
+            id: 'pane-1',
+            tabs: [
+              { id: 'step-tab', type: 'agent', label: 'Claude', workflow },
+              { id: 'user-tab', type: 'shell', label: 'Shell' }
+            ],
+            activeTabId: 'step-tab'
+          }
+        }
+      }
+    })
+    const leaf = merged.terminals.panes['/wt']
+    expect(leaf.type === 'leaf' && leaf.tabs.map((t) => t.workflow)).toEqual([workflow, undefined])
+    expect(merged.terminals.sessions).toEqual(initialState.terminals.sessions)
+  })
+
   it('preserves partial harness config snapshots while filling omitted fields', () => {
     const serverResources = {
       agents: [],

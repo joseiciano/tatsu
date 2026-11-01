@@ -4,7 +4,8 @@ import type {
   TerminalTab,
   PaneNode,
   PaneLeaf,
-  SplitDirection
+  SplitDirection,
+  TerminalTabWorkflow
 } from '../../shared/state/terminals'
 import {
   getLeaves,
@@ -15,9 +16,10 @@ import {
   replaceNode,
   removeLeaf
 } from '../../shared/state/terminals'
-import type { PersistedPaneNode } from '../persistence'
+import type { PersistedPaneNode, PersistedTab } from '../persistence'
 import { agentDisplayName, getAgentInfo } from '../../shared/agent-registry'
 import { log } from '../debug'
+import type { StepSpawnExtras } from '../agent-spawn'
 
 interface PanesFSMOptions {
   persist: (panes: Record<string, PaneNode>) => void
@@ -68,8 +70,11 @@ interface PanesFSMOptions {
   startAgentTab?: (
     wtPath: string,
     tab: TerminalTab,
-    worktree?: { repoRoot: string; branch: string }
+    worktree?: { repoRoot: string; branch: string },
+    extras?: StepSpawnExtras
   ) => void
+  /** Start the PTY for a shell tab main created with `fromMain`. */
+  startShellTab?: (wtPath: string, tab: TerminalTab, extras?: StepSpawnExtras) => void
 }
 
 function newPaneId(): string {
@@ -86,6 +91,74 @@ function stripTransientTabFields(tab: TerminalTab): TerminalTab {
   void _ip
   void _ts
   return rest
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+function parseTabWorkflow(raw: unknown): TerminalTabWorkflow | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const { runId, stepId, attemptId } = raw as Record<string, unknown>
+  if (!isNonEmptyString(runId) || !isNonEmptyString(stepId) || !isNonEmptyString(attemptId)) {
+    return undefined
+  }
+  return { runId, stepId, attemptId }
+}
+
+function treeToPersistedNode(
+  node: PaneNode,
+  getLiveUrl: (tabId: string) => string | null | undefined
+): PersistedPaneNode | null {
+  if (node.type === 'leaf') {
+    const tabs = node.tabs
+      .filter(
+        (t) =>
+          t.type === 'agent' ||
+          t.type === 'shell' ||
+          t.type === 'browser' ||
+          t.type === 'json-claude'
+      )
+      .map((t): PersistedTab => {
+        const stripped = stripTransientTabFields(t)
+        // For browser tabs, the tab's state.url field is set once at
+        // creation and never updated — navigation events flow into the
+        // `browser` slice, not the pane tree. Pull the live URL from the
+        // BrowserManager so the persisted snapshot reflects where the
+        // user actually navigated to.
+        const liveUrl = stripped.type === 'browser' ? getLiveUrl(stripped.id) : null
+        return {
+          id: stripped.id,
+          type: stripped.type as PersistedTab['type'],
+          label: stripped.label,
+          agentKind: stripped.agentKind,
+          sessionId: stripped.sessionId,
+          url: liveUrl || stripped.url,
+          command: stripped.command,
+          cwd: stripped.cwd,
+          model: stripped.model,
+          ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {}),
+          ...(stripped.workflow ? { workflow: { ...stripped.workflow } } : {})
+        }
+      })
+    if (tabs.length === 0) return null
+    const validActive = tabs.some((t) => t.id === node.activeTabId)
+      ? node.activeTabId
+      : tabs[0].id
+    return { type: 'leaf', id: node.id, tabs, activeTabId: validActive }
+  }
+  const left = treeToPersistedNode(node.children[0], getLiveUrl)
+  const right = treeToPersistedNode(node.children[1], getLiveUrl)
+  if (!left && !right) return null
+  if (!left) return right
+  if (!right) return left
+  return {
+    type: 'split',
+    id: node.id,
+    direction: node.direction,
+    children: [left, right],
+    ratio: node.ratio
+  }
 }
 
 export class PanesFSM {
@@ -171,7 +244,7 @@ export class PanesFSM {
       }
     }
     const allTabs = node.tabs
-    const needsBackfill = allTabs.some((t) => t.type === 'agent' && !t.sessionId)
+    const needsBackfill = allTabs.some((t) => t.type === 'agent' && !t.sessionId && !t.workflow)
     const latest = needsBackfill
       ? await this.opts.getLatestClaudeSessionId(wtPath).catch(() => null)
       : null
@@ -189,6 +262,8 @@ export class PanesFSM {
         model: t.model,
         ...(t.customLabel ? { customLabel: t.customLabel } : {})
       }
+      const workflow = parseTabWorkflow(t.workflow)
+      if (workflow) base.workflow = workflow
       // Persisted json-claude and shell tabs hydrate as 'asleep' so app
       // launch doesn't construct an xterm + spawn a subprocess per tab
       // across every restored worktree. The renderer wakes them on
@@ -197,7 +272,7 @@ export class PanesFSM {
       if (base.type === 'json-claude' || base.type === 'shell') {
         return { ...base, mode: 'asleep' }
       }
-      if (base.type !== 'agent' || base.sessionId) return base
+      if (base.type !== 'agent' || base.sessionId || base.workflow) return base
       if (latest && !claimedLatest) {
         claimedLatest = true
         return { ...base, sessionId: latest }
@@ -299,7 +374,17 @@ export class PanesFSM {
     return pane
   }
 
-  addTab(wtPath: string, tab: TerminalTab, paneId?: string, opts?: { fromMain?: boolean }): void {
+  private startFromMain(wtPath: string, tab: TerminalTab, extras: StepSpawnExtras | undefined): void {
+    if (tab.type === 'agent') this.opts.startAgentTab?.(wtPath, tab, undefined, extras)
+    else if (tab.type === 'shell') this.opts.startShellTab?.(wtPath, tab, extras)
+  }
+
+  addTab(
+    wtPath: string,
+    tab: TerminalTab,
+    paneId?: string,
+    opts?: { fromMain?: boolean; spawn?: StepSpawnExtras }
+  ): void {
     // Brand-new json-claude tabs default to 'awake' — the user just
     // clicked to create one, so the renderer's auto-spawn path should
     // proceed. Slept-by-default only applies to tabs hydrated from
@@ -328,9 +413,7 @@ export class PanesFSM {
         activeTabId: normalizedTab.id
       }
       this.commit(wtPath, pane)
-      if (opts?.fromMain && normalizedTab.type === 'agent') {
-        this.opts.startAgentTab?.(wtPath, normalizedTab)
-      }
+      if (opts?.fromMain) this.startFromMain(wtPath, normalizedTab, opts.spawn)
       return
     }
     const leaves = getLeaves(tree)
@@ -345,9 +428,7 @@ export class PanesFSM {
       }
     })
     this.commit(wtPath, updated)
-    if (opts?.fromMain && normalizedTab.type === 'agent') {
-      this.opts.startAgentTab?.(wtPath, normalizedTab)
-    }
+    if (opts?.fromMain) this.startFromMain(wtPath, normalizedTab, opts.spawn)
   }
 
   /** Tear down a json-claude tab's subprocess while leaving its tab
@@ -704,4 +785,4 @@ export class PanesFSM {
   }
 }
 
-export { stripTransientTabFields }
+export { stripTransientTabFields, treeToPersistedNode }

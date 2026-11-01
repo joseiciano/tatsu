@@ -19,6 +19,12 @@ export interface TerminalProgress {
 
 export type AgentKind = 'claude' | 'codex' | 'opencode' | 'pi'
 
+export interface TerminalTabWorkflow {
+  runId: string
+  stepId: string
+  attemptId: string
+}
+
 export interface TerminalTab {
   id: string
   type: 'agent' | 'shell' | 'diff' | 'file' | 'browser' | 'json-claude'
@@ -64,6 +70,9 @@ export interface TerminalTab {
   /** For shell tabs: directory to run in. Relative paths resolve against the
    * worktree root; absolute paths are used as-is. */
   cwd?: string
+  /** Set on tabs main created for a workflow step attempt. Only main starts
+   *  these; a client mount attaches to a live PTY and never respawns. */
+  workflow?: TerminalTabWorkflow
 }
 
 // ---------------------------------------------------------------------------

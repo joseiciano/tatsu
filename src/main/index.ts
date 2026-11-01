@@ -29,7 +29,7 @@ import { setGitHubApiRecorder, setGitHubApiLoggingEnabled } from './github-recor
 import { PRPoller } from './pr-poller'
 import { WorktreesFSM } from './worktrees-fsm'
 import { WorktreeDeletionFSM } from './worktree-deletion-fsm'
-import { PanesFSM, stripTransientTabFields } from './panes-fsm'
+import { PanesFSM, treeToPersistedNode } from './panes-fsm'
 import { ActivityDeriver } from './activity-deriver'
 import { AutoSleepMonitor } from './auto-sleep-monitor'
 import { WorktreeWatcher } from './worktree-watcher'
@@ -101,7 +101,14 @@ import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
 import { toAgentKind } from './agent-kind'
-import { createAgentSpawner, parseSpawnSpec, resolveSpawnSize, agentSessionName } from './agent-spawn'
+import {
+  agentRequestForTab,
+  agentSessionName,
+  createAgentSpawner,
+  parseSpawnSpec,
+  resolveSpawnSize,
+  shellRequestForTab
+} from './agent-spawn'
 
 // Runtime detection — Electron sets process.versions.electron, plain
 // Node leaves it undefined. The mode picks itself; there's no env-var
@@ -668,7 +675,7 @@ function persistPanes(panes: Record<string, PaneNode>): void {
   for (const [wtPath, tree] of Object.entries(panes)) {
     const wt = store.getSnapshot().state.worktrees.list.find((w) => w.path === wtPath)
     const repoRoot = wt?.repoRoot || '__orphan__'
-    const persisted = treeToPersistedNode(tree)
+    const persisted = treeToPersistedNode(tree, (id) => browserManager.getUrl(id))
     if (persisted) {
       if (!nested[repoRoot]) nested[repoRoot] = {}
       nested[repoRoot][wtPath] = persisted
@@ -676,58 +683,6 @@ function persistPanes(panes: Record<string, PaneNode>): void {
   }
   config.panes = nested
   saveConfig(config)
-}
-
-function treeToPersistedNode(node: PaneNode): PersistedPaneNode | null {
-  if (node.type === 'leaf') {
-    const tabs = node.tabs
-      .filter(
-        (t) =>
-          t.type === 'agent' ||
-          t.type === 'shell' ||
-          t.type === 'browser' ||
-          t.type === 'json-claude'
-      )
-      .map((t) => {
-        const stripped = stripTransientTabFields(t as TerminalTab)
-        // For browser tabs, the tab's state.url field is set once at
-        // creation and never updated — navigation events flow into the
-        // `browser` slice, not the pane tree. Pull the live URL from the
-        // BrowserManager so the persisted snapshot reflects where the
-        // user actually navigated to.
-        const liveUrl =
-          stripped.type === 'browser' ? browserManager.getUrl(stripped.id) : null
-        return {
-          id: stripped.id,
-          type: stripped.type as 'agent' | 'shell' | 'browser' | 'json-claude',
-          label: stripped.label,
-          agentKind: stripped.agentKind,
-          sessionId: stripped.sessionId,
-          url: liveUrl || stripped.url,
-          command: stripped.command,
-          cwd: stripped.cwd,
-          model: stripped.model,
-          ...(stripped.customLabel ? { customLabel: stripped.customLabel } : {})
-        }
-      })
-    if (tabs.length === 0) return null
-    const validActive = tabs.some((t) => t.id === node.activeTabId)
-      ? node.activeTabId
-      : tabs[0].id
-    return { type: 'leaf', id: node.id, tabs, activeTabId: validActive }
-  }
-  const left = treeToPersistedNode(node.children[0])
-  const right = treeToPersistedNode(node.children[1])
-  if (!left && !right) return null
-  if (!left) return right
-  if (!right) return left
-  return {
-    type: 'split',
-    id: node.id,
-    direction: node.direction,
-    children: [left, right],
-    ratio: node.ratio
-  }
 }
 
 // IMPORTANT — construction order is load-bearing.
@@ -778,23 +733,23 @@ const panesFSM = new PanesFSM(store, {
   startJsonClaude: (sessionId, worktreePath) => {
     startJsonClaudeSession(sessionId, worktreePath)
   },
-  startAgentTab: (wtPath, tab, worktree) => {
+  startAgentTab: (wtPath, tab, worktree, extras) => {
     const state = store.getSnapshot().state
     const wt = worktree ?? state.worktrees.list.find((w) => w.path === wtPath)
-    const size = resolveSpawnSize(state.terminals, wtPath, tab.id)
-    agentSpawner.spawnAgentTerminal({
-      terminalId: tab.id,
-      cwd: wtPath,
-      agentKind: tab.agentKind ?? 'claude',
-      sessionId: tab.sessionId,
-      initialPrompt: tab.initialPrompt,
-      teleportSessionId: tab.teleportSessionId,
-      sessionName: agentSessionName(wt, state.settings.nameClaudeSessions),
-      modelOverride: tab.model,
-      cols: size.cols,
-      rows: size.rows,
-      ...devPermissionOverride(detectRuntime() === 'electron' && !isPackaged(), process.env)
-    })
+    agentSpawner.spawnAgentTerminal(
+      agentRequestForTab({
+        wtPath,
+        tab,
+        extras,
+        sessionName: agentSessionName(wt, state.settings.nameClaudeSessions),
+        size: resolveSpawnSize(state.terminals, wtPath, tab.id),
+        defaultPermission: devPermissionOverride(detectRuntime() === 'electron' && !isPackaged(), process.env)
+      })
+    )
+  },
+  startShellTab: (wtPath, tab, extras) => {
+    const size = resolveSpawnSize(store.getSnapshot().state.terminals, wtPath, tab.id)
+    agentSpawner.spawnShellTerminal(shellRequestForTab({ wtPath, tab, extras, size }))
   }
 })
 
@@ -2565,36 +2520,10 @@ function registerIpcHandlers(): void {
   transport.onSignal(
     'pty:create',
     (ctx, id: string, cwd: string, cmd: string, args: string[], agentKind?: string, cols?: number, rows?: number) => {
-      const isAgent = !!agentKind
-      const extraEnv = agentKind === 'claude' ? config.claudeEnvVars
-        : agentKind === 'codex' ? config.codexEnvVars
-        : agentKind === 'opencode' ? config.opencodeEnvVars
-        : agentKind === 'pi' ? config.piEnvVars
-        : undefined
-      const existed = ptyManager.hasTerminal(id)
-      ptyManager.create(id, cwd, cmd, args, extraEnv, !isAgent, cols, rows)
-      if (!existed) {
-        // Creator becomes controller immediately so their first keystroke
-        // — which is a fire-and-forget signal right behind pty:create —
-        // passes the gate. Awaitable ordering on pty:create isn't
-        // available (it's a signal, not a request); all writes in the
-        // current renderer flow arrive strictly after the signal handler
-        // returns, so the dispatch here lands first.
-        const applyCols = cols && cols > 0 ? cols : 120
-        const applyRows = rows && rows > 0 ? rows : 30
-        store.dispatch({
-          type: 'terminals/controlTaken',
-          payload: { terminalId: id, clientId: ctx.clientId, cols: applyCols, rows: applyRows }
-        })
-      } else {
-        // A second client attached to an already-running PTY. Record them
-        // as a spectator so the UI reflects the viewer count; taking
-        // control still requires an explicit click.
-        store.dispatch({
-          type: 'terminals/clientJoined',
-          payload: { terminalId: id, clientId: ctx.clientId }
-        })
-      }
+      agentSpawner.legacyCreate(
+        { terminalId: id, cwd, command: cmd, args, agentKind, cols, rows },
+        ctx.clientId
+      )
     }
   )
 

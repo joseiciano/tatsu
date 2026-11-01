@@ -612,13 +612,14 @@ export function WorkspaceView({
                     modelOverride={tab.type === 'agent' ? tab.model : undefined}
                     shellCommand={tab.type === 'shell' ? tab.command : undefined}
                     shellCwd={tab.type === 'shell' ? tab.cwd : undefined}
+                    workflowStep={!!tab.workflow}
                     onRestartAgent={
-                      tab.type === 'agent'
+                      tab.type === 'agent' && !tab.workflow
                         ? (): void => onRestartAgentTab(worktreePath, tab.id)
                         : undefined
                     }
                     onSwitchToChat={
-                      tab.type === 'agent' && tab.agentKind === 'claude' && onConvertTabType
+                      tab.type === 'agent' && tab.agentKind === 'claude' && !tab.workflow && onConvertTabType
                         ? (): void => onConvertTabType(worktreePath, tab.id, 'json-claude')
                         : undefined
                     }

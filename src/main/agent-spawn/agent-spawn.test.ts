@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
 import {
+  agentRequestForTab,
   agentSessionName,
   createAgentSpawner,
   DEFAULT_SPAWN_COLS,
   DEFAULT_SPAWN_ROWS,
   parseSpawnSpec,
-  resolveSpawnSize
+  resolveSpawnSize,
+  shellRequestForTab
 } from '.'
 import type { AgentSpawnConfig, AgentSpawnerDeps } from '.'
 import type { AgentKind, AgentModule, AgentSpawnOpts, HarnessMcpServerSpec } from '../agents'
@@ -724,16 +726,14 @@ describe('permission level plumbing (TEST-008)', () => {
     expect(logLines().some((l) => l.includes('bad,entry'))).toBe(false)
   })
 
-  it.each([
-    { name: 'a requested level', permissionLevel: 'edit' as const, expected: 'perm=edit' },
-    { name: 'no level', permissionLevel: undefined, expected: 'perm=default' }
-  ])('the spawn log line reports $name', ({ permissionLevel, expected }) => {
+  it('the spawn log line leaves out the permission level (CON-205)', () => {
     const { spawner } = build()
 
-    spawner.spawnAgentTerminal({ terminalId: 't1', cwd: '/wt', agentKind: 'claude', permissionLevel })
+    spawner.spawnAgentTerminal({ terminalId: 't1', cwd: '/wt', agentKind: 'claude', permissionLevel: 'full' })
 
     const spawnLine = logLines().find((l) => l.includes('spawned id=t1'))
-    expect(spawnLine).toContain(expected)
+    expect(spawnLine).toBeDefined()
+    expect(logLines().some((l) => l.includes('perm=') || l.includes('full'))).toBe(false)
   })
 })
 
@@ -926,5 +926,247 @@ describe('buildAgentLaunch with real agent modules per permission level (TEST-01
       expect(withLevel).toEqual(withoutLevel)
       expect(log).toHaveBeenCalledWith('agent-spawn', NOT_SUPPORTED)
     })
+  })
+})
+
+describe('main-only spawn extras (REQ-203)', () => {
+  it('passes a step env and command override into the agent launch', () => {
+    const { spawner, createCalls, buildSpawnArgs } = build()
+
+    spawner.spawnAgentTerminal({
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      command: '/opt/claude-beta',
+      env: { STEP_VAR: '1', WHO: 'step' }
+    })
+
+    expect(buildSpawnArgs.mock.calls[0][0].command).toBe('/opt/claude-beta')
+    expect(createCalls[0][4]).toMatchObject({ STEP_VAR: '1', WHO: 'step', HARNESS_MCP_CONFIG: '/tmp/mcp-t1.json' })
+  })
+
+  it('does not let a step env replace the harness MCP config path', () => {
+    const { spawner, createCalls } = build()
+
+    spawner.spawnAgentTerminal({
+      terminalId: 't1',
+      cwd: '/wt',
+      agentKind: 'claude',
+      env: { HARNESS_MCP_CONFIG: '/evil.json' }
+    })
+
+    expect(createCalls[0][4]?.HARNESS_MCP_CONFIG).toBe('/tmp/mcp-t1.json')
+  })
+
+  it('passes a shell env to the PTY as extra env', () => {
+    const { spawner, createCalls } = build()
+
+    spawner.spawnShellTerminal({ terminalId: 's1', cwd: '/wt', command: 'make', env: { STEP_VAR: '1' } })
+
+    expect(createCalls).toEqual([['s1', '/wt', '', ['-ilc', 'make'], { STEP_VAR: '1' }, true, 120, 30]])
+  })
+
+  describe('agentRequestForTab', () => {
+    const tab = {
+      id: 'a1',
+      type: 'agent' as const,
+      label: 'Claude',
+      agentKind: 'codex' as const,
+      sessionId: 'tab-session',
+      model: 'tab-model',
+      initialPrompt: 'tab prompt'
+    }
+    const size = { cols: 100, rows: 40 }
+
+    it('lays the extras over the tab fields', () => {
+      const req = agentRequestForTab({
+        wtPath: '/wt',
+        tab,
+        size,
+        extras: {
+          sessionId: 'step-session',
+          model: 'step-model',
+          initialPrompt: 'step prompt',
+          permissionLevel: 'edit',
+          bashAllow: ['npm test'],
+          env: { A: '1' },
+          command: 'codex-beta'
+        },
+        defaultPermission: { permissionLevel: 'full', bashAllow: ['rm'] }
+      })
+
+      expect(req).toMatchObject({
+        terminalId: 'a1',
+        cwd: '/wt',
+        agentKind: 'codex',
+        sessionId: 'step-session',
+        modelOverride: 'step-model',
+        initialPrompt: 'step prompt',
+        permissionLevel: 'edit',
+        bashAllow: ['npm test'],
+        env: { A: '1' },
+        command: 'codex-beta',
+        cols: 100,
+        rows: 40
+      })
+    })
+
+    it('falls back to the tab fields and the default permission without extras', () => {
+      const req = agentRequestForTab({
+        wtPath: '/wt',
+        tab,
+        size,
+        defaultPermission: { permissionLevel: 'read-only' }
+      })
+
+      expect(req).toMatchObject({
+        sessionId: 'tab-session',
+        modelOverride: 'tab-model',
+        initialPrompt: 'tab prompt',
+        permissionLevel: 'read-only'
+      })
+      expect(req.env).toBeUndefined()
+      expect(req.command).toBeUndefined()
+    })
+  })
+
+  describe('shellRequestForTab', () => {
+    const size = { cols: 80, rows: 24 }
+
+    it.each([
+      { name: 'no tab cwd', cwd: undefined, expected: '/wt' },
+      { name: 'a relative tab cwd', cwd: 'pkg/a', expected: '/wt/pkg/a' },
+      { name: 'an absolute tab cwd', cwd: '/tmp/x', expected: '/tmp/x' }
+    ])('resolves $name against the worktree', ({ cwd, expected }) => {
+      const req = shellRequestForTab({ wtPath: '/wt', tab: { id: 's1', type: 'shell', label: 'Shell', cwd }, size })
+      expect(req.cwd).toBe(expected)
+    })
+
+    it('prefers the step command and env over the tab command', () => {
+      const req = shellRequestForTab({
+        wtPath: '/wt',
+        tab: { id: 's1', type: 'shell', label: 'Shell', command: 'tab cmd' },
+        extras: { command: 'step cmd', env: { A: '1' } },
+        size
+      })
+      expect(req).toEqual({ terminalId: 's1', cwd: '/wt', command: 'step cmd', env: { A: '1' }, cols: 80, rows: 24 })
+    })
+  })
+})
+
+describe('client spawns of workflow step tabs are attach-only (CON-204)', () => {
+  const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+
+  function seedStepTabs(store: Store): void {
+    store.dispatch({
+      type: 'terminals/panesForWorktreeChanged',
+      payload: {
+        worktreePath: '/wt',
+        panes: {
+          type: 'leaf',
+          id: 'pane-1',
+          tabs: [
+            { id: 'step-agent', type: 'agent', label: 'Claude', agentKind: 'claude', workflow },
+            { id: 'step-shell', type: 'shell', label: 'Shell', workflow },
+            { id: 'user-shell', type: 'shell', label: 'Shell' }
+          ],
+          activeTabId: 'step-agent'
+        }
+      }
+    })
+  }
+
+  it.each([
+    { name: 'agent', spec: { kind: 'agent' as const, terminalId: 'step-agent', cwd: '/wt', agentKind: 'claude' as const } },
+    { name: 'shell', spec: { kind: 'shell' as const, terminalId: 'step-shell', cwd: '/wt' } }
+  ])('createOrAttach does not spawn a $name step tab with no live PTY', ({ spec }) => {
+    const { spawner, store, createCalls, buildSpawnArgs, session } = build()
+    seedStepTabs(store)
+
+    const result = spawner.createOrAttach(spec, 'c1', 90, 40)
+
+    expect(result).toEqual({ outcome: 'failed', history: '' })
+    expect(createCalls).toEqual([])
+    expect(buildSpawnArgs).not.toHaveBeenCalled()
+    expect(session(spec.terminalId)).toBeUndefined()
+  })
+
+  const joined = (s: TerminalSession | undefined, clientId: string): boolean =>
+    !!s && (s.controllerClientId === clientId || s.spectatorClientIds.includes(clientId))
+
+  it('createOrAttach attaches a client to a live step PTY', () => {
+    const { spawner, store, createCalls, session } = build()
+    seedStepTabs(store)
+    spawner.spawnAgentTerminal({ terminalId: 'step-agent', cwd: '/wt', agentKind: 'claude' })
+
+    const result = spawner.createOrAttach(
+      { kind: 'agent', terminalId: 'step-agent', cwd: '/wt', agentKind: 'claude' },
+      'c1',
+      90,
+      40
+    )
+
+    expect(result).toEqual({ outcome: 'attached', history: HISTORY })
+    expect(createCalls).toHaveLength(1)
+    expect(joined(session('step-agent'), 'c1')).toBe(true)
+  })
+
+  it('createOrAttach still spawns an ordinary tab next to step tabs', () => {
+    const { spawner, store, createCalls } = build()
+    seedStepTabs(store)
+
+    const result = spawner.createOrAttach({ kind: 'shell', terminalId: 'user-shell', cwd: '/wt' }, 'c1', 90, 40)
+
+    expect(result.outcome).toBe('spawned')
+    expect(createCalls).toHaveLength(1)
+  })
+
+  it('legacy create does not spawn a step tab with no live PTY', () => {
+    const { spawner, store, createCalls, session } = build()
+    seedStepTabs(store)
+
+    const outcome = spawner.legacyCreate(
+      { terminalId: 'step-agent', cwd: '/wt', command: '', args: ['-ilc', 'claude'], agentKind: 'claude' },
+      'c1'
+    )
+
+    expect(outcome).toBe('failed')
+    expect(createCalls).toEqual([])
+    expect(session('step-agent')).toBeUndefined()
+  })
+
+  it('legacy create joins a client to a live step PTY', () => {
+    const { spawner, store, createCalls, session } = build()
+    seedStepTabs(store)
+    spawner.spawnShellTerminal({ terminalId: 'step-shell', cwd: '/wt' })
+
+    const outcome = spawner.legacyCreate({ terminalId: 'step-shell', cwd: '/wt', command: '', args: ['-il'] }, 'c1')
+
+    expect(outcome).toBe('attached')
+    expect(joined(session('step-shell'), 'c1')).toBe(true)
+    expect(createCalls).toHaveLength(2)
+  })
+
+  it('legacy create spawns an ordinary tab with the agent env and gives the creator control', () => {
+    const { spawner, store, createCalls, session } = build()
+    seedStepTabs(store)
+
+    const outcome = spawner.legacyCreate(
+      { terminalId: 'fresh', cwd: '/wt', command: '', args: ['-ilc', 'codex'], agentKind: 'codex', cols: 70, rows: 20 },
+      'c1'
+    )
+
+    expect(outcome).toBe('spawned')
+    expect(createCalls).toEqual([['fresh', '/wt', '', ['-ilc', 'codex'], { WHO: 'codex' }, false, 70, 20]])
+    expect(session('fresh')?.controllerClientId).toBe('c1')
+  })
+
+  it('main can still start a step tab with no client attached', () => {
+    const { spawner, store, createCalls } = build()
+    seedStepTabs(store)
+
+    expect(spawner.spawnAgentTerminal({ terminalId: 'step-agent', cwd: '/wt', agentKind: 'claude' })).toBe('spawned')
+    expect(spawner.spawnShellTerminal({ terminalId: 'step-shell', cwd: '/wt' })).toBe('spawned')
+    expect(createCalls.map((c) => c[0])).toEqual(['step-agent', 'step-shell'])
   })
 })

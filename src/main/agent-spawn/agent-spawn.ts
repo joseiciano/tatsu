@@ -1,4 +1,6 @@
-import type { AgentKind, TerminalsState } from '../../shared/state/terminals'
+import { isAbsolute, join } from 'path'
+import type { AgentKind, PaneNode, TerminalsState, TerminalTab } from '../../shared/state/terminals'
+import type { PermissionLevel } from '../../shared/permission-level'
 import { findLeafByTabId, getLeaves } from '../../shared/state/terminals'
 import type {
   SpawnOutcome,
@@ -18,7 +20,9 @@ import type {
   AgentSpawner,
   AgentSpawnerDeps,
   AgentSpawnRequest,
-  ShellSpawnRequest
+  LegacyCreateRequest,
+  ShellSpawnRequest,
+  StepSpawnExtras
 } from './types'
 
 function positive(value: number | undefined, fallback: number): number {
@@ -57,6 +61,62 @@ export function resolveSpawnSize(
     }
   }
   return { cols: DEFAULT_SPAWN_COLS, rows: DEFAULT_SPAWN_ROWS }
+}
+
+export function agentRequestForTab(args: {
+  wtPath: string
+  tab: TerminalTab
+  extras?: StepSpawnExtras
+  sessionName?: string
+  size: { cols: number; rows: number }
+  defaultPermission: { permissionLevel?: PermissionLevel; bashAllow?: string[] }
+}): AgentSpawnRequest {
+  const { wtPath, tab, extras, size } = args
+  const permission =
+    extras?.permissionLevel || extras?.bashAllow
+      ? { permissionLevel: extras.permissionLevel, bashAllow: extras.bashAllow }
+      : args.defaultPermission
+  return {
+    terminalId: tab.id,
+    cwd: wtPath,
+    agentKind: tab.agentKind ?? 'claude',
+    sessionId: extras?.sessionId ?? tab.sessionId,
+    initialPrompt: extras?.initialPrompt ?? tab.initialPrompt,
+    teleportSessionId: tab.teleportSessionId,
+    sessionName: args.sessionName,
+    modelOverride: extras?.model ?? tab.model,
+    cols: size.cols,
+    rows: size.rows,
+    ...permission,
+    command: extras?.command,
+    env: extras?.env
+  }
+}
+
+export function shellRequestForTab(args: {
+  wtPath: string
+  tab: TerminalTab
+  extras?: StepSpawnExtras
+  size: { cols: number; rows: number }
+}): ShellSpawnRequest {
+  const { wtPath, tab, extras, size } = args
+  const cwd = !tab.cwd ? wtPath : isAbsolute(tab.cwd) ? tab.cwd : join(wtPath, tab.cwd)
+  return {
+    terminalId: tab.id,
+    cwd,
+    command: extras?.command ?? tab.command,
+    env: extras?.env,
+    cols: size.cols,
+    rows: size.rows
+  }
+}
+
+export function isWorkflowStepTab(panes: Readonly<Record<string, PaneNode>>, terminalId: string): boolean {
+  for (const tree of Object.values(panes)) {
+    const tab = findLeafByTabId(tree, terminalId)?.tabs.find((t) => t.id === terminalId)
+    if (tab) return !!tab.workflow
+  }
+  return false
 }
 
 export function agentSessionName(
@@ -105,8 +165,9 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     const config = deps.getConfig()
     const kind = req.agentKind
     const agent = getAgent(kind)
-    const command =
-      kind === 'claude'
+    const command = req.command
+      ? req.command
+      : kind === 'claude'
         ? config.claudeCommand || agent.defaultCommand
         : kind === 'codex'
           ? config.codexCommand || agent.defaultCommand
@@ -166,15 +227,20 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     return { agent, kind, opts }
   }
 
-  function agentEnv(kind: AgentKind, agent: AgentModule, opts: AgentSpawnOpts): Record<string, string> {
-    const base = configuredEnv(kind, deps.getConfig())
+  function agentEnv(
+    kind: AgentKind,
+    agent: AgentModule,
+    opts: AgentSpawnOpts,
+    extraEnv: Record<string, string> | undefined
+  ): Record<string, string> {
+    const base = { ...configuredEnv(kind, deps.getConfig()), ...(extraEnv ?? {}) }
     const mcp: Record<string, string> = opts.mcpConfigPath ? { HARNESS_MCP_CONFIG: opts.mcpConfigPath } : {}
     return { ...base, ...mcp, ...(agent.spawnEnv?.(opts, base, deps.inheritedEnv ?? process.env) ?? {}) }
   }
 
   function buildAgentLaunch(req: AgentSpawnRequest): { command: string; env: Record<string, string> } {
     const { agent, kind, opts } = buildAgentSpawnOpts(req)
-    return { command: agent.buildSpawnArgs(opts), env: agentEnv(kind, agent, opts) }
+    return { command: agent.buildSpawnArgs(opts), env: agentEnv(kind, agent, opts, req.env) }
   }
 
   function buildAgentCommand(req: AgentSpawnRequest): string {
@@ -187,13 +253,12 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     clientId: string | undefined,
     reqCols: number | undefined,
     reqRows: number | undefined,
-    perm: string,
     create: (cols: number, rows: number) => boolean
   ): SpawnOutcome {
     const finish = (outcome: SpawnOutcome, cols: number, rows: number): SpawnOutcome => {
       log(
         'agent-spawn',
-        `${outcome} id=${terminalId} kind=${kind} cols=${cols} rows=${rows} client=${clientId ?? 'main'} perm=${perm}`
+        `${outcome} id=${terminalId} kind=${kind} cols=${cols} rows=${rows} client=${clientId ?? 'main'}`
       )
       return outcome
     }
@@ -218,20 +283,20 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
   }
 
   function spawnAgentTerminal(req: AgentSpawnRequest, clientId?: string): SpawnOutcome {
-    return spawn(req.terminalId, req.agentKind, clientId, req.cols, req.rows, req.permissionLevel ?? 'default', (cols, rows) => {
+    return spawn(req.terminalId, req.agentKind, clientId, req.cols, req.rows, (cols, rows) => {
       const launch = buildAgentLaunch(req)
       return deps.pty.create(req.terminalId, req.cwd, '', ['-ilc', launch.command], launch.env, false, cols, rows)
     })
   }
 
   function spawnShellTerminal(req: ShellSpawnRequest, clientId?: string): SpawnOutcome {
-    return spawn(req.terminalId, 'shell', clientId, req.cols, req.rows, 'default', (cols, rows) =>
+    return spawn(req.terminalId, 'shell', clientId, req.cols, req.rows, (cols, rows) =>
       deps.pty.create(
         req.terminalId,
         req.cwd,
         '',
         req.command ? ['-ilc', req.command] : ['-il'],
-        undefined,
+        req.env,
         true,
         cols,
         rows
@@ -253,6 +318,10 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     cols?: number,
     rows?: number
   ): TerminalCreateResult {
+    if (refusesClientSpawn(spec.terminalId)) {
+      log('agent-spawn', `refused id=${spec.terminalId} client=${clientId} reason=workflow-step`)
+      return { outcome: 'failed', history: '' }
+    }
     const outcome =
       spec.kind === 'agent'
         ? spawnAgentTerminal(
@@ -277,5 +346,53 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     return { outcome, history: outcome === 'attached' ? deps.pty.getHistory(spec.terminalId) : '' }
   }
 
-  return { buildAgentCommand, buildAgentLaunch, spawnAgentTerminal, spawnShellTerminal, attach, createOrAttach }
+  function refusesClientSpawn(terminalId: string): boolean {
+    if (deps.pty.hasTerminal(terminalId)) return false
+    return isWorkflowStepTab(deps.store.getSnapshot().state.terminals.panes, terminalId)
+  }
+
+  function legacyCreate(req: LegacyCreateRequest, clientId: string): SpawnOutcome {
+    if (refusesClientSpawn(req.terminalId)) {
+      log('agent-spawn', `refused id=${req.terminalId} client=${clientId} reason=workflow-step`)
+      return 'failed'
+    }
+    const config = deps.getConfig()
+    const kind = req.agentKind
+    const extraEnv =
+      kind === 'claude'
+        ? config.claudeEnvVars
+        : kind === 'codex'
+          ? config.codexEnvVars
+          : kind === 'opencode'
+            ? config.opencodeEnvVars
+            : kind === 'pi'
+              ? config.piEnvVars
+              : undefined
+    const existed = deps.pty.hasTerminal(req.terminalId)
+    deps.pty.create(req.terminalId, req.cwd, req.command, req.args, extraEnv, !kind, req.cols, req.rows)
+    if (existed) {
+      deps.store.dispatch({ type: 'terminals/clientJoined', payload: { terminalId: req.terminalId, clientId } })
+      return 'attached'
+    }
+    deps.store.dispatch({
+      type: 'terminals/controlTaken',
+      payload: {
+        terminalId: req.terminalId,
+        clientId,
+        cols: positive(req.cols, DEFAULT_SPAWN_COLS),
+        rows: positive(req.rows, DEFAULT_SPAWN_ROWS)
+      }
+    })
+    return 'spawned'
+  }
+
+  return {
+    buildAgentCommand,
+    buildAgentLaunch,
+    spawnAgentTerminal,
+    spawnShellTerminal,
+    attach,
+    createOrAttach,
+    legacyCreate
+  }
 }
