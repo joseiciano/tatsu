@@ -291,6 +291,8 @@ export function buildBackend(
     reloadCustomThemes: () => req('config:reloadCustomThemes'),
     reloadWorkflowDefinitions: () => req('workflows:reloadDefinitions'),
     getWorkflowDefinition: (id: string) => req('workflows:getDefinition', id),
+    getWorkflowRun: (runId: string) => req('workflows:getRun', runId),
+    getWorkflowAttemptResult: (attemptId: string) => req('workflows:getAttemptResult', attemptId),
     openThemesFolder: () => reqLocal('config:openThemesFolder'),
     setCostsInterest: (expanded: boolean) => req('costs:setInterest', expanded),
     getAllSessionCosts: (sinceMs?: number) => req('costs:getAllSessions', sinceMs),

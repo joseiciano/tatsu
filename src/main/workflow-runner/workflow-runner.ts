@@ -7,16 +7,21 @@ import type {
   StartRunResult,
   StepResult
 } from './types'
-import type { RunnableStep, StepDriverEvent, StepDriverKind } from './drivers/types'
-import type { ResolvedWorkflowStep } from '../../shared/workflow-def'
+import type { RunnableStep, StepDriverEvent, StepDriverKind, StepExecution } from './drivers/types'
+import { runContextPath } from './run-artifacts'
+import type { ResolvedWorkflowStep, TemplateScope, TemplateStepScope } from '../../shared/workflow-def'
 import type { StateEvent } from '../../shared/state'
-import type {
-  WorkflowAttemptStatus,
-  WorkflowPausedReason,
-  WorkflowRun,
-  WorkflowRunStatus,
-  WorkflowRunStep,
-  WorkflowStepStatus
+import {
+  RECENT_RUNS_MAX,
+  WORKFLOW_RUN_RECORD_VERSION,
+  runsToEvict,
+  type WorkflowAttemptStatus,
+  type WorkflowPausedReason,
+  type WorkflowRun,
+  type WorkflowRunStatus,
+  type WorkflowRunStep,
+  type WorkflowSnapshotRef,
+  type WorkflowStepStatus
 } from '../../shared/state/workflows'
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
@@ -31,7 +36,11 @@ interface RunState {
   record: WorkflowRunRecord
   stepStatus: Record<string, WorkflowStepStatus>
   live: LiveAttempt | null
+  io: Promise<boolean>
+  lastSnapshot?: string
 }
+
+type SnapshotSlot = 'baseSnapshot' | 'headSnapshot'
 
 interface QueueEntry {
   runId: string
@@ -62,6 +71,18 @@ export class WorkflowRunner {
     for (const unsubscribe of this.unsubscribers) unsubscribe()
   }
 
+  getRunRecord(runId: string): WorkflowRunRecord | null {
+    const state = this.runs.get(runId)
+    return state ? structuredClone(state.record) : null
+  }
+
+  runIdForAttempt(attemptId: string): string | undefined {
+    for (const [runId, state] of this.runs) {
+      if (state.record.attempts.some((attempt) => attempt.attemptId === attemptId)) return runId
+    }
+    return undefined
+  }
+
   start(request: StartRunRequest): StartRunResult {
     const { store, loader, now, newId } = this.deps
     if (!store.getSnapshot().state.settings.labs.workflows) return this.refuse('labs-off')
@@ -89,18 +110,23 @@ export class WorkflowRunner {
     }
     const state: RunState = {
       record: {
+        version: WORKFLOW_RUN_RECORD_VERSION,
         runId,
         defId: run.defId,
         defHash: run.defHash,
         definition,
         inputs: { ...request.inputs },
         worktreePath: request.worktreePath,
+        contextPath: runContextPath(request.worktreePath, runId),
         status: 'running',
         cursor: 0,
+        steps: stepStatus,
+        startedAt: run.startedAt,
         attempts: []
       },
       stepStatus,
-      live: null
+      live: null,
+      io: this.prepare(runId, request.worktreePath)
     }
     this.runs.set(runId, state)
     store.dispatch({ type: 'workflows/runStarted', payload: { runId, run } })
@@ -110,7 +136,8 @@ export class WorkflowRunner {
     return { ok: true, runId }
   }
 
-  complete(attemptId: string, result: StepResult): boolean {
+  complete(attemptId: string, completion: StepResult): boolean {
+    const result: StepResult = { ...completion }
     const state = this.runForLiveAttempt(attemptId)
     if (!state?.live) {
       this.log('completion ignored', { attemptId })
@@ -145,14 +172,14 @@ export class WorkflowRunner {
       this.endAttempt(state, 'cancelled', undefined, true)
       this.setStep(state, stepId, 'cancelled')
     }
+    const finishedAt = this.deps.now()
     state.record.status = 'cancelled'
+    state.record.finishedAt = finishedAt
     delete state.record.pausedReason
-    this.deps.store.dispatch({
-      type: 'workflows/runCancelled',
-      payload: { runId, finishedAt: this.deps.now() }
-    })
+    this.deps.store.dispatch({ type: 'workflows/runCancelled', payload: { runId, finishedAt } })
     this.log('run cancelled', { runId })
     this.runs.delete(runId)
+    this.evictFinishedRuns()
     this.settle(state)
     return true
   }
@@ -266,13 +293,110 @@ export class WorkflowRunner {
 
   private finish(state: RunState): void {
     const { runId } = state.record
+    const finishedAt = this.deps.now()
     state.record.status = 'done'
+    state.record.finishedAt = finishedAt
     this.deps.store.dispatch({
       type: 'workflows/runFinished',
-      payload: { runId, status: 'done', finishedAt: this.deps.now() }
+      payload: { runId, status: 'done', finishedAt }
     })
     this.log('run finished done', { runId })
     this.runs.delete(runId)
+    this.evictFinishedRuns()
+  }
+
+  private evictFinishedRuns(): void {
+    const runIds = runsToEvict(this.deps.store.getSnapshot().state.workflows, RECENT_RUNS_MAX)
+    if (runIds.length === 0) return
+    this.deps.store.dispatch({ type: 'workflows/runsEvicted', payload: { runIds } })
+    this.log(`runs evicted ${runIds.length}`)
+  }
+
+  private prepare(runId: string, worktreePath: string): Promise<boolean> {
+    const { artifacts } = this.deps
+    if (!artifacts) return Promise.resolve(false)
+    return artifacts.prepare({ worktreePath, runId }).then(
+      () => true,
+      () => {
+        this.log('run artifacts unavailable', { runId })
+        return false
+      }
+    )
+  }
+
+  private queueIo(state: RunState, task: (prepared: boolean) => Promise<void>): Promise<void> {
+    const next = state.io.then(async (prepared) => {
+      await task(prepared)
+      return prepared
+    })
+    state.io = next.catch(() => false)
+    return next.then(
+      () => undefined,
+      () => undefined
+    )
+  }
+
+  private snapshotAttempt(state: RunState, record: WorkflowAttemptRecord, slot: SnapshotSlot): Promise<void> {
+    const { artifacts } = this.deps
+    if (!artifacts) return Promise.resolve()
+    const { runId, worktreePath } = state.record
+    const { stepId, attemptId } = record
+    const n = 2 * (record.n - 1) + (slot === 'headSnapshot' ? 1 : 0)
+    const label = slot === 'baseSnapshot' ? 'base' : 'head'
+    return this.queueIo(state, async (prepared) => {
+      if (!prepared) {
+        this.log(`${label} snapshot skipped`, { runId, stepId, attemptId })
+        return
+      }
+      let snapshot: WorkflowSnapshotRef
+      try {
+        snapshot = await artifacts.snapshot({ worktreePath, runId, stepId, n, parent: state.lastSnapshot })
+      } catch {
+        this.log(`${label} snapshot failed`, { runId, stepId, attemptId })
+        return
+      }
+      record[slot] = snapshot
+      state.lastSnapshot = snapshot.commit
+      this.persist(state.record)
+    })
+  }
+
+  private appendContext(state: RunState, record: WorkflowAttemptRecord): void {
+    const { artifacts } = this.deps
+    const result = record.result
+    if (!artifacts || !result) return
+    const { runId, contextPath } = state.record
+    const section = `## ${record.stepId} (attempt ${record.n})\n\nStatus: ${record.status}\n\n${result.summary}\n\n`
+    void this.queueIo(state, async (prepared) => {
+      if (!prepared) return
+      try {
+        await artifacts.appendContext({ contextPath, section })
+      } catch {
+        this.log('context append failed', { runId, stepId: record.stepId, attemptId: record.attemptId })
+      }
+    })
+  }
+
+  private scopeFor(state: RunState): TemplateScope {
+    const { record, stepStatus } = state
+    const steps: Record<string, TemplateStepScope> = {}
+    for (const [stepId, status] of Object.entries(stepStatus)) {
+      if (status !== 'pending') steps[stepId] = { status }
+    }
+    for (const attempt of record.attempts) {
+      const { result } = attempt
+      if (!result) continue
+      steps[attempt.stepId] = {
+        status: stepStatus[attempt.stepId],
+        summary: result.summary,
+        ...(result.data === undefined ? {} : { data: result.data })
+      }
+    }
+    return {
+      inputs: { ...record.inputs },
+      steps,
+      run: { id: record.runId, worktree: record.worktreePath, contextPath: record.contextPath }
+    }
   }
 
   private launch(state: RunState, step: RunnableStep): void {
@@ -280,7 +404,16 @@ export class WorkflowRunner {
     const { runId, worktreePath, inputs } = state.record
     const n = state.record.attempts.filter((attempt) => attempt.stepId === step.id).length + 1
     const attemptId = newId()
-    const record: WorkflowAttemptRecord = { attemptId, stepId: step.id, n, status: 'running' }
+    const scope = this.scopeFor(state)
+    const startedAt = now()
+    const record: WorkflowAttemptRecord = {
+      attemptId,
+      stepId: step.id,
+      n,
+      status: 'running',
+      startedAt,
+      metrics: { continuations: 0, pauses: [] }
+    }
     state.record.attempts.push(record)
     state.live = { record, kind: step.kind }
     this.liveAttempts.set(attemptId, runId)
@@ -288,14 +421,22 @@ export class WorkflowRunner {
     this.setStep(state, step.id, 'running')
     store.dispatch({
       type: 'workflows/attemptStarted',
-      payload: { attemptId, runId, stepId: step.id, n, startedAt: now() }
+      payload: { attemptId, runId, stepId: step.id, n, startedAt }
     })
     this.log('attempt started', { runId, stepId: step.id, attemptId })
     const driver = drivers[step.kind]
-    Promise.resolve()
-      .then(() => driver.start({ runId, stepId: step.id, attemptId, n, worktreePath, inputs, step }))
+    const startDriver = (): Promise<StepExecution> | StepExecution =>
+      driver.start({ runId, stepId: step.id, attemptId, n, worktreePath, inputs, step, scope })
+    const started: Promise<StepExecution | null> = this.deps.artifacts
+      ? this.snapshotAttempt(state, record, 'baseSnapshot').then(() =>
+          this.runForLiveAttempt(attemptId) ? startDriver() : null
+        )
+      : Promise.resolve().then(startDriver)
+    started
       .then(
-        (execution) => this.onStarted(attemptId, step.kind, execution.executionId),
+        (execution) => {
+          if (execution) this.onStarted(attemptId, step.kind, execution.executionId)
+        },
         () => this.onStartFailed(attemptId)
       )
       .catch(() => this.log('driver callback failed', { runId, stepId: step.id, attemptId }))
@@ -356,8 +497,18 @@ export class WorkflowRunner {
     if (!live) return
     state.live = null
     const { attemptId, stepId } = live.record
+    const endedAt = this.deps.now()
     live.record.status = status
-    if (result) live.record.result = result
+    live.record.endedAt = endedAt
+    live.record.metrics.wallMs = endedAt - live.record.startedAt
+    if (result) {
+      live.record.result = result
+      live.record.metrics.completedBy = result.completedBy
+      if (result.costUsd !== undefined) live.record.metrics.costUsd = result.costUsd
+    }
+    if (status === 'done' && state.record.timeToFirstDoneMs === undefined) {
+      state.record.timeToFirstDoneMs = endedAt - state.record.startedAt
+    }
     this.liveAttempts.delete(attemptId)
     this.agentSlots.delete(attemptId)
     if (live.executionId !== undefined) {
@@ -369,13 +520,15 @@ export class WorkflowRunner {
       payload: {
         attemptId,
         status,
-        endedAt: this.deps.now(),
+        endedAt,
         summary: result?.summary ?? '',
         ...(result ? { completedBy: result.completedBy } : {}),
         ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd })
       }
     })
     this.log(`attempt ended ${status}`, { runId: state.record.runId, stepId, attemptId })
+    void this.snapshotAttempt(state, live.record, 'headSnapshot')
+    this.appendContext(state, live.record)
   }
 
   private setStep(state: RunState, stepId: string, status: WorkflowStepStatus): void {
@@ -396,6 +549,10 @@ export class WorkflowRunner {
     if (record.status === 'paused' && record.pausedReason === reason) return
     record.status = 'paused'
     record.pausedReason = reason
+    const attempt = state.live?.record ?? record.attempts.at(-1)
+    if (attempt && (state.live || attempt.stepId === this.currentStep(state)?.id)) {
+      attempt.metrics.pauses.push({ reason, at: this.deps.now() })
+    }
     this.deps.store.dispatch({ type: 'workflows/runPaused', payload: { runId: record.runId, reason } })
     this.log(`run paused ${reason}`, { runId: record.runId })
   }

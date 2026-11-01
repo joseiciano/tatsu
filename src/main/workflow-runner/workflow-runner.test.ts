@@ -1,14 +1,22 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
-import { WorkflowRunner, type StepAttempt, type StepResult, type WorkflowRunnerDeps } from '.'
+import {
+  WorkflowRunner,
+  type RunArtifacts,
+  type StepAttempt,
+  type StepResult,
+  type WorkflowRunnerDeps,
+  type WorkflowRunRecord
+} from '.'
 import { FakeStepDriver, type FakeStartBehavior } from './fake-step-driver'
 import { initialState, type StateEvent } from '../../shared/state'
 import type {
   WorkflowAttemptStatus,
   WorkflowDefinitionDetail,
+  WorkflowRun,
   WorkflowStepStatus
 } from '../../shared/state/workflows'
-import { validateWorkflowDefinition } from '../../shared/workflow-def'
+import { renderTemplate, validateWorkflowDefinition } from '../../shared/workflow-def'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -43,6 +51,15 @@ steps:
     kind: shell
     run: "echo ${PROMPT_SECRET}"
 `,
+  handoff: `name: handoff
+steps:
+  - id: one
+    agent: claude
+    prompt: "go"
+  - id: two
+    agent: claude
+    prompt: "context {{run.contextPath}} prior {{steps.one.summary}} status {{steps.one.status}}"
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -75,11 +92,14 @@ interface SetupOptions {
   cap?: number
   agentScript?: (attempt: StepAttempt) => FakeStartBehavior
   shellScript?: (attempt: StepAttempt) => FakeStartBehavior
+  artifacts?: RunArtifacts
+  runs?: Record<string, WorkflowRun>
 }
 
-function setup({ labs = true, cap = 4, agentScript, shellScript }: SetupOptions = {}) {
+function setup({ labs = true, cap = 4, agentScript, shellScript, artifacts, runs = {} }: SetupOptions = {}) {
   const store = new Store({
     ...initialState,
+    workflows: { ...initialState.workflows, runs },
     settings: {
       ...initialState.settings,
       labs: { ...initialState.settings.labs, workflows: labs },
@@ -97,6 +117,7 @@ function setup({ labs = true, cap = 4, agentScript, shellScript }: SetupOptions 
   const logs: string[] = []
   const logData: Array<Record<string, string>> = []
   const persisted: string[] = []
+  const records: WorkflowRunRecord[] = []
   let ids = 0
   let clock = 1000
   const runner = new WorkflowRunner({
@@ -109,7 +130,11 @@ function setup({ labs = true, cap = 4, agentScript, shellScript }: SetupOptions 
       logs.push(`[${category}] ${message} ${JSON.stringify(data ?? {})}`)
       logData.push(data ?? {})
     },
-    persist: (run) => persisted.push(run.runId)
+    persist: (run) => {
+      persisted.push(run.runId)
+      records.push(structuredClone(run))
+    },
+    artifacts
   })
   const events: StateEvent[] = []
   store.subscribe((event) => events.push(event))
@@ -150,6 +175,7 @@ function setup({ labs = true, cap = 4, agentScript, shellScript }: SetupOptions 
     logs,
     logData,
     persisted,
+    records,
     events,
     wf,
     startRun,
@@ -691,5 +717,172 @@ describe('WorkflowRunner logging', () => {
     expect(attemptLine).toContain(`"runId":"${runA}"`)
     expect(attemptLine).toContain('"stepId":"plan"')
     expect(attemptLine).toMatch(/"attemptId":"id-\d+"/)
+  })
+})
+
+describe('WorkflowRunner run records', () => {
+  const lastRecord = (ctx: Ctx, runId: string): WorkflowRunRecord => {
+    const record = ctx.records.filter((r) => r.runId === runId).at(-1)
+    if (!record) throw new Error(`no record for ${runId}`)
+    return record
+  }
+
+  it('persists a versioned record with the definition, inputs, full results and metrics', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('two-agent', '/wt/a')
+    await flush()
+    const plan = ctx.attemptOf(runId, 'plan')
+    ctx.runner.complete(plan, failed('first try'))
+    ctx.runner.retry(runId)
+    await flush()
+    const planRetry = ctx.attemptOf(runId, 'plan')
+    ctx.runner.complete(planRetry, { ...done('plan ok'), data: { files: 3 }, costUsd: 0.5 })
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), done('build ok'))
+
+    const record = lastRecord(ctx, runId)
+    expect(record).toMatchObject({
+      version: 1,
+      runId,
+      defId: 'personal:two-agent',
+      defHash: 'hash-two-agent',
+      inputs: { task: INPUT_SECRET },
+      worktreePath: '/wt/a',
+      contextPath: `/wt/a/.harness/runs/${runId}/context.md`,
+      status: 'done'
+    })
+    expect(record.definition.steps.map((step) => step.id)).toEqual(['plan', 'build'])
+    expect(record.steps).toEqual({ plan: 'done', build: 'done' })
+    expect(record.finishedAt).toBeGreaterThan(record.startedAt)
+    expect(record.attempts.map((a) => [a.stepId, a.n, a.status])).toEqual([
+      ['plan', 1, 'failed'],
+      ['plan', 2, 'done'],
+      ['build', 1, 'done']
+    ])
+    const [first, second, build] = record.attempts
+    expect(first.result).toEqual(failed('first try'))
+    expect(first.metrics.pauses).toEqual([{ reason: 'step-failed', at: expect.any(Number) }])
+    expect(second.result).toEqual({ ...done('plan ok'), data: { files: 3 }, costUsd: 0.5 })
+    expect(second.metrics).toEqual({
+      completedBy: 'tool',
+      continuations: 0,
+      pauses: [],
+      wallMs: (second.endedAt ?? 0) - second.startedAt,
+      costUsd: 0.5
+    })
+    expect(build.metrics.costUsd).toBeUndefined()
+    expect(record.timeToFirstDoneMs).toBe((second.endedAt ?? 0) - record.startedAt)
+  })
+
+  it('persists the current state after every transition', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    const early = lastRecord(ctx, runId)
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    expect(early.attempts[0].status).toBe('running')
+    expect(lastRecord(ctx, runId).attempts[0].status).toBe('done')
+  })
+
+  it('does not mutate the result object the caller passed to complete', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    const result = Object.freeze(done('frozen'))
+    expect(ctx.runner.complete(ctx.attemptOf(runId, 'plan'), result)).toBe(true)
+    expect(lastRecord(ctx, runId).attempts[0].result).toEqual(result)
+  })
+
+  it('records a needs-input pause on the live attempt', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), { status: 'needs-input', summary: '?', completedBy: 'fallback' })
+    expect(lastRecord(ctx, runId).attempts[0]).toMatchObject({
+      status: 'running',
+      metrics: { pauses: [{ reason: 'needs-input' }] }
+    })
+  })
+
+  it('does not attribute a pause to an earlier step attempt when a queued step is cancelled', async () => {
+    const ctx = setup({ cap: 1 })
+    const runId = ctx.startRun('two-agent', '/wt/a')
+    const blocker = ctx.startRun('one-agent', '/wt/blocker')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    expect(ctx.stepStatus(blocker, 'plan')).toBe('running')
+    expect(ctx.stepStatus(runId, 'build')).toBe('queued')
+    expect(ctx.runner.cancelStep(runId)).toBe(true)
+
+    const record = lastRecord(ctx, runId)
+    expect(record.steps).toEqual({ plan: 'done', build: 'cancelled' })
+    expect(record.pausedReason).toBe('step-failed')
+    expect(record.attempts.map((a) => [a.stepId, a.metrics.pauses])).toEqual([['plan', []]])
+  })
+
+  it('renders a later step prompt from the full summary of an earlier step, not the preview', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('handoff', '/wt/a')
+    await flush()
+    const summary = `${'x'.repeat(5 * 1024 - 4)}-END`
+    ctx.runner.complete(ctx.attemptOf(runId, 'one'), done(summary))
+    await flush()
+
+    expect(ctx.wf().attempts[ctx.attemptOf(runId, 'one')].summaryPreview).toHaveLength(200)
+    const two = ctx.agent.started[1]
+    expect(two.stepId).toBe('two')
+    expect(two.scope).toEqual({
+      inputs: { task: INPUT_SECRET },
+      steps: { one: { status: 'done', summary } },
+      run: { id: runId, worktree: '/wt/a', contextPath: `/wt/a/.harness/runs/${runId}/context.md` }
+    })
+    if (two.step.kind !== 'agent') throw new Error('expected an agent step')
+    const rendered = renderTemplate(two.step.prompt, two.scope)
+    expect(rendered.missing).toEqual([])
+    expect(rendered.text).toBe(
+      `context /wt/a/.harness/runs/${runId}/context.md prior ${summary} status done`
+    )
+  })
+})
+
+describe('WorkflowRunner recent-run eviction', () => {
+  function finished(count: number): Record<string, WorkflowRun> {
+    const runs: Record<string, WorkflowRun> = {}
+    for (let i = 0; i < count; i++) {
+      runs[`old-${i}`] = {
+        defId: 'personal:one-agent',
+        defHash: 'h',
+        worktreePath: `/wt/old-${i}`,
+        status: 'done',
+        startedAt: 10 + i,
+        finishedAt: 100 + i,
+        steps: {}
+      }
+    }
+    return runs
+  }
+
+  it.each([
+    ['finishing', (ctx: Ctx, runId: string) => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())],
+    ['cancelling', (ctx: Ctx, runId: string) => ctx.runner.cancelRun(runId)]
+  ])('%s a 51st run evicts the oldest finished run in one event', async (_name, end) => {
+    const ctx = setup({ runs: finished(50) })
+    const runId = ctx.startRun('one-agent', '/wt/new')
+    await flush()
+    const types = ctx.eventsSince(() => end(ctx, runId))
+    expect(types.slice(-1)).toEqual(['runsEvicted'])
+    expect(ctx.events.at(-1)).toEqual({ type: 'workflows/runsEvicted', payload: { runIds: ['old-0'] } })
+    expect(Object.keys(ctx.wf().runs)).toHaveLength(50)
+    expect(ctx.wf().runs['old-0']).toBeUndefined()
+    expect(ctx.wf().runs[runId]).toBeDefined()
+  })
+
+  it('does not evict while 50 or fewer runs are finished', async () => {
+    const ctx = setup({ runs: finished(49) })
+    const runId = ctx.startRun('one-agent', '/wt/new')
+    await flush()
+    const types = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done()))
+    expect(types).not.toContain('runsEvicted')
+    expect(Object.keys(ctx.wf().runs)).toHaveLength(50)
   })
 })

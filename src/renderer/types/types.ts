@@ -5,7 +5,11 @@ import type { Worktree, PendingWorktree, PendingDeletion } from '../../shared/st
 export type { Worktree, PendingWorktree, PendingDeletion }
 
 import type { RepoConfig } from '../../shared/state/repo-configs'
-import type { WorkflowDefinitionDetail } from '../../shared/state/workflows'
+import type {
+  WorkflowAttemptRecord,
+  WorkflowDefinitionDetail,
+  WorkflowRunRecord
+} from '../../shared/state/workflows'
 import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
 export type { RepoConfig }
 
@@ -396,6 +400,8 @@ export interface ElectronAPI {
   reloadCustomThemes(): Promise<number>
   reloadWorkflowDefinitions(): Promise<number>
   getWorkflowDefinition(id: string): Promise<WorkflowDefinitionDetail | null>
+  getWorkflowRun(runId: string): Promise<WorkflowRunRecord | null>
+  getWorkflowAttemptResult(attemptId: string): Promise<WorkflowAttemptRecord | null>
   /** Reveal the themes directory in the OS file browser (Electron only).
    *  Always returns the absolute directory path so the web client can
    *  surface it manually. */

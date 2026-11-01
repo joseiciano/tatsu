@@ -1,4 +1,4 @@
-import type { ResolvedAgentStep, ResolvedShellStep } from '../../../shared/workflow-def'
+import type { ResolvedAgentStep, ResolvedShellStep, TemplateScope } from '../../../shared/workflow-def'
 
 export type RunnableStep = ResolvedAgentStep | ResolvedShellStep
 
@@ -12,6 +12,7 @@ export interface StepAttempt {
   worktreePath: string
   inputs: Record<string, string>
   step: RunnableStep
+  scope: TemplateScope
 }
 
 export interface StepExecution {

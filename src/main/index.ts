@@ -96,7 +96,8 @@ import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
-import { WorkflowRunner, type StepDriver } from './workflow-runner'
+import { WorkflowRunner, createGitRunArtifacts, type StepDriver } from './workflow-runner'
+import { createWorkflowRunLookup, createWorkflowRunRecords, workflowRunsDir } from './workflow-run-records'
 import { registerWorkflowSettingsRequestHandlers } from './workflow-settings-transport'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
@@ -313,6 +314,7 @@ try {
 } catch {
   log('workflow', 'initial scan failed')
 }
+const workflowRunRecords = createWorkflowRunRecords({ dir: workflowRunsDir(), log })
 const perfMonitor = new PerfMonitor()
 setGitHubApiRecorder(() => perfMonitor.recordGitHubApiCall())
 setGitHubApiLoggingEnabled(config.expandedDiagnosticLoggingEnabled === true)
@@ -464,7 +466,16 @@ const harnessConfigService = createHarnessConfigService({
   replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)
 })
 registerHarnessConfigRequestHandlers({ transport, store, service: harnessConfigService })
-registerWorkflowsRequestHandlers({ transport, loader: workflowDefsLoader })
+registerWorkflowsRequestHandlers({
+  transport,
+  loader: workflowDefsLoader,
+  runs: createWorkflowRunLookup({
+    live: (runId) => workflowRunner.getRunRecord(runId),
+    liveAttemptRunId: (attemptId) => workflowRunner.runIdForAttempt(attemptId),
+    records: workflowRunRecords,
+    attemptRunId: (attemptId) => store.getSnapshot().state.workflows.attempts[attemptId]?.runId
+  })
+})
 registerWorkflowSettingsRequestHandlers({
   transport,
   config,
@@ -766,7 +777,9 @@ const workflowRunner = new WorkflowRunner({
   drivers: { agent: unavailableStepDriver(), shell: unavailableStepDriver() },
   now: () => Date.now(),
   newId: () => randomUUID(),
-  log
+  log,
+  persist: (run) => workflowRunRecords.persist(run),
+  artifacts: createGitRunArtifacts()
 })
 
 /** Look up a json-claude tab's persisted `model` override by sessionId
