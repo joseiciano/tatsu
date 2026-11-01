@@ -214,3 +214,37 @@ export interface RenderedTemplate {
 }
 
 export type TemplateField = 'prompt' | 'run' | 'on_loop'
+
+export type StepOutputStatus = 'done' | 'failed' | 'needs-input'
+
+export interface StepOutputValue {
+  status: StepOutputStatus
+  summary: string
+  data?: Record<string, unknown>
+}
+
+export interface StepOutputFieldError {
+  field: string
+  message: string
+}
+
+export type StepOutputValidation =
+  | { ok: true; value: StepOutputValue }
+  | { ok: false; errors: StepOutputFieldError[] }
+
+export interface StepInputProperty {
+  type?: OutputScalarType | 'array'
+  enum?: WorkflowScalar[]
+  items?: StepInputProperty
+  maxLength?: number
+  maxItems?: number
+  default?: WorkflowScalar
+  description?: string
+}
+
+export interface StepInputSchema {
+  type: 'object'
+  properties: Record<string, StepInputProperty>
+  required: string[]
+  additionalProperties: false
+}
