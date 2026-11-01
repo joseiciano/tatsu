@@ -6,6 +6,7 @@ export type { Worktree, PendingWorktree, PendingDeletion }
 
 import type { RepoConfig } from '../../shared/state/repo-configs'
 import type { WorkflowDefinitionDetail } from '../../shared/state/workflows'
+import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
 export type { RepoConfig }
 
 import type { WeeklyStats, TopWorktree } from '../../shared/weekly-stats'
@@ -417,6 +418,8 @@ export interface ElectronAPI {
   snooze(path: string, wakeAt: number): Promise<boolean>
   unsnooze(path: string): Promise<boolean>
   setSnoozeDefaultDays(days: number): Promise<boolean>
+  setLabs(patch: Partial<LabsSettings>): Promise<boolean>
+  setWorkflowSettings(patch: Partial<WorkflowSettings>): Promise<boolean>
   setScratchpadText(worktreePath: string, text: string): Promise<boolean>
   openInEditor(worktreePath: string, filePath?: string): Promise<{ ok: true } | { ok: false; error: string }>
 

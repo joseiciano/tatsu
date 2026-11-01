@@ -77,4 +77,32 @@ describe('buildInitialAppState', () => {
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
   })
 
+  it('seeds labs and workflow settings defaults when config has none', () => {
+    const result = buildInitialAppState(emptyConfig, { hasGithubToken: false })
+    expect(result.settings.labs).toEqual({ workflows: false })
+    expect(result.settings.workflows).toEqual({ maxConcurrentAgents: 4 })
+  })
+
+  it('seeds stored labs and workflow settings values', () => {
+    const result = buildInitialAppState(
+      { ...emptyConfig, labs: { workflows: true }, workflowSettings: { maxConcurrentAgents: 9 } },
+      { hasGithubToken: false }
+    )
+    expect(result.settings.labs).toEqual({ workflows: true })
+    expect(result.settings.workflows).toEqual({ maxConcurrentAgents: 9 })
+  })
+
+  it('clamps a stored out-of-range cap and defaults a non-finite one', () => {
+    const high = buildInitialAppState(
+      { ...emptyConfig, workflowSettings: { maxConcurrentAgents: 99 } },
+      { hasGithubToken: false }
+    )
+    expect(high.settings.workflows.maxConcurrentAgents).toBe(16)
+    const bad = buildInitialAppState(
+      { ...emptyConfig, workflowSettings: { maxConcurrentAgents: Number.NaN } },
+      { hasGithubToken: false }
+    )
+    expect(bad.settings.workflows.maxConcurrentAgents).toBe(4)
+  })
+
 })

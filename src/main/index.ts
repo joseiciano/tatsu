@@ -96,6 +96,7 @@ import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
+import { registerWorkflowSettingsRequestHandlers } from './workflow-settings-transport'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
 import { AnnouncementsPoller } from './announcements-poller'
@@ -456,6 +457,13 @@ const harnessConfigService = createHarnessConfigService({
 })
 registerHarnessConfigRequestHandlers({ transport, store, service: harnessConfigService })
 registerWorkflowsRequestHandlers({ transport, loader: workflowDefsLoader })
+registerWorkflowSettingsRequestHandlers({
+  transport,
+  config,
+  saveConfig,
+  getSettings: () => store.getSnapshot().state.settings,
+  dispatch: (event) => store.dispatch(event)
+})
 
 // Tails Claude Code session jsonl transcripts on Stop hook events,
 // sums per-model usage, and dispatches costs/usageUpdated. See

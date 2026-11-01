@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  clampMaxConcurrentAgents,
   initialSettings,
   settingsReducer,
   type SettingsEvent,
@@ -599,6 +600,37 @@ describe('settingsReducer', () => {
     expect(off.announcementsMuted).toBe(false)
   })
 
+  it('labsChanged merges the patch into labs', () => {
+    expect(initialSettings.labs).toEqual({ workflows: false })
+    const on = apply(initialSettings, { type: 'settings/labsChanged', payload: { workflows: true } })
+    expect(on.labs).toEqual({ workflows: true })
+    const off = apply(on, { type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(off.labs).toEqual({ workflows: false })
+  })
+
+  it('labsChanged returns the same state when the patch changes nothing', () => {
+    expect(apply(initialSettings, { type: 'settings/labsChanged', payload: { workflows: false } })).toBe(initialSettings)
+    expect(apply(initialSettings, { type: 'settings/labsChanged', payload: {} })).toBe(initialSettings)
+    expect(apply(initialSettings, { type: 'settings/labsChanged', payload: { workflows: undefined } })).toBe(initialSettings)
+  })
+
+  it('workflowSettingsChanged merges the patch into workflows', () => {
+    expect(initialSettings.workflows).toEqual({ maxConcurrentAgents: 4 })
+    const next = apply(initialSettings, {
+      type: 'settings/workflowSettingsChanged',
+      payload: { maxConcurrentAgents: 8 }
+    })
+    expect(next.workflows).toEqual({ maxConcurrentAgents: 8 })
+    expect(next.labs).toBe(initialSettings.labs)
+  })
+
+  it('workflowSettingsChanged returns the same state when the patch changes nothing', () => {
+    expect(
+      apply(initialSettings, { type: 'settings/workflowSettingsChanged', payload: { maxConcurrentAgents: 4 } })
+    ).toBe(initialSettings)
+    expect(apply(initialSettings, { type: 'settings/workflowSettingsChanged', payload: {} })).toBe(initialSettings)
+  })
+
   it('returns a new object reference (no mutation)', () => {
     const next = apply(initialSettings, { type: 'settings/themeDarkChanged', payload: 'dracula' })
     expect(next).not.toBe(initialSettings)
@@ -614,5 +646,22 @@ describe('settingsReducer', () => {
     const next = apply(start, { type: 'settings/themeDarkChanged', payload: 'nord' })
     expect(next.claudeCommand).toBe('pre-existing')
     expect(next.nameClaudeSessions).toBe(true)
+  })
+})
+
+describe('clampMaxConcurrentAgents', () => {
+  it('clamps to an integer in 1..16', () => {
+    expect(clampMaxConcurrentAgents(0)).toBe(1)
+    expect(clampMaxConcurrentAgents(-3)).toBe(1)
+    expect(clampMaxConcurrentAgents(99)).toBe(16)
+    expect(clampMaxConcurrentAgents(2.5)).toBe(2)
+    expect(clampMaxConcurrentAgents(7)).toBe(7)
+  })
+
+  it('returns null for a non-finite or non-number value', () => {
+    expect(clampMaxConcurrentAgents(Number.NaN)).toBeNull()
+    expect(clampMaxConcurrentAgents(Number.POSITIVE_INFINITY)).toBeNull()
+    expect(clampMaxConcurrentAgents('8')).toBeNull()
+    expect(clampMaxConcurrentAgents(undefined)).toBeNull()
   })
 })

@@ -18,7 +18,9 @@ import {
   initialSettings,
   DEFAULT_LIGHT_THEME,
   DEFAULT_DARK_THEME,
-  DEFAULT_PR_REVIEW_PROMPT
+  DEFAULT_PR_REVIEW_PROMPT,
+  DEFAULT_WORKFLOW_SETTINGS,
+  clampMaxConcurrentAgents
 } from '../../shared/state/settings'
 import {
   DEFAULT_CLAUDE_COMMAND,
@@ -148,7 +150,13 @@ export function buildInitialAppState(
       dismissedAnnouncementIds: Array.isArray(config.dismissedAnnouncementIds)
         ? config.dismissedAnnouncementIds.filter((x): x is string => typeof x === 'string')
         : [],
-      announcementsMuted: config.announcementsMuted === true
+      announcementsMuted: config.announcementsMuted === true,
+      labs: { workflows: config.labs?.workflows === true },
+      workflows: {
+        maxConcurrentAgents:
+          clampMaxConcurrentAgents(config.workflowSettings?.maxConcurrentAgents) ??
+          DEFAULT_WORKFLOW_SETTINGS.maxConcurrentAgents
+      }
     }
   }
 }

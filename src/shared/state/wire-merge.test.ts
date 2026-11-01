@@ -29,6 +29,30 @@ describe('mergeWireSnapshot', () => {
     expect(merged.settings.themeDark).toBe('dark')
   })
 
+  it('fills labs and workflow settings from defaults for an old server snapshot that lacks them', () => {
+    const wire: WireSnapshotState = { settings: { themeMode: 'dark' } }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.themeMode).toBe('dark')
+    expect(merged.settings.labs).toEqual({ workflows: false })
+    expect(merged.settings.workflows).toEqual({ maxConcurrentAgents: 4 })
+  })
+
+  it('fills each missing nested labs and workflow settings field from defaults', () => {
+    const wire: WireSnapshotState = { settings: { labs: {}, workflows: {} } }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.labs).toEqual({ workflows: false })
+    expect(merged.settings.workflows).toEqual({ maxConcurrentAgents: 4 })
+  })
+
+  it('keeps server-sent labs and workflow settings', () => {
+    const wire: WireSnapshotState = {
+      settings: { labs: { workflows: true }, workflows: { maxConcurrentAgents: 9 } }
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.labs).toEqual({ workflows: true })
+    expect(merged.settings.workflows).toEqual({ maxConcurrentAgents: 9 })
+  })
+
   it('backfills hooks.codexTrust for an old server snapshot that only sends consent', () => {
     const wire: WireSnapshotState = { hooks: { consent: 'accepted' } }
     const merged = mergeWireSnapshot(wire)

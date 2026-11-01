@@ -14,8 +14,10 @@
 import {
   initialSettings,
   settingsReducer,
+  type LabsSettings,
   type SettingsEvent,
-  type SettingsState
+  type SettingsState,
+  type WorkflowSettings
 } from './settings'
 import {
   initialPRs,
@@ -357,8 +359,15 @@ export interface StateSnapshot {
  *  missing recently-added fields (older server with the slice but an
  *  older schema). Consumers must merge with `initialState` defaults via
  *  `mergeWireSnapshot` before treating the value as a full `AppState`. */
+export type WireSettingsState = Partial<Omit<SettingsState, 'labs' | 'workflows'>> & {
+  labs?: Partial<LabsSettings>
+  workflows?: Partial<WorkflowSettings>
+}
+
 export type WireSnapshotState = {
-  [K in keyof AppState]?: Partial<AppState[K]>
+  [K in Exclude<keyof AppState, 'settings'>]?: Partial<AppState[K]>
+} & {
+  settings?: WireSettingsState
 }
 
 /** Per-slice shallow merge of a wire snapshot against `initialState`
@@ -375,7 +384,12 @@ export type WireSnapshotState = {
  *  literal won't satisfy `AppState`. */
 export function mergeWireSnapshot(state: WireSnapshotState): AppState {
   return {
-    settings: { ...initialState.settings, ...state.settings },
+    settings: {
+      ...initialState.settings,
+      ...state.settings,
+      labs: { ...initialState.settings.labs, ...state.settings?.labs },
+      workflows: { ...initialState.settings.workflows, ...state.settings?.workflows }
+    },
     prs: { ...initialState.prs, ...state.prs },
     onboarding: { ...initialState.onboarding, ...state.onboarding },
     hooks: { ...initialState.hooks, ...state.hooks },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect, useId } from 'react'
-import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Beaker, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { HARNESS_ISSUES_URL, HARNESS_RELEASES_URL, harnessReleaseNotesUrl } from '../../../shared/constants'
 import { useSettings, useUpdater, useRepoConfigs, useHooks } from '../../store'
@@ -13,7 +13,13 @@ import { InterfaceToggle } from '../InterfaceToggle'
 import { BUILT_IN_THEMES_BY_MODE, type ThemeOption } from '../../themes'
 import { SEMANTIC_KEYS } from '../../theme-apply'
 import type { CustomTheme, UiScale } from '../../../shared/state/settings'
-import { SCALES, scaleSpec } from '../../../shared/state/settings'
+import {
+  SCALES,
+  scaleSpec,
+  clampMaxConcurrentAgents,
+  MIN_MAX_CONCURRENT_AGENTS,
+  MAX_MAX_CONCURRENT_AGENTS
+} from '../../../shared/state/settings'
 import { QRCodeSVG } from 'qrcode.react'
 
 interface SettingsProps {
@@ -23,7 +29,7 @@ interface SettingsProps {
   initialSection?: SectionId
 }
 
-type SectionId = 'appearance' | 'agent' | 'worktrees' | 'editor' | 'github' | 'hotkeys' | 'updates' | 'support' | 'experimental'
+type SectionId = 'appearance' | 'agent' | 'worktrees' | 'editor' | 'github' | 'hotkeys' | 'updates' | 'support' | 'experimental' | 'labs'
 type SubSectionId =
   | 'appearance-theme'
   | 'appearance-custom-themes'
@@ -97,7 +103,8 @@ const SECTIONS: Section[] = [
       { id: 'experimental-browser-control', label: 'Browser control' },
       { id: 'experimental-web-mobile', label: 'Web & mobile' }
     ]
-  }
+  },
+  { id: 'labs', label: 'Labs', icon: Beaker }
 ]
 
 interface SearchItem {
@@ -171,7 +178,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     hotkeys: null,
     updates: null,
     support: null,
-    experimental: null
+    experimental: null,
+    labs: null
   })
   const subSectionRefs = useRef<Record<SubSectionId, HTMLElement | null>>({
     'appearance-theme': null,
@@ -384,7 +392,9 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     jsonModeDefaultPermissionMode,
     autoSleepMinutes,
     snoozeDefaultDays,
-    expandedDiagnosticLoggingEnabled
+    expandedDiagnosticLoggingEnabled,
+    labs,
+    workflows
   } = settings
   const setupScript = worktreeScripts.setup
   const teardownScript = worktreeScripts.teardown
@@ -631,6 +641,26 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
       setAutoSleepDraft(String(clamped))
     }
   }, [autoSleepDraft, autoSleepMinutes])
+
+  const [maxConcurrentAgentsDraft, setMaxConcurrentAgentsDraft] = useState<string>(
+    String(workflows.maxConcurrentAgents)
+  )
+  useEffect(() => {
+    setMaxConcurrentAgentsDraft(String(workflows.maxConcurrentAgents))
+  }, [workflows.maxConcurrentAgents])
+  const commitMaxConcurrentAgents = useCallback(() => {
+    const clamped = maxConcurrentAgentsDraft.trim() === ''
+      ? null
+      : clampMaxConcurrentAgents(Number(maxConcurrentAgentsDraft))
+    if (clamped === null) {
+      setMaxConcurrentAgentsDraft(String(workflows.maxConcurrentAgents))
+      return
+    }
+    setMaxConcurrentAgentsDraft(String(clamped))
+    if (clamped !== workflows.maxConcurrentAgents) {
+      void backend.setWorkflowSettings({ maxConcurrentAgents: clamped })
+    }
+  }, [maxConcurrentAgentsDraft, workflows.maxConcurrentAgents])
 
   const handleSelectEditor = useCallback(async (id: string) => {
     await backend.setEditor(id)
@@ -3436,6 +3466,60 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <p className="text-xs text-warning">{wsNeedsRestart}</p>
                   </div>
                 )}
+              </div>
+            </section>
+
+            <section ref={(el) => { sectionRefs.current.labs = el }} id="labs">
+              <h2 className="text-lg font-semibold text-fg-bright mb-1 flex items-center gap-2">
+                <Beaker className="w-[1.125rem] h-[1.125rem] text-warning" />
+                Labs
+              </h2>
+              <p className="text-sm text-dim mb-4">
+                Early features that are off by default. Turn one on to try it
+                before it ships to everyone.
+              </p>
+
+              <div className="bg-panel-raised border border-warning/30 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="labs-workflows"
+                    checked={labs.workflows}
+                    onChange={(e) => { void backend.setLabs({ workflows: e.target.checked }) }}
+                    className="mt-0.5 cursor-pointer icon-base" />
+                  <div className="flex-1">
+                    <label htmlFor="labs-workflows" className="text-sm text-fg-bright cursor-pointer">Workflows</label>
+                    <div className="text-xs text-dim mt-0.5">
+                      Run multi-step agent workflows defined in YAML files.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-border">
+                  <label htmlFor="labs-max-concurrent-agents" className="block text-xs font-medium text-fg mb-1">
+                    Max concurrent agent steps
+                  </label>
+                  <div className="text-xs text-dim mb-2">
+                    How many agent steps can run at once across all workflow
+                    runs. Shell steps don't count. Between {MIN_MAX_CONCURRENT_AGENTS} and {MAX_MAX_CONCURRENT_AGENTS}.
+                  </div>
+                  <input
+                    type="number"
+                    id="labs-max-concurrent-agents"
+                    min={MIN_MAX_CONCURRENT_AGENTS}
+                    max={MAX_MAX_CONCURRENT_AGENTS}
+                    step={1}
+                    value={maxConcurrentAgentsDraft}
+                    onChange={(e) => setMaxConcurrentAgentsDraft(e.target.value)}
+                    onBlur={commitMaxConcurrentAgents}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    className="bg-panel border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-fg w-24"
+                  />
+                </div>
               </div>
             </section>
           </div>
