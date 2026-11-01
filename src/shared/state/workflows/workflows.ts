@@ -74,6 +74,18 @@ function patchStep(run: WorkflowRun, stepId: string, step: WorkflowRunStep): Wor
   return { ...run, steps: { ...run.steps, [stepId]: step } }
 }
 
+function isTerminalRun(state: WorkflowsState, runId: string): boolean {
+  const run = state.runs[runId]
+  return run !== undefined && TERMINAL_RUN_STATUSES.has(run.status)
+}
+
+function previewOf(summary: string): string {
+  if (summary.length <= SUMMARY_PREVIEW_MAX) return summary
+  const last = summary.charCodeAt(SUMMARY_PREVIEW_MAX - 1)
+  const end = last >= 0xd800 && last <= 0xdbff ? SUMMARY_PREVIEW_MAX - 1 : SUMMARY_PREVIEW_MAX
+  return summary.slice(0, end)
+}
+
 function setStepStatus(
   state: WorkflowsState,
   runId: string,
@@ -82,7 +94,7 @@ function setStepStatus(
 ): WorkflowsState {
   const run = state.runs[runId]
   const step = run?.steps[stepId]
-  if (!step || step.status === status) return state
+  if (!step || step.status === status || TERMINAL_RUN_STATUSES.has(run.status)) return state
   return patchRun(state, runId, patchStep(run, stepId, { ...step, status }))
 }
 
@@ -151,7 +163,7 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       const { attemptId, runId, stepId, n, startedAt } = event.payload
       const run = state.runs[runId]
       const step = run?.steps[stepId]
-      if (!step || state.attempts[attemptId]) return state
+      if (!step || state.attempts[attemptId] || TERMINAL_RUN_STATUSES.has(run.status)) return state
       const nextRun = patchStep(run, stepId, {
         ...step,
         attemptIds: [...step.attemptIds, attemptId]
@@ -168,7 +180,9 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
     case 'workflows/attemptEnded': {
       const { attemptId, status, endedAt, summary, completedBy, costUsd } = event.payload
       const attempt = state.attempts[attemptId]
-      if (!attempt || attempt.endedAt !== undefined) return state
+      if (!attempt || attempt.endedAt !== undefined || isTerminalRun(state, attempt.runId)) {
+        return state
+      }
       return {
         ...state,
         attempts: {
@@ -177,7 +191,7 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
             ...attempt,
             status,
             endedAt,
-            summaryPreview: summary.slice(0, SUMMARY_PREVIEW_MAX),
+            summaryPreview: previewOf(summary),
             ...(completedBy === undefined ? {} : { completedBy }),
             ...(costUsd === undefined ? {} : { costUsd })
           }
