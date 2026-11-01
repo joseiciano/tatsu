@@ -14,7 +14,7 @@
 
 import { basename, dirname, join } from 'path'
 
-import type { AgentKind } from '../../shared/state/terminals'
+import type { AgentKind, TerminalTabWorkflow } from '../../shared/state/terminals'
 
 export interface PersistedTab {
   id: string
@@ -33,6 +33,7 @@ export interface PersistedTab {
   model?: string
   /** User-defined label override. Empty/undefined falls back to `label`. */
   customLabel?: string
+  workflow?: TerminalTabWorkflow
 }
 
 export interface PersistedPane {

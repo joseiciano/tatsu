@@ -24,12 +24,35 @@ export interface AgentSpawnRequest {
   rows?: number
   permissionLevel?: PermissionLevel
   bashAllow?: string[]
+  command?: string
+  env?: Record<string, string>
 }
 
 export interface ShellSpawnRequest {
   terminalId: string
   cwd: string
   command?: string
+  env?: Record<string, string>
+  cols?: number
+  rows?: number
+}
+
+export interface StepSpawnExtras {
+  permissionLevel?: PermissionLevel
+  bashAllow?: string[]
+  initialPrompt?: string
+  sessionId?: string
+  model?: string
+  env?: Record<string, string>
+  command?: string
+}
+
+export interface LegacyCreateRequest {
+  terminalId: string
+  cwd: string
+  command: string
+  args: string[]
+  agentKind?: string
   cols?: number
   rows?: number
 }
@@ -70,4 +93,5 @@ export interface AgentSpawner {
     cols?: number,
     rows?: number
   ): TerminalCreateResult
+  legacyCreate(req: LegacyCreateRequest, clientId: string): SpawnOutcome
 }

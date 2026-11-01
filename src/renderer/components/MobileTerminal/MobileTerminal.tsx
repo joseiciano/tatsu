@@ -307,6 +307,7 @@ export function MobileTerminal({ worktreePath, tab }: MobileTerminalProps): JSX.
           sessionName={tab.label}
           sessionId={tab.sessionId}
           modelOverride={tab.type === 'agent' ? tab.model : undefined}
+          workflowStep={!!tab.workflow}
         />
         {/* Hidden textarea — pointer-events:none so touch scrolling on the
             wrapper above isn't eaten; the wrapper's onClick focuses the

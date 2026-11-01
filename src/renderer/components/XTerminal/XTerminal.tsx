@@ -251,12 +251,14 @@ interface XTerminalProps {
    * `cwd` (the worktree root); absolute paths are used as-is. */
   shellCwd?: string
   onRestartAgent?: () => void
+  /** Main owns this tab's PTY: attach when it is live, never spawn. */
+  workflowStep?: boolean
   /** When provided AND this is a Claude agent tab, an overlay chip in
    *  the top-left invites the user to switch to the Chat interface. */
   onSwitchToChat?: () => void
 }
 
-export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, onSwitchToChat }: XTerminalProps): JSX.Element {
+export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, workflowStep, onSwitchToChat }: XTerminalProps): JSX.Element {
   // Lazy font-cache init — fires once on first XTerminal mount. See
   // initFontCache() comment for why this is lazy rather than at module
   // top.
@@ -437,7 +439,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
     let cleanupExit: (() => void) | null = null
     let disposed = false
 
-    if (type === 'agent') {
+    if (type === 'agent' || workflowStep) {
       cleanupExit = backend.onTerminalExit((id) => {
         if (id === terminalId && !disposed) setExited(true)
       })
@@ -489,8 +491,17 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           }
         : { kind: 'shell', terminalId, cwd: resolveShellCwd(), command: shellCommand }
 
+    const showStepExited = (): void => {
+      setLoading(false)
+      setExited(true)
+    }
+
     const spawnPty = async (): Promise<void> => {
       if (disposed) return
+      if (workflowStep) {
+        showStepExited()
+        return
+      }
       // If the container has no layout yet (display:none background tab),
       // defer the spawn. The visible useEffect below will call this again
       // once the tab becomes visible and FitAddon can compute real dims.
@@ -588,6 +599,11 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
             // the visible effect fits again
           }
         }
+        return
+      }
+      if (workflowStep) {
+        if (res.history) terminal.write(sanitizeTerminalData(res.history))
+        showStepExited()
         return
       }
       if (!res.history) {
@@ -949,7 +965,14 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           </Tooltip>
         </div>
       )}
-      {exited && type === 'agent' && onRestartAgent && (
+      {exited && workflowStep && (
+        <div className="absolute inset-0 flex items-center justify-center bg-app/80">
+          <div className="text-sm text-dim">
+            {type === 'agent' ? agentDisplayName(agentKind) : 'Step'} exited.
+          </div>
+        </div>
+      )}
+      {exited && !workflowStep && type === 'agent' && onRestartAgent && (
         <div className="absolute inset-0 flex items-center justify-center bg-app/80">
           <div className="flex flex-col items-center gap-3 text-sm">
             <div className="text-dim">{agentDisplayName(agentKind)} exited.</div>
