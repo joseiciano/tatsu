@@ -1,1 +1,3 @@
 export const SUMMARY_PREVIEW_MAX = 200
+export const RECENT_RUNS_MAX = 50
+export const WORKFLOW_RUN_RECORD_VERSION = 1

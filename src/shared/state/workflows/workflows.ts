@@ -86,6 +86,32 @@ function previewOf(summary: string): string {
   return summary.slice(0, end)
 }
 
+export function runsToEvict(state: WorkflowsState, max: number): string[] {
+  const finished: Array<{ runId: string; finishedAt: number }> = []
+  for (const [runId, run] of Object.entries(state.runs)) {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      finished.push({ runId, finishedAt: run.finishedAt ?? run.startedAt })
+    }
+  }
+  if (finished.length <= max) return []
+  finished.sort((a, b) => a.finishedAt - b.finishedAt || (a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0))
+  return finished.slice(0, finished.length - max).map((entry) => entry.runId)
+}
+
+function evictRuns(state: WorkflowsState, runIds: string[]): WorkflowsState {
+  const evicted = new Set(runIds.filter((runId) => Object.hasOwn(state.runs, runId)))
+  if (evicted.size === 0) return state
+  const runs: Record<string, WorkflowRun> = {}
+  for (const [runId, run] of Object.entries(state.runs)) {
+    if (!evicted.has(runId)) runs[runId] = run
+  }
+  const attempts: WorkflowsState['attempts'] = {}
+  for (const [attemptId, attempt] of Object.entries(state.attempts)) {
+    if (!evicted.has(attempt.runId)) attempts[attemptId] = attempt
+  }
+  return { ...state, runs, attempts }
+}
+
 function setStepStatus(
   state: WorkflowsState,
   runId: string,
@@ -198,6 +224,8 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
         }
       }
     }
+    case 'workflows/runsEvicted':
+      return evictRuns(state, event.payload.runIds)
     default: {
       const _exhaustive: never = event
       void _exhaustive

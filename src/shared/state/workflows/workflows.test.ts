@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   initialWorkflows,
+  RECENT_RUNS_MAX,
   SUMMARY_PREVIEW_MAX,
+  runsToEvict,
   workflowsReducer,
   type WorkflowAttempt,
   type WorkflowDefinitionSummary,
@@ -544,5 +546,60 @@ describe('workflowsReducer terminal-run guards', () => {
     expect(next.attempts['att-a1'].summaryPreview).toBe(
       'x'.repeat(SUMMARY_PREVIEW_MAX - 2) + '\u{1F600}'
     )
+  })
+})
+
+describe('workflowsReducer runsEvicted', () => {
+  it('removes the listed runs and their attempts and keeps everything else by reference', () => {
+    const start = fixture({ status: 'done', finishedAt: 2000 })
+    const next = workflowsReducer(start, {
+      type: 'workflows/runsEvicted',
+      payload: { runIds: ['run-a'] }
+    })
+    expect(Object.keys(next.runs)).toEqual(['run-b'])
+    expect(Object.keys(next.attempts)).toEqual(['att-b1'])
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+    expect(next.attempts['att-b1']).toBe(start.attempts['att-b1'])
+    expect(next.definitions).toBe(start.definitions)
+  })
+
+  it('is a no-op that returns the same state when no listed run exists', () => {
+    const start = fixture()
+    for (const runIds of [[], ['run-missing'], ['constructor', '__proto__']]) {
+      expect(workflowsReducer(start, { type: 'workflows/runsEvicted', payload: { runIds } })).toBe(start)
+    }
+  })
+})
+
+describe('runsToEvict', () => {
+  function finishedRuns(count: number): WorkflowsState {
+    const runs: Record<string, WorkflowRun> = {}
+    for (let i = 0; i < count; i++) {
+      runs[`run-${String(i).padStart(3, '0')}`] = run({ status: i % 2 ? 'cancelled' : 'done', finishedAt: 5000 - i })
+    }
+    return { ...initialWorkflows, runs }
+  }
+
+  it('returns nothing while finished runs are within the cap', () => {
+    expect(RECENT_RUNS_MAX).toBe(50)
+    expect(runsToEvict(finishedRuns(50), RECENT_RUNS_MAX)).toEqual([])
+  })
+
+  it('returns the oldest finished runs beyond the cap and ignores live runs', () => {
+    const state = finishedRuns(52)
+    state.runs['run-live'] = run({ status: 'paused', startedAt: 1 })
+    expect(runsToEvict(state, RECENT_RUNS_MAX)).toEqual(['run-051', 'run-050'])
+  })
+
+  it('breaks finishedAt ties by run id', () => {
+    const state: WorkflowsState = {
+      ...initialWorkflows,
+      runs: {
+        'run-b': run({ status: 'done', finishedAt: 10 }),
+        'run-a': run({ status: 'done', finishedAt: 10 }),
+        'run-c': run({ status: 'done', finishedAt: 20 })
+      }
+    }
+    expect(runsToEvict(state, 1)).toEqual(['run-a', 'run-b'])
   })
 })
