@@ -92,6 +92,99 @@ function callControl(method, path, body) {
   })
 }
 
+const CONTROL_TIMEOUT_MS = 5000
+const WORKFLOW_STEP_RETRY_MS = 500
+const WORKFLOW_NOT_A_STEP = 'not a workflow step'
+
+function requestControl(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const data = body === undefined ? undefined : JSON.stringify(body)
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: Number(PORT),
+        path,
+        method,
+        timeout: CONTROL_TIMEOUT_MS,
+        headers: {
+          Authorization: 'Bearer ' + TOKEN,
+          'Content-Type': 'application/json',
+          'X-Harness-Terminal-Id': TERMINAL_ID,
+          ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {})
+        }
+      },
+      (res) => {
+        let chunks = ''
+        res.on('data', (c) => (chunks += c))
+        res.on('end', () => {
+          let json = null
+          try {
+            json = chunks ? JSON.parse(chunks) : null
+          } catch {
+            json = null
+          }
+          resolve({ status: res.statusCode, json })
+        })
+      }
+    )
+    req.on('timeout', () => req.destroy(new Error('harness request timed out')))
+    req.on('error', reject)
+    if (data) req.write(data)
+    req.end()
+  })
+}
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+async function fetchWorkflowStep() {
+  const r = await requestControl('GET', '/workflow/step')
+  if (r.status === 200 && isPlainObject(r.json) && isPlainObject(r.json.inputSchema) && r.json.inputSchema.type === 'object') {
+    return { inputSchema: r.json.inputSchema }
+  }
+  return { retry: r.status === 404 && isPlainObject(r.json) && r.json.error === WORKFLOW_NOT_A_STEP }
+}
+
+async function loadWorkflowStep() {
+  if (!TERMINAL_ID) return null
+  try {
+    let r = await fetchWorkflowStep()
+    if (r.retry) {
+      await new Promise((resolve) => setTimeout(resolve, WORKFLOW_STEP_RETRY_MS))
+      r = await fetchWorkflowStep()
+    }
+    return r.inputSchema || null
+  } catch (e) {
+    logErr('workflow step lookup failed', (e && e.message) || String(e))
+    return null
+  }
+}
+
+let workflowStepPromise = null
+function getWorkflowStep() {
+  if (!workflowStepPromise) workflowStepPromise = loadWorkflowStep()
+  return workflowStepPromise
+}
+
+function completeStepTool(inputSchema) {
+  return {
+    name: 'complete_step',
+    description:
+      'Finish the workflow step this session is running. Call it once, when the step is done ("done"), cannot succeed ("failed"), or needs an answer from the user ("needs-input", with the question in summary). Give a summary and every required output field. An invalid call returns the field errors so you can fix it and call again.',
+    inputSchema
+  }
+}
+
+function controlErrorMessage(r) {
+  const base = isPlainObject(r.json) && typeof r.json.error === 'string' ? r.json.error : 'harness HTTP ' + r.status
+  const fields = isPlainObject(r.json) && Array.isArray(r.json.fields) ? r.json.fields : []
+  const lines = fields
+    .filter((f) => isPlainObject(f) && typeof f.message === 'string')
+    .map((f) => '- ' + (typeof f.field === 'string' && f.field ? f.field + ': ' : '') + f.message)
+  return lines.length ? base + '\n' + lines.join('\n') : base
+}
+
 const TOOLS = [
   {
     name: 'create_worktree',
@@ -475,6 +568,13 @@ function filterToolsByPerms(tools, perms) {
 }
 
 async function handleToolCall(name, args) {
+  if (name === 'complete_step') {
+    const r = await requestControl('POST', '/workflow/complete', args || {})
+    if (r.status < 200 || r.status >= 300) throw new Error(controlErrorMessage(r))
+    return args && args.status === 'needs-input'
+      ? 'Question recorded. Wait for the user to reply.'
+      : 'Step completed.'
+  }
   if (name === 'create_worktree') {
     const prNumber = args && args.prNumber
     if (!args || (!args.branchName && !prNumber)) {
@@ -705,8 +805,10 @@ async function handle(msg) {
       return null
     }
     if (method === 'tools/list') {
-      const perms = await getBrowserPerms()
-      return { jsonrpc: '2.0', id, result: { tools: filterToolsByPerms(TOOLS, perms) } }
+      const [perms, stepSchema] = await Promise.all([getBrowserPerms(), getWorkflowStep()])
+      const tools = filterToolsByPerms(TOOLS, perms)
+      if (stepSchema) tools.push(completeStepTool(stepSchema))
+      return { jsonrpc: '2.0', id, result: { tools } }
     }
     if (method === 'tools/call') {
       const result = await handleToolCall(
