@@ -92,7 +92,7 @@ export class PtyManager {
   private historyDirty = new Set<string>()
   private historyFlushTimer: NodeJS.Timeout | null = null
   private perfMonitor: PerfMonitor | null = null
-  private exitListeners = new Set<(id: string, exitCode: number) => void>()
+  private exitListeners = new Set<(id: string, exitCode: number, signal?: number) => void>()
 
   /** Wire the authoritative store after it's constructed. PTY status,
    * shell activity, and cleanup events dispatch through it. */
@@ -104,7 +104,7 @@ export class PtyManager {
     this.perfMonitor = monitor
   }
 
-  onExit(listener: (id: string, exitCode: number) => void): () => void {
+  onExit(listener: (id: string, exitCode: number, signal?: number) => void): () => void {
     this.exitListeners.add(listener)
     return () => {
       this.exitListeners.delete(listener)
@@ -223,11 +223,11 @@ export class PtyManager {
       this.sendSignal?.('terminal:data', id, data)
     })
 
-    ptyProcess.onExit(({ exitCode }) => {
-      log('pty', `exit id=${id} code=${exitCode}`)
+    ptyProcess.onExit(({ exitCode, signal }) => {
+      log('pty', `exit id=${id} code=${exitCode}${signal ? ` signal=${signal}` : ''}`)
       for (const listener of [...this.exitListeners]) {
         try {
-          listener(id, exitCode)
+          listener(id, exitCode, signal)
         } catch (err) {
           log('pty', `exit listener failed id=${id}`, err instanceof Error ? err.message : err)
         }

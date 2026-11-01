@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-type ExitHandler = (e: { exitCode: number }) => void
+type ExitHandler = (e: { exitCode: number; signal?: number }) => void
 
-const spawned = vi.hoisted(() => [] as { args: string[]; fireExit: (code: number) => void }[])
+const spawned = vi.hoisted(
+  () => [] as { args: string[]; fireExit: (code: number, signal?: number) => void }[]
+)
 
 vi.mock('node-pty', () => ({
   spawn: vi.fn((_file: string, args: string[]) => {
     let onExit: ExitHandler = () => {}
-    spawned.push({ args, fireExit: (exitCode) => onExit({ exitCode }) })
+    spawned.push({ args, fireExit: (exitCode, signal) => onExit({ exitCode, signal }) })
     return {
       pid: 1234,
       onData: () => ({ dispose: () => {} }),
@@ -71,6 +73,17 @@ describe('PtyManager.onExit', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
+  it('passes the terminating signal to listeners', () => {
+    const pty = new PtyManager()
+    const listener = vi.fn()
+    pty.onExit(listener)
+
+    pty.create('t1', '/wt', '/bin/zsh', ['-il'])
+    lastSpawn().fireExit(0, 15)
+
+    expect(listener).toHaveBeenCalledWith('t1', 0, 15)
+  })
+
   it('still cleans up the PTY and calls later listeners when one listener throws', () => {
     const pty = new PtyManager()
     const later = vi.fn()
@@ -82,7 +95,7 @@ describe('PtyManager.onExit', () => {
     pty.create('t1', '/wt', '/bin/zsh', ['-il'])
     lastSpawn().fireExit(1)
 
-    expect(later).toHaveBeenCalledWith('t1', 1)
+    expect(later).toHaveBeenCalledWith('t1', 1, undefined)
     expect(pty.hasTerminal('t1')).toBe(false)
   })
 })
