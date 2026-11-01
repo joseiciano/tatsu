@@ -96,6 +96,7 @@ import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
+import { WorkflowRunner, type StepDriver } from './workflow-runner'
 import { registerWorkflowSettingsRequestHandlers } from './workflow-settings-transport'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
@@ -751,6 +752,21 @@ const panesFSM = new PanesFSM(store, {
     const size = resolveSpawnSize(store.getSnapshot().state.terminals, wtPath, tab.id)
     agentSpawner.spawnShellTerminal(shellRequestForTab({ wtPath, tab, extras, size }))
   }
+})
+
+const unavailableStepDriver = (): StepDriver => ({
+  start: () => Promise.reject(new Error('step driver unavailable')),
+  continue: () => {},
+  cancel: () => {},
+  onEvent: () => () => {}
+})
+const workflowRunner = new WorkflowRunner({
+  store,
+  loader: workflowDefsLoader,
+  drivers: { agent: unavailableStepDriver(), shell: unavailableStepDriver() },
+  now: () => Date.now(),
+  newId: () => randomUUID(),
+  log
 })
 
 /** Look up a json-claude tab's persisted `model` override by sessionId
@@ -3500,6 +3516,7 @@ if (desktopShellMod && desktopEarly) {
     },
     onBeforeQuit: () => {
       codexHookTrustMonitor?.stop()
+      workflowRunner.dispose()
       chatRuntimeRegistry.killAll()
     }
   })
@@ -3516,6 +3533,7 @@ if (desktopShellMod && desktopEarly) {
   // still safe to call — the headless stub no-ops it.
   const shutdown = (): void => {
     codexHookTrustMonitor?.stop()
+    workflowRunner.dispose()
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')
