@@ -1,4 +1,6 @@
 import type { AgentKind } from '../../shared/state/terminals'
+import type { StepOutputValue } from '../../shared/workflow-def'
+import type { CompleteExecutionResult, WorkflowExecutionStep } from '../workflow-runner'
 export interface BrowserTabSummary {
   id: string
   url: string
@@ -92,4 +94,11 @@ export interface ControlServerDeps {
   getBrowserPerms: () => BrowserPerms
   browser: BrowserQueries
   shell: ShellQueries
+  workflow?: WorkflowStepControl
+}
+
+export interface WorkflowStepControl {
+  enabled(): boolean
+  stepFor(terminalId: string): WorkflowExecutionStep | null
+  complete(terminalId: string, value: StepOutputValue): CompleteExecutionResult
 }

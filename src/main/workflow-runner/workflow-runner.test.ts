@@ -71,6 +71,15 @@ steps:
     agent: claude
     prompt: "context {{run.contextPath}} prior {{steps.one.summary}} status {{steps.one.status}}"
 `,
+  reviewed: `name: reviewed
+steps:
+  - id: review
+    agent: claude
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+      required: [verdict]
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -995,5 +1004,86 @@ describe('WorkflowRunner recent-run eviction', () => {
     const types = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done()))
     expect(types).not.toContain('runsEvicted')
     expect(Object.keys(ctx.wf().runs)).toHaveLength(50)
+  })
+})
+
+describe('WorkflowRunner step tool seam', () => {
+  it('describes the live agent step of an execution', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('reviewed')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'review')
+    expect(ctx.runner.stepForExecution(ctx.agent.executionFor(attemptId))).toEqual({
+      attemptId,
+      stepId: 'review',
+      output: { fields: { verdict: { enum: ['pass', 'fail'] } }, required: ['verdict'] },
+      ended: false
+    })
+  })
+
+  it('returns null for unknown executions, shell steps and while labs is off', async () => {
+    const ctx = setup()
+    const shellRun = ctx.startRun('one-shell')
+    const agentRun = ctx.startRun('one-agent')
+    await flush()
+    expect(ctx.runner.stepForExecution('nobody')).toBeNull()
+    expect(ctx.runner.stepForExecution(ctx.shell.executionFor(ctx.attemptOf(shellRun, 'test')))).toBeNull()
+    const execution = ctx.agent.executionFor(ctx.attemptOf(agentRun, 'plan'))
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.stepForExecution(execution)).toBeNull()
+    expect(ctx.runner.completeExecution(execution, { status: 'done', summary: '' })).toEqual({
+      ok: false,
+      reason: 'not-a-step'
+    })
+    expect(ctx.wf().attempts[ctx.attemptOf(agentRun, 'plan')].status).toBe('running')
+  })
+
+  it('completes the attempt with completedBy tool and the validated data', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('reviewed')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'review')
+    const execution = ctx.agent.executionFor(attemptId)
+    expect(
+      ctx.runner.completeExecution(execution, { status: 'done', summary: 'looks good', data: { verdict: 'pass' } })
+    ).toEqual({ ok: true })
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ status: 'done', completedBy: 'tool' })
+    const attempt = ctx.records.at(-1)?.attempts.find((record) => record.attemptId === attemptId)
+    expect(attempt?.result).toEqual({
+      status: 'done',
+      summary: 'looks good',
+      data: { verdict: 'pass' },
+      completedBy: 'tool'
+    })
+  })
+
+  it('reports an ended execution as already completed', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: '' })
+    expect(ctx.runner.stepForExecution(execution)).toEqual({ attemptId, stepId: 'plan', ended: true })
+    expect(
+      ctx.eventsSince(() =>
+        expect(ctx.runner.completeExecution(execution, { status: 'failed', summary: '' })).toEqual({
+          ok: false,
+          reason: 'already-completed'
+        })
+      )
+    ).toEqual([])
+  })
+
+  it('a needs-input completion keeps the execution live so a later completion resumes', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    expect(ctx.runner.completeExecution(execution, { status: 'needs-input', summary: 'which?' })).toEqual({ ok: true })
+    expect(ctx.runner.stepForExecution(execution)?.ended).toBe(false)
+    expect(ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })).toEqual({ ok: true })
+    expect(ctx.wf().runs[runId].status).toBe('done')
   })
 })

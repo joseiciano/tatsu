@@ -548,3 +548,164 @@ describe('mcp-bridge --config', () => {
     expect(stderr).toContain('cannot read --config')
   })
 })
+
+describe('mcp-bridge complete_step', () => {
+  let stub
+  let bridge
+
+  const inputSchema = {
+    type: 'object',
+    properties: {
+      status: { type: 'string', enum: ['done', 'failed', 'needs-input'], default: 'done' },
+      summary: { type: 'string' },
+      verdict: { enum: ['pass', 'fail'] }
+    },
+    required: ['summary', 'verdict'],
+    additionalProperties: false
+  }
+
+  afterEach(async () => {
+    if (bridge) await bridge.kill()
+    bridge = undefined
+    if (stub) await stub.close()
+    stub = undefined
+  })
+
+  function json(res, status, body) {
+    res.writeHead(status, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(body))
+  }
+
+  function workflowStub({ stepResponses, complete }) {
+    let stepCalls = 0
+    return startStub((req, body, res) => {
+      if (req.url === '/scope') return json(res, 200, { scope: null, browser: { enabled: true, mode: 'full' } })
+      if (req.url === '/workflow/step') {
+        const status = stepResponses[Math.min(stepCalls++, stepResponses.length - 1)]
+        if (status === 200) return json(res, 200, { attemptId: 'att-1', stepId: 'review', inputSchema })
+        if (status === 'disabled') return json(res, 404, { error: 'workflows disabled' })
+        return json(res, status, { error: 'not a workflow step' })
+      }
+      if (req.url === '/workflow/complete') return complete(res, body)
+      json(res, 404, { error: 'not found' })
+    })
+  }
+
+  async function listTools(b) {
+    b.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })
+    await b.next()
+    b.send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
+    return (await b.next()).result.tools
+  }
+
+  async function callTool(b, id, args) {
+    b.send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'complete_step', arguments: args } })
+    return (await b.next()).result
+  }
+
+  const stepCalls = () => stub.captured.filter((c) => c.method === 'GET' && c.url === '/workflow/step')
+
+  it('lists complete_step with the server schema when /workflow/step returns 200', async () => {
+    stub = await workflowStub({ stepResponses: [200], complete: (res) => json(res, 200, { ok: true }) })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    const tool = (await listTools(bridge)).find((t) => t.name === 'complete_step')
+
+    expect(tool.inputSchema).toEqual(inputSchema)
+    expect(stepCalls()).toHaveLength(1)
+    expect(stepCalls()[0].terminalId).toBe('test-terminal')
+  })
+
+  it('retries a first 404 once and lists the tool when the retry finds the step', async () => {
+    stub = await workflowStub({ stepResponses: [404, 200], complete: (res) => json(res, 200, { ok: true }) })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    const tools = await listTools(bridge)
+
+    expect(tools.some((t) => t.name === 'complete_step')).toBe(true)
+    expect(stepCalls()).toHaveLength(2)
+  })
+
+  it('does not list the tool for a non-step terminal and caches that answer', async () => {
+    stub = await workflowStub({ stepResponses: [404], complete: (res) => json(res, 200, { ok: true }) })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    const tools = await listTools(bridge)
+    bridge.send({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
+    const again = (await bridge.next()).result.tools
+
+    expect(tools.some((t) => t.name === 'complete_step')).toBe(false)
+    expect(again.some((t) => t.name === 'complete_step')).toBe(false)
+    expect(tools.some((t) => t.name === 'create_worktree')).toBe(true)
+    expect(stepCalls()).toHaveLength(2)
+  })
+
+  it('does not retry when workflows are disabled', async () => {
+    stub = await workflowStub({ stepResponses: ['disabled', 200], complete: (res) => json(res, 200, { ok: true }) })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    const tools = await listTools(bridge)
+    bridge.send({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
+    const again = (await bridge.next()).result.tools
+
+    expect(tools.some((t) => t.name === 'complete_step')).toBe(false)
+    expect(again.some((t) => t.name === 'complete_step')).toBe(false)
+    expect(stepCalls()).toHaveLength(1)
+  })
+
+  it('does not list the tool when the server errors', async () => {
+    stub = await workflowStub({ stepResponses: [500], complete: (res) => json(res, 200, { ok: true }) })
+    bridge = spawnBridge(stub.port, 'tok')
+
+    const tools = await listTools(bridge)
+
+    expect(tools.some((t) => t.name === 'complete_step')).toBe(false)
+    expect(stepCalls()).toHaveLength(1)
+  })
+
+  it('posts the arguments to /workflow/complete and reports success', async () => {
+    stub = await workflowStub({ stepResponses: [200], complete: (res) => json(res, 200, { ok: true }) })
+    bridge = spawnBridge(stub.port, 'tok')
+    await listTools(bridge)
+
+    const result = await callTool(bridge, 3, { summary: 'fine', verdict: 'pass' })
+
+    expect(result.isError).toBeUndefined()
+    const post = stub.captured.find((c) => c.method === 'POST' && c.url === '/workflow/complete')
+    expect(post.body).toEqual({ summary: 'fine', verdict: 'pass' })
+    expect(post.terminalId).toBe('test-terminal')
+  })
+
+  it('returns a 400 from /workflow/complete as isError with the field errors', async () => {
+    stub = await workflowStub({
+      stepResponses: [200],
+      complete: (res) =>
+        json(res, 400, {
+          error: 'invalid step result',
+          fields: [{ field: 'verdict', message: 'Expected one of: "pass", "fail"' }]
+        })
+    })
+    bridge = spawnBridge(stub.port, 'tok')
+    await listTools(bridge)
+
+    const result = await callTool(bridge, 3, { summary: 'fine', verdict: 'maybe' })
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toContain('invalid step result')
+    expect(result.content[0].text).toContain('verdict: Expected one of: "pass", "fail"')
+  })
+
+  it('returns a 409 from /workflow/complete as isError with the server message', async () => {
+    stub = await workflowStub({
+      stepResponses: [200],
+      complete: (res) => json(res, 409, { error: 'step already completed' })
+    })
+    bridge = spawnBridge(stub.port, 'tok')
+    await listTools(bridge)
+
+    const result = await callTool(bridge, 3, { summary: 'again' })
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0].text).toBe('step already completed')
+  })
+})

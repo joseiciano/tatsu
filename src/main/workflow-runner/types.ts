@@ -2,6 +2,7 @@ import type { Store } from '../store'
 import type { WorkflowDefsLoader } from '../workflow-defs-loader'
 import type { WorkflowRunRecord, WorkflowSnapshotRef } from '../../shared/state/workflows'
 import type { StepDriver, StepDriverKind } from './drivers/types'
+import type { WorkflowOutputSchema } from '../../shared/workflow-def'
 
 export type {
   StepResult,
@@ -54,3 +55,12 @@ export interface RunArtifacts {
   snapshot(args: RunSnapshotRequest): Promise<WorkflowSnapshotRef>
   appendContext(args: { contextPath: string; section: string }): Promise<void>
 }
+
+export interface WorkflowExecutionStep {
+  attemptId: string
+  stepId: string
+  output?: WorkflowOutputSchema
+  ended: boolean
+}
+
+export type CompleteExecutionResult = { ok: true } | { ok: false; reason: 'not-a-step' | 'already-completed' }

@@ -1,17 +1,19 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'http'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { randomBytes, randomUUID } from 'crypto'
 import { addWorktree, listWorktrees, defaultWorktreeDir, type WorktreeInfo } from '../worktree'
 import type { AgentKind } from '../../shared/state/terminals'
 import { AGENT_REGISTRY } from '../../shared/agent-registry'
 import { log } from '../debug'
+import { outputJsonSchema, validateStepOutput, type WorkflowOutputSchema } from '../../shared/workflow-def'
 import {
   type BrowserQueries,
   type BrowserPerms,
   type CallerScope,
   type ControlServerDeps,
-  type ShellQueries
+  type ShellQueries,
+  type WorkflowStepControl
 } from './types'
-import { FULL_CONTROL_BROWSER_PATHS } from './constants'
+import { CONTROL_WORKFLOW_MAX_BODY_BYTES, FULL_CONTROL_BROWSER_PATHS } from './constants'
 
 export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
@@ -33,7 +35,7 @@ export function getControlServerInfo(): { port: number; token: string } | null {
   return serverInfo
 }
 
-export function startControlServer(deps: ControlServerDeps): Promise<void> {
+export function startControlServer(deps: ControlServerDeps): Promise<Server> {
   return new Promise((resolve, reject) => {
     const token = randomBytes(32).toString('hex')
 
@@ -52,7 +54,7 @@ export function startControlServer(deps: ControlServerDeps): Promise<void> {
       if (addr && typeof addr === 'object') {
         serverInfo = { port: addr.port, token }
         log('control', `listening on 127.0.0.1:${addr.port}`)
-        resolve()
+        resolve(server)
       } else {
         reject(new Error('failed to bind control server'))
       }
@@ -451,6 +453,10 @@ async function handleRequest(
     return
   }
 
+  if (path === '/workflow/step' || path === '/workflow/complete') {
+    return handleWorkflowRequest(req, res, path, deps)
+  }
+
   // /scope — returns the caller's current scope. The MCP bridge calls this
   // once at startup so it can adapt tool descriptions (e.g. signalling
   // "create_worktree defaults to this repo" for feature callers) and filter
@@ -465,6 +471,85 @@ async function handleRequest(
 
   res.writeHead(404)
   res.end('not found')
+}
+
+const NOT_A_STEP = { error: 'not a workflow step' }
+const WORKFLOWS_DISABLED = { error: 'workflows disabled' }
+const ALREADY_COMPLETED = { error: 'step already completed' }
+const CALLER_ID_KEYS: ReadonlySet<string> = new Set(['attemptId', 'stepId'])
+
+async function handleWorkflowRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  path: '/workflow/step' | '/workflow/complete',
+  deps: ControlServerDeps
+): Promise<void> {
+  const expected = path === '/workflow/step' ? 'GET' : 'POST'
+  if (req.method !== expected) return sendJson(res, 405, { error: `use ${expected}` })
+  const terminalId = String(req.headers['x-harness-terminal-id'] || '')
+  if (!terminalId) return sendJson(res, 400, { error: 'X-Harness-Terminal-Id header required' })
+  const workflow = activeWorkflow(deps)
+  if (!workflow) return sendJson(res, 404, WORKFLOWS_DISABLED)
+  const step = workflow.stepFor(terminalId)
+  if (!step) return sendJson(res, 404, NOT_A_STEP)
+  if (path === '/workflow/step') {
+    if (step.ended) return sendJson(res, 404, NOT_A_STEP)
+    return sendJson(res, 200, {
+      attemptId: step.attemptId,
+      stepId: step.stepId,
+      inputSchema: outputJsonSchema({ output: step.output })
+    })
+  }
+  if (step.ended) return sendJson(res, 409, ALREADY_COMPLETED)
+
+  const body = await readBoundedJson(req, CONTROL_WORKFLOW_MAX_BODY_BYTES)
+  if (!body.ok) return sendJson(res, body.status, { error: body.error })
+  const validation = validateStepOutput(step.output, withoutCallerIds(body.value, step.output))
+  if (!validation.ok) return sendJson(res, 400, { error: 'invalid step result', fields: validation.errors })
+  if (!activeWorkflow(deps)) return sendJson(res, 404, WORKFLOWS_DISABLED)
+  const result = workflow.complete(terminalId, validation.value)
+  if (result.ok) return sendJson(res, 200, { ok: true })
+  log('control', `workflow completion refused ${result.reason}`)
+  return result.reason === 'already-completed'
+    ? sendJson(res, 409, ALREADY_COMPLETED)
+    : sendJson(res, 404, NOT_A_STEP)
+}
+
+function activeWorkflow(deps: ControlServerDeps): WorkflowStepControl | undefined {
+  const workflow = deps.workflow
+  return workflow?.enabled() ? workflow : undefined
+}
+
+function withoutCallerIds(value: unknown, output: WorkflowOutputSchema | undefined): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
+  const fields = output?.fields ?? {}
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !CALLER_ID_KEYS.has(key) || Object.hasOwn(fields, key))
+  )
+}
+
+type BoundedJson = { ok: true; value: unknown } | { ok: false; status: 400 | 413; error: string }
+
+function readBoundedJson(req: IncomingMessage, maxBytes: number): Promise<BoundedJson> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    let tooLarge = false
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > maxBytes) tooLarge = true
+      if (!tooLarge) chunks.push(chunk)
+    })
+    req.on('end', () => {
+      if (tooLarge) return resolve({ ok: false, status: 413, error: 'request body too large' })
+      try {
+        resolve({ ok: true, value: JSON.parse(Buffer.concat(chunks).toString('utf-8')) })
+      } catch {
+        resolve({ ok: false, status: 400, error: 'invalid JSON' })
+      }
+    })
+    req.on('error', reject)
+  })
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

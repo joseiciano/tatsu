@@ -1,4 +1,4 @@
-import type { WorkflowFeature, WorkflowFeatureInfo } from './types'
+import type { StepOutputStatus, WorkflowFeature, WorkflowFeatureInfo } from './types'
 
 export const WORKFLOW_FEATURES: Readonly<Record<WorkflowFeature, WorkflowFeatureInfo>> = {
   'agent-codex': { phase: 3, message: 'Codex steps ("agent: codex") need phase 3', supported: false },
@@ -20,3 +20,19 @@ export const ALL_WORKFLOW_FEATURES: readonly WorkflowFeature[] = Object.keys(WOR
 )
 
 export const BASELINE_SUPPORTED_FEATURES: readonly WorkflowFeature[] = ALL_WORKFLOW_FEATURES.filter((id) => WORKFLOW_FEATURES[id].supported)
+
+export const STEP_OUTPUT_STATUSES: readonly StepOutputStatus[] = ['done', 'failed', 'needs-input']
+
+export const STEP_OUTPUT_RESERVED_KEYS: ReadonlySet<string> = new Set(['status', 'summary'])
+
+export const STEP_OUTPUT_FORBIDDEN_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype'])
+
+export const STEP_SUMMARY_MAX_CHARS = 16384
+
+export const STEP_OUTPUT_STRING_MAX_CHARS = 16384
+
+export const STEP_OUTPUT_ARRAY_MAX_ITEMS = 256
+
+export const STEP_OUTPUT_MAX_ERRORS = 20
+
+export const STEP_OUTPUT_FIELD_NAME_MAX_CHARS = 64

@@ -3467,6 +3467,11 @@ async function runBoot(): Promise<void> {
         }
       }
     },
+    workflow: {
+      enabled: () => store.getSnapshot().state.settings.labs.workflows,
+      stepFor: (terminalId) => workflowRunner.stepForExecution(terminalId),
+      complete: (terminalId, value) => workflowRunner.completeExecution(terminalId, value)
+    },
     runWorktreeSetup: (ctx) => worktreesFSM.runWorktreeSetup(ctx),
     runPendingPRWorktree: async (params) => {
       // The FSM already handles ensureInitialized (with the prompt) + PR poller
