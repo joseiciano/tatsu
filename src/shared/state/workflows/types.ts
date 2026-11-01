@@ -154,6 +154,7 @@ export interface WorkflowAttemptRecord {
   status: WorkflowAttemptStatus
   startedAt: number
   endedAt?: number
+  executionId?: string
   result?: StepResult
   baseSnapshot?: WorkflowSnapshotRef
   headSnapshot?: WorkflowSnapshotRef

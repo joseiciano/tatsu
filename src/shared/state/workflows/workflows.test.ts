@@ -3,11 +3,15 @@ import {
   initialWorkflows,
   RECENT_RUNS_MAX,
   SUMMARY_PREVIEW_MAX,
+  WORKFLOW_RUN_RECORD_VERSION,
+  hydrateWorkflowRuns,
+  projectRunRecord,
   runsToEvict,
   workflowsReducer,
   type WorkflowAttempt,
   type WorkflowDefinitionSummary,
   type WorkflowRun,
+  type WorkflowRunRecord,
   type WorkflowScope,
   type WorkflowsEvent,
   type WorkflowsState
@@ -601,5 +605,151 @@ describe('runsToEvict', () => {
       }
     }
     expect(runsToEvict(state, 1)).toEqual(['run-a', 'run-b'])
+  })
+})
+
+function runRecord(runId: string, overrides: Partial<WorkflowRunRecord> = {}): WorkflowRunRecord {
+  return {
+    version: WORKFLOW_RUN_RECORD_VERSION,
+    runId,
+    defId: 'personal:one',
+    defHash: 'hash-1',
+    definition: { name: 'one', inputs: {}, steps: [] },
+    inputs: {},
+    worktreePath: '/repo/wt',
+    contextPath: `/repo/wt/.harness/runs/${runId}/context.md`,
+    status: 'done',
+    cursor: 0,
+    steps: {},
+    startedAt: 100,
+    finishedAt: 200,
+    attempts: [],
+    ...overrides
+  }
+}
+
+describe('projectRunRecord', () => {
+  it('projects a record into the run and attempt rows the runtime events would build', () => {
+    const long = `${'a'.repeat(SUMMARY_PREVIEW_MAX - 1)}\u{1F600}tail`
+    const projected = projectRunRecord(
+      runRecord('run-1', {
+        status: 'paused',
+        pausedReason: 'step-failed',
+        finishedAt: undefined,
+        steps: { plan: 'done', build: 'failed', ship: 'pending' },
+        attempts: [
+          {
+            attemptId: 'att-1',
+            stepId: 'plan',
+            n: 1,
+            status: 'done',
+            startedAt: 110,
+            endedAt: 120,
+            result: { status: 'done', summary: long, completedBy: 'tool', costUsd: 0.5 },
+            metrics: { continuations: 0, pauses: [] }
+          },
+          {
+            attemptId: 'att-2',
+            stepId: 'build',
+            n: 1,
+            status: 'running',
+            startedAt: 130,
+            result: { status: 'needs-input', summary: 'waiting', completedBy: 'tool' },
+            metrics: { continuations: 0, pauses: [] }
+          },
+          {
+            attemptId: 'att-3',
+            stepId: 'build',
+            n: 2,
+            status: 'interrupted',
+            startedAt: 140,
+            endedAt: 150,
+            result: { status: 'needs-input', summary: 'asked', completedBy: 'tool' },
+            metrics: { continuations: 0, pauses: [] }
+          }
+        ]
+      })
+    )
+    expect(projected.attempts['att-3']).toEqual({
+      runId: 'run-1',
+      stepId: 'build',
+      n: 2,
+      status: 'interrupted',
+      summaryPreview: '',
+      startedAt: 140,
+      endedAt: 150
+    })
+    expect(projected.run).toEqual({
+      defId: 'personal:one',
+      defHash: 'hash-1',
+      worktreePath: '/repo/wt',
+      status: 'paused',
+      pausedReason: 'step-failed',
+      startedAt: 100,
+      steps: {
+        plan: { status: 'done', attemptIds: ['att-1'] },
+        build: { status: 'failed', attemptIds: ['att-2', 'att-3'] },
+        ship: { status: 'pending', attemptIds: [] }
+      }
+    })
+    expect(projected.attempts['att-1']).toEqual({
+      runId: 'run-1',
+      stepId: 'plan',
+      n: 1,
+      status: 'done',
+      summaryPreview: 'a'.repeat(SUMMARY_PREVIEW_MAX - 1),
+      startedAt: 110,
+      endedAt: 120,
+      completedBy: 'tool',
+      costUsd: 0.5
+    })
+    expect(projected.attempts['att-2']).toEqual({
+      runId: 'run-1',
+      stepId: 'build',
+      n: 1,
+      status: 'running',
+      summaryPreview: '',
+      startedAt: 130
+    })
+  })
+})
+
+describe('hydrateWorkflowRuns', () => {
+  it('keeps every live run plus the newest finished runs up to the cap', () => {
+    const records: WorkflowRunRecord[] = []
+    for (let i = 0; i < RECENT_RUNS_MAX + 3; i++) {
+      const runId = `run-${String(i).padStart(3, '0')}`
+      records.push(
+        runRecord(runId, {
+          finishedAt: 1000 + i,
+          steps: { plan: 'done' },
+          attempts: [
+            {
+              attemptId: `att-${runId}`,
+              stepId: 'plan',
+              n: 1,
+              status: 'done',
+              startedAt: 1,
+              endedAt: 2,
+              metrics: { continuations: 0, pauses: [] }
+            }
+          ]
+        })
+      )
+    }
+    records.push(runRecord('run-live', { status: 'running', finishedAt: undefined, startedAt: 1 }))
+    const hydrated = hydrateWorkflowRuns(records)
+    expect(Object.keys(hydrated.runs)).toHaveLength(RECENT_RUNS_MAX + 1)
+    expect(hydrated.runs['run-live']).toBeDefined()
+    for (const evicted of ['run-000', 'run-001', 'run-002']) {
+      expect(hydrated.runs[evicted]).toBeUndefined()
+      expect(hydrated.attempts[`att-${evicted}`]).toBeUndefined()
+    }
+    expect(hydrated.runs['run-003']).toBeDefined()
+    expect(hydrated.attempts['att-run-003']).toBeDefined()
+  })
+
+  it('returns empty maps for no records', () => {
+    expect(hydrateWorkflowRuns([])).toEqual({ runs: {}, attempts: {} })
   })
 })
