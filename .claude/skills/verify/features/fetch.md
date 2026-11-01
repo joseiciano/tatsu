@@ -19,7 +19,7 @@ Preconditions:
 
 - **Before.** `git -C "$RUN/fixture/demo-repo" rev-parse refs/remotes/origin/main` differs from `git -C "$RUN/fixture/origin.git" rev-parse main`.
 - **Fetch.** Choose button `Fetch`. Within 10 s the first command prints the second's SHA; no text starting `Fetch failed` appears.
-- **Run.** `node .claude/skills/verify/scripts/drive.mjs "$RUN" .claude/skills/verify/scripts/journeys/fetch.mjs`.
+- **Run.** `node .claude/skills/verify/scripts/code-diff/drive.mjs "$RUN" .claude/skills/verify/scripts/code-diff/journeys/fetch.mjs`.
 
 ## Gotchas
 

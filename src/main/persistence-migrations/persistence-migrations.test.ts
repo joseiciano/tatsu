@@ -437,3 +437,144 @@ describe('v6 → v7: legacy theme → themeMode + themeLight/themeDark', () => {
     expect(c.theme).toBeUndefined()
   })
 })
+
+describe('v7 → v8: introduce harnessConfig', () => {
+  it('seeds an empty version-1 harnessConfig when the key is absent', () => {
+    const c: AnyConfig = { repoRoots: ['/a/repo'] }
+    runOne(7, c)
+    expect(c.harnessConfig).toEqual({ version: 1, resources: [] })
+  })
+
+  it('preserves an existing version-1 harnessConfig byte-for-byte, including resource content and alias metadata', () => {
+    const existing = {
+      version: 1,
+      resources: [
+        {
+          id: 'res-1',
+          agentKind: 'claude',
+          resourceType: 'skills',
+          aliasResourceTypes: ['commands'],
+          relativePath: 'my-skill/SKILL.md',
+          label: 'My Skill',
+          content: '# My Skill\n\nDo the thing.',
+          hash: 'abc123',
+          updatedAt: 1700000000000
+        }
+      ]
+    }
+    const c: AnyConfig = { harnessConfig: JSON.parse(JSON.stringify(existing)) }
+    runOne(7, c)
+    expect(c.harnessConfig).toEqual(existing)
+  })
+
+  it('does not overwrite a present malformed harnessConfig object', () => {
+    const malformed = { not: 'a valid shape' }
+    const c: AnyConfig = { harnessConfig: malformed }
+    runOne(7, c)
+    expect(c.harnessConfig).toBe(malformed)
+  })
+
+  it('does not overwrite a present harnessConfig with an unknown nested version', () => {
+    const future = { version: 2, resources: [], somethingNew: true }
+    const c: AnyConfig = { harnessConfig: future }
+    runOne(7, c)
+    expect(c.harnessConfig).toBe(future)
+  })
+
+  it('end-to-end: a pristine config converges on an empty harnessConfig at the current schema version', () => {
+    const c: AnyConfig = { repoRoot: '/Users/mike/projects/harness' }
+    runMigrations(c)
+    expect(c.harnessConfig).toEqual({ version: 1, resources: [] })
+    expect(c.schemaVersion).toBe(SCHEMA_VERSION)
+  })
+})
+
+describe('v8 → v9: backfill agentKind on json-claude tabs', () => {
+  function jsonTab(id: string): Record<string, unknown> {
+    return { id, type: 'json-claude', label: 'Chat', sessionId: id }
+  }
+
+  it('sets agentKind claude on json-claude tabs that lack it', () => {
+    const c: AnyConfig = {
+      schemaVersion: 8,
+      panes: {
+        '/a/repo1': {
+          '/a/repo1': {
+            type: 'leaf',
+            id: 'p1',
+            tabs: [jsonTab('chat-1'), tab('agent-1', 'agent', 'claude'), tab('sh-1', 'shell')],
+            activeTabId: 'chat-1'
+          }
+        }
+      }
+    }
+    runOne(8, c)
+    const nested = c.panes as Record<string, Record<string, PersistedPaneNode>>
+    const tabs = (nested['/a/repo1']['/a/repo1'] as PersistedPaneNode & { type: 'leaf' }).tabs
+    expect(tabs[0].agentKind).toBe('claude')
+    expect(tabs[1].agentKind).toBe('claude')
+    expect(tabs[2].agentKind).toBeUndefined()
+  })
+
+  it('backfills json-claude tabs nested inside split nodes', () => {
+    const c: AnyConfig = {
+      schemaVersion: 8,
+      panes: {
+        '/a/repo1': {
+          '/a/repo1': {
+            type: 'split',
+            id: 's1',
+            direction: 'horizontal',
+            ratio: 0.5,
+            children: [
+              { type: 'leaf', id: 'l1', tabs: [jsonTab('chat-a')], activeTabId: 'chat-a' },
+              { type: 'leaf', id: 'l2', tabs: [jsonTab('chat-b')], activeTabId: 'chat-b' }
+            ]
+          }
+        }
+      }
+    }
+    runOne(8, c)
+    const nested = c.panes as Record<string, Record<string, PersistedPaneNode>>
+    const root = nested['/a/repo1']['/a/repo1'] as { type: 'split'; children: PersistedPaneNode[] }
+    const left = root.children[0] as { tabs: PersistedTab[] }
+    const right = root.children[1] as { tabs: PersistedTab[] }
+    expect(left.tabs[0].agentKind).toBe('claude')
+    expect(right.tabs[0].agentKind).toBe('claude')
+  })
+
+  it('is a no-op on an already-migrated config', () => {
+    const c: AnyConfig = {
+      schemaVersion: 8,
+      panes: {
+        '/a/repo1': {
+          '/a/repo1': {
+            type: 'leaf',
+            id: 'p1',
+            tabs: [{ id: 'chat-1', type: 'json-claude', label: 'Chat', sessionId: 'chat-1', agentKind: 'claude' }],
+            activeTabId: 'chat-1'
+          }
+        }
+      }
+    }
+    const before = JSON.parse(JSON.stringify(c))
+    runOne(8, c)
+    expect(c).toEqual(before)
+  })
+
+  it('end-to-end: a v0 config with a json-claude tab converges with agentKind claude', () => {
+    const c: AnyConfig = {
+      repoRoot: '/a/repo1',
+      terminalTabs: {
+        '/a/repo1': [
+          { id: 'chat-1', type: 'json-claude', label: 'Chat' }
+        ]
+      }
+    }
+    runMigrations(c)
+    const nested = c.panes as Record<string, Record<string, PersistedPaneNode>>
+    const tabs = (nested['/a/repo1']['/a/repo1'] as PersistedPaneNode & { type: 'leaf' }).tabs
+    expect(tabs[0].agentKind).toBe('claude')
+    expect(c.schemaVersion).toBe(SCHEMA_VERSION)
+  })
+})

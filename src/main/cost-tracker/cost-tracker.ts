@@ -116,7 +116,7 @@ export class CostTracker {
   private parseAndDispatchStop(ev: StopEvent): void {
     try {
       const entry = this.parseIncremental(ev.sessionId, ev.transcriptPath)
-      if (!entry) return
+      if (!entry || Object.keys(entry.byModel).length === 0) return
       const usage: SessionUsage = {
         sessionId: ev.sessionId,
         transcriptPath: ev.transcriptPath,

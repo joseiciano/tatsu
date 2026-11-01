@@ -66,6 +66,7 @@ export const initialSettings: SettingsState = {
   viewerLogin: null,
   harnessStarred: null,
   autoUpdateEnabled: true,
+  experimentalChatAgentsEnabled: false,
   harnessSystemPromptEnabled: true,
   harnessSystemPrompt: '',
   harnessSystemPromptMain: '',
@@ -76,6 +77,8 @@ export const initialSettings: SettingsState = {
   browserToolsEnabled: true,
   browserToolsMode: 'full',
   defaultClaudeTabType: 'xterm',
+  defaultOpencodeTabType: 'xterm',
+  defaultCodexTabType: 'xterm',
   chatPromotionDismissed: false,
   autoApprovePermissions: false,
   autoApproveSteerInstructions: '',
@@ -89,5 +92,7 @@ export const initialSettings: SettingsState = {
   expandedDiagnosticLoggingEnabled: false,
   prReviewPrompt: DEFAULT_PR_REVIEW_PROMPT,
   dismissedAnnouncementIds: [],
-  announcementsMuted: false
+  announcementsMuted: false,
+  harnessConfigRoots: {},
+  harnessConfigSourceDir: null
 }

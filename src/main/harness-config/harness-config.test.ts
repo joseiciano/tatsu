@@ -1,0 +1,2566 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync
+} from 'fs'
+import { createHash } from 'crypto'
+import { tmpdir } from 'os'
+import { basename, dirname, join, resolve } from 'path'
+
+import { renderTemplates } from '../../shared/harness-template-render'
+import { createHarnessConfigService, type HarnessConfigService } from '.'
+import {
+  createCommandFromSkill,
+  createSkillFromCommand,
+  extractFrontMatterDescription,
+  slugifyLogicalName
+} from './conversion'
+
+
+type AnyRecord = Record<string, unknown>
+type Scope = { agentKind: string; resourceType: string }
+
+type FileRef = {
+  id: string
+  agentKind: string
+  resourceType: string
+  canonicalResourceType: string
+  aliasResourceTypes: string[]
+  label: string
+  relativePath: string
+  absolutePath: string
+  hash: string
+  existsOnDisk: boolean
+  managed: boolean
+  updatedAt: number
+  linkedFrom?: string
+  templateRef?: string
+}
+type RefSeed = Pick<FileRef, 'id' | 'agentKind' | 'relativePath'> & Partial<Omit<FileRef, 'id' | 'agentKind' | 'relativePath'>>
+
+type Resolver = AnyRecord
+type Comparison = {
+  scope: Scope
+  status: string
+  configOnly: FileRef[]
+  changed: AnyRecord[]
+  renderErrors?: Array<{ templateRef: string; message: string; held: FileRef[] }>
+  fragmentErrors?: Array<{ id: string; label: string; relativePath: string; message: string; held?: FileRef }>
+  fragmentEdits?: Array<{ id: string; label: string; relativePath: string; fragments: string[] }>
+}
+type Plan = Comparison & {
+  planId: string
+  direction: string
+  detach?: string[]
+  generatedAt: number
+  fingerprint: string
+}
+type MutationPlan = { planId: string; [key: string]: unknown }
+type ApplyResult = { applied: AnyRecord[]; requiresRescan: boolean; [key: string]: unknown }
+type Conversion = { status: string; ref: FileRef; [key: string]: unknown }
+
+type TestService = {
+  scan(scope: Scope): FileRef[]
+  readFile(id: string): Promise<AnyRecord> | AnyRecord
+  planSync(scope: Scope): Comparison
+  planSyncToDisk(scope: Scope, options?: { detach?: string[] }): Plan
+  prepareCreate(scope: Scope, name: string, content: string): MutationPlan
+  prepareUpdate(scope: Scope, id: string, content: string): MutationPlan
+  prepareDelete(scope: Scope, id: string): MutationPlan
+  prepareCommandFromSkill(scope: Scope, id: string): Conversion
+  prepareSkillFromCommand(scope: Scope, id: string): Conversion
+  applyPlan(request: AnyRecord): Promise<ApplyResult>
+  scopesForFragment(name?: string): Scope[]
+  filesUsingFragment(name: string): AnyRecord[]
+  resolveFragmentEdit(scope: Scope, id: string, fragment: string, resolution: string): Promise<AnyRecord>
+}
+
+type FsAdapter = AnyRecord
+type FixtureOptions = {
+  root?: string
+  roots?: Record<string, string>
+  resolvers?: Record<string, AnyRecord>
+  fs?: AnyRecord
+  clock?: () => number
+  uuid?: () => string
+  log?: (...args: unknown[]) => void
+  deps?: AnyRecord
+}
+
+type Fixture = {
+  root: string
+  roots: Record<string, string>
+  resolvers: Record<string, AnyRecord>
+  fs: FsAdapter
+  service: TestService
+}
+
+const NOW = 1_759_000_000_000
+let root: string
+let nextId = 0
+
+const unsupportedScopes: Scope[] = [
+  { agentKind: 'pi', resourceType: 'agents' },
+  { agentKind: 'pi', resourceType: 'skills' },
+  { agentKind: 'pi', resourceType: 'commands' },
+  { agentKind: 'codex', resourceType: 'commands' }
+]
+const managedScopes: Scope[] = [
+  { agentKind: 'claude', resourceType: 'agents' },
+  { agentKind: 'claude', resourceType: 'skills' },
+  { agentKind: 'claude', resourceType: 'commands' },
+  { agentKind: 'codex', resourceType: 'agents' },
+  { agentKind: 'codex', resourceType: 'skills' },
+  { agentKind: 'opencode', resourceType: 'agents' },
+  { agentKind: 'opencode', resourceType: 'skills' },
+  { agentKind: 'opencode', resourceType: 'commands' }
+]
+
+
+
+function hashBytes(value: string | Buffer): string {
+  return createHash('sha256').update(value).digest('hex')
+}
+function physicalId(agentKind: string, rootKey: string, relativePath: string): string {
+  return hashBytes(Buffer.from(`${agentKind}\u0000${rootKey}\u0000${relativePath}`, 'utf8'))
+}
+
+
+function pathFor(rootPath: string, path: string): string {
+  return join(rootPath, ...path.split('/'))
+}
+
+function put(rootPath: string, path: string, content: string | Buffer): string {
+  const target = pathFor(rootPath, path)
+  mkdirSync(dirname(target), { recursive: true })
+  writeFileSync(target, content)
+  return target
+}
+
+function resolver(
+  agentKind: string,
+  resourceType: string,
+  rootKey: string,
+  pattern: RegExp,
+  options: AnyRecord = {}
+): Resolver {
+  return {
+    supported: true,
+    reason: options.reason ?? 'fixture unsupported',
+    rootKey,
+    identity: options.identity ?? `${agentKind}-${resourceType}-fixture-v1`,
+    verificationSource: options.verificationSource ?? 'test fixture',
+    canonicalResourceType: options.canonicalResourceType ?? resourceType,
+    aliasResourceTypes: options.aliasResourceTypes ?? [],
+    aliasSourceResourceTypes: options.aliasSourceResourceTypes ?? [],
+    maxDepth: options.maxDepth ?? Number.POSITIVE_INFINITY,
+    matches: options.matches ?? ((relativePath: string) => pattern.test(relativePath)),
+    nameToRelativePath:
+      options.nameToRelativePath ?? ((name: string) => `${name}.md`),
+    pattern
+  }
+}
+
+function makeFsAdapter(overrides: AnyRecord = {}): FsAdapter {
+  return {
+    readdirSync,
+    lstatSync,
+    statSync,
+    readFileSync,
+    writeFileSync,
+    appendFileSync,
+    renameSync,
+    unlinkSync,
+    mkdirSync,
+    existsSync,
+    realpathSync: (value: string) => resolve(value),
+    readlinkSync: (value: string) => readlinkSync(value),
+    symlinkSync: (target: string, value: string) => symlinkSync(target, value),
+    ...overrides
+  }
+}
+
+function makeFixture(options: FixtureOptions = {}): Fixture {
+  root = options.root ?? mkdtempSync(join(tmpdir(), 'harness-config-test-'))
+  const roots: Record<string, string> = options.roots ?? {}
+  const resolvers: Record<string, AnyRecord> = options.resolvers ?? {}
+  const fs = makeFsAdapter(options.fs)
+  const clock = options.clock ?? (() => NOW)
+  const uuid = options.uuid ?? (() => `plan-${++nextId}`)
+  const resolverMap: Record<string, AnyRecord> = { ...resolvers }
+  const deps: AnyRecord = {
+    knownRoots: () => roots,
+    resolvers: resolverMap,
+    clock,
+    uuid,
+    filesystem: fs,
+    fs,
+    log: options.log ?? vi.fn(),
+    formatErr: (error: unknown) => String(error),
+    ...options.deps
+  }
+  const service = createHarnessConfigService(deps as unknown as Parameters<typeof createHarnessConfigService>[0]) as unknown as TestService
+  return { root, roots, resolvers: resolverMap, fs, service }
+}
+
+function addResolver(
+  fixture: Fixture,
+  scope: Scope,
+  key: string,
+  pattern = /\.md$/,
+  options: AnyRecord = {}
+): Resolver {
+  const resolverDescriptor = resolver(
+    scope.agentKind,
+    scope.resourceType,
+    key,
+    pattern,
+    options
+  )
+  fixture.roots[key] = join(fixture.root, key.replace(/[^a-z0-9-]/gi, '-'))
+  mkdirSync(fixture.roots[key], { recursive: true })
+  const harness = fixture.resolvers[scope.agentKind] ?? {
+    agentKind: scope.agentKind,
+    identity: options.harnessIdentity ?? `${scope.agentKind}-fixture-v1`,
+    resources: {}
+  }
+  const resources = (harness.resources ?? {}) as Record<string, Resolver>
+  resources[scope.resourceType] = resolverDescriptor
+  harness.resources = resources
+  fixture.resolvers[scope.agentKind] = harness
+  return resolverDescriptor
+}
+function resourceDescriptor(fixture: Fixture, scope: Scope): AnyRecord {
+  const harness = fixture.resolvers[scope.agentKind]
+  const resources = harness.resources
+  if (!resources || typeof resources !== 'object') throw new Error('missing resolver resources')
+  const descriptor = (resources as Record<string, unknown>)[scope.resourceType]
+  if (!descriptor || typeof descriptor !== 'object') throw new Error('missing resolver descriptor')
+  return descriptor as AnyRecord
+}
+
+function expectStructuredCode(error: unknown, code: string): void {
+  expect(error).toMatchObject({ code })
+}
+
+async function rejectsCode(action: () => unknown | Promise<unknown>, code: string): Promise<void> {
+  try {
+    await action()
+    throw new Error(`expected ${code} rejection`)
+  } catch (error) {
+    expectStructuredCode(error, code)
+  }
+}
+
+function backupFiles(directory: string): string[] {
+  return readdirSync(directory).filter((name) => name.includes('.x-backup-'))
+}
+
+function tempFiles(directory: string): string[] {
+  return readdirSync(directory).filter((name) => name.includes('.tmp-') || name.includes('.harness-config-'))
+}
+
+function snapshotTree(directory: string): Record<string, string> {
+  const snapshot: Record<string, string> = {}
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of readdirSync(dir)) {
+      const entryPath = join(dir, name)
+      const relative = prefix ? `${prefix}/${name}` : name
+      const info = lstatSync(entryPath)
+      if (info.isSymbolicLink()) {
+        snapshot[relative] = '<symlink>'
+      } else if (info.isDirectory()) {
+        walk(entryPath, relative)
+      } else {
+        snapshot[relative] = readFileSync(entryPath).toString('base64')
+      }
+    }
+  }
+  walk(directory, '')
+  return snapshot
+}
+
+function fragmentSha(body: string): string {
+  return hashBytes(Buffer.from(body, 'utf8')).slice(0, 12)
+}
+
+function fragmentSection(name: string, body: string, sha = fragmentSha(body)): string {
+  return `<!-- tatsu:fragment ${name} sha=${sha} -->\n${body}\n<!-- /tatsu:fragment ${name} -->`
+}
+
+type ToneSource = { templates: never[]; fragments: Array<{ name: string; content: string }>; errors: never[] }
+
+function toneSource(content = 'Be brief.'): ToneSource {
+  return { templates: [], fragments: [{ name: 'tone', content }], errors: [] }
+}
+
+function toneDeps(source: ToneSource): AnyRecord {
+  return { loadTemplateSource: () => source }
+}
+
+const TONE_PLACEHOLDER = '{{fragment:tone}}\n'
+const toneExpanded = (body = 'Be brief.'): string => `${fragmentSection('tone', body)}\n`
+
+beforeEach(() => {
+  nextId = 0
+})
+
+afterEach(() => {
+  if (root) rmSync(root, { recursive: true, force: true })
+})
+
+  it('uses built-in production resolvers for all supported pairs and rejects Codex commands', () => {
+    const fixture = makeFixture()
+    const fixtureRoot = fixture.root
+    const home = join(fixtureRoot, 'home')
+    const claudeHome = join(home, '.claude')
+    const codexHome = join(home, '.codex')
+    const agentsHome = join(home, '.agents')
+    const opencodeHome = join(home, '.config', 'opencode')
+    const roots: Record<string, string> = {
+      claudeAgents: join(claudeHome, 'agents'),
+      claudeSkills: join(claudeHome, 'skills'),
+      claudeCommands: join(claudeHome, 'commands'),
+      codexHome,
+      codexSkills: join(agentsHome, 'skills'),
+      opencodeAgents: join(opencodeHome, 'agents'),
+      opencodeSkills: join(opencodeHome, 'skills'),
+      opencodeCommands: join(opencodeHome, 'commands')
+    }
+    const production = makeFixture({
+      roots,
+      deps: {
+        homeDir: home,
+        env: { HOME: home, CODEX_HOME: codexHome }
+      }
+    })
+    rmSync(fixtureRoot, { recursive: true, force: true })
+    put(roots.claudeAgents, 'built-in.md', 'claude agent')
+    put(roots.claudeSkills, 'built-in/SKILL.md', 'claude skill')
+    put(roots.claudeCommands, 'built-in.md', 'claude command')
+    put(roots.codexHome, 'AGENTS.md', 'codex agent')
+    put(roots.codexSkills, 'built-in/SKILL.md', 'codex skill')
+    put(roots.opencodeAgents, 'built-in.md', 'opencode agent')
+    put(roots.opencodeSkills, 'built-in/SKILL.md', 'opencode skill')
+    put(roots.opencodeCommands, 'built-in.md', 'opencode command')
+
+    for (const scope of managedScopes) {
+      expect(production.service.scan(scope)).not.toEqual([])
+    }
+    expect(() => production.service.scan({ agentKind: 'codex', resourceType: 'commands' })).toThrow()
+  })
+  it('honors Claude config override while rejecting ambiguous OpenCode overrides', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-env-test-'))
+    const home = join(fixtureRoot, 'home')
+    const claudeOverride = join(fixtureRoot, 'claude-config')
+    const opencodeOverride = join(fixtureRoot, 'opencode-config')
+    const standardOpenCodeSkills = join(home, '.config', 'opencode', 'skills')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      deps: {
+        homeDir: home,
+        env: {
+          HOME: home,
+          CLAUDE_CONFIG_DIR: claudeOverride,
+          OPENCODE_CONFIG_DIR: opencodeOverride
+        }
+      }
+    })
+    put(claudeOverride, 'agents/override.md', 'agent')
+    put(claudeOverride, 'skills/override/SKILL.md', 'skill')
+    put(claudeOverride, 'commands/override.md', 'command')
+
+    for (const scope of [
+      { agentKind: 'claude', resourceType: 'agents' },
+      { agentKind: 'claude', resourceType: 'skills' },
+      { agentKind: 'claude', resourceType: 'commands' }
+    ]) {
+      const refs = fixture.service.scan(scope)
+      expect(refs).not.toEqual([])
+      expect(refs.every((ref: FileRef) => ref.absolutePath.startsWith(claudeOverride))).toBe(true)
+    }
+    expect(() => fixture.service.scan({ agentKind: 'opencode', resourceType: 'agents' })).toThrow()
+    expect(() => fixture.service.scan({ agentKind: 'opencode', resourceType: 'skills' })).toThrow()
+    expect(() => fixture.service.scan({ agentKind: 'opencode', resourceType: 'commands' })).toThrow()
+  })
+
+  it('uses standard OpenCode skills root without override', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-opencode-std-'))
+    const home = join(fixtureRoot, 'home')
+    const standardOpenCodeSkills = join(home, '.config', 'opencode', 'skills')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      deps: { homeDir: home, env: { HOME: home } }
+    })
+    put(standardOpenCodeSkills, 'standard/SKILL.md', 'standard skill')
+    const refs = fixture.service.scan({ agentKind: 'opencode', resourceType: 'skills' })
+    expect(refs).toHaveLength(1)
+    expect(refs.every((ref: FileRef) => ref.absolutePath.startsWith(standardOpenCodeSkills))).toBe(true)
+  })
+
+describe('harness-config inventory and resolver boundaries', () => {
+  it.each([
+    ['claude', 'agents', 'claude-agents', /(?:^|\/)[^/]+\.md$/],
+    ['claude', 'skills', 'claude-skills', /(?:^|\/)SKILL\.md$/],
+    ['claude', 'commands', 'claude-commands', /(?:^|\/)[^/]+\.md$/],
+    ['codex', 'agents', 'codex-agents', /AGENTS(?:\.override)?\.md$/],
+    ['codex', 'skills', 'codex-skills', /(?:^|\/)SKILL\.md$/],
+    ['opencode', 'agents', 'opencode-agents', /(?:^|\/)[^/]+\.md$/],
+    ['opencode', 'skills', 'opencode-skills', /(?:^|\/)SKILL\.md$/],
+    ['opencode', 'commands', 'opencode-commands', /(?:^|\/)[^/]+\.md$/]
+  ])(
+    'scans supported %s/%s only from its injected known root and declared entrypoint',
+    (agentKind, resourceType, rootKey, pattern) => {
+      const fixture = makeFixture()
+      const scope = { agentKind, resourceType }
+      addResolver(fixture, scope, rootKey, pattern)
+      put(fixture.roots[rootKey], 'nested/keep.md', 'managed')
+      put(fixture.roots[rootKey], 'nested/SKILL.md', 'skill')
+      put(fixture.roots[rootKey], 'adjacent.txt', 'ignore')
+      put(fixture.roots[rootKey], 'nested/SKILL.md.x-backup-20260926T000000000Z', 'backup')
+
+      const refs = fixture.service.scan(scope)
+      expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(
+        refs.map((ref: FileRef) => ref.relativePath).sort()
+      )
+      expect(refs.every((ref: FileRef) => ref.absolutePath.startsWith(fixture.roots[rootKey]))).toBe(true)
+      expect(refs.some((ref: FileRef) => ref.relativePath.includes('backup'))).toBe(false)
+      expect(refs.some((ref: FileRef) => ref.relativePath === 'adjacent.txt')).toBe(false)
+    }
+  )
+
+  it.each(unsupportedScopes)(
+    'rejects unsupported %s/%s without synthesizing a path',
+    (scope) => {
+      const fixture = makeFixture()
+      expect(() => fixture.service.scan(scope)).toThrow()
+      expect(() => fixture.service.planSync(scope)).toThrow()
+    }
+  )
+
+  it('rejects an unavailable, empty, or ambiguous root instead of falling back', () => {
+    const fixture = makeFixture({ roots: { one: join(fixtureRootPlaceholder(), 'missing') } })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    fixture.resolvers.claude = {
+      agentKind: 'claude',
+      identity: 'claude-fixture-v1',
+      resources: { agents: resolver('claude', 'agents', 'one', /\.md$/) }
+    }
+    fixture.roots.one = join(fixture.root, 'missing')
+
+    expect(() => fixture.service.scan(scope)).toThrow()
+    expect(() => fixture.service.scan({ agentKind: 'pi', resourceType: 'agents' })).toThrow()
+  })
+
+  it('follows symlinked directories read-only and skips links outside the resolver pattern', () => {
+    const fixture = makeFixture({ fs: makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) }) })
+    const scope = { agentKind: 'claude', resourceType: 'skills' }
+    addResolver(fixture, scope, 'skills', /(?:^|\/)SKILL\.md$/)
+    put(fixture.roots.skills, 'real/SKILL.md', 'real')
+    const outside = join(fixture.root, 'outside')
+    mkdirSync(outside)
+    put(outside, 'SKILL.md', 'secret')
+    symlinkSync(join(outside, 'SKILL.md'), join(fixture.roots.skills, 'escape.md'))
+    symlinkSync(outside, join(fixture.roots.skills, 'linked-dir'))
+
+    const refs = fixture.service.scan(scope)
+    expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(['linked-dir/SKILL.md', 'real/SKILL.md'])
+    expect(refs.find((ref: FileRef) => ref.relativePath === 'linked-dir/SKILL.md')?.linkedFrom).toBe(realpathSync.native(outside))
+    expect(refs.find((ref: FileRef) => ref.relativePath === 'real/SKILL.md')?.linkedFrom).toBeUndefined()
+  })
+
+  it('sorts by POSIX relative path and reports files no template claims as unmanaged', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'commands', /\.md$/)
+    put(fixture.roots.commands, 'z.md', 'z')
+    put(fixture.roots.commands, 'a.md', 'a')
+    put(fixture.roots.commands, 'nested/m.md', 'm')
+
+    const refs = fixture.service.scan(scope)
+    expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(['a.md', 'nested/m.md', 'z.md'])
+    expect(refs.every((ref: FileRef) => ref.existsOnDisk === true && ref.managed === false)).toBe(true)
+  })
+})
+
+describe('harness-config hashes, identities, aliases, and reads', () => {
+  it('hashes exact bytes, preserving Unicode and newline distinctions', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    addResolver(fixture, scope, 'commands', /\.md$/)
+    const content = Buffer.from('é\r\nline\n', 'utf8')
+    put(fixture.roots.commands, 'unicode.md', content)
+
+    const [ref] = fixture.service.scan(scope)
+    expect(ref.hash).toBe(hashBytes(content))
+    expect(await fixture.service.readFile(ref.id)).toMatchObject({
+      content: content.toString('utf8'),
+      hash: hashBytes(content)
+    })
+  })
+
+  it('keeps physical identity stable across fresh scans and independent of logical view', () => {
+    const fixture = makeFixture()
+    const skills = { agentKind: 'claude', resourceType: 'skills' }
+    const commands = { agentKind: 'claude', resourceType: 'commands' }
+    addResolver(fixture, skills, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      aliasResourceTypes: ['commands']
+    })
+    addResolver(fixture, commands, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      aliasResourceTypes: ['commands'],
+      aliases: [{ resourceType: 'commands', canonicalResourceType: 'skills' }]
+    })
+    put(fixture.roots['claude-skills'], 'format/SKILL.md', '# skill')
+    const skillRef = fixture.service.scan(skills)[0]
+    const commandRef = fixture.service.scan(commands)[0]
+    expect(commandRef.id).toBe(skillRef.id)
+    expect(commandRef.absolutePath).toBe(skillRef.absolutePath)
+    expect(commandRef.canonicalResourceType).toBe('skills')
+    expect(commandRef.aliasResourceTypes).toEqual(['commands'])
+    expect(fixture.service.scan(skills)[0].id).toBe(skillRef.id)
+  })
+
+  it('uses fresh recognized inventory for reads and never trusts a renderer path', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const target = put(fixture.roots.agents, 'agent.md', 'safe')
+    const [ref] = fixture.service.scan(scope)
+    appendFileSync(target, '-changed')
+
+    expect(await fixture.service.readFile(ref.id)).toMatchObject({
+      content: 'safe-changed',
+      hash: hashBytes(Buffer.from('safe-changed'))
+    })
+  })
+
+  it('reads an OpenCode agent while a Claude skills root holds a skills-prefixed folder', async () => {
+    const fixture = makeFixture()
+    const claudeSkills = { agentKind: 'claude', resourceType: 'skills' }
+    const opencodeAgents = { agentKind: 'opencode', resourceType: 'agents' }
+    addResolver(fixture, claudeSkills, 'skills', /(?:^|\/)SKILL\.md$/)
+    addResolver(fixture, opencodeAgents, 'opencode-agents', /\.md$/)
+    put(fixture.roots.skills, 'skills-used/SKILL.md', 'skill')
+    put(fixture.roots['opencode-agents'], 'reviewer.md', 'agent')
+
+    const [agent] = fixture.service.scan(opencodeAgents)
+    const [skill] = fixture.service.scan(claudeSkills)
+    expect(await fixture.service.readFile(agent.id)).toMatchObject({ content: 'agent' })
+    expect(await fixture.service.readFile(skill.id)).toMatchObject({ content: 'skill' })
+  })
+
+  it('reads from a healthy scope when an earlier scope fails to scan, and reports that failure for unknown ids', async () => {
+    let unreadable = ''
+    const fixture = makeFixture({
+      fs: {
+        readFileSync: (path: string, ...rest: unknown[]) => {
+          if (path === unreadable) throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
+          return (readFileSync as (...args: unknown[]) => unknown)(path, ...rest)
+        }
+      }
+    })
+    const claudeSkills = { agentKind: 'claude', resourceType: 'skills' }
+    const opencodeAgents = { agentKind: 'opencode', resourceType: 'agents' }
+    addResolver(fixture, claudeSkills, 'skills', /(?:^|\/)SKILL\.md$/)
+    addResolver(fixture, opencodeAgents, 'opencode-agents', /\.md$/)
+    unreadable = put(fixture.roots.skills, 'locked/SKILL.md', 'locked')
+    put(fixture.roots['opencode-agents'], 'reviewer.md', 'agent')
+    const [agent] = fixture.service.scan(opencodeAgents)
+
+    expect(await fixture.service.readFile(agent.id)).toMatchObject({ content: 'agent' })
+    await rejectsCode(() => fixture.service.readFile('missing-id'), 'read-failed')
+  })
+
+  it('skips a walked entry with an unsafe name and still inventories the rest of the scope', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    writeFileSync(join(fixture.roots.agents, 'a\\b.md'), 'unsafe')
+    put(fixture.roots.agents, 'ok.md', 'ok')
+
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toEqual(['ok.md'])
+  })
+})
+
+describe('scoped comparison and non-mutating actionable plans', () => {
+  function setupComparison(deps: AnyRecord = {}): Fixture {
+    const fixture = makeFixture({ deps })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    return fixture
+  }
+
+  it('isolates comparisons and plans to exact harness/resource scope', () => {
+    const fixture = makeFixture({ deps: toneDeps(toneSource()) })
+    const claude = { agentKind: 'claude', resourceType: 'agents' }
+    const codex = { agentKind: 'codex', resourceType: 'agents' }
+    addResolver(fixture, claude, 'claude-agents', /\.md$/)
+    addResolver(fixture, codex, 'codex-agents', /\.md$/)
+    put(fixture.roots['claude-agents'], 'one.md', TONE_PLACEHOLDER)
+    put(fixture.roots['codex-agents'], 'other.md', 'other')
+
+    const comparison = fixture.service.planSync(claude)
+    expect(comparison.scope).toEqual(claude)
+    expect(comparison.status).toBe('conflict')
+    expect(comparison.changed.map((pair) => [(pair.disk as FileRef).agentKind, (pair.disk as FileRef).relativePath])).toEqual([
+      ['claude', 'one.md']
+    ])
+    expect(fixture.service.planSync(codex)).toMatchObject({ scope: codex, status: 'synced', configOnly: [], changed: [] })
+
+    expect(fixture.service.planSyncToDisk(claude).changed).toHaveLength(1)
+    expect(fixture.service.planSyncToDisk(codex).changed).toEqual([])
+  })
+
+  it('generates a sync plan without writes and keeps executable content private', () => {
+    const fixture = setupComparison(toneDeps(toneSource()))
+    const target = put(fixture.roots.agents, 'disk.md', TONE_PLACEHOLDER)
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    const sync = fixture.service.planSyncToDisk(scope)
+
+    expect(sync.direction).toBe('sync-to-disk')
+    expect(sync.changed).toHaveLength(1)
+    expect(sync).not.toHaveProperty('operations')
+    expect(sync).not.toHaveProperty('content')
+    expect(readFileSync(target, 'utf8')).toBe(TONE_PLACEHOLDER)
+  })
+
+  it('deduplicates Claude alias records and retains canonical physical identity in plans', () => {
+    const fixture = makeFixture({ deps: toneDeps(toneSource()) })
+    const skills = { agentKind: 'claude', resourceType: 'skills' }
+    const commands = { agentKind: 'claude', resourceType: 'commands' }
+    addResolver(fixture, skills, 'skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills', aliasResourceTypes: ['commands']
+    })
+    addResolver(fixture, commands, 'skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills', aliasResourceTypes: ['commands'],
+      aliases: [{ resourceType: 'commands', canonicalResourceType: 'skills' }]
+    })
+    put(fixture.roots.skills, 'one/SKILL.md', TONE_PLACEHOLDER)
+
+    const skillRef = fixture.service.scan(skills)[0]
+    const comparison = fixture.service.planSync(commands)
+    expect(comparison.configOnly).toEqual([])
+    expect(comparison.changed).toHaveLength(1)
+    expect(comparison.changed[0].config).toMatchObject({ id: skillRef.id, canonicalResourceType: 'skills' })
+  })
+
+  it('refuses direct destination collisions before storing a mutation plan', async () => {
+    const fixture = setupComparison()
+    put(fixture.roots.agents, 'taken.md', 'existing')
+    await rejectsCode(
+      () => fixture.service.prepareCreate({ agentKind: 'claude', resourceType: 'agents' }, 'taken', 'new'),
+      'collision'
+    )
+  })
+
+  // TEST-001: a logical name that does not match the resolver's filename
+  // pattern for the selected harness/resource cannot be written, even when
+  // the name is otherwise path-safe (no traversal/NUL/absolute characters).
+  it('rejects a create whose logical name does not match the resolver pattern', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'codex', resourceType: 'agents' }
+    addResolver(fixture, scope, 'codex-agents', /^AGENTS(?:\.override)?\.md$/)
+    const beforeTree = snapshotTree(fixture.root)
+
+    await rejectsCode(() => fixture.service.prepareCreate(scope, 'notes', 'content'), 'unsafe-path')
+    expect(snapshotTree(fixture.root)).toEqual(beforeTree)
+  })
+
+  // TEST-001: an update/delete of an ID absent from a fresh recognized
+  // inventory is rejected with zero writes.
+  it('rejects update and delete of an unrecognized resource id with zero writes', async () => {
+    const fixture = setupComparison()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    put(fixture.roots.agents, 'existing.md', 'keep')
+    const beforeTree = snapshotTree(fixture.root)
+
+    await rejectsCode(() => fixture.service.prepareUpdate(scope, 'nonexistent-id', 'new'), 'unknown-resource')
+    await rejectsCode(() => fixture.service.prepareDelete(scope, 'nonexistent-id'), 'unknown-resource')
+
+    expect(snapshotTree(fixture.root)).toEqual(beforeTree)
+  })
+})
+
+describe('confirmation, staleness, and path security', () => {
+  function createFixture(deps: AnyRecord = {}): { fixture: Fixture; scope: Scope; target: string } {
+    const fixture = makeFixture({ deps })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const target = put(fixture.roots.agents, 'target.md', 'old')
+    return { fixture, scope, target }
+  }
+
+  it('treats cancellation and confirmed !== true as no-ops without consuming a plan', async () => {
+    const { fixture, scope, target } = createFixture()
+    const plan = fixture.service.prepareUpdate(scope, fixture.service.scan(scope)[0].id, 'new')
+
+    await rejectsCode(
+      () => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }),
+      'unconfirmed-plan'
+    )
+    expect(readFileSync(target, 'utf8')).toBe('old')
+
+    // TEST-015: a request with `confirmed` entirely absent is rejected the
+    // same as an explicit `false`, proving the gate checks for `=== true`
+    // rather than treating a missing key as implicitly confirmed.
+    await rejectsCode(
+      () => fixture.service.applyPlan({ scope, planId: plan.planId }),
+      'unconfirmed-plan'
+    )
+    expect(readFileSync(target, 'utf8')).toBe('old')
+
+    expect((await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })).applied).toHaveLength(1)
+  })
+
+  it.each([
+    ['unknown plan', (fixture: Fixture, scope: Scope, _plan: MutationPlan) => ({ scope, planId: 'missing', confirmed: true }), 'unknown-plan'],
+    ['wrong scope', (fixture: Fixture, scope: Scope, plan: MutationPlan) => ({ scope: { ...scope, resourceType: 'skills' }, planId: plan.planId, confirmed: true }), 'scope-mismatch']
+  ])('%s cannot mutate disk', async (_name, request, code) => {
+    const { fixture, scope } = createFixture()
+    const plan = fixture.service.prepareCreate(scope, 'fresh', 'new')
+    await rejectsCode(() => fixture.service.applyPlan(request(fixture, scope, plan)), code)
+    expect(existsSync(join(fixture.roots.agents, 'fresh.md'))).toBe(false)
+  })
+
+  it('rejects a reused plan after one successful confirmed application', async () => {
+    const { fixture, scope } = createFixture()
+    const id = fixture.service.scan(scope)[0].id
+    const plan = fixture.service.prepareUpdate(scope, id, 'new')
+    await expect(fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })).resolves.toBeDefined()
+    await rejectsCode(
+      () => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }),
+      'stale-plan'
+    )
+  })
+  // TEST-015: delete and sync-to-disk plans share the update plan's gate —
+  // `confirmed: false`, a missing `confirmed`, an unknown plan id, and a
+  // reused plan id all reject with zero disk changes, while
+  // the confirmed control run proves the gate is the confirmation value.
+  it.each([
+    ['delete', (fixture: Fixture, scope: Scope) => fixture.service.prepareDelete(scope, fixture.service.scan(scope)[0].id)],
+    ['sync-to-disk', (fixture: Fixture, scope: Scope, target: string) => {
+      writeFileSync(target, TONE_PLACEHOLDER)
+      return fixture.service.planSyncToDisk(scope)
+    }]
+  ] as const)('rejects unconfirmed, unknown, and reused %s plans without writing', async (kind, prepare) => {
+    const { fixture, scope, target } = createFixture(toneDeps(toneSource()))
+    const plan = prepare(fixture, scope, target)
+    const before = snapshotTree(fixture.root)
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }), 'unconfirmed-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId }), 'unconfirmed-plan')
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: 'missing', confirmed: true }), 'unknown-plan')
+    expect(snapshotTree(fixture.root)).toEqual(before)
+
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    if (kind === 'delete') {
+      expect(existsSync(target)).toBe(false)
+    } else {
+      expect(readFileSync(target, 'utf8')).toBe(toneExpanded())
+    }
+    const afterControl = snapshotTree(fixture.root)
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+    expect(snapshotTree(fixture.root)).toEqual(afterControl)
+  })
+
+  it.each([
+    ['disk', (fixture: Fixture, scope: Scope) => put(fixture.roots.agents, 'new.md', 'drift')],
+    ['resolver', (fixture: Fixture, scope: Scope) => { resourceDescriptor(fixture, scope).identity = 'changed-v2' }]
+  ])('consumes stale %s plans without writing', async (_name, drift) => {
+    const { fixture, scope } = createFixture()
+    const plan = fixture.service.planSyncToDisk(scope)
+    drift(fixture, scope)
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+  })
+
+  it.each(['', '/absolute.md', '../escape', 'a/../escape', 'a\\b', 'a\u0000b', '.', '..'])('rejects unsafe logical names: %s', async (name) => {
+    const { fixture, scope } = createFixture()
+    await rejectsCode(() => fixture.service.prepareCreate(scope, name, 'unsafe'), 'unsafe-path')
+    expect(readdirSync(fixture.roots.agents)).toEqual(['target.md'])
+  })
+
+  it('treats a child folder named like the root plus a dash as managed content', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    put(fixture.roots.agents, 'agents-sibling/helper.md', 'child')
+    const [ref] = fixture.service.scan(scope)
+    expect(ref.relativePath).toBe('agents-sibling/helper.md')
+    expect(await fixture.service.readFile(ref.id)).toMatchObject({ content: 'child' })
+
+    expect(fixture.service.planSync(scope).status).toBe('synced')
+  })
+
+  it('writes an update through a link into a real prefix-sibling folder and keeps the link', async () => {
+    const fixture = makeFixture({ fs: makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) }) })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const sibling = join(fixture.root, 'agents-backup')
+    const siblingFile = put(sibling, 'evil.md', 'sibling')
+    const link = join(fixture.roots.agents, 'backup')
+    symlinkSync(sibling, link)
+
+    const ref = fixture.service.scan(scope).find((entry: FileRef) => entry.relativePath === 'backup/evil.md')!
+    expect(ref.linkedFrom).toBe(realpathSync.native(sibling))
+    const plan = fixture.service.prepareUpdate(scope, ref.id, 'overwrite')
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(readFileSync(siblingFile, 'utf8')).toBe('overwrite')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+  })
+
+  it('creates through a directory link that points outside the root into the link target and skips a dangling file link', async () => {
+    const fixture = makeFixture({ fs: makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) }) })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const outside = join(fixture.root, 'outside')
+    mkdirSync(outside)
+    const link = join(fixture.roots.agents, 'escape')
+    symlinkSync(outside, link)
+    const plan = fixture.service.prepareCreate(scope, 'escape/new', 'secret')
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(readdirSync(outside)).toEqual(['new.md'])
+    expect(readFileSync(join(outside, 'new.md'), 'utf8')).toBe('secret')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+
+    symlinkSync(join(outside, 'target.md'), join(fixture.roots.agents, 'link.md'))
+    const targetRef = fixture.service.scan(scope).find((ref: FileRef) => ref.relativePath === 'link.md')
+    expect(targetRef).toBeUndefined()
+  })
+  it('replaces a dangling symlink directory with a real folder only once a create is confirmed', async () => {
+    const { fixture, scope } = createFixture()
+    const missingTarget = join(fixture.root, 'missing-target')
+    const link = join(fixture.roots.agents, 'dangling')
+    symlinkSync(missingTarget, link)
+
+    const plan = fixture.service.prepareCreate(scope, 'dangling/new', 'secret')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }), 'unconfirmed-plan')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(lstatSync(link).isDirectory()).toBe(true)
+    expect(readFileSync(join(link, 'new.md'), 'utf8')).toBe('secret')
+    expect(existsSync(missingTarget)).toBe(false)
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toContain('dangling/new.md')
+  })
+
+  it('creates parent directories only after confirmed create validation', async () => {
+    const { fixture, scope } = createFixture()
+    const plan = fixture.service.prepareCreate(scope, 'nested/new', 'created')
+    expect(existsSync(join(fixture.roots.agents, 'nested'))).toBe(false)
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: false }), 'unconfirmed-plan')
+    expect(existsSync(join(fixture.roots.agents, 'nested'))).toBe(false)
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(readFileSync(join(fixture.roots.agents, 'nested/new.md'), 'utf8')).toBe('created')
+  })
+})
+
+describe('backups, atomic writes, and partial application', () => {
+  it('backs up exact pre-change bytes before overwrite and uses collision suffixes', async () => {
+    const events: string[] = []
+    const fixture = makeFixture({
+      fs: makeFsAdapter({
+        readFileSync: (path: string) => { events.push(`read:${path}`); return readFileSync(path) },
+        writeFileSync: (path: string, data: string | Buffer) => { events.push(`write:${path}`); return writeFileSync(path, data) },
+        renameSync: (from: string, to: string) => { events.push(`rename:${from}->${to}`); return renameSync(from, to) }
+      })
+    })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    put(fixture.roots.agents, 'one.md', Buffer.from([0, 1, 2, 255]))
+    put(fixture.roots.agents, 'one.md.x-backup-20250927T190640000Z', 'old-backup')
+    const id = fixture.service.scan(scope)[0].id
+    const plan = fixture.service.prepareUpdate(scope, id, 'replacement')
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+
+    const backups = backupFiles(fixture.roots.agents)
+    expect(backups).toContain('one.md.x-backup-20250927T190640000Z-2')
+    expect(readFileSync(join(fixture.roots.agents, backups.find((name) => name.endsWith('-2'))!))).toEqual(Buffer.from([0, 1, 2, 255]))
+    expect(events.findIndex((event) => event.includes('.x-backup-'))).toBeLessThan(events.findIndex((event) => event.includes('rename:')))
+  })
+
+  it('backs up deletes, leaves backups visible on disk, and excludes them from rescans', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const target = put(fixture.roots.agents, 'delete.md', 'preserve me')
+    const id = fixture.service.scan(scope)[0].id
+    const plan = fixture.service.prepareDelete(scope, id)
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+
+    expect(existsSync(target)).toBe(false)
+    const backups = backupFiles(fixture.roots.agents)
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(fixture.roots.agents, backups[0]), 'utf8')).toBe('preserve me')
+    expect(fixture.service.scan(scope)).toEqual([])
+  })
+
+  it('does not create a backup for a genuinely new target', async () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const plan = fixture.service.prepareCreate(scope, 'new', 'new bytes')
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    expect(backupFiles(fixture.roots.agents)).toEqual([])
+  })
+
+  it.each(['read', 'create', 'write'])('fails closed when backup %s fails', async (failure) => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const target = put(fixture.roots.agents, 'protected.md', 'original')
+    const original = readFileSync(target)
+    const throwing = new Error(`backup ${failure}`)
+    const fsOverrides: AnyRecord = {}
+    let applyStarted = false
+    let readsDuringApply = 0
+    if (failure === 'read') {
+      fsOverrides.readFileSync = vi.fn((path: string) => {
+        if (applyStarted && readsDuringApply++ > 0) throw throwing
+        return readFileSync(path)
+      })
+    }
+    if (failure === 'create') fsOverrides.writeFileSync = vi.fn(() => { throw throwing })
+    if (failure === 'write') fsOverrides.renameSync = vi.fn(() => { throw throwing })
+    const failingService = makeFixture({ root: fixture.root, fs: makeFsAdapter(fsOverrides), roots: fixture.roots, resolvers: fixture.resolvers }).service
+    const id = failingService.scan(scope)[0].id
+    const plan = failingService.prepareUpdate(scope, id, 'replacement')
+    applyStarted = true
+    await expect(failingService.applyPlan({ scope, planId: plan.planId, confirmed: true })).rejects.toThrow()
+    expect(readFileSync(target)).toEqual(original)
+  })
+
+  it('removes temporary files after atomic replacement failure', async () => {
+    const fixture = makeFixture({
+      fs: makeFsAdapter({ renameSync: vi.fn(() => { throw new Error('rename failed') }) })
+    })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    const target = put(fixture.roots.agents, 'atomic.md', 'old')
+    const id = fixture.service.scan(scope)[0].id
+    const plan = fixture.service.prepareUpdate(scope, id, 'new')
+    await expect(fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })).rejects.toThrow()
+    expect(readFileSync(target, 'utf8')).toBe('old')
+    expect(tempFiles(fixture.roots.agents)).toEqual([])
+  })
+
+  it('reports one completed overwrite and requires rescan when second atomic rename fails', async () => {
+    let renames = 0
+    const fixture = makeFixture({
+      fs: makeFsAdapter({
+        renameSync: (from: string, to: string) => {
+          renames += 1
+          if (renames === 2) throw new Error('second overwrite failed')
+          return renameSync(from, to)
+        }
+      }),
+      deps: toneDeps(toneSource())
+    })
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    addResolver(fixture, scope, 'agents', /\.md$/)
+    put(fixture.roots.agents, 'a.md', TONE_PLACEHOLDER)
+    put(fixture.roots.agents, 'b.md', TONE_PLACEHOLDER)
+    const plan = fixture.service.planSyncToDisk(scope)
+    const failure = await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }).catch((error: unknown) => error as ApplyResult)
+    expect(failure.applied).toHaveLength(1)
+    expect(failure.requiresRescan).toBe(true)
+    expect(readFileSync(join(fixture.roots.agents, 'a.md'), 'utf8')).toBe(toneExpanded())
+    expect(readFileSync(join(fixture.roots.agents, 'b.md'), 'utf8')).toBe(TONE_PLACEHOLDER)
+  })
+})
+
+describe('sync direction and conversion preparation', () => {
+  it('prepares Claude alias conversion as identity-preserving no-op', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'skills' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills', aliasResourceTypes: ['commands']
+    })
+    put(fixture.roots.skills, 'alias/SKILL.md', 'alias')
+    const ref = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareCommandFromSkill(scope, ref.id)
+    expect(conversion).toEqual({ status: 'alias', ref })
+  })
+
+  it('returns existing for independent destination collision and draft otherwise without a write or plan', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills', aliasResourceTypes: []
+    })
+    addResolver(fixture, destination, 'skills', /\.md$/, {
+      canonicalResourceType: 'commands', aliasResourceTypes: []
+    })
+    put(fixture.roots.skills, 'source/SKILL.md', 'source')
+    put(fixture.roots.skills, 'source.md', 'existing destination')
+    const source = fixture.service.scan(scope)[0]
+    const existing = fixture.service.prepareCommandFromSkill(scope, source.id)
+    expect(existing.status).toBe('existing')
+    expect(existing.ref.relativePath).toBe('source.md')
+
+    unlinkSync(join(fixture.roots.skills, 'source.md'))
+    const draft = fixture.service.prepareCommandFromSkill(scope, source.id)
+    expect(draft.status).toBe('draft')
+    expect(draft).not.toHaveProperty('planId')
+    expect(readdirSync(fixture.roots.skills)).toEqual(['source'])
+  })
+
+  it('reports an existing destination that differs only by case on a case-insensitive filesystem', () => {
+    const caseInsensitiveLstat = (path: string) => {
+      try {
+        return lstatSync(path)
+      } catch (error) {
+        const dir = dirname(path)
+        const match = readdirSync(dir).find((entry) => entry.toLowerCase() === basename(path).toLowerCase())
+        if (!match) throw error
+        return lstatSync(join(dir, match))
+      }
+    }
+    const fixture = makeFixture({ fs: { lstatSync: caseInsensitiveLstat } })
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'MySkill/SKILL.md', 'source')
+    put(fixture.roots.skills, 'MySkill.md', 'existing destination')
+    const source = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareCommandFromSkill(scope, source.id)
+    expect(conversion.status).toBe('existing')
+    expect(conversion.ref.relativePath).toBe('MySkill.md')
+  })
+
+  it('rejects conversion across harnesses and ignores plugin payload/settings files', async () => {
+    const fixture = makeFixture()
+    const claude = { agentKind: 'claude', resourceType: 'skills' }
+    const codex = { agentKind: 'codex', resourceType: 'skills' }
+    addResolver(fixture, claude, 'claude-skills', /SKILL\.md$/)
+    addResolver(fixture, codex, 'codex-skills', /SKILL\.md$/)
+    put(fixture.roots['claude-skills'], 'plugin/SKILL.md', 'plugin payload')
+    put(fixture.roots['claude-skills'], 'settings.json', 'settings')
+    const ref = fixture.service.scan(claude)[0]
+    await rejectsCode(() => fixture.service.prepareCommandFromSkill(codex, ref.id), 'unknown-resource')
+    expect(fixture.service.scan(claude).map((r: FileRef) => r.relativePath)).toEqual(['plugin/SKILL.md'])
+    expect(readFileSync(join(fixture.roots['claude-skills'], 'settings.json'), 'utf8')).toBe('settings')
+  })
+
+  // TEST-013: syncing every drifted harness never copies or writes a
+  // resource into another `agentKind`, an unsynced harness keeps its bytes,
+  // and plugin/settings files seeded beside the roots are left untouched.
+  it('syncs each harness scope without cross-harness writes', async () => {
+    const fixture = makeFixture({ deps: toneDeps(toneSource()) })
+    const claude = { agentKind: 'claude', resourceType: 'agents' }
+    const codex = { agentKind: 'codex', resourceType: 'agents' }
+    const opencode = { agentKind: 'opencode', resourceType: 'agents' }
+    addResolver(fixture, claude, 'claude-agents', /\.md$/)
+    addResolver(fixture, codex, 'codex-agents', /\.md$/)
+    addResolver(fixture, opencode, 'opencode-agents', /\.md$/)
+
+    put(fixture.roots['claude-agents'], 'claude.md', TONE_PLACEHOLDER)
+    put(fixture.roots['claude-agents'], 'plugin.json', 'claude plugin')
+    put(fixture.roots['codex-agents'], 'codex.md', TONE_PLACEHOLDER)
+    put(fixture.roots['codex-agents'], 'settings.json', 'codex settings')
+    put(fixture.roots['opencode-agents'], 'opencode.md', TONE_PLACEHOLDER)
+    put(fixture.roots['opencode-agents'], 'plugin.json', 'opencode plugin')
+
+    for (const scope of [claude, codex]) {
+      const plan = fixture.service.planSyncToDisk(scope)
+      await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+    }
+
+    const listing = (key: string): string[] =>
+      readdirSync(fixture.roots[key]).filter((name) => !name.includes('.x-backup-')).sort()
+    expect(listing('claude-agents')).toEqual(['claude.md', 'plugin.json'])
+    expect(listing('codex-agents')).toEqual(['codex.md', 'settings.json'])
+    expect(listing('opencode-agents')).toEqual(['opencode.md', 'plugin.json'])
+    expect(readFileSync(join(fixture.roots['claude-agents'], 'claude.md'), 'utf8')).toBe(toneExpanded())
+    expect(readFileSync(join(fixture.roots['codex-agents'], 'codex.md'), 'utf8')).toBe(toneExpanded())
+    expect(readFileSync(join(fixture.roots['opencode-agents'], 'opencode.md'), 'utf8')).toBe(TONE_PLACEHOLDER)
+
+    expect(readFileSync(join(fixture.roots['claude-agents'], 'plugin.json'), 'utf8')).toBe('claude plugin')
+    expect(readFileSync(join(fixture.roots['codex-agents'], 'settings.json'), 'utf8')).toBe('codex settings')
+    expect(readFileSync(join(fixture.roots['opencode-agents'], 'plugin.json'), 'utf8')).toBe('opencode plugin')
+  })
+
+  it('resolves the reverse Claude alias direction as an identity-preserving no-op', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    addResolver(fixture, scope, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills', aliasResourceTypes: ['commands'], aliasSourceResourceTypes: ['skills']
+    })
+    put(fixture.roots['claude-skills'], 'alias/SKILL.md', 'alias')
+    const ref = fixture.service.scan(scope)[0]
+    const conversion = fixture.service.prepareSkillFromCommand(scope, ref.id)
+    expect(conversion).toEqual({ status: 'alias', ref })
+  })
+
+  it('generates a byte-exact command draft from a skill via the pure generator', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'skills' }
+    const destination = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'My Skill/SKILL.md', '---\ndescription: Does a thing\n---\n\nBody text.\n')
+    const source = fixture.service.scan(scope)[0]
+    const draft = fixture.service.prepareCommandFromSkill(scope, source.id) as AnyRecord
+    expect(draft.status).toBe('draft')
+    expect(draft.name).toBe('my-skill')
+    expect(draft.relativePath).toBe('my-skill.md')
+    expect(draft.content).toBe(
+      '---\ndescription: Does a thing\n---\n\nUse the My Skill skill.\n\n<!-- Converted by Tatsu from opencode skills My Skill/SKILL.md -->\n'
+    )
+  })
+
+  it('generates a byte-exact skill draft from a command with a fallback description', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'commands', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots.commands, 'Deploy Now.md', 'no front matter here')
+    const source = fixture.service.scan(scope)[0]
+    const draft = fixture.service.prepareSkillFromCommand(scope, source.id) as AnyRecord
+    expect(draft.status).toBe('draft')
+    expect(draft.name).toBe('deploy-now')
+    expect(draft.relativePath).toBe('deploy-now/SKILL.md')
+    expect(draft.content).toBe(
+      '---\nname: deploy-now\ndescription: Run the deploy-now command\n---\n\n# deploy-now\n\nUse this skill when the user requests the `Deploy Now` command behavior.\n\n<!-- Converted by Tatsu from opencode commands Deploy Now.md -->\n'
+    )
+  })
+
+  it('generates a skill draft that carries the command description as front matter', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'commands', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots.commands, 'run-tests.md', '---\ndescription: Run the test suite\n---\n\nRun the tests.\n')
+    const source = fixture.service.scan(scope)[0]
+    const draft = fixture.service.prepareSkillFromCommand(scope, source.id) as AnyRecord
+    expect(draft.content).toBe(
+      '---\nname: run-tests\ndescription: Run the test suite\n---\n\n# run-tests\n\nUse this skill when the user requests the `run-tests` command behavior.\n\n<!-- Converted by Tatsu from opencode commands run-tests.md -->\n'
+    )
+  })
+
+  it('repeated conversion is idempotent once the drafted destination exists', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'codex', resourceType: 'skills' }
+    const destination = { agentKind: 'codex', resourceType: 'commands' }
+    addResolver(fixture, scope, 'skills', /SKILL\.md$/, { canonicalResourceType: 'skills' })
+    addResolver(fixture, destination, 'skills', /\.md$/, { canonicalResourceType: 'commands' })
+    put(fixture.roots.skills, 'repeat/SKILL.md', 'body')
+    const source = fixture.service.scan(scope)[0]
+    const first = fixture.service.prepareCommandFromSkill(scope, source.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    put(fixture.roots.skills, 'repeat.md', first.content as string)
+    const second = fixture.service.prepareCommandFromSkill(scope, source.id) as Conversion
+    expect(second.status).toBe('existing')
+    expect(second.ref.relativePath).toBe('repeat.md')
+  })
+
+  // TEST-010: command-to-skill conversion mirrors TEST-009 — a repeated run
+  // and an independent existing destination both return the existing ref
+  // without writing, overwriting, or duplicating the skill file.
+  it('repeated command-to-skill conversion and an existing destination return existing without writes', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    const destination = { agentKind: 'opencode', resourceType: 'skills' }
+    addResolver(fixture, scope, 'opencode-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'opencode-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['opencode-commands'], 'ops/deploy.md', 'deploy body')
+    put(fixture.roots['opencode-commands'], 'release.md', 'release body')
+    put(fixture.roots['opencode-skills'], 'release/SKILL.md', 'independent skill')
+    const sources = fixture.service.scan(scope)
+    const deploy = sources.find((ref: FileRef) => ref.relativePath === 'ops/deploy.md') as FileRef
+    const release = sources.find((ref: FileRef) => ref.relativePath === 'release.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, deploy.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.relativePath).toBe('ops-deploy/SKILL.md')
+    put(fixture.roots['opencode-skills'], 'ops-deploy/SKILL.md', first.content as string)
+    const before = snapshotTree(fixture.root)
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, deploy.id)
+    const again = fixture.service.prepareSkillFromCommand(scope, deploy.id)
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('ops-deploy/SKILL.md')
+    expect(again).toEqual(repeat)
+
+    const existing = fixture.service.prepareSkillFromCommand(scope, release.id)
+    expect(existing.status).toBe('existing')
+    expect(existing.ref.relativePath).toBe('release/SKILL.md')
+    expect(existing).not.toHaveProperty('planId')
+
+    expect(snapshotTree(fixture.root)).toEqual(before)
+    expect(readFileSync(join(fixture.roots['opencode-skills'], 'release/SKILL.md'), 'utf8')).toBe('independent skill')
+    expect(fixture.service.scan(destination).map((ref: FileRef) => ref.relativePath)).toEqual([
+      'ops-deploy/SKILL.md',
+      'release/SKILL.md'
+    ])
+  })
+
+  it('keeps nested Claude commands with the same basename distinct via path-qualified names', () => {
+    const fixture = makeFixture()
+    const scope = { agentKind: 'claude', resourceType: 'commands' }
+    const destination = { agentKind: 'claude', resourceType: 'skills' }
+    addResolver(fixture, scope, 'claude-commands', /\.md$/, { canonicalResourceType: 'commands' })
+    addResolver(fixture, destination, 'claude-skills', /SKILL\.md$/, {
+      canonicalResourceType: 'skills',
+      nameToRelativePath: (name: string) => `${name}/SKILL.md`
+    })
+    put(fixture.roots['claude-commands'], 'frontend/review.md', 'frontend review')
+    put(fixture.roots['claude-commands'], 'backend/review.md', 'backend review')
+    const sources = fixture.service.scan(scope)
+    const frontend = sources.find((ref: FileRef) => ref.relativePath === 'frontend/review.md') as FileRef
+    const backend = sources.find((ref: FileRef) => ref.relativePath === 'backend/review.md') as FileRef
+
+    const first = fixture.service.prepareSkillFromCommand(scope, frontend.id) as AnyRecord
+    expect(first.status).toBe('draft')
+    expect(first.name).toBe('frontend-review')
+    expect(first.relativePath).toBe('frontend-review/SKILL.md')
+    expect(first.content).toBe(
+      '---\nname: frontend-review\ndescription: Run the frontend-review command\n---\n\n# frontend-review\n\nUse this skill when the user requests the `review` command behavior.\n\n<!-- Converted by Tatsu from claude commands frontend/review.md -->\n'
+    )
+    put(fixture.roots['claude-skills'], 'frontend-review/SKILL.md', first.content as string)
+
+    const second = fixture.service.prepareSkillFromCommand(scope, backend.id) as AnyRecord
+    expect(second.status).toBe('draft')
+    expect(second.name).toBe('backend-review')
+    expect(second.relativePath).toBe('backend-review/SKILL.md')
+
+    const repeat = fixture.service.prepareSkillFromCommand(scope, frontend.id) as Conversion
+    expect(repeat.status).toBe('existing')
+    expect(repeat.ref.relativePath).toBe('frontend-review/SKILL.md')
+  })
+})
+
+describe('conversion content generators (TEST-001/TEST-002)', () => {
+  it('slugifies labels deterministically', () => {
+    expect(slugifyLogicalName('My Cool Skill!')).toBe('my-cool-skill')
+    expect(slugifyLogicalName('  __Weird///Name__  ')).toBe('weird-name')
+    expect(slugifyLogicalName('already-slug')).toBe('already-slug')
+    const long = 'a'.repeat(90)
+    expect(slugifyLogicalName(long)).toBe('a'.repeat(64))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}-!!!`)).toBe('a'.repeat(63))
+    expect(slugifyLogicalName(`${'a'.repeat(63)}/review`)).toBe('a'.repeat(63))
+  })
+
+  it('throws invalid-name when a label has no derivable slug', () => {
+    expect(() => slugifyLogicalName('!!!')).toThrow(/invalid-name|Unable to derive/)
+    try {
+      slugifyLogicalName('***')
+      expect.unreachable()
+    } catch (error) {
+      expect((error as { code?: string }).code).toBe('invalid-name')
+    }
+  })
+
+  it('extracts a leading front-matter description', () => {
+    expect(extractFrontMatterDescription('---\ndescription: Hello world\n---\nbody')).toBe('Hello world')
+    expect(extractFrontMatterDescription('---\ntags: [a]\ndescription:   padded value  \n---\n')).toBe('padded value')
+  })
+
+  it('returns null when there is no block, no closing delimiter, or no description line', () => {
+    expect(extractFrontMatterDescription('no front matter at all')).toBeNull()
+    expect(extractFrontMatterDescription('---\ndescription: unterminated')).toBeNull()
+    expect(extractFrontMatterDescription('---\ntags: [a]\n---\nbody')).toBeNull()
+    const tooLong = ['---', ...Array.from({ length: 60 }, (_, i) => `line${i}: x`), 'description: late', '---'].join('\n')
+    expect(extractFrontMatterDescription(tooLong)).toBeNull()
+  })
+
+  it('extracts descriptions from CRLF files and ignores block scalar indicators', () => {
+    expect(extractFrontMatterDescription('---\r\ndescription: Windows line\r\n---\r\nbody')).toBe('Windows line')
+    expect(extractFrontMatterDescription('---\ndescription: >-\n  folded\n---\n')).toBeNull()
+    expect(extractFrontMatterDescription('---\ndescription: |\n  literal\n---\n')).toBeNull()
+  })
+
+  it('createCommandFromSkill rejects a non-skills source', () => {
+    expect(() =>
+      createCommandFromSkill({
+        agentKind: 'claude',
+        resourceType: 'commands' as unknown as 'skills',
+        name: 'x',
+        label: 'x',
+        relativePath: 'x.md',
+        content: ''
+      })
+    ).toThrow()
+  })
+
+  it('createSkillFromCommand rejects a non-commands source', () => {
+    expect(() =>
+      createSkillFromCommand({
+        agentKind: 'claude',
+        resourceType: 'skills' as unknown as 'commands',
+        name: 'x',
+        label: 'x',
+        relativePath: 'x/SKILL.md',
+        content: ''
+      })
+    ).toThrow()
+  })
+
+  it('prefers the path-qualified logical name over the label', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: 'frontend/review',
+      label: 'review',
+      relativePath: 'frontend/review.md',
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe('frontend-review')
+  })
+
+  it('falls back to the label when name has no derivable slug', () => {
+    const draft = createCommandFromSkill({
+      agentKind: 'codex',
+      resourceType: 'skills',
+      name: '!!!',
+      label: 'Fallback Label',
+      relativePath: '!!!/SKILL.md',
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe('fallback-label')
+  })
+
+  it('caps destination names at 64 characters', () => {
+    const draft = createSkillFromCommand({
+      agentKind: 'claude',
+      resourceType: 'commands',
+      name: `${'x'.repeat(40)}/${'y'.repeat(40)}`,
+      label: 'y'.repeat(40),
+      relativePath: `${'x'.repeat(40)}/${'y'.repeat(40)}.md`,
+      content: 'body'
+    })
+    expect(draft.destinationName).toBe(`${'x'.repeat(40)}-${'y'.repeat(23)}`)
+    expect(draft.destinationName).toHaveLength(64)
+  })
+})
+
+function fixtureRootPlaceholder(): string {
+  return join(tmpdir(), `harness-config-missing-${Date.now()}-${Math.random()}`)
+}
+
+describe('harness-config live known roots', () => {
+  it('reads the knownRoots getter on every scan and stales plans generated under the old root', async () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-live-roots-'))
+    const home = join(fixtureRoot, 'home')
+    const first = join(fixtureRoot, 'first-skills')
+    const second = join(fixtureRoot, 'second-skills')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { claudeSkills: first },
+      deps: { homeDir: home, env: { HOME: home } }
+    })
+    put(first, 'alpha/SKILL.md', 'alpha')
+    put(second, 'beta/SKILL.md', 'beta')
+    const scope = { agentKind: 'claude', resourceType: 'skills' }
+
+    const before = fixture.service.scan(scope)
+    expect(before.map((ref: FileRef) => ref.absolutePath)).toEqual([join(first, 'alpha', 'SKILL.md')])
+    const plan = fixture.service.planSyncToDisk(scope)
+
+    fixture.roots.claudeSkills = second
+    const after = fixture.service.scan(scope)
+    expect(after.map((ref: FileRef) => ref.absolutePath)).toEqual([join(second, 'beta', 'SKILL.md')])
+
+    await rejectsCode(() => fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+    expect(existsSync(join(first, 'alpha', 'SKILL.md'))).toBe(true)
+  })
+
+  it('falls back to the default root once an override is removed', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-root-reset-'))
+    const home = join(fixtureRoot, 'home')
+    const override = join(fixtureRoot, 'override-agents')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { claudeAgents: override },
+      deps: { homeDir: home, env: { HOME: home } }
+    })
+    put(override, 'custom.md', 'custom')
+    put(join(home, '.claude', 'agents'), 'default.md', 'default')
+    const scope = { agentKind: 'claude', resourceType: 'agents' }
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toEqual(['custom.md'])
+    delete fixture.roots.claudeAgents
+    expect(fixture.service.scan(scope).map((ref: FileRef) => ref.relativePath)).toEqual(['default.md'])
+  })
+
+  it('honors an explicit OpenCode override while OPENCODE_CONFIG_DIR is set', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-opencode-explicit-'))
+    const home = join(fixtureRoot, 'home')
+    const explicitSkills = join(fixtureRoot, 'explicit-opencode-skills')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: { opencodeSkills: explicitSkills },
+      deps: {
+        homeDir: home,
+        env: { HOME: home, OPENCODE_CONFIG_DIR: join(fixtureRoot, 'opencode-config') }
+      }
+    })
+    put(explicitSkills, 'explicit/SKILL.md', 'explicit skill')
+    const refs = fixture.service.scan({ agentKind: 'opencode', resourceType: 'skills' })
+    expect(refs).toHaveLength(1)
+    expect(refs[0].absolutePath.startsWith(explicitSkills)).toBe(true)
+    expect(() => fixture.service.scan({ agentKind: 'opencode', resourceType: 'agents' })).toThrow()
+  })
+
+  it('reports default roots and maps root keys to the scopes that read them', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-defaults-'))
+    const home = join(fixtureRoot, 'home')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      deps: { homeDir: home, env: { HOME: home, CODEX_HOME: join(fixtureRoot, 'codex') } }
+    })
+    const service = fixture.service as unknown as HarnessConfigService
+    const defaults = service.defaultRoots()
+    expect(defaults.claudeSkills).toBe(join(home, '.claude', 'skills'))
+    expect(defaults.codexHome).toBe(join(fixtureRoot, 'codex'))
+    expect(defaults.opencodeCommands).toBe(join(home, '.config', 'opencode', 'commands'))
+    expect(service.scopesForRootKeys(['claudeSkills', 'codexHome'])).toEqual([
+      { agentKind: 'claude', resourceType: 'skills' },
+      { agentKind: 'codex', resourceType: 'agents' }
+    ])
+    expect(service.scopesForRootKeys([])).toEqual([])
+  })
+})
+
+describe('harness-config symlink-aware inventory', () => {
+  const realFs = (): FsAdapter => makeFsAdapter({ realpathSync: (value: string) => realpathSync.native(value) })
+
+  function dotfilesFixture(options: { override?: boolean; deps?: AnyRecord } = {}) {
+    const fixtureRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'harness-config-linked-')))
+    const home = join(fixtureRoot, 'home')
+    const claudeHome = join(home, '.claude')
+    const build = join(fixtureRoot, 'dotfiles', 'output', 'claude')
+    put(build, 'agents/reviewer.md', 'reviewer')
+    put(build, 'skills/deploy/SKILL.md', 'deploy skill')
+    put(build, 'commands/ship.md', 'ship')
+    mkdirSync(join(claudeHome, 'skills'), { recursive: true })
+    mkdirSync(join(claudeHome, 'commands'), { recursive: true })
+    symlinkSync(join(build, 'agents'), join(claudeHome, 'agents'))
+    symlinkSync(join(build, 'skills', 'deploy'), join(claudeHome, 'skills', 'deploy'))
+    symlinkSync(join(build, 'commands', 'ship.md'), join(claudeHome, 'commands', 'ship.md'))
+    put(join(claudeHome, 'skills'), 'local/SKILL.md', 'local skill')
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots: options.override ? { claudeAgents: join(claudeHome, 'agents') } : {},
+      fs: realFs(),
+      deps: { homeDir: home, env: { HOME: home }, ...options.deps }
+    })
+    return { fixture, home, claudeHome, build }
+  }
+
+  type RenderSeed = Parameters<typeof renderTemplates>[0][number]
+  function claudeTemplate(kind: 'agent' | 'skill', name: string): RenderSeed {
+    return {
+      kind,
+      name,
+      description: `The ${name} ${kind}`,
+      fragments: [],
+      body: `${name} body.`,
+      harnesses: { claude: { frontmatter: {} } },
+      references: []
+    }
+  }
+  function templateDeps(templates: RenderSeed[], fragments = toneSource().fragments): AnyRecord {
+    return { loadTemplateSource: () => ({ templates, fragments, errors: [] }) }
+  }
+  function renderedContent(templates: RenderSeed[], name: string): string {
+    const rendered = renderTemplates(templates, []).resources.find((resource) => resource.relativePath.startsWith(name))
+    if (!rendered) throw new Error(`no output for ${name}`)
+    return rendered.content
+  }
+
+  const agents = { agentKind: 'claude', resourceType: 'agents' }
+  const skills = { agentKind: 'claude', resourceType: 'skills' }
+  const commands = { agentKind: 'claude', resourceType: 'commands' }
+
+  it('scans a symlinked root folder and marks every entry as managed elsewhere', () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const refs = fixture.service.scan(agents)
+    expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(['reviewer.md'])
+    expect(refs[0].linkedFrom).toBe(join(build, 'agents'))
+    expect(refs[0].absolutePath).toBe(join(claudeHome, 'agents', 'reviewer.md'))
+  })
+
+  it('reads a file in a symlinked root from its target while reporting the configured path', () => {
+    const { fixture, claudeHome } = dotfilesFixture()
+    const result = fixture.service.readFile(physicalId('claude', 'claudeAgents', 'reviewer.md')) as AnyRecord
+    expect(result.content).toBe('reviewer')
+    expect((result.ref as FileRef).absolutePath).toBe(join(claudeHome, 'agents', 'reviewer.md'))
+  })
+
+  it('inventories symlinked skill folders and command files with linkedFrom set', () => {
+    const { fixture, build } = dotfilesFixture()
+    const skillRefs = fixture.service.scan(skills)
+    expect(skillRefs.map((ref: FileRef) => [ref.relativePath, ref.linkedFrom])).toEqual([
+      ['deploy/SKILL.md', join(build, 'skills', 'deploy')],
+      ['local/SKILL.md', undefined]
+    ])
+    const commandRefs = fixture.service.scan(commands).filter((ref: FileRef) => ref.relativePath === 'ship.md')
+    expect(commandRefs).toHaveLength(1)
+    expect(commandRefs[0].linkedFrom).toBe(join(build, 'commands', 'ship.md'))
+  })
+
+  it('reads a managed-elsewhere resource through its link', () => {
+    const { fixture } = dotfilesFixture()
+    const ref = fixture.service.scan(skills).find((entry: FileRef) => entry.relativePath === 'deploy/SKILL.md')!
+    const result = fixture.service.readFile(ref.id) as AnyRecord
+    expect(result.content).toBe('deploy skill')
+  })
+
+  it('skips broken links and directory loops without failing the scan', () => {
+    const fixture = makeFixture({ fs: realFs() })
+    const scope = { agentKind: 'opencode', resourceType: 'commands' }
+    addResolver(fixture, scope, 'commands', /\.md$/)
+    put(fixture.roots.commands, 'a.md', 'a')
+    put(fixture.roots.commands, 'nested/b.md', 'b')
+    symlinkSync(fixture.roots.commands, join(fixture.roots.commands, 'nested', 'loop'))
+    symlinkSync(join(fixture.root, 'missing.md'), join(fixture.roots.commands, 'broken.md'))
+    symlinkSync(join(fixture.root, 'missing-dir'), join(fixture.roots.commands, 'broken-dir'))
+
+    const refs = fixture.service.scan(scope)
+    expect(refs.map((ref: FileRef) => ref.relativePath)).toEqual(['a.md', 'nested/b.md'])
+  })
+
+  type LinkCase = {
+    scope: Scope
+    rootKey: string
+    relativePath: string
+    link: (claudeHome: string) => string
+    target: (build: string) => string
+    before: string
+  }
+  const linkCases: Array<[string, LinkCase]> = [
+    ['symlinked root folder', {
+      scope: agents,
+      rootKey: 'claudeAgents',
+      relativePath: 'reviewer.md',
+      link: (claudeHome) => join(claudeHome, 'agents'),
+      target: (build) => join(build, 'agents', 'reviewer.md'),
+      before: 'reviewer'
+    }],
+    ['symlinked skill folder', {
+      scope: skills,
+      rootKey: 'claudeSkills',
+      relativePath: 'deploy/SKILL.md',
+      link: (claudeHome) => join(claudeHome, 'skills', 'deploy'),
+      target: (build) => join(build, 'skills', 'deploy', 'SKILL.md'),
+      before: 'deploy skill'
+    }],
+    ['symlinked command file', {
+      scope: commands,
+      rootKey: 'claudeCommands',
+      relativePath: 'ship.md',
+      link: (claudeHome) => join(claudeHome, 'commands', 'ship.md'),
+      target: (build) => join(build, 'commands', 'ship.md'),
+      before: 'ship'
+    }]
+  ]
+
+  it.each(linkCases)('writes an update through a %s into its target and keeps the link', async (_name, linkCase) => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = linkCase.link(claudeHome)
+    const target = linkCase.target(build)
+    const id = physicalId('claude', linkCase.rootKey, linkCase.relativePath)
+
+    const plan = fixture.service.prepareUpdate(linkCase.scope, id, 'tatsu edit')
+    await fixture.service.applyPlan({ scope: linkCase.scope, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(readFileSync(target, 'utf8')).toBe('tatsu edit')
+    const backups = backupFiles(dirname(target))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(dirname(target), backups[0]), 'utf8')).toBe(linkCase.before)
+    expect(backupFiles(dirname(link))).toEqual([])
+    expect(tempFiles(dirname(target))).toEqual([])
+    const ref = fixture.service.scan(linkCase.scope).find((entry: FileRef) => entry.id === id)!
+    expect(ref.linkedFrom).toBeDefined()
+  })
+
+  it.each(linkCases)('syncs a fragment refresh to disk through a %s into its target and keeps the link', async (_name, linkCase) => {
+    const { fixture, claudeHome, build } = dotfilesFixture({ deps: toneDeps(toneSource()) })
+    const link = linkCase.link(claudeHome)
+    const target = linkCase.target(build)
+    writeFileSync(target, TONE_PLACEHOLDER)
+
+    const plan = fixture.service.planSyncToDisk(linkCase.scope)
+    await fixture.service.applyPlan({ scope: linkCase.scope, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    expect(readFileSync(target, 'utf8')).toBe(toneExpanded())
+    const backups = backupFiles(dirname(target))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(dirname(target), backups[0]), 'utf8')).toBe(TONE_PLACEHOLDER)
+    expect(backupFiles(dirname(link))).toEqual([])
+  })
+
+  it('deletes the target of a symlinked command file, removes the now-dangling link, and drops it from the scan', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const target = join(build, 'commands', 'ship.md')
+    const plan = fixture.service.prepareDelete(commands, physicalId('claude', 'claudeCommands', 'ship.md'))
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(existsSync(target)).toBe(false)
+    expect(() => lstatSync(link)).toThrow()
+    const backups = backupFiles(join(build, 'commands'))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(build, 'commands', backups[0]), 'utf8')).toBe('ship')
+    expect(backupFiles(join(claudeHome, 'commands'))).toEqual([])
+    expect(fixture.service.scan(commands).map((ref: FileRef) => ref.relativePath)).not.toContain('ship.md')
+  })
+
+  it('recreates a command deleted through its link as a regular file in the configured folder', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const deletion = fixture.service.prepareDelete(commands, physicalId('claude', 'claudeCommands', 'ship.md'))
+    await fixture.service.applyPlan({ scope: commands, planId: deletion.planId, confirmed: true })
+
+    const creation = fixture.service.prepareCreate(commands, 'ship', 'ship again')
+    await fixture.service.applyPlan({ scope: commands, planId: creation.planId, confirmed: true })
+
+    expect(lstatSync(link).isFile()).toBe(true)
+    expect(readFileSync(link, 'utf8')).toBe('ship again')
+    expect(existsSync(join(build, 'commands', 'ship.md'))).toBe(false)
+    const recreated = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'ship.md')!
+    expect(recreated.linkedFrom).toBeUndefined()
+  })
+
+  it('creates a command over a dangling file link left behind outside Tatsu, without resurrecting the link target', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'ship.md')
+    const target = join(build, 'commands', 'ship.md')
+    unlinkSync(target)
+
+    const plan = fixture.service.prepareCreate(commands, 'ship', 'fresh ship')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isFile()).toBe(true)
+    expect(readFileSync(link, 'utf8')).toBe('fresh ship')
+    expect(existsSync(target)).toBe(false)
+  })
+
+  it('creates a skill through a dangling skill-folder link by replacing it with a real folder', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'shared')
+    const missing = join(build, 'missing-shared')
+    symlinkSync(missing, link)
+
+    const plan = fixture.service.prepareCreate(commands, 'shared/new', 'x')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(lstatSync(link).isDirectory()).toBe(true)
+    expect(readFileSync(join(link, 'new.md'), 'utf8')).toBe('x')
+    expect(existsSync(missing)).toBe(false)
+    const created = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'shared/new.md')!
+    expect(created.linkedFrom).toBeUndefined()
+  })
+
+  it('deletes a skill inside a symlinked skill folder from the target and keeps the folder link', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const plan = fixture.service.prepareDelete(skills, physicalId('claude', 'claudeSkills', 'deploy/SKILL.md'))
+    await fixture.service.applyPlan({ scope: skills, planId: plan.planId, confirmed: true })
+
+    expect(existsSync(join(build, 'skills', 'deploy', 'SKILL.md'))).toBe(false)
+    expect(lstatSync(join(claudeHome, 'skills', 'deploy')).isSymbolicLink()).toBe(true)
+    expect(fixture.service.scan(skills).map((ref: FileRef) => ref.relativePath)).toEqual(['local/SKILL.md'])
+  })
+
+  it('includes linked entries in a mixed sync-to-disk plan and writes them through the link', async () => {
+    const freshPath = 'fresh/SKILL.md'
+    const templates = [claudeTemplate('skill', 'fresh')]
+    const { fixture, claudeHome, build } = dotfilesFixture({ deps: templateDeps(templates) })
+    writeFileSync(join(build, 'skills', 'deploy', 'SKILL.md'), TONE_PLACEHOLDER)
+    const plan = fixture.service.planSyncToDisk(skills)
+    expect(plan.changed.map((pair) => (pair.disk as FileRef).linkedFrom)).toEqual([join(build, 'skills', 'deploy')])
+
+    const result = await fixture.service.applyPlan({ scope: skills, planId: plan.planId, confirmed: true })
+    expect(result.applied).toEqual([
+      { type: 'overwrite', id: physicalId('claude', 'claudeSkills', 'deploy/SKILL.md'), relativePath: 'deploy/SKILL.md' },
+      { type: 'create', id: physicalId('claude', 'claudeSkills', freshPath), relativePath: freshPath }
+    ])
+    expect(readFileSync(join(claudeHome, 'skills', 'fresh', 'SKILL.md'), 'utf8')).toBe(renderedContent(templates, 'fresh'))
+    expect(readFileSync(join(build, 'skills', 'deploy', 'SKILL.md'), 'utf8')).toBe(toneExpanded())
+    expect(readFileSync(join(claudeHome, 'skills', 'local', 'SKILL.md'), 'utf8')).toBe('local skill')
+    expect(lstatSync(join(claudeHome, 'skills', 'deploy')).isSymbolicLink()).toBe(true)
+  })
+
+  it('refreshes a changed fragment in hand-written files, writing linked skills through the link', async () => {
+    const source = toneSource()
+    const { fixture, claudeHome, build } = dotfilesFixture({ deps: toneDeps(source) })
+    const linkedFile = join(build, 'skills', 'deploy', 'SKILL.md')
+    const localFile = join(claudeHome, 'skills', 'local', 'SKILL.md')
+    writeFileSync(linkedFile, `Deploy.\n${fragmentSection('tone', 'Be brief.')}\n`)
+    writeFileSync(localFile, `Local.\n${fragmentSection('tone', 'Be brief.')}\n`)
+    expect(fixture.service.planSync(skills).status).toBe('synced')
+
+    source.fragments = [{ name: 'tone', content: 'Be very brief.' }]
+    const plan = fixture.service.planSyncToDisk(skills)
+    expect(plan.changed.map((pair) => (pair.disk as FileRef).relativePath).sort()).toEqual([
+      'deploy/SKILL.md',
+      'local/SKILL.md'
+    ])
+    const result = await fixture.service.applyPlan({ scope: skills, planId: plan.planId, confirmed: true })
+
+    expect(result.applied.map((entry) => entry.relativePath).sort()).toEqual(['deploy/SKILL.md', 'local/SKILL.md'])
+    expect(readFileSync(localFile, 'utf8')).toBe(`Local.\n${fragmentSection('tone', 'Be very brief.')}\n`)
+    expect(readFileSync(linkedFile, 'utf8')).toBe(`Deploy.\n${fragmentSection('tone', 'Be very brief.')}\n`)
+    expect(lstatSync(join(claudeHome, 'skills', 'deploy')).isSymbolicLink()).toBe(true)
+  })
+
+  it('creates through a symlinked folder entry into its target', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture()
+    const link = join(claudeHome, 'commands', 'shared')
+    symlinkSync(join(build, 'skills'), link)
+    const plan = fixture.service.prepareCreate(commands, 'shared/new', 'x')
+    await fixture.service.applyPlan({ scope: commands, planId: plan.planId, confirmed: true })
+
+    expect(readFileSync(join(build, 'skills', 'new.md'), 'utf8')).toBe('x')
+    expect(lstatSync(link).isSymbolicLink()).toBe(true)
+    const created = fixture.service.scan(commands).find((ref: FileRef) => ref.relativePath === 'shared/new.md')!
+    expect(created.linkedFrom).toBe(join(build, 'skills'))
+  })
+
+  it('creates directly and through sync-to-disk in a symlinked root without an override, writing into the target', async () => {
+    const templates = [claudeTemplate('agent', 'planner')]
+    const { fixture, claudeHome, build } = dotfilesFixture({ deps: templateDeps(templates) })
+    const created = fixture.service.prepareCreate(agents, 'new-agent', 'new')
+    await fixture.service.applyPlan({ scope: agents, planId: created.planId, confirmed: true })
+    const synced = fixture.service.planSyncToDisk(agents)
+    await fixture.service.applyPlan({ scope: agents, planId: synced.planId, confirmed: true })
+
+    expect(lstatSync(join(claudeHome, 'agents')).isSymbolicLink()).toBe(true)
+    expect(readdirSync(join(build, 'agents')).filter((name) => !name.includes('.x-backup-')).sort()).toEqual([
+      'new-agent.md',
+      'planner.md',
+      'reviewer.md'
+    ])
+    expect(readFileSync(join(build, 'agents', 'new-agent.md'), 'utf8')).toBe('new')
+    expect(readFileSync(join(build, 'agents', 'planner.md'), 'utf8')).toBe(renderedContent(templates, 'planner'))
+    expect(fixture.service.scan(agents).map((ref: FileRef) => [ref.relativePath, ref.linkedFrom])).toEqual([
+      ['new-agent.md', join(build, 'agents')],
+      ['planner.md', join(build, 'agents')],
+      ['reviewer.md', join(build, 'agents')]
+    ])
+  })
+
+  it('treats a symlinked root as a plain folder at its real path when an override is set', async () => {
+    const { fixture, claudeHome, build } = dotfilesFixture({ override: true })
+    expect(fixture.service.scan(agents)[0].linkedFrom).toBeUndefined()
+    const plan = fixture.service.prepareCreate(agents, 'new-agent', 'new')
+    expect((plan.resource as FileRef).absolutePath).toBe(join(claudeHome, 'agents', 'new-agent.md'))
+    const result = await fixture.service.applyPlan({ scope: agents, planId: plan.planId, confirmed: true })
+    const written = join(build, 'agents', 'new-agent.md')
+    expect(lstatSync(written).isFile()).toBe(true)
+    expect(readFileSync(written, 'utf8')).toBe('new')
+    expect(lstatSync(join(claudeHome, 'agents')).isSymbolicLink()).toBe(true)
+    expect((result.resultingRefs as FileRef[]).map((ref) => [ref.relativePath, ref.absolutePath, ref.linkedFrom])).toEqual([
+      ['new-agent.md', join(claudeHome, 'agents', 'new-agent.md'), undefined],
+      ['reviewer.md', join(claudeHome, 'agents', 'reviewer.md'), undefined]
+    ])
+  })
+
+  it('ignores a symlink above the root when deciding managed-elsewhere', async () => {
+    const fixtureRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'harness-config-linked-home-')))
+    const home = join(fixtureRoot, 'home')
+    const kept = join(fixtureRoot, 'dotfiles', 'claude')
+    put(kept, 'agents/kept.md', 'kept')
+    mkdirSync(home, { recursive: true })
+    symlinkSync(kept, join(home, '.claude'))
+    const fixture = makeFixture({ root: fixtureRoot, fs: realFs(), deps: { homeDir: home, env: { HOME: home } } })
+
+    const refs = fixture.service.scan(agents)
+    expect(refs.map((ref: FileRef) => [ref.relativePath, ref.linkedFrom])).toEqual([['kept.md', undefined]])
+    const plan = fixture.service.prepareCreate(agents, 'another', 'another')
+    await fixture.service.applyPlan({ scope: agents, planId: plan.planId, confirmed: true })
+    expect(readFileSync(join(kept, 'agents', 'another.md'), 'utf8')).toBe('another')
+  })
+
+  it('reports a broken root link as an unavailable root', () => {
+    const fixtureRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'harness-config-broken-root-')))
+    const home = join(fixtureRoot, 'home')
+    mkdirSync(join(home, '.claude'), { recursive: true })
+    symlinkSync(join(fixtureRoot, 'missing'), join(home, '.claude', 'agents'))
+    const fixture = makeFixture({ root: fixtureRoot, fs: realFs(), deps: { homeDir: home, env: { HOME: home } } })
+    expect(() => fixture.service.scan(agents)).toThrow('The resolver known root is unavailable')
+  })
+
+})
+
+describe('harness-config template sync', () => {
+  type TemplateSeed = Parameters<typeof renderTemplates>[0][number] & { hash?: string }
+  type FragmentSeed = { name: string; content: string; hash?: string }
+  type TemplateFixture = Fixture & {
+    roots: Record<string, string>
+    source: { templates: TemplateSeed[]; fragments: FragmentSeed[]; errors: { relativePath: string; message: string }[] }
+    detach: ReturnType<typeof vi.fn>
+  }
+
+  const claudeAgents: Scope = { agentKind: 'claude', resourceType: 'agents' }
+  const opencodeAgents: Scope = { agentKind: 'opencode', resourceType: 'agents' }
+
+  function agentTemplate(overrides: Partial<TemplateSeed> = {}): TemplateSeed {
+    return {
+      kind: 'agent',
+      name: 'reviewer',
+      description: 'Reviews code',
+      fragments: [],
+      body: 'Review the diff.',
+      harnesses: { claude: { frontmatter: {} }, opencode: { frontmatter: { mode: 'subagent' } } },
+      references: [],
+      ...overrides
+    }
+  }
+
+  function makeTemplateFixture(options: { deps?: AnyRecord } = {}): TemplateFixture {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'harness-config-template-sync-'))
+    const roots: Record<string, string> = {}
+    for (const key of ['claudeAgents', 'claudeSkills', 'claudeCommands', 'opencodeAgents']) {
+      roots[key] = join(fixtureRoot, key)
+      mkdirSync(roots[key], { recursive: true })
+    }
+    const source: TemplateFixture['source'] = { templates: [], fragments: [], errors: [] }
+    const detach = vi.fn()
+    const fixture = makeFixture({
+      root: fixtureRoot,
+      roots,
+      deps: {
+        homeDir: join(fixtureRoot, 'home'),
+        env: { HOME: join(fixtureRoot, 'home') },
+        loadTemplateSource: () => ({ templates: source.templates, fragments: source.fragments, errors: source.errors }),
+        detachTemplateTarget: detach,
+        ...options.deps
+      }
+    })
+    return { ...fixture, roots, source, detach }
+  }
+
+  function setTemplates(fixture: TemplateFixture, templates: TemplateSeed[], fragments = fixture.source.fragments): void {
+    fixture.source.templates = [...templates]
+    fixture.source.fragments = [...fragments]
+  }
+
+  function renderedFor(fixture: TemplateFixture, agentKind: string): { relativePath: string; content: string } {
+    const { resources } = renderTemplates(fixture.source.templates, fixture.source.fragments)
+    const resource = resources.find((entry) => entry.agentKind === agentKind)
+    if (!resource) throw new Error(`no ${agentKind} output`)
+    return resource
+  }
+
+  async function syncScope(fixture: TemplateFixture, scope: Scope): Promise<void> {
+    const plan = fixture.service.planSyncToDisk(scope)
+    await fixture.service.applyPlan({ scope, planId: plan.planId, confirmed: true })
+  }
+
+  it('reports each targeted scope as config-only until that scope is synced (TEST-001)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+
+    for (const scope of [claudeAgents, opencodeAgents]) {
+      const comparison = fixture.service.planSync(scope)
+      expect(comparison.status).toBe('config-only')
+      expect(comparison.configOnly).toHaveLength(1)
+      expect(comparison.configOnly[0]).toMatchObject({
+        relativePath: 'reviewer.md',
+        source: 'template',
+        templateRef: 'agent/reviewer'
+      })
+    }
+
+    await syncScope(fixture, claudeAgents)
+    expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+    expect(fixture.service.planSync(opencodeAgents).status).toBe('config-only')
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+
+    await syncScope(fixture, opencodeAgents)
+    expect(fixture.service.planSync(opencodeAgents).status).toBe('synced')
+  })
+
+  it('shows a Claude skill template in the commands alias scope without planning a delete', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate({ kind: 'skill', name: 'deploy', harnesses: { claude: { frontmatter: {} } } })])
+    await syncScope(fixture, { agentKind: 'claude', resourceType: 'skills' })
+    const commands = fixture.service.planSync({ agentKind: 'claude', resourceType: 'commands' })
+    expect(commands.status).toBe('synced')
+    expect(fixture.service.scan({ agentKind: 'claude', resourceType: 'commands' })[0]).toMatchObject({
+      relativePath: 'deploy/SKILL.md',
+      managed: true
+    })
+  })
+
+  it('classifies hand-written files as synced and template output as config-only or changed', () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    expect(fixture.service.planSync(claudeAgents)).toMatchObject({ status: 'synced', configOnly: [], changed: [] })
+
+    setTemplates(fixture, [agentTemplate()])
+    const configOnly = fixture.service.planSync(claudeAgents)
+    expect(configOnly.status).toBe('config-only')
+    expect(configOnly.changed).toEqual([])
+    expect(configOnly.configOnly).toHaveLength(1)
+    expect(configOnly.configOnly[0]).toMatchObject({
+      relativePath: 'reviewer.md',
+      existsOnDisk: false,
+      absolutePath: join(fixture.roots.claudeAgents, 'reviewer.md')
+    })
+
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+    const conflict = fixture.service.planSync(claudeAgents)
+    expect(conflict.status).toBe('conflict')
+    expect(conflict.configOnly).toEqual([])
+    expect(conflict.changed).toHaveLength(1)
+    expect(conflict.changed[0].disk).toMatchObject({ relativePath: 'reviewer.md', hash: hashBytes('hand edited'), existsOnDisk: true })
+    expect(conflict.changed[0].config).toMatchObject({
+      relativePath: 'reviewer.md',
+      hash: hashBytes(renderedFor(fixture, 'claude').content)
+    })
+  })
+
+  it('plans no operations for a scope of hand-written files and never deletes them', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [])
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    const before = snapshotTree(fixture.root)
+
+    const plan = fixture.service.planSyncToDisk(claudeAgents)
+    expect(plan).toMatchObject({ status: 'synced', configOnly: [], changed: [] })
+    const result = await fixture.service.applyPlan({ scope: claudeAgents, planId: plan.planId, confirmed: true })
+    expect(result.applied).toEqual([])
+    expect(snapshotTree(fixture.root)).toEqual(before)
+  })
+
+  it('only creates missing template output next to hand-written files', async () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    put(fixture.roots.claudeAgents, 'helper.md', 'helper agent')
+    setTemplates(fixture, [agentTemplate()])
+
+    const plan = fixture.service.planSyncToDisk(claudeAgents)
+    const result = await fixture.service.applyPlan({ scope: claudeAgents, planId: plan.planId, confirmed: true })
+
+    expect(result.applied).toEqual([
+      { type: 'create', id: physicalId('claude', 'claudeAgents', 'reviewer.md'), relativePath: 'reviewer.md' }
+    ])
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'manual.md'), 'utf8')).toBe('manual agent')
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'helper.md'), 'utf8')).toBe('helper agent')
+    expect(backupFiles(fixture.roots.claudeAgents)).toEqual([])
+  })
+
+  // TEST-007: a confirmed sync-to-disk plan combining a create and an
+  // overwrite writes only inside the selected harness root, leaves no
+  // atomic-write temp files, and backs up only the overwritten file.
+  it('applies a combined create and overwrite sync-to-disk plan only inside the selected root', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()], [{ name: 'tone', content: 'Be brief.' }])
+    put(fixture.roots.claudeAgents, 'refresh.md', TONE_PLACEHOLDER)
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    put(fixture.roots.opencodeAgents, 'sibling.md', TONE_PLACEHOLDER)
+
+    await syncScope(fixture, claudeAgents)
+
+    const claudeFiles = readdirSync(fixture.roots.claudeAgents).filter((name) => !name.includes('.x-backup-'))
+    expect(claudeFiles.sort()).toEqual(['manual.md', 'refresh.md', 'reviewer.md'])
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'refresh.md'), 'utf8')).toBe(toneExpanded())
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'manual.md'), 'utf8')).toBe('manual agent')
+    expect(tempFiles(fixture.roots.claudeAgents)).toEqual([])
+    const backups = backupFiles(fixture.roots.claudeAgents)
+    expect(backups.map((name) => readFileSync(join(fixture.roots.claudeAgents, name), 'utf8'))).toEqual([TONE_PLACEHOLDER])
+    expect(readdirSync(fixture.roots.opencodeAgents)).toEqual(['sibling.md'])
+    expect(readFileSync(join(fixture.roots.opencodeAgents, 'sibling.md'), 'utf8')).toBe(TONE_PLACEHOLDER)
+  })
+
+  it('reports an existing file at a template output path as shadowed, but not the template\'s own output (REQ-002)', async () => {
+    const fixture = makeTemplateFixture()
+    const shadows = (template: TemplateSeed) => (fixture.service as unknown as HarnessConfigService).templateShadows(template)
+    const reviewerShadow = [{ agentKind: 'claude', resourceType: 'agents', relativePath: 'reviewer.md' }]
+    expect(shadows(agentTemplate())).toEqual([])
+
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand written')
+    expect(shadows(agentTemplate())).toEqual(reviewerShadow)
+
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    await syncScope(fixture, opencodeAgents)
+    expect(shadows(agentTemplate())).toEqual([])
+    expect(shadows(agentTemplate({ name: 'alpha', harnesses: { claude: { name: 'reviewer', frontmatter: {} } } }))).toEqual(
+      reviewerShadow
+    )
+  })
+
+  it('makes pending plans in every dependent scope stale when a shared fragment changes (TEST-002)', async () => {
+    const fixture = makeTemplateFixture()
+    const fragment = { name: 'tone', content: 'Be brief.', hash: 'tone-1' }
+    setTemplates(fixture, [agentTemplate({ fragments: ['tone'] })], [fragment])
+    const plans = [claudeAgents, opencodeAgents].map((scope) => fixture.service.planSyncToDisk(scope))
+
+    setTemplates(fixture, fixture.source.templates, [{ ...fragment, content: 'Be very brief.', hash: 'tone-2' }])
+    for (const plan of plans) {
+      await rejectsCode(
+        () => fixture.service.applyPlan({ scope: plan.scope, planId: plan.planId, confirmed: true }),
+        'stale-plan'
+      )
+    }
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(false)
+  })
+
+  it('makes pending plans stale when the renderer version changes (TEST-003)', async () => {
+    let version = 2
+    const fixture = makeTemplateFixture({
+      deps: {
+        render: (templates: TemplateSeed[], fragments: FragmentSeed[]) => ({
+          ...renderTemplates(templates, fragments),
+          rendererVersion: version
+        })
+      }
+    })
+    setTemplates(fixture, [agentTemplate()])
+    const plans = [claudeAgents, opencodeAgents].map((scope) => fixture.service.planSyncToDisk(scope))
+    version = 3
+    setTemplates(fixture, fixture.source.templates)
+    for (const plan of plans) {
+      await rejectsCode(() => fixture.service.applyPlan({ scope: plan.scope, planId: plan.planId, confirmed: true }), 'stale-plan')
+    }
+  })
+
+  it('skips the overwrite of a detached file and detaches it after the disk writes (TEST-004)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    const planner = agentTemplate({ name: 'planner', harnesses: { claude: { frontmatter: {} } } })
+    setTemplates(fixture, [agentTemplate(), planner])
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    const templateId = physicalId('claude', 'claudeAgents', 'reviewer.md')
+    const plannerPath = join(fixture.roots.claudeAgents, 'planner.md')
+    const plannerAtDetach: boolean[] = []
+    fixture.detach.mockImplementation(() => {
+      plannerAtDetach.push(existsSync(plannerPath))
+    })
+
+    const keep = fixture.service.planSyncToDisk(claudeAgents)
+    expect(keep).not.toHaveProperty('detach')
+    expect(keep.changed.map((pair) => (pair.config as FileRef).id)).toEqual([templateId])
+
+    const detach = fixture.service.planSyncToDisk(claudeAgents, { detach: [templateId] })
+    expect(detach.detach).toEqual([templateId])
+    const result = await fixture.service.applyPlan({ scope: claudeAgents, planId: detach.planId, confirmed: true })
+
+    expect(result.applied).toEqual([
+      { type: 'create', id: physicalId('claude', 'claudeAgents', 'planner.md'), relativePath: 'planner.md' },
+      { type: 'detach', id: templateId, relativePath: 'reviewer.md' }
+    ])
+    expect(fixture.detach).toHaveBeenCalledTimes(1)
+    expect(fixture.detach).toHaveBeenCalledWith('agent/reviewer', 'claude')
+    expect(plannerAtDetach).toEqual([true])
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe('hand edited')
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'manual.md'), 'utf8')).toBe('manual agent')
+    expect(backupFiles(fixture.roots.claudeAgents)).toEqual([])
+  })
+
+  it.each([
+    ['a hand-written file', 'manual.md'],
+    ['template output not yet on disk', 'reviewer.md'],
+    ['an unknown file', 'missing.md']
+  ])('rejects detaching %s', async (_label, relativePath) => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+    await rejectsCode(
+      () => fixture.service.planSyncToDisk(claudeAgents, { detach: [physicalId('claude', 'claudeAgents', relativePath)] }),
+      'unknown-resource'
+    )
+  })
+
+  it('rejects detaching template output when no detach handler is available', async () => {
+    const fixture = makeTemplateFixture({ deps: { detachTemplateTarget: undefined } })
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+    await rejectsCode(
+      () => fixture.service.planSyncToDisk(claudeAgents, { detach: [physicalId('claude', 'claudeAgents', 'reviewer.md')] }),
+      'desired-state-failed'
+    )
+  })
+
+  it('holds earlier output of a template with a render error instead of deleting it (TEST-005)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [agentTemplate({ fragments: ['missing'] })])
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.status).toBe('conflict')
+    expect(comparison.renderErrors).toEqual([
+      expect.objectContaining({ templateRef: 'agent/reviewer', message: expect.stringContaining('missing') })
+    ])
+    expect(comparison.renderErrors?.[0].held.map((ref) => ref.relativePath)).toEqual(['reviewer.md'])
+
+    const opencode = fixture.service.planSync(opencodeAgents)
+    expect(opencode.renderErrors?.[0].templateRef).toBe('agent/reviewer')
+    expect(opencode.configOnly).toEqual([])
+
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(true)
+  })
+
+  it('holds earlier output of a template whose file no longer parses (REQ-007)', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [])
+    fixture.source.errors = [{ relativePath: 'agents/reviewer.md', message: 'Invalid frontmatter' }]
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.status).toBe('conflict')
+    expect(comparison.renderErrors).toEqual([
+      expect.objectContaining({ templateRef: 'agent/reviewer', message: 'Invalid frontmatter' })
+    ])
+    expect(comparison.renderErrors?.[0].held.map((ref) => ref.relativePath)).toEqual(['reviewer.md'])
+    expect(fixture.service.planSync(opencodeAgents).renderErrors).toBeUndefined()
+
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'reviewer.md'))).toBe(true)
+  })
+
+  it('backs up an existing file before syncing template output over it (TEST-006)', async () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'old reviewer')
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    const backups = backupFiles(fixture.roots.claudeAgents)
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(fixture.roots.claudeAgents, backups[0]), 'utf8')).toBe('old reviewer')
+    expect(readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')).toBe(renderedFor(fixture, 'claude').content)
+  })
+
+  it('attributes a disk file to the template whose rendered path it sits at, not to any marker in its content', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    const rendered = readFileSync(join(fixture.roots.claudeAgents, 'reviewer.md'), 'utf8')
+    expect(rendered).not.toContain('tatsu-template')
+    put(fixture.roots.claudeAgents, 'manual.md', '---\nname: manual\n---\nHand written.\n')
+    put(fixture.roots.claudeAgents, 'legacy.md', '---\nname: legacy\ntatsu-template: agent/reviewer\n---\nOld output.\n')
+
+    const scanned = fixture.service.scan(claudeAgents)
+    expect(scanned.map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
+      ['legacy.md', undefined],
+      ['manual.md', undefined],
+      ['reviewer.md', 'agent/reviewer']
+    ])
+    expect(scanned[0]).not.toHaveProperty('templateRef')
+    expect(scanned[1]).not.toHaveProperty('templateRef')
+
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'hand edited')
+    expect(fixture.service.scan(claudeAgents).find((ref: FileRef) => ref.relativePath === 'reviewer.md')?.templateRef).toBe(
+      'agent/reviewer'
+    )
+  })
+
+  it('reports templateRef on readFile for template output and not for a hand-written file', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate()])
+    await syncScope(fixture, claudeAgents)
+    put(fixture.roots.claudeAgents, 'manual.md', 'manual agent')
+
+    const output = await fixture.service.readFile(physicalId('claude', 'claudeAgents', 'reviewer.md'))
+    expect(output).toMatchObject({ ref: { templateRef: 'agent/reviewer' }, content: renderedFor(fixture, 'claude').content })
+    const manual = await fixture.service.readFile(physicalId('claude', 'claudeAgents', 'manual.md'))
+    expect(manual).toMatchObject({ content: 'manual agent' })
+    expect(manual.ref).not.toHaveProperty('templateRef')
+  })
+
+  it('attributes a shared path to the template that renders there over one that fails to render', () => {
+    const fixture = makeTemplateFixture()
+    put(fixture.roots.claudeAgents, 'reviewer.md', 'existing')
+    setTemplates(fixture, [
+      agentTemplate({ fragments: ['missing'], harnesses: { claude: { frontmatter: {} } } }),
+      agentTemplate({ name: 'alpha', harnesses: { claude: { name: 'reviewer', frontmatter: {} } } })
+    ])
+    expect(fixture.service.scan(claudeAgents).map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
+      ['reviewer.md', 'agent/alpha']
+    ])
+  })
+
+  it('holds earlier output written at a block-overridden name when the template stops rendering', async () => {
+    const fixture = makeTemplateFixture()
+    const renamed = { claude: { name: 'critic', frontmatter: {} } }
+    setTemplates(fixture, [agentTemplate({ harnesses: renamed })])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [agentTemplate({ harnesses: renamed, fragments: ['missing'] })])
+
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.renderErrors?.map((entry) => [entry.templateRef, entry.held.map((ref) => ref.relativePath)])).toEqual([
+      ['agent/reviewer', ['critic.md']]
+    ])
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'critic.md'))).toBe(true)
+  })
+
+  it('treats output at a block-overridden name as hand-written once the template file no longer parses, and keeps it', async () => {
+    const fixture = makeTemplateFixture()
+    setTemplates(fixture, [agentTemplate({ harnesses: { claude: { name: 'critic', frontmatter: {} } } })])
+    await syncScope(fixture, claudeAgents)
+    setTemplates(fixture, [])
+    fixture.source.errors = [{ relativePath: 'agents/reviewer.md', message: 'Invalid frontmatter' }]
+
+    expect(fixture.service.scan(claudeAgents).map((ref: FileRef) => [ref.relativePath, ref.templateRef])).toEqual([
+      ['critic.md', undefined]
+    ])
+    const comparison = fixture.service.planSync(claudeAgents)
+    expect(comparison.status).toBe('synced')
+    expect(comparison.renderErrors).toBeUndefined()
+    await syncScope(fixture, claudeAgents)
+    expect(existsSync(join(fixture.roots.claudeAgents, 'critic.md'))).toBe(true)
+  })
+
+  it('lists the scopes a template lands in, including the Claude commands alias', () => {
+    const fixture = makeTemplateFixture()
+    const scopes = (fixture.service as unknown as HarnessConfigService).scopesForTemplates([
+      { kind: 'skill', harnesses: { claude: { frontmatter: {} } } },
+      { kind: 'agent', harnesses: { opencode: { frontmatter: {} }, claude: false } }
+    ])
+    expect(scopes.map((scope) => `${scope.agentKind}:${scope.resourceType}`).sort()).toEqual([
+      'claude:commands',
+      'claude:skills',
+      'opencode:agents'
+    ])
+  })
+  describe('inline fragments in hand-written files', () => {
+    const claudeSkills: Scope = { agentKind: 'claude', resourceType: 'skills' }
+    const PLACEHOLDER = 'Intro\n{{fragment:tone}}\n'
+    const expanded = (body: string): string => `Intro\n${fragmentSection('tone', body)}\n`
+    const EDITED = `Intro\n${fragmentSection('tone', 'Be terse.', fragmentSha('Be brief.'))}\n`
+    const reviewerId = physicalId('claude', 'claudeAgents', 'reviewer.md')
+
+    function setFragments(fixture: TemplateFixture, fragments: FragmentSeed[]): void {
+      fixture.source.fragments = fragments.map((fragment) => ({ ...fragment }))
+    }
+
+    function agentOnDisk(fixture: TemplateFixture, relativePath: string): string {
+      return readFileSync(join(fixture.roots.claudeAgents, relativePath), 'utf8')
+    }
+
+    it('compares the expanded text, follows a fragment change, and leaves files without placeholders alone', async () => {
+      const fixture = makeTemplateFixture()
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', expanded('Be brief.'))
+      put(fixture.roots.claudeAgents, 'plain.md', 'Plain agent.\n')
+      expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+
+      setFragments(fixture, [{ name: 'tone', content: 'Be very brief.' }])
+      const comparison = fixture.service.planSync(claudeAgents)
+      expect(comparison.status).toBe('conflict')
+      expect(comparison.changed.map((pair) => (pair.config as FileRef).relativePath)).toEqual(['reviewer.md'])
+      expect((comparison.changed[0].config as FileRef).hash).toBe(hashBytes(expanded('Be very brief.')))
+
+      await syncScope(fixture, claudeAgents)
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(expanded('Be very brief.'))
+      expect(agentOnDisk(fixture, 'plain.md')).toBe('Plain agent.\n')
+      expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+      const backups = backupFiles(fixture.roots.claudeAgents)
+      expect(backups.map((name) => agentOnDisk(fixture, name))).toEqual([expanded('Be brief.')])
+    })
+
+    it('writes the fragment section into a hand-written file with a bare placeholder', async () => {
+      const fixture = makeTemplateFixture()
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', PLACEHOLDER)
+      expect(fixture.service.planSync(claudeAgents).changed.map((pair) => (pair.disk as FileRef).relativePath)).toEqual([
+        'reviewer.md'
+      ])
+
+      await syncScope(fixture, claudeAgents)
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(expanded('Be brief.'))
+      expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+    })
+
+    it('rejects a sync plan made before the fragment changed', async () => {
+      const fixture = makeTemplateFixture()
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', PLACEHOLDER)
+      const plan = fixture.service.planSyncToDisk(claudeAgents)
+      expect(plan.changed).toHaveLength(1)
+
+      setFragments(fixture, [{ name: 'tone', content: 'Be very brief.' }])
+      await rejectsCode(
+        () => fixture.service.applyPlan({ scope: claudeAgents, planId: plan.planId, confirmed: true }),
+        'stale-plan'
+      )
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(PLACEHOLDER)
+      expect(backupFiles(fixture.roots.claudeAgents)).toEqual([])
+
+      await syncScope(fixture, claudeAgents)
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(expanded('Be very brief.'))
+    })
+
+    it('holds a hand-written file whose fragment is unknown instead of syncing it', async () => {
+      const fixture = makeTemplateFixture()
+      const content = 'Old reviewer\n{{fragment:missing}}\n'
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', content)
+
+      const comparison = fixture.service.planSync(claudeAgents)
+      expect(comparison.status).toBe('conflict')
+      expect(comparison.configOnly).toEqual([])
+      expect(comparison.changed).toEqual([])
+      expect(comparison.fragmentErrors).toEqual([
+        {
+          id: reviewerId,
+          label: expect.any(String),
+          relativePath: 'reviewer.md',
+          message: expect.stringContaining('"missing"'),
+          held: expect.objectContaining({ relativePath: 'reviewer.md', hash: hashBytes(content) })
+        }
+      ])
+
+      await syncScope(fixture, claudeAgents)
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(content)
+    })
+
+    it.each(['create', 'update'] as const)('expands placeholders before a %s writes the file', async (kind) => {
+      const fixture = makeTemplateFixture()
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      if (kind === 'update') put(fixture.roots.claudeAgents, 'reviewer.md', 'old')
+      const plan =
+        kind === 'create'
+          ? fixture.service.prepareCreate(claudeAgents, 'fresh', PLACEHOLDER)
+          : fixture.service.prepareUpdate(claudeAgents, fixture.service.scan(claudeAgents)[0].id, PLACEHOLDER)
+      await fixture.service.applyPlan({ scope: claudeAgents, planId: plan.planId, confirmed: true })
+
+      const relativePath = kind === 'create' ? 'fresh.md' : 'reviewer.md'
+      expect(agentOnDisk(fixture, relativePath)).toBe(expanded('Be brief.'))
+      expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+    })
+
+    it.each(['create', 'update'] as const)('rejects a %s with an unknown fragment without writing', async (kind) => {
+      const fixture = makeTemplateFixture()
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', 'old')
+      const before = snapshotTree(fixture.root)
+      await rejectsCode(
+        () =>
+          kind === 'create'
+            ? fixture.service.prepareCreate(claudeAgents, 'fresh', 'Intro\n{{fragment:missing}}\n')
+            : fixture.service.prepareUpdate(claudeAgents, fixture.service.scan(claudeAgents)[0].id, 'Intro\n{{fragment:missing}}\n'),
+        'invalid-fragment'
+      )
+      expect(snapshotTree(fixture.root)).toEqual(before)
+    })
+
+    it('reports a hand-edited fragment section on disk as a fragment edit and keeps it through a fragment change', () => {
+      const fixture = makeTemplateFixture()
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', EDITED)
+
+      const comparison = fixture.service.planSync(claudeAgents)
+      expect(comparison.status).toBe('conflict')
+      expect(comparison.changed).toEqual([])
+      expect(comparison.fragmentEdits).toEqual([
+        { id: reviewerId, label: expect.any(String), relativePath: 'reviewer.md', fragments: ['tone'] }
+      ])
+
+      setFragments(fixture, [{ name: 'tone', content: 'Be very brief.' }])
+      expect(fixture.service.planSync(claudeAgents).changed).toEqual([])
+    })
+
+    function editedFixture(deps: AnyRecord = {}): TemplateFixture {
+      const fixture = makeTemplateFixture({ deps })
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', EDITED)
+      return fixture
+    }
+
+    it.each([
+      ['overwrite', expanded('Be brief.'), 'Be brief.'],
+      ['detach', 'Intro\nBe terse.\n', 'Be brief.'],
+      ['keep-edit', expanded('Be terse.'), 'Be terse.']
+    ] as const)('resolves an edited section with %s by writing the disk file behind a backup', async (resolution, content, fragmentAfter) => {
+      let fixture: TemplateFixture | undefined
+      const saveFragment = vi.fn((name: string, text: string) => {
+        setFragments(fixture!, [{ name, content: text }])
+      })
+      fixture = editedFixture({ saveFragment })
+
+      await fixture.service.resolveFragmentEdit(claudeAgents, reviewerId, 'tone', resolution)
+
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(content)
+      const backups = backupFiles(fixture.roots.claudeAgents)
+      expect(backups.map((name) => agentOnDisk(fixture!, name))).toEqual([EDITED])
+      expect(fixture.source.fragments.map((fragment) => fragment.content)).toEqual([fragmentAfter])
+      expect(fixture.service.planSync(claudeAgents).fragmentEdits).toBeUndefined()
+      await rejectsCode(() => fixture!.service.resolveFragmentEdit(claudeAgents, reviewerId, 'tone', resolution), 'stale-plan')
+    })
+
+    it('saves the edited text as the fragment before writing the file on keep-edit', async () => {
+      let fixture: TemplateFixture | undefined
+      const fileAtSave: string[] = []
+      const saveFragment = vi.fn(() => {
+        fileAtSave.push(agentOnDisk(fixture!, 'reviewer.md'))
+      })
+      fixture = editedFixture({ saveFragment })
+      await fixture.service.resolveFragmentEdit(claudeAgents, reviewerId, 'tone', 'keep-edit')
+      expect(saveFragment).toHaveBeenCalledWith('tone', 'Be terse.')
+      expect(fileAtSave).toEqual([EDITED])
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(expanded('Be terse.'))
+    })
+
+    it('leaves the disk file unchanged when saving the kept edit fails', async () => {
+      const fixture = editedFixture({
+        saveFragment: vi.fn(() => {
+          throw new Error('disk full')
+        })
+      })
+      await rejectsCode(() => fixture.service.resolveFragmentEdit(claudeAgents, reviewerId, 'tone', 'keep-edit'), 'write-failed')
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(EDITED)
+      expect(backupFiles(fixture.roots.claudeAgents)).toEqual([])
+    })
+
+    it.each([
+      ['an unknown file', EDITED, 'missing.md', 'tone', 'overwrite', true, 'unknown-resource'],
+      ['an unknown fragment', EDITED, 'reviewer.md', 'nope', 'overwrite', true, 'invalid-fragment'],
+      ['a section that is not edited', expanded('Be brief.'), 'reviewer.md', 'tone', 'overwrite', true, 'stale-plan'],
+      ['keep-edit with no fragment store', EDITED, 'reviewer.md', 'tone', 'keep-edit', false, 'desired-state-failed']
+    ] as const)('refuses to resolve %s', async (_label, content, relativePath, fragment, resolution, canSave, code) => {
+      const fixture = makeTemplateFixture({ deps: canSave ? { saveFragment: vi.fn() } : {} })
+      setFragments(fixture, [{ name: 'tone', content: 'Be brief.' }])
+      put(fixture.roots.claudeAgents, 'reviewer.md', content)
+      await rejectsCode(
+        () => fixture.service.resolveFragmentEdit(claudeAgents, physicalId('claude', 'claudeAgents', relativePath), fragment, resolution),
+        code
+      )
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(content)
+      expect(backupFiles(fixture.roots.claudeAgents)).toEqual([])
+    })
+
+    it('refuses to resolve an edited section in template output', async () => {
+      const fixture = makeTemplateFixture({ deps: { saveFragment: vi.fn() } })
+      setTemplates(
+        fixture,
+        [agentTemplate({ body: 'Review the diff.\n\n{{fragment:tone}}', harnesses: { claude: { frontmatter: {} } } })],
+        [{ name: 'tone', content: 'Be brief.' }]
+      )
+      await syncScope(fixture, claudeAgents)
+      const handEdited = agentOnDisk(fixture, 'reviewer.md').replace('Be brief.', 'Be terse.')
+      put(fixture.roots.claudeAgents, 'reviewer.md', handEdited)
+
+      await rejectsCode(() => fixture.service.resolveFragmentEdit(claudeAgents, reviewerId, 'tone', 'overwrite'), 'unknown-resource')
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(handEdited)
+    })
+
+    it('keeps a detached template file with fragment sections following the fragment', async () => {
+      let fixture: TemplateFixture | undefined
+      fixture = makeTemplateFixture({
+        deps: { detachTemplateTarget: vi.fn(() => setTemplates(fixture!, [])) }
+      })
+      setTemplates(
+        fixture,
+        [agentTemplate({ body: 'Review the diff.\n\n{{fragment:tone}}', harnesses: { claude: { frontmatter: {} } } })],
+        [{ name: 'tone', content: 'Be brief.' }]
+      )
+      await syncScope(fixture, claudeAgents)
+      const rendered = agentOnDisk(fixture, 'reviewer.md')
+      expect(rendered).toContain(fragmentSection('tone', 'Be brief.'))
+      const detach = fixture.service.planSyncToDisk(claudeAgents, { detach: [reviewerId] })
+      await fixture.service.applyPlan({ scope: claudeAgents, planId: detach.planId, confirmed: true })
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(rendered)
+      expect(fixture.service.scan(claudeAgents)[0]).not.toHaveProperty('templateRef')
+      expect(fixture.service.planSync(claudeAgents).status).toBe('synced')
+
+      setFragments(fixture, [{ name: 'tone', content: 'Be very brief.' }])
+      expect(fixture.service.planSync(claudeAgents).changed).toHaveLength(1)
+      await syncScope(fixture, claudeAgents)
+      expect(agentOnDisk(fixture, 'reviewer.md')).toBe(
+        rendered.replace(fragmentSection('tone', 'Be brief.'), fragmentSection('tone', 'Be very brief.'))
+      )
+    })
+
+    function usageFixture(): TemplateFixture {
+      const fixture = makeTemplateFixture()
+      put(fixture.roots.opencodeAgents, 'z.md', PLACEHOLDER)
+      put(fixture.roots.opencodeAgents, 'helper.md', `${fragmentSection('style', 'Be kind.')}\n`)
+      put(fixture.roots.claudeSkills, 'deploy/SKILL.md', PLACEHOLDER)
+      put(fixture.roots.claudeAgents, 'fenced.md', '```\n{{fragment:tone}}\n```\n')
+      put(fixture.roots.claudeAgents, 'w.md', PLACEHOLDER)
+      setTemplates(
+        fixture,
+        [agentTemplate({ body: 'Review the diff.\n\n{{fragment:style}}', harnesses: { claude: { frontmatter: {} } } })],
+        [{ name: 'tone', content: 'Be brief.' }, { name: 'style', content: 'Be kind.' }]
+      )
+      const output = renderedFor(fixture, 'claude')
+      expect(output.content).toContain(fragmentSection('style', 'Be kind.'))
+      put(fixture.roots.claudeAgents, output.relativePath, output.content)
+      return fixture
+    }
+
+    it('lists the scopes with a hand-written file using a fragment, including the Claude commands alias, and skips template output', () => {
+      const fixture = usageFixture()
+      const keys = (scopes: Scope[]): string[] => scopes.map((scope) => `${scope.agentKind}:${scope.resourceType}`).sort()
+      expect(keys(fixture.service.scopesForFragment('tone'))).toEqual([
+        'claude:agents',
+        'claude:commands',
+        'claude:skills',
+        'opencode:agents'
+      ])
+      expect(keys(fixture.service.scopesForFragment('style'))).toEqual(['opencode:agents'])
+      expect(keys(fixture.service.scopesForFragment())).toEqual([
+        'claude:agents',
+        'claude:commands',
+        'claude:skills',
+        'opencode:agents'
+      ])
+      expect(fixture.service.scopesForFragment('unused')).toEqual([])
+    })
+
+    it('ignores placeholders inside code fences when listing fragment scopes', () => {
+      const fixture = makeTemplateFixture()
+      put(fixture.roots.claudeAgents, 'fenced.md', '```\n{{fragment:tone}}\n```\n')
+      expect(fixture.service.scopesForFragment('tone')).toEqual([])
+      expect(fixture.service.scopesForFragment()).toEqual([])
+    })
+
+    it('lists the hand-written files using a fragment sorted by harness, type, and path, skipping template output', () => {
+      const fixture = usageFixture()
+      expect(fixture.service.filesUsingFragment('tone')).toEqual([
+        expect.objectContaining({ id: physicalId('claude', 'claudeAgents', 'w.md'), agentKind: 'claude', resourceType: 'agents', relativePath: 'w.md' }),
+        expect.objectContaining({ agentKind: 'claude', resourceType: 'skills', relativePath: 'deploy/SKILL.md' }),
+        expect.objectContaining({ agentKind: 'opencode', resourceType: 'agents', relativePath: 'z.md' })
+      ])
+      expect(fixture.service.filesUsingFragment('style').map((file) => file.relativePath)).toEqual(['helper.md'])
+      expect(fixture.service.filesUsingFragment('unused')).toEqual([])
+    })
+  })
+})

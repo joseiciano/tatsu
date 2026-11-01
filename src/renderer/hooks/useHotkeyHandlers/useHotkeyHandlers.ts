@@ -10,7 +10,7 @@ import { useBackend } from '../../backend'
 import { SCALES } from '../../../shared/state/settings'
 import { cycleWorktreeDetail } from '../../worktree-detail-override'
 import type { PaletteMode } from '../../components/CommandPalette'
-import { ENABLE_CODE_DIFF } from '../../../shared/constants'
+import { ENABLE_CODE_DIFF, ENABLE_NOTIFICATION_CENTER } from '../../../shared/constants'
 
 interface UseHotkeyHandlersArgs {
   worktrees: Worktree[]
@@ -40,6 +40,7 @@ interface UseHotkeyHandlersArgs {
   setShowHotkeyCheatsheet: React.Dispatch<React.SetStateAction<boolean>>
   setShowReview: React.Dispatch<React.SetStateAction<boolean>>
   setShowCodeDiff: React.Dispatch<React.SetStateAction<boolean>>
+  toggleNotifications: () => void
   // Imperative hooks into other handlers — passed in to avoid this hook
   // depending on useTabHandlers + useWorktreeHandlers directly.
   handleAddTerminalTab: (worktreePath: string, paneId?: string) => void
@@ -86,6 +87,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
     setShowHotkeyCheatsheet,
     setShowReview,
     setShowCodeDiff,
+    toggleNotifications,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
@@ -289,6 +291,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
         backend.openInEditor(activeWorktreeId)
       },
       toggleCommandCenter: () => setShowCommandCenter((v) => !v),
+      ...(ENABLE_NOTIFICATION_CENTER ? { openNotifications: toggleNotifications } : {}),
       commandPalette: () => {
         setShowHotkeyCheatsheet(false)
         setCommandPaletteMode('root')
@@ -365,7 +368,8 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
       setShowPerfMonitor,
       setShowHotkeyCheatsheet,
       setShowReview,
-    setShowCodeDiff,
+      setShowCodeDiff,
+      toggleNotifications,
       setShowSettings,
       backend,
       uiScale,

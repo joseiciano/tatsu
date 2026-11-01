@@ -1,6 +1,6 @@
 import type { PtyStatus } from '../../types'
 import type { Action } from '../../hotkeys'
-import { ENABLE_CODE_DIFF } from '../../../shared/constants'
+import { ENABLE_CODE_DIFF, ENABLE_NOTIFICATION_CENTER } from '../../../shared/constants'
 
 export const FILE_CACHE_TTL_MS = 10_000
 export const MAX_FILE_RESULTS = 100
@@ -44,4 +44,5 @@ export const EXCLUDED_ACTIONS: Set<Action> = new Set([
   'commandPalette',
   'fileQuickOpen',
   ...(ENABLE_CODE_DIFF ? [] : (['toggleCodeDiff'] as const)),
+  ...(ENABLE_NOTIFICATION_CENTER ? [] : (['openNotifications'] as const)),
 ])

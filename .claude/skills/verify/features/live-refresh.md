@@ -21,7 +21,7 @@ Preconditions:
 - **Select.** Choose `keep.txt`. The diff shows `line two CHANGED`.
 - **Edit.** Write `line two EDITED LIVE` into `keep.txt` and create `fresh-file.txt` in `$RUN/fixture/demo-feature`. Within 15 s `fresh-file.txt` is listed and the diff shows `line two EDITED LIVE`.
 - **Restore.** Restore `keep.txt` and delete `fresh-file.txt`. Within 15 s `fresh-file.txt` leaves the list.
-- **Run.** `node .claude/skills/verify/scripts/drive.mjs "$RUN" .claude/skills/verify/scripts/journeys/live-refresh.mjs`.
+- **Run.** `node .claude/skills/verify/scripts/code-diff/drive.mjs "$RUN" .claude/skills/verify/scripts/code-diff/journeys/live-refresh.mjs`.
 
 ## Gotchas
 

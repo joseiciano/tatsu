@@ -58,7 +58,12 @@ node scripts/web-smoke.mjs "$HOST_PORT" "$TOKEN"
 # 3. WS upgrade + snapshot round-trip.
 node scripts/ws-smoke.mjs "$TOKEN" "$PORT"
 
-# 4. Clean shutdown — SIGTERM should exit within 5s. Catches "server
+# 4. Bundled-runtime boot smoke (OpenCode + Codex ACP): resolve the bundled
+# executables from node_modules and confirm each ACP subprocess spawns +
+# boots without auth, then is killed. Platform-aware; skips unsupported hosts.
+node scripts/smoke-bundled-runtimes.mjs
+
+# 5. Clean shutdown — SIGTERM should exit within 5s. Catches "server
 # hangs on SIGTERM" bugs that would leave zombies in CI.
 kill -TERM "$SERVER_PID"
 for _ in $(seq 1 25); do

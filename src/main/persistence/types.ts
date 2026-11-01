@@ -5,6 +5,7 @@ import type {
 } from '../persistence-migrations'
 import type { CostsState } from '../../shared/state/costs'
 import type { SnoozeEntry } from '../../shared/state/snooze'
+import type { HarnessConfigRoots } from '../../shared/state/harness-config'
 
 import type { AgentKind } from '../../shared/state/terminals'
 export type { PersistedPane, PersistedPaneNode, PersistedTab }
@@ -65,6 +66,7 @@ export interface Config {
   harnessAutoStarred?: boolean
   costs?: CostsState
   autoUpdateEnabled?: boolean
+  experimentalChatAgentsEnabled?: boolean
   shareClaudeSettings?: boolean
   hooksConsent?: 'pending' | 'accepted' | 'declined'
   hooksMigratedToGlobal?: boolean
@@ -79,6 +81,8 @@ export interface Config {
   browserToolsEnabled?: boolean
   browserToolsMode?: 'view' | 'full'
   defaultClaudeTabType?: 'xterm' | 'json'
+  defaultOpencodeTabType?: 'xterm' | 'json'
+  defaultCodexTabType?: 'xterm' | 'json'
   chatPromotionDismissed?: boolean
   autoApprovePermissions?: boolean
   autoApproveSteerInstructions?: string
@@ -96,4 +100,9 @@ export interface Config {
   dismissedAnnouncementIds?: string[]
   announcementsMuted?: boolean
   scratchpadNotes?: Record<string, Record<string, string>>
+  /** Saved copies of harness files from builds that kept them. No longer
+   *  read or written; left in place so an older build still finds them. */
+  harnessConfig?: unknown
+  harnessConfigRoots?: HarnessConfigRoots
+  harnessConfigSourceDir?: string
 }

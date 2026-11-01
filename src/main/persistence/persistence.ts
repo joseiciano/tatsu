@@ -13,7 +13,14 @@ import {
   DEFAULT_TERMINAL_FONT_SIZE
 } from './constants'
 
-export type { Config, QuestStep, BackendConnection, PersistedPane, PersistedPaneNode, PersistedTab } from './types'
+export type {
+  Config,
+  QuestStep,
+  BackendConnection,
+  PersistedPane,
+  PersistedPaneNode,
+  PersistedTab
+} from './types'
 export {
   LOCAL_BACKEND_ID,
   DEFAULT_WORKTREE_BASE,

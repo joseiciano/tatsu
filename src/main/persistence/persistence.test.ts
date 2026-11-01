@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { applyConnectionDefaults, LOCAL_BACKEND_ID, type Config } from '.'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { afterEach, beforeEach, describe, it, expect } from 'vitest'
+import { applyConnectionDefaults, loadConfig, LOCAL_BACKEND_ID, type Config } from '.'
+import { resetPathsForTests } from '../paths'
+import { SCHEMA_VERSION } from '../persistence-migrations'
 
 function bareConfig(): Config {
   return {
@@ -63,5 +68,43 @@ describe('applyConnectionDefaults', () => {
     const before = JSON.stringify(input)
     applyConnectionDefaults(input)
     expect(JSON.stringify(input)).toBe(before)
+  })
+})
+
+describe('loadConfig — harnessConfig key', () => {
+  const originalDataDir = process.env.HARNESS_DATA_DIR
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'harness-load-config-test-'))
+    process.env.HARNESS_DATA_DIR = dir
+    resetPathsForTests()
+  })
+
+  afterEach(() => {
+    if (originalDataDir === undefined) delete process.env.HARNESS_DATA_DIR
+    else process.env.HARNESS_DATA_DIR = originalDataDir
+    resetPathsForTests()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function writeConfig(value: Record<string, unknown>): void {
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ schemaVersion: SCHEMA_VERSION, repoRoots: [], ...value }))
+  }
+
+  it('keeps an existing harnessConfig key exactly as stored so an older build still finds it', () => {
+    const saved = {
+      version: 1,
+      resources: [{ id: 'res-1', agentKind: 'claude', resourceType: 'agents', relativePath: 'a.md', content: '# A' }]
+    }
+    writeConfig({ harnessConfig: saved })
+    expect(loadConfig().harnessConfig).toEqual(saved)
+  })
+
+  it('does not add a harnessConfig key when the file has none', () => {
+    writeConfig({ claudeCommand: 'claude --verbose' })
+    const config = loadConfig()
+    expect(config.claudeCommand).toBe('claude --verbose')
+    expect('harnessConfig' in config).toBe(false)
   })
 })

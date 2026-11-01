@@ -1,37 +1,63 @@
-import type { ChatRuntime } from './types'
+import type { ChatRuntime, ApprovalDecision } from './types'
 import type { Store } from '../store'
+import type { AgentKind } from '../../shared/state/terminals'
 import type {
-  ClaudeChatRuntime,
   JsonClaudePermissionMode,
   ChatRuntimeCapabilities
 } from '../../shared/state/json-claude'
 
+export type { ChatRuntime, ApprovalDecision } from './types'
+export { ClaudeAcpRuntime, resolveClaudeAgentSdkExecutablePath } from './claude-acp'
+export {
+  AcpStdioRuntime,
+  defaultAcpStdioCapabilities,
+  type AcpStdioRuntimeOptions
+} from './acp-stdio'
+export { AcpStdioClient, type AcpStdioClientOptions } from './acp-stdio-client'
+export {
+  BundledRuntimeResolver,
+  RuntimeMissingError,
+  codexPlatformPackageId,
+  codexTargetTriple,
+  type RuntimeLaunchConfig,
+  type BundledRuntimeResolverOptions
+} from './runtime-path-resolver'
+
 /** Main-process registry that holds chat runtimes and routes jsonClaude
- *  operations to the correct implementation. */
+ *  operations to the correct implementation. Runtimes are keyed by agent
+ *  kind; routing per session reads the session's `agentKind` from the
+ *  store slice instead of a hard-coded default. */
 export class ChatRuntimeRegistry {
-  private runtimes: Map<ClaudeChatRuntime, ChatRuntime> = new Map()
+  private runtimes: Map<AgentKind, ChatRuntime> = new Map()
+  private store: Store
 
-  constructor(_store: Store) {}
-
-  register(runtimeId: ClaudeChatRuntime, runtime: ChatRuntime): void {
-    this.runtimes.set(runtimeId, runtime)
+  constructor(store: Store) {
+    this.store = store
   }
 
-  getDefaultRuntimeId(): ClaudeChatRuntime {
-    return 'acp'
+  register(agentKind: AgentKind, runtime: ChatRuntime): void {
+    this.runtimes.set(agentKind, runtime)
   }
 
-  getRuntimeById(runtimeId: ClaudeChatRuntime): ChatRuntime {
-    const runtime = this.runtimes.get(runtimeId)
-    if (!runtime) throw new Error(`Chat runtime not registered: ${runtimeId}`)
+  getRuntimeById(agentKind: AgentKind): ChatRuntime {
+    const runtime = this.runtimes.get(agentKind)
+    if (!runtime) {
+      throw new Error(
+        `Chat runtime not registered for agent kind: ${agentKind}`
+      )
+    }
     return runtime
   }
 
-  /** Return concrete ChatRuntime instance for session. */
+  /** Return the concrete ChatRuntime for a session by looking up the
+   *  session's agent kind in the store slice. Throws a clear error for
+   *  an unknown session or an agent kind with no registered runtime. */
   getRuntime(sessionId: string): ChatRuntime {
-    void sessionId
-    const id = this.getDefaultRuntimeId()
-    return this.getRuntimeById(id)
+    const session = this.store.getSnapshot().state.jsonClaude.sessions[sessionId]
+    if (!session) {
+      throw new Error(`Chat runtime lookup failed: unknown session ${sessionId}`)
+    }
+    return this.getRuntimeById(session.agentKind)
   }
 
   hasSession(sessionId: string): boolean {
@@ -44,6 +70,7 @@ export class ChatRuntimeRegistry {
     opts?: {
       permissionMode?: JsonClaudePermissionMode
       modelOverride?: string
+      agentSessionId?: string
     }
   ): void {
     this.getRuntime(sessionId).start(sessionId, worktreePath, opts)
@@ -73,6 +100,24 @@ export class ChatRuntimeRegistry {
 
   rewindTo(sessionId: string, fromEntryId: string): { ok: boolean; reason?: string } {
     return this.getRuntime(sessionId).rewindTo(sessionId, fromEntryId)
+  }
+
+  async authenticate(sessionId: string, methodId: string): Promise<{ ok: boolean; error?: string }> {
+    const runtime = this.getRuntime(sessionId)
+    if (!runtime.authenticate) {
+      return { ok: false, error: 'This runtime has no in-app login' }
+    }
+    return runtime.authenticate(sessionId, methodId)
+  }
+
+  /** Route an approval answer to the runtime that raised it. The pending
+   *  approval in the slice names the session, and the session names the
+   *  runtime. */
+  resolveApproval(requestId: string, decision: ApprovalDecision): boolean {
+    const pending = this.store.getSnapshot().state.jsonClaude.pendingApprovals[requestId]
+    if (!pending) return false
+    const runtime = this.getRuntime(pending.sessionId)
+    return runtime.resolveApproval?.(requestId, decision) ?? false
   }
 
   setPermissionMode(sessionId: string, mode: JsonClaudePermissionMode): void {

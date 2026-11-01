@@ -31,7 +31,7 @@ Preconditions:
 - **Renamed.** Choose the row titled `rename-me.txt → renamed.txt`. The header shows the same.
 - **Untracked / deleted.** Choose `untracked.txt` (shows `scratch`), then `delete-me.txt` (shows `going away`).
 - **Keyboard.** Choose `tests/added.test.ts`, click the `N files` summary, press `j` (header `config.json`), `k` (back), `]` `]` (`src/api/routes.ts`), `[` (`config.json`).
-- **Run.** `node .claude/skills/verify/scripts/drive.mjs "$RUN" .claude/skills/verify/scripts/journeys/file-navigation.mjs`.
+- **Run.** `node .claude/skills/verify/scripts/code-diff/drive.mjs "$RUN" .claude/skills/verify/scripts/code-diff/journeys/file-navigation.mjs`.
 
 ## Gotchas
 

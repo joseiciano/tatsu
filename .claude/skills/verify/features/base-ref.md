@@ -29,7 +29,7 @@ Preconditions:
 - **Invalid.** Fill `no-such-ref`, press Enter. Text `Ref no-such-ref not found.` appears; the file list stays.
 - **Unrelated.** Fill `unrelated`, press Enter. Text `unrelated and this branch share no history.` and button `Reset to default` appear.
 - **Reset.** Choose `Reset to default`. `Base ref` reads `origin/main` and the list returns.
-- **Run.** `node .claude/skills/verify/scripts/drive.mjs "$RUN" .claude/skills/verify/scripts/journeys/base-ref.mjs`.
+- **Run.** `node .claude/skills/verify/scripts/code-diff/drive.mjs "$RUN" .claude/skills/verify/scripts/code-diff/journeys/base-ref.mjs`.
 
 ## Gotchas
 

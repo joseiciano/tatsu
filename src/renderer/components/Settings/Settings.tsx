@@ -15,6 +15,7 @@ import { SEMANTIC_KEYS } from '../../theme-apply'
 import type { CustomTheme, UiScale } from '../../../shared/state/settings'
 import { SCALES, scaleSpec } from '../../../shared/state/settings'
 import { QRCodeSVG } from 'qrcode.react'
+import { ConfigFoldersSettings } from '../ConfigFoldersSettings'
 
 interface SettingsProps {
   onClose: () => void
@@ -23,7 +24,7 @@ interface SettingsProps {
   initialSection?: SectionId
 }
 
-type SectionId = 'appearance' | 'agent' | 'worktrees' | 'editor' | 'github' | 'hotkeys' | 'updates' | 'support' | 'experimental'
+type SectionId = 'appearance' | 'agent' | 'worktrees' | 'editor' | 'config-folders' | 'github' | 'hotkeys' | 'updates' | 'support' | 'experimental'
 type SubSectionId =
   | 'appearance-theme'
   | 'appearance-custom-themes'
@@ -44,6 +45,7 @@ type SubSectionId =
   | 'hotkeys-external'
   | 'experimental-browser-control'
   | 'experimental-web-mobile'
+  | 'experimental-chat-agents'
 
 interface SubSection {
   id: SubSectionId
@@ -77,6 +79,7 @@ const SECTIONS: Section[] = [
   },
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
   { id: 'editor', label: 'Editor', icon: Code2 },
+  { id: 'config-folders', label: 'Config folders', icon: FolderOpen },
   { id: 'github', label: 'GitHub', icon: GitPullRequest },
   {
     id: 'hotkeys', label: 'Hotkeys', icon: Keyboard, children: [
@@ -95,7 +98,8 @@ const SECTIONS: Section[] = [
   {
     id: 'experimental', label: 'Experimental', icon: FlaskConical, children: [
       { id: 'experimental-browser-control', label: 'Browser control' },
-      { id: 'experimental-web-mobile', label: 'Web & mobile' }
+      { id: 'experimental-web-mobile', label: 'Web & mobile' },
+      { id: 'experimental-chat-agents', label: 'Chat agents' }
     ]
   }
 ]
@@ -109,6 +113,27 @@ interface SearchItem {
   /** Section label, shown as secondary context in results. */
   context: string
   element: HTMLElement
+}
+
+type PickerKeyboardEvent = Pick<KeyboardEvent, 'key' | 'preventDefault' | 'stopPropagation'>
+
+export function dismissPickerOnEscape(event: PickerKeyboardEvent, closePicker: () => void): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  closePicker()
+}
+
+export function reindexRevealedRowsAfterRemoval(
+  revealed: ReadonlySet<number>,
+  removedIndex: number
+): Set<number> {
+  const reindexed = new Set<number>()
+  for (const index of revealed) {
+    if (index < removedIndex) reindexed.add(index)
+    else if (index > removedIndex) reindexed.add(index - 1)
+  }
+  return reindexed
 }
 
 function cleanText(el: Element): string {
@@ -146,6 +171,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     agent: null,
     worktrees: null,
     editor: null,
+    'config-folders': null,
     github: null,
     hotkeys: null,
     updates: null,
@@ -171,7 +197,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     'hotkeys-overlays': null,
     'hotkeys-external': null,
     'experimental-browser-control': null,
-    'experimental-web-mobile': null
+    'experimental-web-mobile': null,
+    'experimental-chat-agents': null
   })
   const isProgrammaticScroll = useRef(false)
 
@@ -352,11 +379,14 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     prReviewPrompt,
     claudeTuiFullscreen,
     browserToolsEnabled,
+    experimentalChatAgentsEnabled,
     browserToolsMode,
     wsTransportEnabled,
     wsTransportPort,
     wsTransportHost,
     defaultClaudeTabType,
+    defaultOpencodeTabType,
+    defaultCodexTabType,
     jsonModeChatDensity,
     uiScale,
     jsonModeSendOnEnter,
@@ -1409,7 +1439,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
         </div>
 
         {/* Main scrollable content */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto">
           <div className="max-w-2xl p-8 pb-[60vh] space-y-12">
             {/* Appearance section */}
             <section ref={(el) => { sectionRefs.current.appearance = el }} id="appearance">
@@ -1723,6 +1753,36 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   </div>
                 )}
 
+                {defaultAgent === 'opencode' && experimentalChatAgentsEnabled && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Opencode tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultOpencodeTabType}
+                      onChange={(value) => { void backend.setDefaultOpencodeTabType(value) }}
+                    />
+                  </div>
+                )}
+
+                {defaultAgent === 'codex' && experimentalChatAgentsEnabled && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-semibold text-fg-bright mb-1">Interface</h3>
+                    <p className="text-xs text-dim mb-3">
+                      Which interface new Codex tabs spawn in. Switch any
+                      existing tab from its right-click menu or the chip in
+                      the tab header.
+                    </p>
+                    <InterfaceToggle
+                      value={defaultCodexTabType}
+                      onChange={(value) => { void backend.setDefaultCodexTabType(value) }}
+                    />
+                  </div>
+                )}
+
                 <h3 className="text-sm font-semibold text-fg-bright mt-6 mb-3">
                   Status hooks
                 </h3>
@@ -1832,7 +1892,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       <input type="checkbox" checked={nameClaudeSessions} onChange={(e) => { void backend.setNameClaudeSessions(e.target.checked) }} className="accent-current icon-base cursor-pointer" />
                       <div>
                         <span className="text-sm font-medium text-fg">Name sessions by worktree</span>
-                        <p className="text-xs text-dim mt-0.5">Passes <code className="bg-panel px-1 rounded">--name &quot;repo/branch&quot;</code> to Claude.</p>
+                        <p className="text-xs text-dim mt-0.5">Passes <code className="bg-panel px-1 rounded">--name &quot;repo/branch&quot;</code> to Claude and Pi.</p>
                       </div>
                     </label>
                   </div>
@@ -2320,7 +2380,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                           <span className="text-dim text-xs">=</span>
                           <input type={revealed ? 'text' : 'password'} value={row.value} onChange={(e) => { setPiEnvRows((prev) => prev.map((r, i) => (i === index ? { ...r, value: e.target.value } : r))); setPiEnvSaveResult(null) }} placeholder="value" spellCheck={false} className="flex-1 bg-panel border border-border-strong rounded px-2 py-1.5 text-xs text-fg-bright placeholder-faint outline-none focus:border-fg font-mono" />
                           <Tooltip label={revealed ? 'Hide value' : 'Reveal value'}><button onClick={() => setPiRevealedEnvRows((prev) => { const next = new Set(prev); if (next.has(index)) next.delete(index); else next.add(index); return next })} className="p-1.5 text-dim hover:text-fg transition-colors cursor-pointer">{revealed ? <EyeOff className="icon-sm" /> : <Eye className="icon-sm" />}</button></Tooltip>
-                          <Tooltip label="Remove"><button onClick={() => { setPiEnvRows((prev) => prev.filter((_, i) => i !== index)); setPiEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
+                          <Tooltip label="Remove"><button onClick={() => { setPiEnvRows((prev) => prev.filter((_, i) => i !== index)); setPiRevealedEnvRows((prev) => reindexRevealedRowsAfterRemoval(prev, index)); setPiEnvSaveResult(null) }} className="p-1.5 text-dim hover:text-danger transition-colors cursor-pointer"><Trash2 className="icon-sm" /></button></Tooltip>
                         </div>
                       )
                     })}
@@ -2760,6 +2820,18 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               </p>
             </section>
 
+            <section ref={(el) => { sectionRefs.current['config-folders'] = el }} id="config-folders">
+              <h2 className="text-lg font-semibold text-fg-bright mb-1">Config folders</h2>
+              <p className="text-sm text-dim mb-4">
+                Where each harness keeps its agents, skills, and commands, and
+                where Tatsu keeps its template source. Leave a field empty to use
+                the default shown in grey. Folders must be absolute paths; a
+                folder that doesn't exist yet shows as unavailable on the Config
+                page until you create it.
+              </p>
+              <ConfigFoldersSettings />
+            </section>
+
             {/* GitHub section */}
             <section ref={(el) => { sectionRefs.current.github = el }} id="github">
               {(() => {
@@ -3188,6 +3260,35 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
               {/* Browser control sub-card */}
               <div
+                ref={(el) => { subSectionRefs.current['experimental-chat-agents'] = el }}
+                id="experimental-chat-agents"
+                className="bg-panel-raised border border-warning/30 rounded-lg p-4 mb-4"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-fg-bright">Chat for OpenCode and Codex</h3>
+                  <span className="text-xs font-medium text-warning bg-warning/10 border border-warning/30 rounded px-1.5 py-0.5">
+                    Experimental
+                  </span>
+                </div>
+                <p className="text-xs text-dim mb-3">
+                  Adds the Chat interface to OpenCode and Codex tabs. The agent
+                  runtime is downloaded on first use; sign-in happens from the
+                  chat tab.
+                </p>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="experimental-chat-agents-enabled"
+                    checked={experimentalChatAgentsEnabled}
+                    onChange={(e) => { void backend.setExperimentalChatAgentsEnabled(e.target.checked) }}
+                    className="mt-0.5 cursor-pointer icon-base" />
+                  <label htmlFor="experimental-chat-agents-enabled" className="text-sm text-fg-bright cursor-pointer">
+                    Enable Chat tabs for OpenCode and Codex
+                  </label>
+                </div>
+              </div>
+
+              <div
                 ref={(el) => { subSectionRefs.current['experimental-browser-control'] = el }}
                 id="experimental-browser-control"
                 className="bg-panel-raised border border-warning/30 rounded-lg p-4 mb-4"
@@ -3598,7 +3699,7 @@ function ThemeModePicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3687,7 +3788,7 @@ function EditorPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3783,7 +3884,7 @@ function MergeStrategyPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3872,7 +3973,7 @@ function WorktreeBasePicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -3969,7 +4070,7 @@ function WorktreeDetailPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -4050,7 +4151,7 @@ function DefaultAgentPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
@@ -4131,7 +4232,7 @@ function ModelPicker({
       if (!pickerRef.current?.contains(event.target as Node)) setIsOpen(false)
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setIsOpen(false)
+      dismissPickerOnEscape(event, () => setIsOpen(false))
     }
     document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)

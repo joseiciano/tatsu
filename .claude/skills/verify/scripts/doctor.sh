@@ -1,23 +1,44 @@
 #!/usr/bin/env bash
-# Read-only check: is the instance for <run-root> worth driving?
-# Usage: doctor.sh <run-root>
+# Read-only: is this verify instance worth driving?
+#
+# Usage: doctor.sh <state.env>
 set -uo pipefail
-ROOT="${1:?usage: doctor.sh <run-root>}"
-REPO_DIR="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-fail=0
-ok() { echo "ok   $1"; }
-bad() { echo "FAIL $1"; fail=1; }
 
-PID="$(cat "$ROOT/server.pid" 2>/dev/null || true)"
-URL="$(cat "$ROOT/url" 2>/dev/null || true)"
-[ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && ok "server pid $PID alive" || bad "no live server pid in $ROOT/server.pid"
-PORT="$(echo "$URL" | sed -nE 's#http://127\.0\.0\.1:([0-9]+)/.*#\1#p')"
-if [ -n "$PORT" ] && lsof -a -p "${PID:-0}" -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then ok "port $PORT owned by pid $PID"; else bad "port ${PORT:-?} not owned by pid ${PID:-?}"; fi
-CODE="$(curl -s -o /dev/null -w '%{http_code}' "$URL" 2>/dev/null || true)"
-[ "$CODE" = 200 ] && ok "web client answers 200 with token" || bad "web client returned ${CODE:-nothing}"
-BUNDLE="$REPO_DIR/dist-headless/main/index.js"
-NEWER="$( [ -f "$BUNDLE" ] && find "$REPO_DIR/src" -type f -newer "$BUNDLE" -print -quit )"
-if [ -f "$BUNDLE" ] && [ -z "$NEWER" ]; then ok "dist-headless is newer than every file in src/"; else bad "dist-headless is missing or older than ${NEWER:-src/}; run pnpm build:headless and relaunch"; fi
-if grep -rqs 'code-diff-base-ref-list' "$REPO_DIR/dist-headless/web-client"; then ok "web client bundle contains the code diff tool"; else bad "code diff tool missing from web client bundle (ENABLE_CODE_DIFF off?)"; fi
-[ -d "$ROOT/fixture/demo-feature" ] && ok "fixture worktree present" || bad "fixture worktree missing; run fixture.sh"
-exit $fail
+# shellcheck disable=SC1090
+. "$1"
+SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$SKILL_DIR/../../.." && pwd)"
+FAIL=0
+ok() { echo "ok   $*"; }
+bad() { echo "FAIL $*"; FAIL=1; }
+
+if kill -0 "$PID" 2>/dev/null; then ok "pid $PID alive"; else bad "pid $PID not running"; fi
+
+ENV_LINE="$(ps eww -o command= -p "$PID" 2>/dev/null || true)"
+case "$ENV_LINE" in *"HOME=$SANDBOX_HOME"*) ok "HOME is the sandbox ($SANDBOX_HOME)" ;; *) bad "process HOME is not $SANDBOX_HOME; do not drive it" ;; esac
+case "$ENV_LINE" in *"HARNESS_DATA_DIR=$DATA_DIR"*) ok "HARNESS_DATA_DIR is the sandbox" ;; *) bad "HARNESS_DATA_DIR is not $DATA_DIR" ;; esac
+for v in CLAUDE_CONFIG_DIR CODEX_HOME OPENCODE_CONFIG_DIR; do
+  case "$ENV_LINE" in *" $v="*) bad "$v is set in the server env; it could point outside the sandbox" ;; esac
+done
+
+LISTENER="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1)"
+if [ "$LISTENER" = "$PID" ]; then ok "port $PORT owned by pid $PID"; else bad "port $PORT owned by '${LISTENER:-nobody}', not $PID"; fi
+
+CODE="$(curl -s -o /dev/null -w '%{http_code}' "$URL" || true)"
+if [ "$CODE" = "200" ]; then ok "web client answers 200 with token"; else bad "web client returned $CODE"; fi
+
+TOKEN="${URL##*token=}"
+if node "$REPO/scripts/ws-smoke.mjs" "$TOKEN" "$PORT" > /dev/null 2>&1; then ok "websocket state snapshot round-trips"; else bad "websocket snapshot failed (node scripts/ws-smoke.mjs <token> $PORT)"; fi
+
+BUILT_REV="$(cat "$EVIDENCE/git-rev.txt" 2>/dev/null || echo unknown)"
+HEAD_REV="$(git -C "$REPO" rev-parse HEAD)"
+NEWER="$(find "$REPO/src" -newer "$REPO/dist-headless/main/index.js" -type f 2>/dev/null | head -3)"
+if [ -n "$NEWER" ]; then bad "src/ has files newer than dist-headless (e.g. ${NEWER%%$'\n'*}); relaunch with --build"; else ok "dist-headless is newer than src/"; fi
+[ "$BUILT_REV" = "$HEAD_REV" ] && ok "launched at HEAD $HEAD_REV" || bad "launched at $BUILT_REV but HEAD is $HEAD_REV"
+
+for d in .claude/skills .claude/commands .claude/agents .agents/skills .config/opencode/skills .config/opencode/commands .config/opencode/agents .codex; do
+  [ -d "$SANDBOX_HOME/$d" ] || bad "sandbox root missing: $d"
+done
+[ "$FAIL" = 0 ] && ok "sandbox roots present"
+
+exit "$FAIL"

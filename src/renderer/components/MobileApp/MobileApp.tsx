@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, GitPullRequest, RefreshCw, Loader2, SquareTerminal, FileText, FileDiff, Globe, X, ExternalLink, PanelRightOpen, PanelRightClose } from 'lucide-react'
-import { useWorktrees, usePanes, useTerminals, usePrs, useSettings, useSnooze } from '../../store'
+import { Bell, ChevronDown, GitPullRequest, RefreshCw, Loader2, SquareTerminal, FileText, FileDiff, Globe, X, ExternalLink, PanelRightOpen, PanelRightClose } from 'lucide-react'
+import { useWorktrees, usePanes, useTerminals, usePrs, useSettings, useSnooze, useAnnouncements } from '../../store'
 import { useBackend } from '../../backend'
 import { groupWorktrees, type WorktreeGroup } from '../../worktree-sort'
 import { getLeaves } from '../../../shared/state/terminals'
+import { chatRuntimeAvailable } from '../../../shared/state/json-claude'
 import type { PtyStatus, TerminalTab, Worktree, PRStatus } from '../../types'
 import { MobileTerminal } from '../MobileTerminal'
 import { MobileRightPanel } from '../MobileRightPanel'
@@ -11,6 +12,8 @@ import { JsonModeChat } from '../JsonModeChat'
 import { AgentIcon } from '../AgentIcon'
 import { HotkeysProvider } from '../Tooltip'
 import { resolveHotkeys } from '../../hotkeys'
+import { NotificationCenter, countUnreadAnnouncements } from '../NotificationCenter'
+import { ENABLE_NOTIFICATION_CENTER } from '../../../shared/constants'
 
 type RunnableTab = TerminalTab & { type: 'agent' | 'shell' | 'json-claude' }
 
@@ -65,6 +68,19 @@ export function MobileApp(): JSX.Element {
   // branch commits, cost). Per-client UI focus → renderer-local state, not
   // a slice (see AGENTS.md workflow #5).
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const announcements = useAnnouncements()
+  const settings = useSettings()
+  const unreadAnnouncementCount = useMemo(
+    () =>
+      countUnreadAnnouncements(
+        announcements.items,
+        settings.dismissedAnnouncementIds,
+        settings.announcementsMuted,
+        Date.now()
+      ),
+    [announcements.items, settings.dismissedAnnouncementIds, settings.announcementsMuted]
+  )
 
   useEffect(() => {
     if (!activeWorktreeId) return
@@ -159,6 +175,9 @@ export function MobileApp(): JSX.Element {
         onConvertTabType={handleConvertTabType}
         rightPanelOpen={rightPanelOpen}
         onToggleRightPanel={activeWorktree ? () => setRightPanelOpen((v) => !v) : undefined}
+        notificationsOpen={notificationsOpen}
+        unreadAnnouncementCount={unreadAnnouncementCount}
+        onToggleNotifications={ENABLE_NOTIFICATION_CENTER ? () => setNotificationsOpen((v) => !v) : undefined}
       />
 
       <div className="flex-1 min-h-0 relative">
@@ -212,6 +231,12 @@ export function MobileApp(): JSX.Element {
             onClose={() => setRightPanelOpen(false)}
           />
         )}
+
+        {ENABLE_NOTIFICATION_CENTER && notificationsOpen && (
+          <div className="absolute inset-0 z-40 flex bg-app">
+            <NotificationCenter onClose={() => setNotificationsOpen(false)} />
+          </div>
+        )}
       </div>
     </div>
     </HotkeysProvider>
@@ -256,9 +281,13 @@ interface HeaderProps {
   onConvertTabType?: (tabId: string, newType: 'agent' | 'json-claude') => void
   rightPanelOpen: boolean
   onToggleRightPanel?: () => void
+  notificationsOpen: boolean
+  unreadAnnouncementCount: number
+  onToggleNotifications?: () => void
 }
 
-function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, pickerOpen, onTogglePicker, onSelectTab, onConvertTabType, rightPanelOpen, onToggleRightPanel }: HeaderProps): JSX.Element {
+function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, pickerOpen, onTogglePicker, onSelectTab, onConvertTabType, rightPanelOpen, onToggleRightPanel, notificationsOpen, unreadAnnouncementCount, onToggleNotifications }: HeaderProps): JSX.Element {
+  const chatAgentsEnabled = useSettings().experimentalChatAgentsEnabled
   const repoLabel = worktree ? worktree.repoRoot.split('/').pop() || worktree.repoRoot : null
   return (
     <header className="shrink-0 flex items-stretch border-b border-border bg-panel h-11">
@@ -291,7 +320,7 @@ function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, picker
         {tabs.map((tab) => {
           const convertible =
             !!onConvertTabType &&
-            ((tab.type === 'agent' && tab.agentKind === 'claude') || tab.type === 'json-claude')
+            ((tab.type === 'agent' && chatRuntimeAvailable(tab.agentKind ?? 'claude', chatAgentsEnabled)) || tab.type === 'json-claude')
           return (
             <TabChip
               key={tab.id}
@@ -309,6 +338,23 @@ function Header({ worktree, tabs, selectedTabId, statuses, shellActivity, picker
           )
         })}
       </div>
+      {onToggleNotifications && (
+        <button
+          onClick={onToggleNotifications}
+          className={
+            'relative shrink-0 inline-flex items-center justify-center w-11 h-full border-l border-border ' +
+            (notificationsOpen ? 'bg-surface text-fg-bright' : 'text-dim hover:text-fg hover:bg-panel-raised')
+          }
+          aria-label={notificationsOpen ? 'Close notifications' : 'Notifications'}
+        >
+          <Bell className="icon-base" />
+          {unreadAnnouncementCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-0.5 rounded-full bg-accent text-app text-xs leading-none flex items-center justify-center tabular-nums font-semibold">
+              {unreadAnnouncementCount > 99 ? '99+' : unreadAnnouncementCount}
+            </span>
+          )}
+        </button>
+      )}
       {onToggleRightPanel && (
         <button
           onClick={onToggleRightPanel}

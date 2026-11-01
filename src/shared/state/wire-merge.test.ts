@@ -29,6 +29,16 @@ describe('mergeWireSnapshot', () => {
     expect(merged.settings.themeDark).toBe('dark')
   })
 
+  it('defaults the config folder settings when an older server omits them', () => {
+    const wire: WireSnapshotState = {
+      settings: { themeMode: 'dark' }
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.settings.harnessConfigRoots).toEqual({})
+    expect(merged.settings.harnessConfigSourceDir).toBeNull()
+    expect(merged.settings.themeMode).toBe('dark')
+  })
+
   it('fills in an entirely-missing slice from initialState', () => {
     const wire: WireSnapshotState = {}
     const merged = mergeWireSnapshot(wire)
@@ -36,6 +46,89 @@ describe('mergeWireSnapshot', () => {
     expect(merged.repoConfigs).toEqual(initialState.repoConfigs)
     expect(merged.jsonClaude).toEqual(initialState.jsonClaude)
     expect(merged.settings).toEqual(initialState.settings)
+    expect(merged.harnessConfig).toEqual(initialState.harnessConfig)
+    expect(merged.runtimes).toEqual(initialState.runtimes)
+  })
+
+  it('preserves server-sent runtime statuses', () => {
+    const wire: WireSnapshotState = {
+      runtimes: { byAgent: { opencode: { state: 'ready', version: '1.18.14' } } }
+    }
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.runtimes.byAgent.opencode).toEqual({ state: 'ready', version: '1.18.14' })
+  })
+
+  it('fills templateSyncNotice when an older server omits it', () => {
+    const { templateSyncNotice: _omitted, ...older } = initialState.harnessConfig
+    void _omitted
+    const wire = { harnessConfig: older } as unknown as WireSnapshotState
+    const merged = mergeWireSnapshot(wire)
+    expect(merged.harnessConfig.templateSyncNotice).toBeNull()
+  })
+
+  it('preserves partial harness config snapshots while filling omitted fields', () => {
+    const serverResources = {
+      agents: [],
+      skills: [
+        {
+          id: 'wire:skill',
+          agentKind: 'claude' as const,
+          resourceType: 'skills' as const,
+          canonicalResourceType: 'skills' as const,
+          aliasResourceTypes: [],
+          label: 'Wire skill',
+          relativePath: 'skills/wire.md',
+          absolutePath: '/workspace/.claude/skills/wire.md',
+          hash: 'sha256:wire',
+          existsOnDisk: true,
+          managed: true,
+          updatedAt: 700
+        }
+      ],
+      commands: []
+    }
+    const serverComparison = {
+      scope: { agentKind: 'claude' as const, resourceType: 'skills' as const },
+      status: 'synced' as const,
+      diskOnly: [],
+      configOnly: [],
+      changed: [],
+      comparedAt: 701
+    }
+    const wire: WireSnapshotState = {
+      harnessConfig: {
+        resources: serverResources,
+        comparisons: { 'claude:skills': serverComparison },
+        loading: true,
+        error: 'wire error',
+        lastScannedAt: 702
+        // Older server omits lastSyncedAt.
+      }
+    }
+
+    const merged = mergeWireSnapshot(wire)
+
+    expect(merged.harnessConfig.resources).toBe(serverResources)
+    expect(merged.harnessConfig.comparisons).toBe(wire.harnessConfig?.comparisons)
+    expect(merged.harnessConfig.loading).toBe(true)
+    expect(merged.harnessConfig.error).toBe('wire error')
+    expect(merged.harnessConfig.lastScannedAt).toBe(702)
+    expect(merged.harnessConfig.lastSyncedAt).toBe(initialState.harnessConfig.lastSyncedAt)
+    expect(merged.harnessConfig.templates).toEqual(initialState.harnessConfig.templates)
+  })
+
+  it('fills missing template source fields from an older harnessConfig snapshot', () => {
+    const fragments = [{ name: 'style', content: 'Be brief.', relativePath: 'fragments/style.md', hash: 'h' }]
+    const wire = {
+      harnessConfig: { templates: { fragments } }
+    } as unknown as WireSnapshotState
+
+    const merged = mergeWireSnapshot(wire)
+
+    expect(merged.harnessConfig.templates.fragments).toBe(fragments)
+    expect(merged.harnessConfig.templates.templates).toEqual([])
+    expect(merged.harnessConfig.templates.errors).toEqual([])
+    expect(merged.harnessConfig.templates.loadedAt).toBeNull()
   })
 
   it('preserves server-sent values when the snapshot is complete', () => {
@@ -67,5 +160,51 @@ describe('mergeWireSnapshot', () => {
     }
     const merged = mergeWireSnapshot(wire)
     expect(merged.settings.customThemes).toEqual([])
+  })
+
+  it('preserves a legacy jsonClaude session identity missing agentKind/runtimeId', () => {
+    // An older server ships a jsonClaude slice whose sessions predate the
+    // agentKind/runtimeId fields. mergeWireSnapshot must preserve the
+    // session by reference (identity) rather than clobbering it, so the
+    // reducer's re-attach path can backfill the kind on the next
+    // sessionStarted.
+    const legacySession = {
+      sessionId: 'legacy-1',
+      worktreePath: '/wt/a',
+      state: 'exited' as const,
+      exitCode: 0,
+      exitReason: 'clean',
+      entries: [],
+      entriesHydrated: true,
+      busy: false,
+      permissionMode: 'default' as const,
+      slashCommands: [],
+      autoApprovedDecisions: {},
+      sessionToolApprovals: [],
+      sessionAllowedDecisions: {},
+      capabilities: {
+        canInterrupt: true,
+        canRewind: false,
+        canSetPermissionMode: false,
+        canApproveTools: false,
+        canResume: true,
+        canOpenAuthLogin: false,
+        hasSlashCommands: false,
+        hasCostTracking: false
+      }
+      // no agentKind / runtimeId — pre-metadata wire shape
+    }
+    const wire: WireSnapshotState = {
+      jsonClaude: {
+        // Cast through never: an older server's session legitimately
+        // lacks the new fields, which the typed WireSnapshotState can't
+        // express. The merge must still preserve the object identity.
+        sessions: { 'legacy-1': legacySession as never },
+        pendingApprovals: {}
+      }
+    }
+    const merged = mergeWireSnapshot(wire)
+    // Identity preserved: same session object reference, no throw.
+    expect(merged.jsonClaude.sessions['legacy-1']).toBe(legacySession)
   })
 })

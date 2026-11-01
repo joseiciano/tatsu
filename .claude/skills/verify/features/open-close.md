@@ -28,7 +28,7 @@ Preconditions:
 - **Hotkey.** Press `Meta+Shift+C` to open, again to close.
 - **Palette.** Press `Meta+K`, fill placeholder `Search worktrees and commands...` with `Code diff`, press Enter. The tool opens.
 - **Shared slot.** With the tool open, press `Meta+Alt+R`. `Base ref` is gone and the Review screen shows `N/M reviewed`.
-- **Run.** `node .claude/skills/verify/scripts/drive.mjs "$RUN" .claude/skills/verify/scripts/journeys/open-close.mjs`.
+- **Run.** `node .claude/skills/verify/scripts/code-diff/drive.mjs "$RUN" .claude/skills/verify/scripts/code-diff/journeys/open-close.mjs`.
 
 ## Gotchas
 

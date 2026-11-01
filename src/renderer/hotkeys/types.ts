@@ -31,6 +31,7 @@ export type Action =
   | 'openPR'
   | 'openInEditor'
   | 'toggleCommandCenter'
+  | 'openNotifications'
   | 'commandPalette'
   | 'fileQuickOpen'
   | 'splitPaneRight'

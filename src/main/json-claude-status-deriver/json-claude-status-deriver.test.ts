@@ -20,6 +20,8 @@ function makeSession(
   return {
     sessionId: id,
     worktreePath: `/tmp/wt-${id}`,
+    agentKind: overrides.agentKind ?? 'claude',
+    runtimeId: overrides.runtimeId ?? 'claude',
     state: 'running',
     exitCode: null,
     exitReason: null,

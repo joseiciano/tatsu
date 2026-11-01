@@ -1,5 +1,80 @@
 import type { AgentKind } from '../state/terminals'
 
+export type HarnessConfigResourceType = 'agents' | 'skills' | 'commands'
+export type HarnessConfigCapabilityStatus = 'supported' | 'unsupported' | 'unknown'
+
+/** How a template renders for a harness. `frontmatterName` is false where
+ *  the harness derives the name from the file path and would misread an
+ *  extra `name` key. */
+export interface HarnessTemplateOutput {
+  frontmatterName: boolean
+}
+
+export type AgentConfigCapability =
+  | {
+      resourceType: HarnessConfigResourceType
+      label: string
+      status: 'supported'
+      notes?: string
+      aliasResourceTypes?: readonly HarnessConfigResourceType[]
+      /** `single-file` means the harness keeps this resource type in one
+       *  shared file, so a template cannot own a file per resource. */
+      layout?: 'per-resource' | 'single-file'
+      templateOutput?: HarnessTemplateOutput
+    }
+  | {
+      resourceType: HarnessConfigResourceType
+      label: string
+      status: 'unsupported' | 'unknown'
+      notes: string
+      aliasResourceTypes?: never
+      layout?: never
+      templateOutput?: never
+    }
+
+export function isHarnessConfigCapabilityEnabled(capability: AgentConfigCapability): boolean {
+  return capability.status === 'supported'
+}
+
+type ResourcePathKind = 'claude' | 'codex' | 'opencode'
+
+const RESOURCE_PATHS: Record<ResourcePathKind, Partial<Record<HarnessConfigResourceType, (name: string) => string>>> = {
+  claude: {
+    agents: (name) => `${name}.md`,
+    skills: (name) => `${name}/SKILL.md`,
+    commands: (name) => `${name}.md`
+  },
+  codex: {
+    agents: (name) => `${name}.md`,
+    skills: (name) => `${name}/SKILL.md`
+  },
+  opencode: {
+    agents: (name) => `${name}.md`,
+    skills: (name) => `${name}/SKILL.md`,
+    commands: (name) => `${name}.md`
+  }
+}
+
+/** Root-relative path of a named resource, shared by the main-process
+ *  resolvers and the template renderer so both agree on layouts. */
+export function resourcePathForName(
+  agentKind: AgentKind,
+  resourceType: HarnessConfigResourceType,
+  name: string
+): string | null {
+  if (agentKind !== 'claude' && agentKind !== 'codex' && agentKind !== 'opencode') return null
+  const pathFor = RESOURCE_PATHS[agentKind][resourceType]
+  return pathFor ? pathFor(name) : null
+}
+
+export function templateOutputFor(
+  agentKind: AgentKind,
+  resourceType: HarnessConfigResourceType
+): HarnessTemplateOutput | null {
+  const capability = getAgentInfo(agentKind).configCapabilities.find((entry) => entry.resourceType === resourceType)
+  return capability?.status === 'supported' ? (capability.templateOutput ?? null) : null
+}
+
 export interface AgentInfo {
   kind: AgentKind
   displayName: string
@@ -8,13 +83,118 @@ export interface AgentInfo {
    * first spawn. If false, the agent assigns its own ID and Harness
    * discovers it from the first hook event. */
   assignsSessionId: boolean
+  configCapabilities: readonly AgentConfigCapability[]
 }
 
 export const AGENT_REGISTRY: AgentInfo[] = [
-  { kind: 'claude', displayName: 'Claude Code', vendor: 'Anthropic', assignsSessionId: true },
-  { kind: 'codex', displayName: 'Codex', vendor: 'OpenAI', assignsSessionId: false },
-  { kind: 'opencode', displayName: 'Opencode', vendor: 'Opencode', assignsSessionId: false },
-  { kind: 'pi', displayName: 'Pi', vendor: 'Earendil', assignsSessionId: false }
+  {
+    kind: 'claude',
+    displayName: 'Claude Code',
+    vendor: 'Anthropic',
+    assignsSessionId: true,
+    configCapabilities: [
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        templateOutput: { frontmatterName: true }
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'supported',
+        notes: 'Claude skills also appear in the Commands view as the same physical resource.',
+        aliasResourceTypes: ['commands'],
+        templateOutput: { frontmatterName: true }
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'supported',
+        notes: 'Includes native Claude commands and aliases of Claude skills.',
+        templateOutput: { frontmatterName: true }
+      }
+    ]
+  },
+  {
+    kind: 'codex',
+    displayName: 'Codex',
+    vendor: 'OpenAI',
+    assignsSessionId: false,
+    configCapabilities: [
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        notes: 'Codex agents are one top-level AGENTS.md file, not a folder of agents.',
+        layout: 'single-file'
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'supported',
+        templateOutput: { frontmatterName: true }
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'unsupported',
+        notes: 'Tatsu has no verified first-version custom-command filesystem contract.'
+      }
+    ]
+  },
+  {
+    kind: 'opencode',
+    displayName: 'Opencode',
+    vendor: 'Opencode',
+    assignsSessionId: false,
+    configCapabilities: [
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'supported',
+        templateOutput: { frontmatterName: false }
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'supported',
+        templateOutput: { frontmatterName: true }
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'supported',
+        templateOutput: { frontmatterName: false }
+      }
+    ]
+  },
+  {
+    kind: 'pi',
+    displayName: 'Pi',
+    vendor: 'Earendil',
+    assignsSessionId: false,
+    configCapabilities: [
+      {
+        resourceType: 'agents',
+        label: 'Agents',
+        status: 'unknown',
+        notes: 'Pi config management is deferred; its resource capabilities and layouts are not yet specified.'
+      },
+      {
+        resourceType: 'skills',
+        label: 'Skills',
+        status: 'unknown',
+        notes: 'Pi config management is deferred; its resource capabilities and layouts are not yet specified.'
+      },
+      {
+        resourceType: 'commands',
+        label: 'Commands',
+        status: 'unknown',
+        notes: 'Pi config management is deferred; its resource capabilities and layouts are not yet specified.'
+      }
+    ]
+  }
 ]
 
 export interface ModelOption {
