@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { harnessMcpServerSpec, writeMcpConfigForTerminal } from '.'
+import { harnessMcpServerSpec, removeStaleStepMarkers, writeMcpConfigForTerminal } from '.'
 import { log } from '../debug'
 
 const h = vi.hoisted(() => ({ dataDir: '', failChmod: false, failMkdir: false }))
@@ -105,5 +105,33 @@ describe('writeMcpConfigForTerminal', () => {
 
     expect(result).toBeNull()
     expect(log).toHaveBeenCalledWith('mcp', expect.any(String), expect.anything())
+  })
+})
+
+describe('removeStaleStepMarkers', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mcp-markers-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('deletes leftover .step marker files and leaves every other entry alone', () => {
+    writeFileSync(join(dir, 'term-1.step'), '')
+    writeFileSync(join(dir, 'term-2.step'), 'attempt')
+    writeFileSync(join(dir, 'term-1.json'), '{}')
+    writeFileSync(join(dir, 'notes.step.bak'), '')
+    mkdirSync(join(dir, 'folder.step'))
+
+    expect(removeStaleStepMarkers(dir)).toBe(2)
+
+    expect(readdirSync(dir).sort()).toEqual(['folder.step', 'notes.step.bak', 'term-1.json'])
+  })
+
+  it('does nothing when the directory does not exist', () => {
+    expect(removeStaleStepMarkers(join(dir, 'missing'))).toBe(0)
   })
 })
