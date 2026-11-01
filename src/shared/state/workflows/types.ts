@@ -1,4 +1,4 @@
-import type { WorkflowValidationResult } from '../../workflow-def'
+import type { ResolvedDefinition, WorkflowValidationResult } from '../../workflow-def'
 
 export type WorkflowScope = 'personal'
 
@@ -118,3 +118,63 @@ export type WorkflowsEvent =
         costUsd?: number
       }
     }
+  | { type: 'workflows/runsEvicted'; payload: { runIds: string[] } }
+
+export interface StepResult {
+  status: 'done' | 'failed' | 'needs-input'
+  summary: string
+  completedBy: WorkflowCompletedBy
+  data?: Record<string, unknown>
+  exitCode?: number
+  costUsd?: number
+}
+
+export interface WorkflowSnapshotRef {
+  commit: string
+  ref: string
+}
+
+export interface WorkflowAttemptPause {
+  reason: WorkflowPausedReason
+  at: number
+}
+
+export interface WorkflowAttemptMetrics {
+  completedBy?: WorkflowCompletedBy
+  continuations: number
+  pauses: WorkflowAttemptPause[]
+  wallMs?: number
+  costUsd?: number
+}
+
+export interface WorkflowAttemptRecord {
+  attemptId: string
+  stepId: string
+  n: number
+  status: WorkflowAttemptStatus
+  startedAt: number
+  endedAt?: number
+  result?: StepResult
+  baseSnapshot?: WorkflowSnapshotRef
+  headSnapshot?: WorkflowSnapshotRef
+  metrics: WorkflowAttemptMetrics
+}
+
+export interface WorkflowRunRecord {
+  version: 1
+  runId: string
+  defId: string
+  defHash: string
+  definition: ResolvedDefinition
+  inputs: Record<string, string>
+  worktreePath: string
+  contextPath: string
+  status: WorkflowRunStatus
+  pausedReason?: WorkflowPausedReason
+  cursor: number
+  steps: Record<string, WorkflowStepStatus>
+  startedAt: number
+  finishedAt?: number
+  timeToFirstDoneMs?: number
+  attempts: WorkflowAttemptRecord[]
+}

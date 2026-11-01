@@ -1,22 +1,16 @@
 import type { Store } from '../store'
 import type { WorkflowDefsLoader } from '../workflow-defs-loader'
-import type { ResolvedDefinition } from '../../shared/workflow-def'
-import type {
-  WorkflowAttemptStatus,
-  WorkflowCompletedBy,
-  WorkflowPausedReason,
-  WorkflowRunStatus
-} from '../../shared/state/workflows'
+import type { WorkflowRunRecord, WorkflowSnapshotRef } from '../../shared/state/workflows'
 import type { StepDriver, StepDriverKind } from './drivers/types'
 
-export interface StepResult {
-  status: 'done' | 'failed' | 'needs-input'
-  summary: string
-  completedBy: WorkflowCompletedBy
-  data?: Record<string, unknown>
-  exitCode?: number
-  costUsd?: number
-}
+export type {
+  StepResult,
+  WorkflowAttemptMetrics,
+  WorkflowAttemptPause,
+  WorkflowAttemptRecord,
+  WorkflowRunRecord,
+  WorkflowSnapshotRef
+} from '../../shared/state/workflows'
 
 export interface StartRunRequest {
   defId: string
@@ -33,27 +27,6 @@ export type StartRefusal =
 
 export type StartRunResult = { ok: true; runId: string } | { ok: false; reason: StartRefusal }
 
-export interface WorkflowAttemptRecord {
-  attemptId: string
-  stepId: string
-  n: number
-  status: WorkflowAttemptStatus
-  result?: StepResult
-}
-
-export interface WorkflowRunRecord {
-  runId: string
-  defId: string
-  defHash: string
-  definition: ResolvedDefinition
-  inputs: Record<string, string>
-  worktreePath: string
-  status: WorkflowRunStatus
-  pausedReason?: WorkflowPausedReason
-  cursor: number
-  attempts: WorkflowAttemptRecord[]
-}
-
 export type WorkflowLog = (category: string, message: string, data?: Record<string, string>) => void
 
 export interface WorkflowRunnerDeps {
@@ -64,4 +37,19 @@ export interface WorkflowRunnerDeps {
   newId: () => string
   log: WorkflowLog
   persist?: (run: WorkflowRunRecord) => void
+  artifacts?: RunArtifacts
+}
+
+export interface RunSnapshotRequest {
+  worktreePath: string
+  runId: string
+  stepId: string
+  n: number
+  parent?: string
+}
+
+export interface RunArtifacts {
+  prepare(args: { worktreePath: string; runId: string }): Promise<void>
+  snapshot(args: RunSnapshotRequest): Promise<WorkflowSnapshotRef>
+  appendContext(args: { contextPath: string; section: string }): Promise<void>
 }

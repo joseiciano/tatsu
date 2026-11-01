@@ -122,7 +122,8 @@ async function writeWorkingTree(root: string): Promise<string> {
     if (await hasHead(root)) {
       await git(root, ['read-tree', 'HEAD'], env)
     }
-    await git(root, ['add', '-A', '--', '.', `:(exclude)${RUNS_DIR}`], env)
+    await git(root, ['add', '-A', '--', '.'], env)
+    await git(root, ['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', RUNS_DIR], env)
     return (await git(root, ['write-tree'], env)).trim()
   })
 }
