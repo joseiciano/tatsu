@@ -470,3 +470,79 @@ describe('workflowsReducer runs and attempts', () => {
     expect(next.runs['run-a'].steps).toBe(start.runs['run-a'].steps)
   })
 })
+
+describe('workflowsReducer terminal-run guards', () => {
+  const terminal = [
+    ['done', { status: 'done', finishedAt: 5000 }],
+    ['failed', { status: 'failed', finishedAt: 5000 }],
+    ['cancelled', { status: 'cancelled', finishedAt: 5000 }]
+  ] as const
+
+  const guarded: WorkflowsEvent[] = [
+    { type: 'workflows/stepQueued', payload: { runId: 'run-a', stepId: 'build' } },
+    { type: 'workflows/stepStarted', payload: { runId: 'run-a', stepId: 'build' } },
+    { type: 'workflows/stepSkipped', payload: { runId: 'run-a', stepId: 'build' } },
+    {
+      type: 'workflows/stepStatusChanged',
+      payload: { runId: 'run-a', stepId: 'plan', status: 'done' }
+    },
+    {
+      type: 'workflows/attemptStarted',
+      payload: { attemptId: 'att-a2', runId: 'run-a', stepId: 'build', n: 1, startedAt: 2000 }
+    },
+    {
+      type: 'workflows/attemptEnded',
+      payload: { attemptId: 'att-a1', status: 'done', endedAt: 3000, summary: 'late' }
+    }
+  ]
+
+  it.each(
+    guarded.flatMap((event) =>
+      terminal.map(([status, overrides]) => [event.type, status, event, overrides] as const)
+    )
+  )('%s is a no-op on a %s run', (_type, _status, event, overrides) => {
+    const start = fixture(overrides)
+    expect(workflowsReducer(start, event)).toBe(start)
+  })
+
+  it('attemptEnded still applies to an attempt of another, live run', () => {
+    const start = fixture({ status: 'cancelled', finishedAt: 5000 })
+    const next = workflowsReducer(start, {
+      type: 'workflows/attemptEnded',
+      payload: { attemptId: 'att-b1', status: 'done', endedAt: 3000, summary: 'ok' }
+    })
+    expect(next.attempts['att-b1'].status).toBe('done')
+  })
+
+  it('runCancelled clears the paused reason', () => {
+    const start = fixture({ status: 'paused', pausedReason: 'step-failed' })
+    const next = workflowsReducer(start, {
+      type: 'workflows/runCancelled',
+      payload: { runId: 'run-a', finishedAt: 5000 }
+    })
+    expect(next.runs['run-a'].status).toBe('cancelled')
+    expect(next.runs['run-a']).not.toHaveProperty('pausedReason')
+  })
+
+  it('attemptEnded does not split a surrogate pair at the preview limit', () => {
+    const summaryText = 'x'.repeat(SUMMARY_PREVIEW_MAX - 1) + '\u{1F600}' + 'tail'
+    const next = workflowsReducer(fixture(), {
+      type: 'workflows/attemptEnded',
+      payload: { attemptId: 'att-a1', status: 'done', endedAt: 3000, summary: summaryText }
+    })
+    const preview = next.attempts['att-a1'].summaryPreview
+    expect(preview).toBe('x'.repeat(SUMMARY_PREVIEW_MAX - 1))
+    expect(preview).not.toMatch(/[\uD800-\uDBFF]$/)
+  })
+
+  it('attemptEnded keeps a surrogate pair that ends exactly at the preview limit', () => {
+    const summaryText = 'x'.repeat(SUMMARY_PREVIEW_MAX - 2) + '\u{1F600}' + 'tail'
+    const next = workflowsReducer(fixture(), {
+      type: 'workflows/attemptEnded',
+      payload: { attemptId: 'att-a1', status: 'done', endedAt: 3000, summary: summaryText }
+    })
+    expect(next.attempts['att-a1'].summaryPreview).toBe(
+      'x'.repeat(SUMMARY_PREVIEW_MAX - 2) + '\u{1F600}'
+    )
+  })
+})
