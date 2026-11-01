@@ -571,9 +571,13 @@ export class PanesFSM {
     this.opts.persist(this.buildPersistPayload())
   }
 
-  restartAgentTab(wtPath: string, tabId: string, newId: string): void {
+  restartAgentTab(wtPath: string, tabId: string, newId: string): boolean {
     const tree = this.getTree(wtPath)
-    if (!tree) return
+    if (!tree) return false
+    const target = getLeaves(tree)
+      .flatMap((leaf) => leaf.tabs)
+      .find((t) => t.id === tabId)
+    if (target?.workflow) return false
     // Tear down the old PTY before swapping the id — once we commit the
     // new id, no client has a way to refer to the old PTY anymore.
     this.opts.killTabPty?.(tabId)
@@ -586,6 +590,7 @@ export class PanesFSM {
       return { ...leaf, tabs, activeTabId }
     })
     this.commit(wtPath, updated)
+    return true
   }
 
   selectTab(wtPath: string, paneId: string, tabId: string): void {

@@ -133,6 +133,7 @@ export interface DesktopShellStartDeps {
    *  feature managers (e.g. approval-bridge) that live there can clean
    *  up without desktop-shell needing to know about them. */
   onBeforeQuit?: () => void
+  flushBeforeQuit?: () => Promise<void>
 }
 
 export interface DesktopShellStartHandle {
@@ -155,7 +156,8 @@ export function startDesktopShell(deps: DesktopShellStartDeps): DesktopShellStar
     getStopWatchingStatus,
     setStopWatchingStatus,
     onRepoAdded,
-    onBeforeQuit
+    onBeforeQuit,
+    flushBeforeQuit
   } = deps
 
   registerDesktopHandlers()
@@ -672,7 +674,12 @@ export function startDesktopShell(deps: DesktopShellStartDeps): DesktopShellStar
     }
   })
 
-  app.on('before-quit', () => {
+  let quitTeardown: 'pending' | 'flushing' | 'done' = 'pending'
+  app.on('before-quit', (event) => {
+    if (quitTeardown === 'done') return
+    event.preventDefault()
+    if (quitTeardown === 'flushing') return
+    quitTeardown = 'flushing'
     getStopWatchingStatus()?.()
     setStopWatchingStatus(null)
     ptyManager.killAll('SIGKILL')
@@ -680,6 +687,10 @@ export function startDesktopShell(deps: DesktopShellStartDeps): DesktopShellStar
     browserManager.destroyAll()
     sealAllActive()
     saveConfigSync(config)
+    void (flushBeforeQuit?.() ?? Promise.resolve()).finally(() => {
+      quitTeardown = 'done'
+      app.quit()
+    })
   })
 
   return {

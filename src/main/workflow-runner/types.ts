@@ -38,6 +38,7 @@ export interface WorkflowRunnerDeps {
   log: WorkflowLog
   persist?: (run: WorkflowRunRecord) => void
   artifacts?: RunArtifacts
+  hasExecution?: (executionId: string) => boolean
 }
 
 export interface RunSnapshotRequest {

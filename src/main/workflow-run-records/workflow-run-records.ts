@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { readdirSync, readFileSync } from 'fs'
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { userDataDir } from '../paths'
@@ -10,7 +11,6 @@ import {
 
 export const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/
 const RECORD_EXTENSION = '.json'
-const TERMINAL_RECORD_STATUSES: ReadonlySet<WorkflowRunRecord['status']> = new Set(['done', 'failed', 'cancelled'])
 
 export interface WorkflowRunRecordsDeps {
   dir: string
@@ -38,14 +38,67 @@ export function isRunId(value: unknown): value is string {
   return typeof value === 'string' && RUN_ID_PATTERN.test(value)
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isAttemptRecord(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value.attemptId === 'string' &&
+    typeof value.stepId === 'string' &&
+    typeof value.status === 'string' &&
+    typeof value.n === 'number' &&
+    typeof value.startedAt === 'number' &&
+    isObject(value.metrics) &&
+    Array.isArray(value.metrics.pauses)
+  )
+}
+
 function isRecordFor(value: unknown, runId: string): value is WorkflowRunRecord {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Partial<WorkflowRunRecord>
   return (
     candidate.version === WORKFLOW_RUN_RECORD_VERSION &&
     candidate.runId === runId &&
-    Array.isArray(candidate.attempts)
+    Array.isArray(candidate.attempts) &&
+    candidate.attempts.every(isAttemptRecord) &&
+    typeof candidate.status === 'string' &&
+    typeof candidate.startedAt === 'number' &&
+    typeof candidate.cursor === 'number' &&
+    typeof candidate.steps === 'object' &&
+    candidate.steps !== null &&
+    Array.isArray(candidate.definition?.steps) &&
+    candidate.definition.steps.every((step) => isObject(step) && typeof step.id === 'string')
   )
+}
+
+export function loadRunRecordsSync(
+  dir: string,
+  log: WorkflowRunRecordsDeps['log'] = () => {}
+): WorkflowRunRecord[] {
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return []
+  }
+  const records: WorkflowRunRecord[] = []
+  for (const name of names.sort()) {
+    if (!name.endsWith(RECORD_EXTENSION)) continue
+    const runId = name.slice(0, -RECORD_EXTENSION.length)
+    if (!isRunId(runId)) continue
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+    } catch {
+      log('workflow', 'run record skipped unreadable', { file: name })
+      continue
+    }
+    if (isRecordFor(parsed, runId)) records.push(parsed)
+    else log('workflow', 'run record skipped invalid', { file: name })
+  }
+  return records
 }
 
 export function createWorkflowRunRecords({ dir, log = () => {} }: WorkflowRunRecordsDeps): WorkflowRunRecords {
@@ -164,9 +217,10 @@ export function createWorkflowRunLookup({
   async function scanDisk(attemptId: string): Promise<WorkflowAttemptRecord | null> {
     for (const runId of await records.list()) {
       if (scanned.has(runId)) continue
-      const run = await records.read(runId)
+      const liveRun = live(runId)
+      const run = liveRun ?? (await records.read(runId))
       if (!run) continue
-      if (TERMINAL_RECORD_STATUSES.has(run.status)) scanned.add(runId)
+      if (!liveRun) scanned.add(runId)
       for (const attempt of run.attempts) runIdByAttempt.set(attempt.attemptId, runId)
       const found = attemptIn(run, attemptId)
       if (found) return found

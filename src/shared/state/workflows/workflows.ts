@@ -1,7 +1,9 @@
-import { SUMMARY_PREVIEW_MAX } from './constants'
+import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX } from './constants'
 import type {
+  WorkflowAttempt,
   WorkflowDefinitionSummary,
   WorkflowRun,
+  WorkflowRunRecord,
   WorkflowRunStatus,
   WorkflowRunStep,
   WorkflowScope,
@@ -96,6 +98,57 @@ export function runsToEvict(state: WorkflowsState, max: number): string[] {
   if (finished.length <= max) return []
   finished.sort((a, b) => a.finishedAt - b.finishedAt || (a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0))
   return finished.slice(0, finished.length - max).map((entry) => entry.runId)
+}
+
+export function projectRunRecord(record: WorkflowRunRecord): {
+  run: WorkflowRun
+  attempts: Record<string, WorkflowAttempt>
+} {
+  const steps: Record<string, WorkflowRunStep> = {}
+  for (const [stepId, status] of Object.entries(record.steps)) {
+    steps[stepId] = { status, attemptIds: [] }
+  }
+  const attempts: Record<string, WorkflowAttempt> = {}
+  for (const attempt of record.attempts) {
+    steps[attempt.stepId]?.attemptIds.push(attempt.attemptId)
+    const ended = attempt.endedAt !== undefined
+    const result = ended && attempt.result?.status !== 'needs-input' ? attempt.result : undefined
+    attempts[attempt.attemptId] = {
+      runId: record.runId,
+      stepId: attempt.stepId,
+      n: attempt.n,
+      status: attempt.status,
+      summaryPreview: previewOf(result?.summary ?? ''),
+      startedAt: attempt.startedAt,
+      ...(ended ? { endedAt: attempt.endedAt } : {}),
+      ...(result ? { completedBy: result.completedBy } : {}),
+      ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd })
+    }
+  }
+  const run: WorkflowRun = {
+    defId: record.defId,
+    defHash: record.defHash,
+    worktreePath: record.worktreePath,
+    status: record.status,
+    ...(record.pausedReason === undefined ? {} : { pausedReason: record.pausedReason }),
+    startedAt: record.startedAt,
+    ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
+    steps
+  }
+  return { run, attempts }
+}
+
+export function hydrateWorkflowRuns(
+  records: readonly WorkflowRunRecord[]
+): Pick<WorkflowsState, 'runs' | 'attempts'> {
+  const hydrated: WorkflowsState = { ...initialWorkflows, runs: {}, attempts: {} }
+  for (const record of records) {
+    const projected = projectRunRecord(record)
+    hydrated.runs[record.runId] = projected.run
+    Object.assign(hydrated.attempts, projected.attempts)
+  }
+  const { runs, attempts } = evictRuns(hydrated, runsToEvict(hydrated, RECENT_RUNS_MAX))
+  return { runs, attempts }
 }
 
 function evictRuns(state: WorkflowsState, runIds: string[]): WorkflowsState {

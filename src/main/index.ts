@@ -90,14 +90,19 @@ import { getAllSessionCosts } from './cost-aggregator'
 import { getClaudeAuthStatus } from './claude-auth'
 import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing'
 import { startControlServer } from './control-server'
-import { writeMcpConfigForTerminal, pruneMcpConfigs, harnessMcpServerSpec } from './mcp-config'
+import { writeMcpConfigForTerminal, pruneMcpConfigs, harnessMcpServerSpec, removeStaleStepMarkers } from './mcp-config'
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
 import { WorkflowRunner, createGitRunArtifacts, type StepDriver } from './workflow-runner'
-import { createWorkflowRunLookup, createWorkflowRunRecords, workflowRunsDir } from './workflow-run-records'
+import {
+  createWorkflowRunLookup,
+  createWorkflowRunRecords,
+  loadRunRecordsSync,
+  workflowRunsDir
+} from './workflow-run-records'
 import { registerWorkflowSettingsRequestHandlers } from './workflow-settings-transport'
 import { perfLog } from './perf-log'
 import { buildInitialAppState } from './build-initial-state'
@@ -295,7 +300,10 @@ const ptyManager = new PtyManager()
 let config = loadConfig()
 let stopWatchingStatus: (() => void) | null = null
 
-const store = new Store(buildInitialAppState(config, { hasGithubToken: hasSecret('githubToken') }))
+const bootRunRecords = loadRunRecordsSync(workflowRunsDir(), log)
+const store = new Store(
+  buildInitialAppState(config, { hasGithubToken: hasSecret('githubToken'), workflowRuns: bootRunRecords })
+)
 
 // Scan for user-authored themes once the store exists. Done as a
 // dispatch (rather than seeding into buildInitialAppState) so the
@@ -779,8 +787,23 @@ const workflowRunner = new WorkflowRunner({
   newId: () => randomUUID(),
   log,
   persist: (run) => workflowRunRecords.persist(run),
-  artifacts: createGitRunArtifacts()
+  artifacts: createGitRunArtifacts(),
+  hasExecution: (executionId) => ptyManager.hasTerminal(executionId)
 })
+removeStaleStepMarkers()
+try {
+  workflowRunner.reconcile(bootRunRecords)
+} catch {
+  log('workflow', 'run reconcile failed')
+}
+
+const QUIT_FLUSH_TIMEOUT_MS = 2000
+function flushWorkflowRunRecords(): Promise<void> {
+  return Promise.race([
+    workflowRunRecords.flush(),
+    new Promise<void>((resolve) => setTimeout(resolve, QUIT_FLUSH_TIMEOUT_MS).unref())
+  ])
+}
 
 /** Look up a json-claude tab's persisted `model` override by sessionId
  *  (which is also the tab id for json-claude tabs). Returned to the
@@ -2168,8 +2191,7 @@ function registerIpcHandlers(): void {
   transport.onRequest(
     'panes:restartAgentTab',
     (_ctx, wtPath: string, tabId: string, newId: string) => {
-      panesFSM.restartAgentTab(wtPath, tabId, newId)
-      return true
+      return panesFSM.restartAgentTab(wtPath, tabId, newId)
     }
   )
   transport.onRequest(
@@ -3531,7 +3553,8 @@ if (desktopShellMod && desktopEarly) {
       codexHookTrustMonitor?.stop()
       workflowRunner.dispose()
       chatRuntimeRegistry.killAll()
-    }
+    },
+    flushBeforeQuit: flushWorkflowRunRecords
   })
   desktopHooks.startAutoUpdateChecks = handle.startAutoUpdateChecks
   desktopHooks.stopAutoUpdateChecks = handle.stopAutoUpdateChecks
@@ -3544,7 +3567,10 @@ if (desktopShellMod && desktopEarly) {
   // Mirror the Electron before-quit cleanups for SIGTERM / SIGINT so a
   // headless host can shut down cleanly. browserManager.destroyAll() is
   // still safe to call — the headless stub no-ops it.
+  let shuttingDown = false
   const shutdown = (): void => {
+    if (shuttingDown) return
+    shuttingDown = true
     codexHookTrustMonitor?.stop()
     workflowRunner.dispose()
     stopWatchingStatus?.()
@@ -3554,7 +3580,7 @@ if (desktopShellMod && desktopEarly) {
     browserManager.destroyAll()
     sealAllActive()
     saveConfigSync(config)
-    process.exit(0)
+    void flushWorkflowRunRecords().finally(() => process.exit(0))
   }
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)

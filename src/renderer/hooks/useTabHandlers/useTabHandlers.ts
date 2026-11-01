@@ -133,6 +133,7 @@ export function useTabHandlers({
       if (tree) {
         for (const leaf of getLeaves(tree)) {
           const t = leaf.tabs.find((x) => x.id === tabId)
+          if (t?.workflow) return
           if (t) {
             kind =
               t.type === 'agent'

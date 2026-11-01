@@ -83,6 +83,49 @@ export class WorkflowRunner {
     return undefined
   }
 
+  reconcile(records: readonly WorkflowRunRecord[]): void {
+    const adopted = records
+      .filter((record) => !TERMINAL_RUN_STATUSES.has(record.status) && !this.runs.has(record.runId))
+      .map((record) => this.adopt(structuredClone(record)))
+      .sort(
+        (a, b) =>
+          a.record.startedAt - b.record.startedAt ||
+          (a.record.runId < b.record.runId ? -1 : a.record.runId > b.record.runId ? 1 : 0)
+      )
+    const outcomes = new Map<RunState, string>()
+    for (const state of adopted) {
+      const running = state.record.attempts.find((attempt) => attempt.status === 'running')
+      if (running && !state.live) {
+        this.interrupt(state, running)
+        outcomes.set(state, 'interrupted')
+        continue
+      }
+      if (state.record.status === 'paused') {
+        outcomes.set(state, 'paused')
+        continue
+      }
+      if (state.live) {
+        outcomes.set(state, 'attached')
+        continue
+      }
+      const step = this.currentStep(state)
+      if (step && state.stepStatus[step.id] === 'queued') {
+        this.queue.push({ runId: state.record.runId, stepId: step.id })
+        outcomes.set(state, 'requeued')
+      } else if (!step || state.stepStatus[step.id] === 'pending') {
+        this.enterStep(state)
+        outcomes.set(state, 'resumed')
+      } else {
+        outcomes.set(state, 'unchanged')
+      }
+    }
+    this.drain()
+    for (const [state, outcome] of outcomes) {
+      if (outcome !== 'paused' && outcome !== 'attached' && outcome !== 'unchanged') this.persist(state.record)
+      this.log(`run reconciled ${outcome}`, { runId: state.record.runId })
+    }
+  }
+
   start(request: StartRunRequest): StartRunResult {
     const { store, loader, now, newId } = this.deps
     if (!store.getSnapshot().state.settings.labs.workflows) return this.refuse('labs-off')
@@ -241,6 +284,48 @@ export class WorkflowRunner {
     this.advance(state)
     this.settle(state)
     return true
+  }
+
+  private adopt(record: WorkflowRunRecord): RunState {
+    const { runId, worktreePath } = record
+    const state: RunState = {
+      record,
+      stepStatus: record.steps,
+      live: null,
+      io: this.prepare(runId, worktreePath)
+    }
+    for (const attempt of record.attempts) {
+      const snapshot = attempt.headSnapshot ?? attempt.baseSnapshot
+      if (snapshot) state.lastSnapshot = snapshot.commit
+    }
+    this.runs.set(runId, state)
+    const running = record.attempts.find((attempt) => attempt.status === 'running')
+    const step = record.definition.steps.find((candidate) => candidate.id === running?.stepId)
+    const executionId = running?.executionId
+    const alive = executionId !== undefined && (this.deps.hasExecution?.(executionId) ?? false)
+    if (running && executionId !== undefined && alive && step && isRunnable(step)) {
+      state.live = { record: running, kind: step.kind, executionId }
+      this.liveAttempts.set(running.attemptId, runId)
+      this.executions.set(executionId, running.attemptId)
+      if (step.kind === 'agent') this.agentSlots.add(running.attemptId)
+    }
+    return state
+  }
+
+  private interrupt(state: RunState, attempt: WorkflowAttemptRecord): void {
+    const { runId } = state.record
+    const { attemptId, stepId } = attempt
+    const endedAt = this.deps.now()
+    attempt.status = 'interrupted'
+    attempt.endedAt = endedAt
+    attempt.metrics.wallMs = endedAt - attempt.startedAt
+    this.deps.store.dispatch({
+      type: 'workflows/attemptEnded',
+      payload: { attemptId, status: 'interrupted', endedAt, summary: '' }
+    })
+    this.log('attempt ended interrupted', { runId, stepId, attemptId })
+    this.setStep(state, stepId, 'interrupted')
+    this.pause(state, 'interrupted')
   }
 
   private refuse(reason: StartRefusal): StartRunResult {
@@ -450,7 +535,9 @@ export class WorkflowRunner {
       return
     }
     state.live.executionId = executionId
+    state.live.record.executionId = executionId
     this.executions.set(executionId, attemptId)
+    this.persist(state.record)
   }
 
   private onStartFailed(attemptId: string): void {

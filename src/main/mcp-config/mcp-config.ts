@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync, chmodSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync, chmodSync, lstatSync } from 'fs'
 import { join } from 'path'
 import { getControlServerInfo } from '../control-server'
 import type { CallerScope } from '../control-server'
@@ -6,8 +6,12 @@ import type { HarnessMcpServerSpec } from '../agents'
 import { resolveBundledMcpScript, userDataDir } from '../paths'
 import { log } from '../debug'
 
+export function mcpConfigsDir(): string {
+  return join(userDataDir(), 'mcp-configs')
+}
+
 function getConfigDir(): string {
-  const dir = join(userDataDir(), 'mcp-configs')
+  const dir = mcpConfigsDir()
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
   return dir
 }
@@ -108,4 +112,28 @@ export function pruneMcpConfigs(keepIds: Set<string>): void {
   } catch {
     /* ignore */
   }
+}
+
+const STEP_MARKER_EXTENSION = '.step'
+
+export function removeStaleStepMarkers(dir: string = mcpConfigsDir()): number {
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return 0
+  }
+  let removed = 0
+  for (const name of names) {
+    if (!name.endsWith(STEP_MARKER_EXTENSION)) continue
+    const path = join(dir, name)
+    try {
+      if (!lstatSync(path).isFile()) continue
+      unlinkSync(path)
+      removed += 1
+    } catch {
+      log('mcp', 'stale step marker not removed', name)
+    }
+  }
+  return removed
 }
