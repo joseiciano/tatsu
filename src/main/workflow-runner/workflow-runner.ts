@@ -1,4 +1,6 @@
 import type {
+  CompleteExecutionResult,
+  WorkflowExecutionStep,
   WorkflowAttemptRecord,
   WorkflowRunRecord,
   WorkflowRunnerDeps,
@@ -9,7 +11,12 @@ import type {
 } from './types'
 import { StepStartError, type RunnableStep, type StepDriverEvent, type StepDriverKind, type StepExecution } from './drivers'
 import { runContextPath } from './run-artifacts'
-import type { ResolvedWorkflowStep, TemplateScope, TemplateStepScope } from '../../shared/workflow-def'
+import type {
+  ResolvedWorkflowStep,
+  StepOutputValue,
+  TemplateScope,
+  TemplateStepScope
+} from '../../shared/workflow-def'
 import type { StateEvent } from '../../shared/state'
 import {
   RECENT_RUNS_MAX,
@@ -23,6 +30,8 @@ import {
   type WorkflowSnapshotRef,
   type WorkflowStepStatus
 } from '../../shared/state/workflows'
+
+const ENDED_EXECUTIONS_MAX = 256
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
 
@@ -55,6 +64,7 @@ export class WorkflowRunner {
   private readonly runs = new Map<string, RunState>()
   private readonly liveAttempts = new Map<string, string>()
   private readonly executions = new Map<string, string>()
+  private readonly endedExecutions = new Map<string, { attemptId: string; stepId: string }>()
   private readonly agentSlots = new Set<string>()
   private queue: QueueEntry[] = []
   private readonly unsubscribers: Array<() => void>
@@ -81,6 +91,30 @@ export class WorkflowRunner {
       if (state.record.attempts.some((attempt) => attempt.attemptId === attemptId)) return runId
     }
     return undefined
+  }
+
+  stepForExecution(executionId: string): WorkflowExecutionStep | null {
+    if (!this.labsOn()) return null
+    const live = this.liveAgentStep(executionId)
+    if (live) {
+      const { attemptId, stepId } = live.record
+      const step = live.state.record.definition.steps.find((candidate) => candidate.id === stepId)
+      if (step?.kind !== 'agent') return null
+      return { attemptId, stepId, ...(step.output === undefined ? {} : { output: step.output }), ended: false }
+    }
+    const ended = this.endedExecutions.get(executionId)
+    return ended ? { ...ended, ended: true } : null
+  }
+
+  completeExecution(executionId: string, value: StepOutputValue): CompleteExecutionResult {
+    if (!this.labsOn()) return { ok: false, reason: 'not-a-step' }
+    const live = this.liveAgentStep(executionId)
+    if (!live) {
+      return { ok: false, reason: this.endedExecutions.has(executionId) ? 'already-completed' : 'not-a-step' }
+    }
+    return this.complete(live.record.attemptId, { ...value, completedBy: 'tool' })
+      ? { ok: true }
+      : { ok: false, reason: 'already-completed' }
   }
 
   reconcile(records: readonly WorkflowRunRecord[]): void {
@@ -349,6 +383,19 @@ export class WorkflowRunner {
   private currentStep(state: RunState): RunnableStep | undefined {
     const step = state.record.definition.steps[state.record.cursor]
     return step && isRunnable(step) ? step : undefined
+  }
+
+  private liveAgentStep(executionId: string): { state: RunState; record: WorkflowAttemptRecord } | undefined {
+    const attemptId = this.executions.get(executionId)
+    const state = attemptId === undefined ? undefined : this.runForLiveAttempt(attemptId)
+    return state?.live?.kind === 'agent' ? { state, record: state.live.record } : undefined
+  }
+
+  private rememberEnded(executionId: string, attemptId: string, stepId: string): void {
+    this.endedExecutions.set(executionId, { attemptId, stepId })
+    if (this.endedExecutions.size <= ENDED_EXECUTIONS_MAX) return
+    const oldest = this.endedExecutions.keys().next()
+    if (!oldest.done) this.endedExecutions.delete(oldest.value)
   }
 
   private runForLiveAttempt(attemptId: string): RunState | undefined {
@@ -620,6 +667,7 @@ export class WorkflowRunner {
     this.agentSlots.delete(attemptId)
     if (live.executionId !== undefined) {
       this.executions.delete(live.executionId)
+      if (live.kind === 'agent') this.rememberEnded(live.executionId, attemptId, stepId)
       if (cancelExecution) this.deps.drivers[live.kind].cancel(live.executionId)
     }
     this.deps.store.dispatch({
