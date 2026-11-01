@@ -99,6 +99,7 @@ interface BootOptions {
   cap?: number
   alive?: ReadonlySet<string>
   loader?: WorkflowRunnerDeps['loader']
+  labs?: boolean
 }
 
 function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, options: BootOptions = {}) {
@@ -115,7 +116,7 @@ function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, 
     ...initial,
     settings: {
       ...initial.settings,
-      labs: { workflows: true },
+      labs: { workflows: options.labs ?? true },
       workflows: { maxConcurrentAgents: options.cap ?? 4 }
     }
   })
@@ -143,7 +144,7 @@ function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, 
     persisted.filter((run) => run.runId === runId).at(-1)
   const stepStatus = (runId: string, stepId: string): WorkflowStepStatus | undefined =>
     wf().runs[runId]?.steps[stepId]?.status
-  return { records, store, runner, agent, logs, persisted, probed, wf, lastPersisted, stepStatus }
+  return { records, store, runner, agent, shell, logs, persisted, probed, wf, lastPersisted, stepStatus }
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -339,5 +340,71 @@ describe('WorkflowRunner.reconcile', () => {
     if (!started.ok) throw new Error(started.reason)
     await flush()
     expect(ctx.lastPersisted(started.runId)?.attempts[0].executionId).toBe('agent-exec-1')
+  })
+})
+
+describe('WorkflowRunner.reconcile with labs off', () => {
+  const setLabs = (ctx: ReturnType<typeof boot>, workflows: boolean) => {
+    const { settings } = ctx.store.getSnapshot().state
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { ...settings.labs, workflows } })
+  }
+
+  it('holds queued and pending runs as interrupted instead of starting them', async () => {
+    const ctx = boot(
+      [
+        record('run-q', { steps: { plan: 'queued' }, startedAt: 10 }),
+        record('run-p', { steps: { plan: 'pending' }, startedAt: 20 }),
+        record('run-dead', { steps: { plan: 'running' }, startedAt: 30, attempts: [attempt('att-dead')] })
+      ],
+      { labs: false }
+    )
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.shell.started).toEqual([])
+    for (const runId of ['run-q', 'run-p']) {
+      expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+      expect(ctx.stepStatus(runId, 'plan')).toBe('pending')
+      expect(ctx.lastPersisted(runId)).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+      expect(ctx.logs).toContain(`[workflow] run reconciled held {"runId":"${runId}"}`)
+    }
+    expect(ctx.wf().attempts['att-dead'].status).toBe('interrupted')
+    expect(ctx.wf().runs['run-dead']).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+  })
+
+  it('refuses retry while labs is off and recovers a held step with no attempt once it is on', async () => {
+    const ctx = boot([record('run-p', { steps: { plan: 'pending' } })], { labs: false })
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.retry('run-p')).toBe(false)
+    await flush()
+    expect(ctx.agent.started).toEqual([])
+
+    setLabs(ctx, true)
+    expect(ctx.runner.retry('run-p')).toBe(true)
+    await flush()
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.agent.started[0]).toMatchObject({ runId: 'run-p', stepId: 'plan', n: 1 })
+    expect(ctx.wf().runs['run-p'].status).toBe('running')
+  })
+
+  it('holds the next step of a reattached run when labs was turned off', async () => {
+    const ctx = boot(
+      [
+        record('run-a', {
+          defId: 'personal:two-agent',
+          definition: definitionOf(TWO_AGENT),
+          steps: { plan: 'running', build: 'pending' },
+          attempts: [attempt('att-1', { executionId: 'pty-live' })]
+        })
+      ],
+      { labs: false, alive: new Set(['pty-live']) }
+    )
+    ctx.runner.reconcile(ctx.records)
+    ctx.runner.complete('att-1', { status: 'done', summary: 'ok', completedBy: 'tool' })
+    await flush()
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.stepStatus('run-a', 'build')).toBe('pending')
+    expect(ctx.wf().runs['run-a']).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
   })
 })
