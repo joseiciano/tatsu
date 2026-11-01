@@ -105,6 +105,8 @@ export interface Config {
   expandedDiagnosticLoggingEnabled?: boolean
   dismissedAnnouncementIds?: string[]
   announcementsMuted?: boolean
+  labs?: { workflows?: boolean }
+  workflowSettings?: { maxConcurrentAgents?: number }
   scratchpadNotes?: Record<string, Record<string, string>>
   harnessConfig?: PersistedHarnessConfig
 }

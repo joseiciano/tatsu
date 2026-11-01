@@ -34,6 +34,14 @@ export interface UiScaleSpec {
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
+export interface LabsSettings {
+  workflows: boolean
+}
+
+export interface WorkflowSettings {
+  maxConcurrentAgents: number
+}
+
 /** A theme loaded from `<userData>/themes/*.json`. Stays minimal — the
  *  loader only validates `name` + `mode` + an optional `colors` map of the
  *  16 semantic keys; missing keys inherit from the default of that mode at
@@ -175,6 +183,8 @@ export interface SettingsState {
    *  the feed contents. Set by the "Hide all announcements" action and
    *  cleared only by the user. */
   announcementsMuted: boolean
+  labs: LabsSettings
+  workflows: WorkflowSettings
 }
 
 export type SettingsEvent =
@@ -238,3 +248,5 @@ export type SettingsEvent =
   | { type: 'settings/piCommandChanged'; payload: string }
   | { type: 'settings/piEnvVarsChanged'; payload: Record<string, string> }
   | { type: 'settings/piModelChanged'; payload: string | null }
+  | { type: 'settings/labsChanged'; payload: Partial<LabsSettings> }
+  | { type: 'settings/workflowSettingsChanged'; payload: Partial<WorkflowSettings> }

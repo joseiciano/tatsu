@@ -1,4 +1,11 @@
-import type { CustomTheme, SettingsState, UiScale, UiScaleSpec } from './types'
+import type {
+  CustomTheme,
+  LabsSettings,
+  SettingsState,
+  UiScale,
+  UiScaleSpec,
+  WorkflowSettings
+} from './types'
 
 export const SCALES: readonly UiScaleSpec[] = [
   { id: 'x-small', label: 'X-Small', rootPx: 14, terminalOffset: -2 },
@@ -29,6 +36,12 @@ export const DEFAULT_DARK_THEME = 'dark'
  *  Settings (`prReviewPrompt`) and per-creation in the New Worktree screen. */
 export const DEFAULT_PR_REVIEW_PROMPT =
   "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+
+export const DEFAULT_LABS_SETTINGS: LabsSettings = { workflows: false }
+
+export const MIN_MAX_CONCURRENT_AGENTS = 1
+export const MAX_MAX_CONCURRENT_AGENTS = 16
+export const DEFAULT_WORKFLOW_SETTINGS: WorkflowSettings = { maxConcurrentAgents: 4 }
 
 // Client-side placeholder. Real values are seeded in the main-process Store
 // constructor from the on-disk config and secrets.
@@ -89,5 +102,7 @@ export const initialSettings: SettingsState = {
   expandedDiagnosticLoggingEnabled: false,
   prReviewPrompt: DEFAULT_PR_REVIEW_PROMPT,
   dismissedAnnouncementIds: [],
-  announcementsMuted: false
+  announcementsMuted: false,
+  labs: DEFAULT_LABS_SETTINGS,
+  workflows: DEFAULT_WORKFLOW_SETTINGS
 }

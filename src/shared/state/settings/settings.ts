@@ -1,4 +1,20 @@
+import { MAX_MAX_CONCURRENT_AGENTS, MIN_MAX_CONCURRENT_AGENTS } from './constants'
 import type { SettingsEvent, SettingsState } from './types'
+
+export function clampMaxConcurrentAgents(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.min(MAX_MAX_CONCURRENT_AGENTS, Math.max(MIN_MAX_CONCURRENT_AGENTS, Math.floor(value)))
+}
+
+function mergePatch<T extends object>(current: T, patch: Partial<T>): T {
+  let next = current
+  for (const key in patch) {
+    const value = patch[key]
+    if (value === undefined || Object.is(value, next[key])) continue
+    next = { ...next, [key]: value }
+  }
+  return next
+}
 
 export function settingsReducer(state: SettingsState, event: SettingsEvent): SettingsState {
   switch (event.type) {
@@ -121,6 +137,14 @@ export function settingsReducer(state: SettingsState, event: SettingsEvent): Set
     }
     case 'settings/announcementsMutedChanged':
       return { ...state, announcementsMuted: event.payload }
+    case 'settings/labsChanged': {
+      const labs = mergePatch(state.labs, event.payload)
+      return labs === state.labs ? state : { ...state, labs }
+    }
+    case 'settings/workflowSettingsChanged': {
+      const workflows = mergePatch(state.workflows, event.payload)
+      return workflows === state.workflows ? state : { ...state, workflows }
+    }
     default: {
       const _exhaustive: never = event
       void _exhaustive

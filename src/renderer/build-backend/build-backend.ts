@@ -40,6 +40,7 @@ import type {
 } from '../../shared/transport/transport'
 import type { ElectronAPI, TerminalSpawnSpec } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
+import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
 import type {
   HarnessConfigApplyRequest,
   HarnessConfigConversionRequest,
@@ -364,6 +365,9 @@ export function buildBackend(
     snooze: (path: string, wakeAt: number) => req('snooze:snooze', path, wakeAt),
     unsnooze: (path: string) => req('snooze:unsnooze', path),
     setSnoozeDefaultDays: (days: number) => req('config:setSnoozeDefaultDays', days),
+    setLabs: (patch: Partial<LabsSettings>) => req('settings:setLabs', patch),
+    setWorkflowSettings: (patch: Partial<WorkflowSettings>) =>
+      req('settings:setWorkflowSettings', patch),
 
     setScratchpadText: (worktreePath: string, text: string) =>
       req('scratchpad:setText', worktreePath, text),
