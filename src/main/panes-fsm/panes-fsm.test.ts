@@ -630,6 +630,25 @@ describe('PanesFSM main-side agent start', () => {
       expect(startAgentTab).not.toHaveBeenCalled()
     })
 
+    it('restartAgentTab leaves a workflow step tab and its PTY alone', () => {
+      const killTabPty = vi.fn()
+      const { fsm, store } = buildFSM({ killTabPty })
+      const wtPath = '/wt/restart-step'
+      const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+      seedLeaf(store, wtPath, {
+        type: 'leaf',
+        id: 'pane-1',
+        tabs: [{ ...agentTab('agent-1'), workflow }],
+        activeTabId: 'agent-1'
+      })
+      const before = store.getSnapshot().state.terminals.panes[wtPath]
+
+      expect(fsm.restartAgentTab(wtPath, 'agent-1', 'agent-2')).toBe(false)
+
+      expect(store.getSnapshot().state.terminals.panes[wtPath]).toBe(before)
+      expect(killTabPty).not.toHaveBeenCalled()
+    })
+
     it('convertTabType to agent does not start the converted tab', () => {
       const startAgentTab = startSpy()
       const { fsm, store } = buildFSM({ startAgentTab })
