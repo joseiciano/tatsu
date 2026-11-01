@@ -156,6 +156,30 @@ describe('workflow-snapshots', () => {
       expect(files.some((f) => f.startsWith('.harness/runs'))).toBe(false)
     })
 
+    it('still snapshots once .harness/runs is excluded from git', async () => {
+      await ensureRunsExcluded(repo)
+      mkdirSync(join(repo, '.harness', 'runs', 'r1'), { recursive: true })
+      writeFileSync(join(repo, '.harness', 'runs', 'r1', 'context.md'), 'artifact\n')
+      writeFileSync(join(repo, 'new.txt'), 'new\n')
+
+      const snap = await takeSnapshot({ worktree: repo, runId: 'r1', stepId: 's', n: 0 })
+
+      const files = lsTree(repo, snap.commit)
+      expect(files).toContain('new.txt')
+      expect(files.some((f) => f.startsWith('.harness/runs'))).toBe(false)
+    })
+
+    it('drops .harness/runs files even when HEAD tracks them', async () => {
+      mkdirSync(join(repo, '.harness', 'runs', 'old'), { recursive: true })
+      writeFileSync(join(repo, '.harness', 'runs', 'old', 'context.md'), 'tracked\n')
+      git(repo, ['add', '-A'])
+      git(repo, ['commit', '-q', '-m', 'tracked runs'])
+
+      const snap = await takeSnapshot({ worktree: repo, runId: 'r1', stepId: 's', n: 0 })
+
+      expect(lsTree(repo, snap.commit).some((f) => f.startsWith('.harness/runs'))).toBe(false)
+    })
+
     it('chains to the previous snapshot and uses its own identity', async () => {
       const first = await takeSnapshot({ worktree: repo, runId: 'r1', stepId: 's', n: 0 })
       writeFileSync(join(repo, 'tracked.txt'), 'two\n')
