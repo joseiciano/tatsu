@@ -28,7 +28,7 @@
 import { existsSync, mkdirSync } from 'fs'
 import { createRequire } from 'module'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, resolve } from 'path'
 
 export type Runtime = 'electron' | 'node'
 
@@ -59,7 +59,7 @@ export function userDataDir(): string {
     cachedUserDataDir = loadElectronApp().getPath('userData')
   } else {
     const fromEnv = process.env['HARNESS_DATA_DIR']
-    const dir = fromEnv && fromEnv.trim() ? fromEnv : join(homedir(), '.harness')
+    const dir = fromEnv && fromEnv.trim() ? resolve(fromEnv) : join(homedir(), '.harness')
     cachedUserDataDir = ensureDir(dir)
   }
   return cachedUserDataDir
