@@ -20,15 +20,41 @@ import type {
   HarnessTemplateHarnesses,
   ManagedHarnessKind
 } from './harness-config'
+import type { Announcement, AnnouncementsEvent, AnnouncementsState } from './announcements'
+import type { BrowserEvent, BrowserState, BrowserTabState } from './browser'
+import type { HooksConsent, HooksEvent, HooksState } from './hooks'
 import type { ChatRuntimeId, JsonClaudePermissionMode } from './json-claude'
-import type { DownloadableRuntime, RuntimesState, RuntimeStatus } from './runtimes'
+import type { OnboardingEvent, OnboardingState, QuestStep } from './onboarding'
+import type { DownloadableRuntime, RuntimesEvent, RuntimesState, RuntimeStatus } from './runtimes'
+import type { ScratchpadEvent, ScratchpadState } from './scratchpad'
 import type { SettingsState } from './settings'
 import { initialSnooze, snoozeReducer, type SnoozeEvent, type SnoozeState } from './snooze'
 import type { AgentKind, PaneLeaf, PaneNode, PaneSplit, TerminalTab } from './terminals'
+import type { UpdaterEvent, UpdaterState, UpdaterStatus } from './updater'
 import type { PendingDeletion, PendingWorktree } from './worktrees'
 
 const snoozeState: WireEqual<Generated.SnoozeState, SnoozeState> = true
 const snoozeEvent: WireEqual<Generated.SnoozeEvent, SnoozeEvent> = true
+
+const questStep: WireEqual<Generated.QuestStep, QuestStep> = true
+const onboardingState: WireEqual<Generated.OnboardingState, OnboardingState> = true
+const onboardingEvent: WireEqual<Generated.OnboardingEvent, OnboardingEvent> = true
+const hooksConsent: WireEqual<Generated.HooksConsent, HooksConsent> = true
+const hooksState: WireEqual<Generated.HooksState, HooksState> = true
+const hooksEvent: WireEqual<Generated.HooksEvent, HooksEvent> = true
+const updaterStatus: WireEqual<Generated.UpdaterStatus, UpdaterStatus> = true
+const updaterState: WireEqual<Generated.UpdaterState, UpdaterState> = true
+const updaterEvent: WireEqual<Generated.UpdaterEvent, UpdaterEvent> = true
+const browserTabState: WireEqual<Generated.BrowserTabState, BrowserTabState> = true
+const browserTabStatePatch: WireEqual<Generated.BrowserTabStatePatch, Partial<BrowserTabState>> = true
+const browserState: WireEqual<Generated.BrowserState, BrowserState> = true
+const browserEvent: WireEqual<Generated.BrowserEvent, BrowserEvent> = true
+const announcement: WireEqual<Generated.Announcement, Announcement> = true
+const announcementsState: WireEqual<Generated.AnnouncementsState, AnnouncementsState> = true
+const announcementsEvent: WireEqual<Generated.AnnouncementsEvent, AnnouncementsEvent> = true
+const scratchpadState: WireEqual<Generated.ScratchpadState, ScratchpadState> = true
+const scratchpadEvent: WireEqual<Generated.ScratchpadEvent, ScratchpadEvent> = true
+const runtimesEvent: WireEqual<Generated.RuntimesEvent, RuntimesEvent> = true
 
 const agentKind: WireEqual<Generated.AgentKind, AgentKind> = true
 const chatRuntimeId: WireEqual<Generated.ChatRuntimeId, ChatRuntimeId> = true

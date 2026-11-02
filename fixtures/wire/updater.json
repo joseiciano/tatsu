@@ -1,0 +1,192 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial updater state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "status": null
+    }
+  },
+  {
+    "name": "statusChanged sets checking from null",
+    "now": 1700000000000,
+    "before": {
+      "status": null
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "checking"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "checking"
+      }
+    }
+  },
+  {
+    "name": "statusChanged replaces checking with available",
+    "now": 1700000000000,
+    "before": {
+      "status": {
+        "state": "checking"
+      }
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "available",
+        "version": "1.13.0"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "available",
+        "version": "1.13.0"
+      }
+    }
+  },
+  {
+    "name": "statusChanged available carries optional releaseUrl and manualInstallRequired",
+    "now": 1700000000000,
+    "before": {
+      "status": null
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "available",
+        "version": "2.8.0",
+        "releaseUrl": "https://github.com/example/harness/releases/tag/v2.8.0",
+        "manualInstallRequired": true
+      }
+    },
+    "after": {
+      "status": {
+        "state": "available",
+        "version": "2.8.0",
+        "releaseUrl": "https://github.com/example/harness/releases/tag/v2.8.0",
+        "manualInstallRequired": true
+      }
+    }
+  },
+  {
+    "name": "statusChanged downloading keeps a fractional percent",
+    "now": 1700000000000,
+    "before": {
+      "status": {
+        "state": "available",
+        "version": "1.13.0"
+      }
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "downloading",
+        "percent": 42.5,
+        "version": "1.13.0"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "downloading",
+        "percent": 42.5,
+        "version": "1.13.0"
+      }
+    }
+  },
+  {
+    "name": "statusChanged downloading writes a whole percent as an integer",
+    "now": 1700000000000,
+    "before": {
+      "status": {
+        "state": "downloading",
+        "percent": 42.5,
+        "version": "1.13.0"
+      }
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "downloading",
+        "percent": 100,
+        "version": "1.13.0"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "downloading",
+        "percent": 100,
+        "version": "1.13.0"
+      }
+    }
+  },
+  {
+    "name": "statusChanged downloaded drops the downloading fields",
+    "now": 1700000000000,
+    "before": {
+      "status": {
+        "state": "downloading",
+        "percent": 100,
+        "version": "1.13.0"
+      }
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "downloaded",
+        "version": "1.13.0"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "downloaded",
+        "version": "1.13.0"
+      }
+    }
+  },
+  {
+    "name": "statusChanged not-available",
+    "now": 1700000000000,
+    "before": {
+      "status": {
+        "state": "checking"
+      }
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "not-available"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "not-available"
+      }
+    }
+  },
+  {
+    "name": "statusChanged error preserves the message",
+    "now": 1700000000000,
+    "before": {
+      "status": null
+    },
+    "event": {
+      "type": "updater/statusChanged",
+      "payload": {
+        "state": "error",
+        "error": "no internet"
+      }
+    },
+    "after": {
+      "status": {
+        "state": "error",
+        "error": "no internet"
+      }
+    }
+  }
+]

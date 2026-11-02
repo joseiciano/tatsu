@@ -1,5 +1,16 @@
 [
   {
+    "name": "initial state: a no-op event from another slice leaves the initial snooze state",
+    "now": 1700000000000,
+    "event": {
+      "type": "scratchpad/worktreeRemoved",
+      "payload": "/none"
+    },
+    "after": {
+      "byPath": {}
+    }
+  },
+  {
     "name": "set adds an entry to an empty state",
     "now": 1700000000000,
     "before": {

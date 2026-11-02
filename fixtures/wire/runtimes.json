@@ -1,0 +1,257 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial runtimes state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "byAgent": {}
+    }
+  },
+  {
+    "name": "statusChanged bundled adds an entry",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {}
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "codex",
+        "status": {
+          "state": "bundled"
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "codex": {
+          "state": "bundled"
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged ready adds an entry",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {}
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "codex",
+        "status": {
+          "state": "ready",
+          "version": "0.146.1-darwin-arm64"
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "codex": {
+          "state": "ready",
+          "version": "0.146.1-darwin-arm64"
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged missing sets one agent without touching the others",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {
+        "codex": {
+          "state": "ready",
+          "version": "0.146.1-darwin-arm64"
+        }
+      }
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "opencode",
+        "status": {
+          "state": "missing",
+          "version": "1.18.14",
+          "sizeBytes": 139830770
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "codex": {
+          "state": "ready",
+          "version": "0.146.1-darwin-arm64"
+        },
+        "opencode": {
+          "state": "missing",
+          "version": "1.18.14",
+          "sizeBytes": 139830770
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged missing with an unknown size writes null",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {}
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "opencode",
+        "status": {
+          "state": "missing",
+          "version": "1.18.14",
+          "sizeBytes": null
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "opencode": {
+          "state": "missing",
+          "version": "1.18.14",
+          "sizeBytes": null
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged downloading with a known total",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {
+        "opencode": {
+          "state": "missing",
+          "version": "1.18.14",
+          "sizeBytes": 100
+        }
+      }
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "opencode",
+        "status": {
+          "state": "downloading",
+          "version": "1.18.14",
+          "receivedBytes": 10,
+          "totalBytes": 100
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "opencode": {
+          "state": "downloading",
+          "version": "1.18.14",
+          "receivedBytes": 10,
+          "totalBytes": 100
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged downloading with an unknown total writes null",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {}
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "codex",
+        "status": {
+          "state": "downloading",
+          "version": "0.1",
+          "receivedBytes": 0,
+          "totalBytes": null
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "codex": {
+          "state": "downloading",
+          "version": "0.1",
+          "receivedBytes": 0,
+          "totalBytes": null
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged error replaces the previous status for the same agent",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {
+        "opencode": {
+          "state": "downloading",
+          "version": "1.18.14",
+          "receivedBytes": 10,
+          "totalBytes": 100
+        }
+      }
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "opencode",
+        "status": {
+          "state": "error",
+          "version": "1.18.14",
+          "error": "HTTP 503"
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "opencode": {
+          "state": "error",
+          "version": "1.18.14",
+          "error": "HTTP 503"
+        }
+      }
+    }
+  },
+  {
+    "name": "statusChanged replaces the first of two agents in place",
+    "now": 1700000000000,
+    "before": {
+      "byAgent": {
+        "opencode": {
+          "state": "bundled"
+        },
+        "codex": {
+          "state": "bundled"
+        }
+      }
+    },
+    "event": {
+      "type": "runtimes/statusChanged",
+      "payload": {
+        "agentKind": "opencode",
+        "status": {
+          "state": "ready",
+          "version": "1.18.14"
+        }
+      }
+    },
+    "after": {
+      "byAgent": {
+        "opencode": {
+          "state": "ready",
+          "version": "1.18.14"
+        },
+        "codex": {
+          "state": "bundled"
+        }
+      }
+    }
+  }
+]

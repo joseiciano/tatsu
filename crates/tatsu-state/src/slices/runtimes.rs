@@ -41,10 +41,64 @@ pub struct RuntimesState {
     pub by_agent: IndexMap<DownloadableRuntime, RuntimeStatus>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeStatusChange {
+    pub agent_kind: DownloadableRuntime,
+    pub status: RuntimeStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", content = "payload")]
+pub enum RuntimesEvent {
+    #[serde(rename = "runtimes/statusChanged")]
+    StatusChanged(RuntimeStatusChange),
+}
+
+pub fn reduce(state: &mut RuntimesState, event: RuntimesEvent) {
+    match event {
+        RuntimesEvent::StatusChanged(change) => {
+            state.by_agent.insert(change.agent_kind, change.status);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn status_changed(agent_kind: DownloadableRuntime, version: &str) -> RuntimesEvent {
+        RuntimesEvent::StatusChanged(RuntimeStatusChange {
+            agent_kind,
+            status: RuntimeStatus::Ready {
+                version: version.to_string(),
+            },
+        })
+    }
+
+    #[test]
+    fn initial_state_serializes_to_empty_by_agent() {
+        assert_eq!(
+            serde_json::to_value(RuntimesState::default()).unwrap(),
+            json!({ "byAgent": {} })
+        );
+    }
+
+    #[test]
+    fn status_changed_replaces_an_entry_in_place() {
+        let mut state = RuntimesState::default();
+        reduce(&mut state, status_changed(DownloadableRuntime::Codex, "1"));
+        reduce(
+            &mut state,
+            status_changed(DownloadableRuntime::Opencode, "1"),
+        );
+        reduce(&mut state, status_changed(DownloadableRuntime::Codex, "2"));
+        assert_eq!(
+            serde_json::to_string(&state).unwrap(),
+            r#"{"byAgent":{"codex":{"state":"ready","version":"2"},"opencode":{"state":"ready","version":"1"}}}"#
+        );
+    }
 
     #[test]
     fn null_byte_counts_serialize_as_null() {

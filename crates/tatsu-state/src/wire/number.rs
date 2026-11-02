@@ -13,6 +13,17 @@ pub fn serialize<S: Serializer>(value: &f64, serializer: S) -> Result<S::Ok, S::
     }
 }
 
+pub mod option {
+    use serde::Serializer;
+
+    pub fn serialize<S: Serializer>(value: &Option<f64>, serializer: S) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(value) => super::serialize(value, serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
@@ -56,5 +67,16 @@ mod tests {
     fn whole_numbers_past_two_pow_53_stay_floats() {
         assert_eq!(js(9_007_199_254_740_992.0), "9007199254740992");
         assert_eq!(js(18_014_398_509_481_984.0), "1.8014398509481984e+16");
+    }
+
+    #[derive(Serialize)]
+    struct JsOption(#[serde(serialize_with = "super::option::serialize")] Option<f64>);
+
+    #[test]
+    fn options_write_none_as_null_and_values_like_json_stringify() {
+        let js_option = |value| serde_json::to_string(&JsOption(value)).unwrap();
+        assert_eq!(js_option(None), "null");
+        assert_eq!(js_option(Some(1_717_000_000_000.0)), "1717000000000");
+        assert_eq!(js_option(Some(2.5)), "2.5");
     }
 }

@@ -29,10 +29,13 @@ fn slice_of(request: &Value) -> Result<String, String> {
 
 fn reduce_case(request: &Value) -> Result<Value, String> {
     let slice = slice_of(request)?;
-    let before: Value = field(request, "before")?;
+    let start: Map<String, Value> = request
+        .get("before")
+        .map(|before| (slice.clone(), before.clone()))
+        .into_iter()
+        .collect();
     let mut state: AppState =
-        serde_json::from_value(Value::Object(Map::from_iter([(slice.clone(), before)])))
-            .map_err(|err| format!("`before`: {err}"))?;
+        serde_json::from_value(Value::Object(start)).map_err(|err| format!("`before`: {err}"))?;
     root_reduce(
         &mut state,
         field::<StateEvent>(request, "event")?,

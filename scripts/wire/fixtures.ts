@@ -11,7 +11,7 @@ export type SliceKey = keyof AppState
 export interface FixtureCase {
   name: string
   now: number
-  before: unknown
+  before?: unknown
   event: StateEvent
   after?: unknown
 }
@@ -42,7 +42,8 @@ export function reduceCase(key: SliceKey, fixture: FixtureCase): unknown {
   vi.useFakeTimers()
   vi.setSystemTime(fixture.now)
   try {
-    const state = { ...initialState, [key]: fixture.before } as AppState
+    const before = 'before' in fixture ? fixture.before : initialState[key]
+    const state = { ...initialState, [key]: before } as AppState
     const next = rootReducer(state, fixture.event)
     return JSON.parse(JSON.stringify(next[key]))
   } finally {

@@ -42,12 +42,21 @@ fn slice_files() -> Vec<(String, PathBuf)> {
 }
 
 fn reduce_case(key: &str, case: &Map<String, Value>) -> Result<Value, String> {
-    let now = case["now"].as_i64().ok_or("`now` is not an integer")?;
-    let state = Value::Object(Map::from_iter([(key.to_string(), case["before"].clone())]));
+    let now = case
+        .get("now")
+        .and_then(Value::as_i64)
+        .ok_or("`now` is not an integer")?;
+    let state = Value::Object(
+        case.get("before")
+            .map(|before| (key.to_string(), before.clone()))
+            .into_iter()
+            .collect(),
+    );
     let mut state: AppState =
         serde_json::from_value(state).map_err(|err| format!("before: {err}"))?;
     let event: StateEvent =
-        serde_json::from_value(case["event"].clone()).map_err(|err| format!("event: {err}"))?;
+        serde_json::from_value(case.get("event").cloned().ok_or("missing `event`")?)
+            .map_err(|err| format!("event: {err}"))?;
     root_reduce(&mut state, event, now);
     let mut state = serde_json::to_value(&state).map_err(|err| format!("serialize: {err}"))?;
     Ok(state[key].take())
@@ -68,11 +77,14 @@ fn every_slice_fixture_case_matches_the_recorded_ts_after() {
             serde_json::from_str(&text).unwrap_or_else(|err| panic!("{}: {err}", path.display()));
         for case in &file {
             cases += 1;
-            let name = case["name"].as_str().unwrap_or("<unnamed>");
+            let name = case
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("<unnamed>");
             let input = Value::Object(
                 ["now", "before", "event"]
                     .into_iter()
-                    .map(|field| (field.to_string(), case[field].clone()))
+                    .filter_map(|field| Some((field.to_string(), case.get(field)?.clone())))
                     .collect(),
             );
             let expected = case.get("after").cloned().unwrap_or(Value::Null);

@@ -1,0 +1,55 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial hooks state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "consent": "pending"
+    }
+  },
+  {
+    "name": "consentChanged pending to accepted",
+    "now": 1700000000000,
+    "before": {
+      "consent": "pending"
+    },
+    "event": {
+      "type": "hooks/consentChanged",
+      "payload": "accepted"
+    },
+    "after": {
+      "consent": "accepted"
+    }
+  },
+  {
+    "name": "consentChanged accepted to declined",
+    "now": 1700000000000,
+    "before": {
+      "consent": "accepted"
+    },
+    "event": {
+      "type": "hooks/consentChanged",
+      "payload": "declined"
+    },
+    "after": {
+      "consent": "declined"
+    }
+  },
+  {
+    "name": "consentChanged declined back to pending",
+    "now": 1700000000000,
+    "before": {
+      "consent": "declined"
+    },
+    "event": {
+      "type": "hooks/consentChanged",
+      "payload": "pending"
+    },
+    "after": {
+      "consent": "pending"
+    }
+  }
+]

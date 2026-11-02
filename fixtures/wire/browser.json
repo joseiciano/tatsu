@@ -1,0 +1,271 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial browser state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "byTab": {}
+    }
+  },
+  {
+    "name": "tabStateChanged creates an entry from the initial tab state",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {}
+    },
+    "event": {
+      "type": "browser/tabStateChanged",
+      "payload": {
+        "tabId": "b1",
+        "state": {
+          "url": "https://example.com",
+          "loading": true
+        }
+      }
+    },
+    "after": {
+      "byTab": {
+        "b1": {
+          "url": "https://example.com",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": true
+        }
+      }
+    }
+  },
+  {
+    "name": "tabStateChanged merges a partial update into an existing tab",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {
+        "b1": {
+          "url": "https://example.com",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": true
+        }
+      }
+    },
+    "event": {
+      "type": "browser/tabStateChanged",
+      "payload": {
+        "tabId": "b1",
+        "state": {
+          "title": "Example",
+          "loading": false
+        }
+      }
+    },
+    "after": {
+      "byTab": {
+        "b1": {
+          "url": "https://example.com",
+          "title": "Example",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    }
+  },
+  {
+    "name": "tabStateChanged sets an error on an existing tab",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": true
+        }
+      }
+    },
+    "event": {
+      "type": "browser/tabStateChanged",
+      "payload": {
+        "tabId": "b1",
+        "state": {
+          "error": "no browser",
+          "loading": false
+        }
+      }
+    },
+    "after": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false,
+          "error": "no browser"
+        }
+      }
+    }
+  },
+  {
+    "name": "tabStateChanged with an empty patch on a new tab adds the initial tab state",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    },
+    "event": {
+      "type": "browser/tabStateChanged",
+      "payload": {
+        "tabId": "b2",
+        "state": {}
+      }
+    },
+    "after": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        },
+        "b2": {
+          "url": "",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    }
+  },
+  {
+    "name": "tabStateChanged on an existing tab keeps the other tabs",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        },
+        "b2": {
+          "url": "y",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    },
+    "event": {
+      "type": "browser/tabStateChanged",
+      "payload": {
+        "tabId": "b1",
+        "state": {
+          "canGoBack": true,
+          "canGoForward": true
+        }
+      }
+    },
+    "after": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": true,
+          "canGoForward": true,
+          "loading": false
+        },
+        "b2": {
+          "url": "y",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    }
+  },
+  {
+    "name": "tabRemoved drops the entry",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        },
+        "b2": {
+          "url": "y",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    },
+    "event": {
+      "type": "browser/tabRemoved",
+      "payload": "b1"
+    },
+    "after": {
+      "byTab": {
+        "b2": {
+          "url": "y",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    }
+  },
+  {
+    "name": "tabRemoved of an unknown tab leaves the state unchanged",
+    "now": 1700000000000,
+    "before": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    },
+    "event": {
+      "type": "browser/tabRemoved",
+      "payload": "missing"
+    },
+    "after": {
+      "byTab": {
+        "b1": {
+          "url": "x",
+          "title": "",
+          "canGoBack": false,
+          "canGoForward": false,
+          "loading": false
+        }
+      }
+    }
+  }
+]

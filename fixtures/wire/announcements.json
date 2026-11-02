@@ -1,0 +1,267 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial announcements state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": null
+    }
+  },
+  {
+    "name": "loaded replaces items, records fetchedAt, and clears the error",
+    "now": 1700000000000,
+    "before": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": "boom"
+    },
+    "event": {
+      "type": "announcements/loaded",
+      "payload": {
+        "items": [
+          {
+            "id": "a",
+            "title": "A",
+            "href": "https://example.com/a",
+            "publishedAt": "2026-05-20T00:00:00Z"
+          }
+        ],
+        "fetchedAt": 1717000000000
+      }
+    },
+    "after": {
+      "items": [
+        {
+          "id": "a",
+          "title": "A",
+          "href": "https://example.com/a",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 1717000000000,
+      "lastError": null
+    }
+  },
+  {
+    "name": "loaded replaces earlier items",
+    "now": 1700000000000,
+    "before": {
+      "items": [
+        {
+          "id": "old",
+          "title": "OLD",
+          "href": "https://example.com/old",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 1,
+      "lastError": null
+    },
+    "event": {
+      "type": "announcements/loaded",
+      "payload": {
+        "items": [
+          {
+            "id": "a",
+            "title": "A",
+            "href": "https://example.com/a",
+            "publishedAt": "2026-05-20T00:00:00Z"
+          },
+          {
+            "id": "b",
+            "title": "B",
+            "href": "https://example.com/b",
+            "publishedAt": "2026-05-20T00:00:00Z"
+          }
+        ],
+        "fetchedAt": 2
+      }
+    },
+    "after": {
+      "items": [
+        {
+          "id": "a",
+          "title": "A",
+          "href": "https://example.com/a",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        },
+        {
+          "id": "b",
+          "title": "B",
+          "href": "https://example.com/b",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 2,
+      "lastError": null
+    }
+  },
+  {
+    "name": "loaded keeps a fractional fetchedAt",
+    "now": 1700000000000,
+    "before": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": null
+    },
+    "event": {
+      "type": "announcements/loaded",
+      "payload": {
+        "items": [],
+        "fetchedAt": 1717000000000.5
+      }
+    },
+    "after": {
+      "items": [],
+      "lastFetched": 1717000000000.5,
+      "lastError": null
+    }
+  },
+  {
+    "name": "loaded preserves summary and expiresAt",
+    "now": 1700000000000,
+    "before": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": null
+    },
+    "event": {
+      "type": "announcements/loaded",
+      "payload": {
+        "items": [
+          {
+            "id": "a",
+            "title": "A",
+            "href": "https://example.com/a",
+            "publishedAt": "2026-05-20T00:00:00Z",
+            "summary": "A short blurb.",
+            "expiresAt": "2026-06-20T00:00:00Z"
+          }
+        ],
+        "fetchedAt": 1
+      }
+    },
+    "after": {
+      "items": [
+        {
+          "id": "a",
+          "title": "A",
+          "href": "https://example.com/a",
+          "publishedAt": "2026-05-20T00:00:00Z",
+          "summary": "A short blurb.",
+          "expiresAt": "2026-06-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 1,
+      "lastError": null
+    }
+  },
+  {
+    "name": "loaded items without a summary flow through unchanged",
+    "now": 1700000000000,
+    "before": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": null
+    },
+    "event": {
+      "type": "announcements/loaded",
+      "payload": {
+        "items": [
+          {
+            "id": "a",
+            "title": "A",
+            "href": "https://example.com/a",
+            "publishedAt": "2026-05-20T00:00:00Z"
+          }
+        ],
+        "fetchedAt": 1
+      }
+    },
+    "after": {
+      "items": [
+        {
+          "id": "a",
+          "title": "A",
+          "href": "https://example.com/a",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 1,
+      "lastError": null
+    }
+  },
+  {
+    "name": "fetchFailed records the error without dropping items",
+    "now": 1700000000000,
+    "before": {
+      "items": [
+        {
+          "id": "a",
+          "title": "A",
+          "href": "https://example.com/a",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 1,
+      "lastError": null
+    },
+    "event": {
+      "type": "announcements/fetchFailed",
+      "payload": "network down"
+    },
+    "after": {
+      "items": [
+        {
+          "id": "a",
+          "title": "A",
+          "href": "https://example.com/a",
+          "publishedAt": "2026-05-20T00:00:00Z"
+        }
+      ],
+      "lastFetched": 1,
+      "lastError": "network down"
+    }
+  },
+  {
+    "name": "fetchFailed on the initial state sets only the error",
+    "now": 1700000000000,
+    "before": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": null
+    },
+    "event": {
+      "type": "announcements/fetchFailed",
+      "payload": "x"
+    },
+    "after": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": "x"
+    }
+  },
+  {
+    "name": "fetchFailed replaces an earlier error",
+    "now": 1700000000000,
+    "before": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": "old"
+    },
+    "event": {
+      "type": "announcements/fetchFailed",
+      "payload": "new"
+    },
+    "after": {
+      "items": [],
+      "lastFetched": null,
+      "lastError": "new"
+    }
+  }
+]

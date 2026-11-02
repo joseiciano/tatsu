@@ -1,6 +1,12 @@
+pub mod announcements;
+pub mod browser;
 pub mod harness_config;
+pub mod hooks;
 pub mod json_claude;
+pub mod onboarding;
 pub mod runtimes;
+pub mod scratchpad;
 pub mod snooze;
 pub mod terminals;
+pub mod updater;
 pub mod worktrees;

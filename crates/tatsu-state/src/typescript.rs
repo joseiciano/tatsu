@@ -5,15 +5,21 @@ use specta::{
 use specta_typescript::Typescript;
 
 use crate::slices::{
+    announcements::{Announcement, AnnouncementsEvent, AnnouncementsState},
+    browser::{BrowserEvent, BrowserState, BrowserTabState, BrowserTabStatePatch},
     harness_config::{
         HarnessConfigComparisons, HarnessConfigFileRef, HarnessConfigResourceType,
         HarnessConfigRootKey, HarnessConfigRoots, HarnessConfigScopeKey, HarnessConfigSyncStatus,
         HarnessTemplateHarnessBlock, HarnessTemplateHarnesses, ManagedHarnessKind,
     },
+    hooks::{HooksConsent, HooksEvent, HooksState},
     json_claude::{ChatRuntimeId, JsonClaudePermissionMode},
-    runtimes::{DownloadableRuntime, RuntimeStatus, RuntimesState},
+    onboarding::{OnboardingEvent, OnboardingState, QuestStep},
+    runtimes::{DownloadableRuntime, RuntimeStatus, RuntimesEvent, RuntimesState},
+    scratchpad::{ScratchpadEvent, ScratchpadState},
     snooze::{SnoozeEntry, SnoozeEvent, SnoozeState},
     terminals::{AgentKind, PaneNode, TerminalTab},
+    updater::{UpdaterEvent, UpdaterState, UpdaterStatus},
     worktrees::{PendingDeletion, PendingDeletionPatch, PendingWorktree, PendingWorktreePatch},
 };
 use crate::wire::frames::{ClientFrame, ServerFrame};
@@ -27,6 +33,24 @@ pub fn wire_types() -> Types {
         .register::<SnoozeEntry>()
         .register::<SnoozeState>()
         .register::<SnoozeEvent>()
+        .register::<QuestStep>()
+        .register::<OnboardingState>()
+        .register::<OnboardingEvent>()
+        .register::<HooksConsent>()
+        .register::<HooksState>()
+        .register::<HooksEvent>()
+        .register::<UpdaterStatus>()
+        .register::<UpdaterState>()
+        .register::<UpdaterEvent>()
+        .register::<BrowserTabState>()
+        .register::<BrowserTabStatePatch>()
+        .register::<BrowserState>()
+        .register::<BrowserEvent>()
+        .register::<Announcement>()
+        .register::<AnnouncementsState>()
+        .register::<AnnouncementsEvent>()
+        .register::<ScratchpadState>()
+        .register::<ScratchpadEvent>()
         .register::<AgentKind>()
         .register::<TerminalTab>()
         .register::<PaneNode>()
@@ -45,6 +69,7 @@ pub fn wire_types() -> Types {
         .register::<DownloadableRuntime>()
         .register::<RuntimeStatus>()
         .register::<RuntimesState>()
+        .register::<RuntimesEvent>()
         .register::<PendingWorktree>()
         .register::<PendingWorktreePatch>()
         .register::<PendingDeletion>()

@@ -1,0 +1,83 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial onboarding state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "quest": "hidden"
+    }
+  },
+  {
+    "name": "questChanged sets the quest step",
+    "now": 1700000000000,
+    "before": {
+      "quest": "hidden"
+    },
+    "event": {
+      "type": "onboarding/questChanged",
+      "payload": "spawn-second"
+    },
+    "after": {
+      "quest": "spawn-second"
+    }
+  },
+  {
+    "name": "questChanged to the same step keeps it",
+    "now": 1700000000000,
+    "before": {
+      "quest": "hidden"
+    },
+    "event": {
+      "type": "onboarding/questChanged",
+      "payload": "hidden"
+    },
+    "after": {
+      "quest": "hidden"
+    }
+  },
+  {
+    "name": "questChanged moves spawn-second to switch-between",
+    "now": 1700000000000,
+    "before": {
+      "quest": "spawn-second"
+    },
+    "event": {
+      "type": "onboarding/questChanged",
+      "payload": "switch-between"
+    },
+    "after": {
+      "quest": "switch-between"
+    }
+  },
+  {
+    "name": "questChanged moves switch-between to finale",
+    "now": 1700000000000,
+    "before": {
+      "quest": "switch-between"
+    },
+    "event": {
+      "type": "onboarding/questChanged",
+      "payload": "finale"
+    },
+    "after": {
+      "quest": "finale"
+    }
+  },
+  {
+    "name": "questChanged moves finale to done",
+    "now": 1700000000000,
+    "before": {
+      "quest": "finale"
+    },
+    "event": {
+      "type": "onboarding/questChanged",
+      "payload": "done"
+    },
+    "after": {
+      "quest": "done"
+    }
+  }
+]

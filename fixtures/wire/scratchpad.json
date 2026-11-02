@@ -1,0 +1,194 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial scratchpad state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "byWorktreePath": {}
+    }
+  },
+  {
+    "name": "loaded replaces the whole map",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/old": "old text"
+      }
+    },
+    "event": {
+      "type": "scratchpad/loaded",
+      "payload": {
+        "/a": "note a",
+        "/b": "note b"
+      }
+    },
+    "after": {
+      "byWorktreePath": {
+        "/a": "note a",
+        "/b": "note b"
+      }
+    }
+  },
+  {
+    "name": "loaded with an empty map clears every note",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "note a"
+      }
+    },
+    "event": {
+      "type": "scratchpad/loaded",
+      "payload": {}
+    },
+    "after": {
+      "byWorktreePath": {}
+    }
+  },
+  {
+    "name": "textChanged sets a value",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {}
+    },
+    "event": {
+      "type": "scratchpad/textChanged",
+      "payload": {
+        "worktreePath": "/a",
+        "text": "hello"
+      }
+    },
+    "after": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    }
+  },
+  {
+    "name": "textChanged replaces an existing value in place",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "hello",
+        "/b": "world"
+      }
+    },
+    "event": {
+      "type": "scratchpad/textChanged",
+      "payload": {
+        "worktreePath": "/a",
+        "text": "changed"
+      }
+    },
+    "after": {
+      "byWorktreePath": {
+        "/a": "changed",
+        "/b": "world"
+      }
+    }
+  },
+  {
+    "name": "textChanged with empty string deletes the entry",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "hello",
+        "/b": "world"
+      }
+    },
+    "event": {
+      "type": "scratchpad/textChanged",
+      "payload": {
+        "worktreePath": "/a",
+        "text": ""
+      }
+    },
+    "after": {
+      "byWorktreePath": {
+        "/b": "world"
+      }
+    }
+  },
+  {
+    "name": "textChanged with empty string on a missing key is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    },
+    "event": {
+      "type": "scratchpad/textChanged",
+      "payload": {
+        "worktreePath": "/missing",
+        "text": ""
+      }
+    },
+    "after": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    }
+  },
+  {
+    "name": "textChanged with identical text is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    },
+    "event": {
+      "type": "scratchpad/textChanged",
+      "payload": {
+        "worktreePath": "/a",
+        "text": "hello"
+      }
+    },
+    "after": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    }
+  },
+  {
+    "name": "worktreeRemoved drops the matching entry",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "hello",
+        "/b": "world"
+      }
+    },
+    "event": {
+      "type": "scratchpad/worktreeRemoved",
+      "payload": "/a"
+    },
+    "after": {
+      "byWorktreePath": {
+        "/b": "world"
+      }
+    }
+  },
+  {
+    "name": "worktreeRemoved on a missing key is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    },
+    "event": {
+      "type": "scratchpad/worktreeRemoved",
+      "payload": "/missing"
+    },
+    "after": {
+      "byWorktreePath": {
+        "/a": "hello"
+      }
+    }
+  }
+]
