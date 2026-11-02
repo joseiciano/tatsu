@@ -23,7 +23,7 @@ export function CodeDiffHunks({ patch, filePath }: { patch: string; filePath: st
               {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ''}
             </span>
             <span
-              className="whitespace-pre pr-4 hljs"
+              className="whitespace-pre pr-4"
               dangerouslySetInnerHTML={{
                 __html: highlightLine(line.content, line.type === 'hunk' ? null : language)
               }}
