@@ -1,6 +1,7 @@
 pub mod slices;
 pub mod wire;
 
+mod js_string;
 mod root;
 mod typescript;
 

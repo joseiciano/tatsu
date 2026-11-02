@@ -1,0 +1,6814 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial terminals state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "statusChanged sets the status and nulls pendingTool when not needs-approval",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/statusChanged",
+      "payload": {
+        "id": "t1",
+        "status": "processing",
+        "pendingTool": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        }
+      }
+    },
+    "after": {
+      "statuses": {
+        "t1": "processing"
+      },
+      "pendingTools": {
+        "t1": null
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "statusChanged with needs-approval keeps pendingTool",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {
+        "t0": "idle"
+      },
+      "pendingTools": {
+        "t0": null
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/statusChanged",
+      "payload": {
+        "id": "t1",
+        "status": "needs-approval",
+        "pendingTool": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        }
+      }
+    },
+    "after": {
+      "statuses": {
+        "t0": "idle",
+        "t1": "needs-approval"
+      },
+      "pendingTools": {
+        "t0": null,
+        "t1": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "statusChanged drops a stale pendingTool and keeps the key position of an existing id",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {
+        "/x/t1": "needs-approval",
+        "t2": "idle"
+      },
+      "pendingTools": {
+        "/x/t1": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        "t2": null
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/statusChanged",
+      "payload": {
+        "id": "/x/t1",
+        "status": "waiting",
+        "pendingTool": null
+      }
+    },
+    "after": {
+      "statuses": {
+        "/x/t1": "waiting",
+        "t2": "idle"
+      },
+      "pendingTools": {
+        "/x/t1": null,
+        "t2": null
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "statusChanged with needs-approval and a null pendingTool stores null",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/statusChanged",
+      "payload": {
+        "id": "t1",
+        "status": "needs-approval",
+        "pendingTool": null
+      }
+    },
+    "after": {
+      "statuses": {
+        "t1": "needs-approval"
+      },
+      "pendingTools": {
+        "t1": null
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "shellActivityChanged sets the active flag and process name",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/shellActivityChanged",
+      "payload": {
+        "id": "t1",
+        "active": true,
+        "processName": "vim"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {
+        "t1": {
+          "active": true,
+          "processName": "vim"
+        }
+      },
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "shellActivityChanged without processName drops the old process name",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {
+        "t1": {
+          "active": true,
+          "processName": "vim"
+        },
+        "t2": {
+          "active": false
+        }
+      },
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/shellActivityChanged",
+      "payload": {
+        "id": "t1",
+        "active": false
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {
+        "t1": {
+          "active": false
+        },
+        "t2": {
+          "active": false
+        }
+      },
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "progressChanged stores a fractional normal progress",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/progressChanged",
+      "payload": {
+        "id": "t1",
+        "state": 1,
+        "value": 42.5
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 42.5
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "progressChanged with state 0 drops a middle entry",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        },
+        "t2": {
+          "state": 3,
+          "value": 0
+        },
+        "t3": {
+          "state": 2,
+          "value": 100
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/progressChanged",
+      "payload": {
+        "id": "t2",
+        "state": 0,
+        "value": 0
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        },
+        "t3": {
+          "state": 2,
+          "value": 100
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "progressChanged with state 0 and no entry is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/progressChanged",
+      "payload": {
+        "id": "t9",
+        "state": 0,
+        "value": 5
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "progressChanged with an identical update is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/progressChanged",
+      "payload": {
+        "id": "t1",
+        "state": 1,
+        "value": 10
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "progressChanged replaces an entry with a paused negative value",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 1,
+          "value": 10
+        },
+        "t2": {
+          "state": 1,
+          "value": 20
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/progressChanged",
+      "payload": {
+        "id": "t1",
+        "state": 4,
+        "value": -1.25
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {
+        "t1": {
+          "state": 4,
+          "value": -1.25
+        },
+        "t2": {
+          "state": 1,
+          "value": 20
+        }
+      },
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "removed clears every per-terminal map for that id and leaves panes and lastActive",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {
+        "t0": "idle",
+        "t1": "needs-approval"
+      },
+      "pendingTools": {
+        "t0": null,
+        "t1": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "shellActivity": {
+        "t1": {
+          "active": true,
+          "processName": "make"
+        }
+      },
+      "progress": {
+        "t1": {
+          "state": 3,
+          "value": 0
+        }
+      },
+      "panes": {
+        "t1": {
+          "type": "leaf",
+          "id": "p1",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {
+        "t1": 1699999999000
+      },
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        },
+        "t0": {
+          "controllerClientId": null,
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/removed",
+      "payload": "t1"
+    },
+    "after": {
+      "statuses": {
+        "t0": "idle"
+      },
+      "pendingTools": {
+        "t0": null
+      },
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "t1": {
+          "type": "leaf",
+          "id": "p1",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {
+        "t1": 1699999999000
+      },
+      "sessions": {
+        "t0": {
+          "controllerClientId": null,
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "removed on an unknown id is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {
+        "t0": "idle",
+        "t1": "needs-approval"
+      },
+      "pendingTools": {
+        "t0": null,
+        "t1": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "shellActivity": {
+        "t1": {
+          "active": true,
+          "processName": "make"
+        }
+      },
+      "progress": {
+        "t1": {
+          "state": 3,
+          "value": 0
+        }
+      },
+      "panes": {
+        "t1": {
+          "type": "leaf",
+          "id": "p1",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {
+        "t1": 1699999999000
+      },
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        },
+        "t0": {
+          "controllerClientId": null,
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/removed",
+      "payload": "t9"
+    },
+    "after": {
+      "statuses": {
+        "t0": "idle",
+        "t1": "needs-approval"
+      },
+      "pendingTools": {
+        "t0": null,
+        "t1": {
+          "name": "Bash",
+          "input": {
+            "command": "rm -rf build",
+            "nested": {
+              "a": [
+                1,
+                2.5,
+                null,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "shellActivity": {
+        "t1": {
+          "active": true,
+          "processName": "make"
+        }
+      },
+      "progress": {
+        "t1": {
+          "state": 3,
+          "value": 0
+        }
+      },
+      "panes": {
+        "t1": {
+          "type": "leaf",
+          "id": "p1",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {
+        "t1": 1699999999000
+      },
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        },
+        "t0": {
+          "controllerClientId": null,
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "removed clears an id present only in sessions",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/removed",
+      "payload": "t1"
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "lastActiveChanged sets the timestamp for a new worktree",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {
+        "/a": 1
+      },
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/lastActiveChanged",
+      "payload": {
+        "worktreePath": "/b",
+        "ts": 1700000000123
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {
+        "/a": 1,
+        "/b": 1700000000123
+      },
+      "sessions": {}
+    }
+  },
+  {
+    "name": "lastActiveChanged updates an existing worktree in place",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {
+        "/b": 1,
+        "/a": 2,
+        "/c": 3
+      },
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/lastActiveChanged",
+      "payload": {
+        "worktreePath": "/a",
+        "ts": 1700000000456
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {
+        "/b": 1,
+        "/a": 1700000000456,
+        "/c": 3
+      },
+      "sessions": {}
+    }
+  },
+  {
+    "name": "clientJoined creates a session with the joiner as controller",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/clientJoined",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "clientJoined with a controller appends the joiner as spectator",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientJoined",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c3"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2",
+            "c3"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "clientJoined promotes the joiner to controller when the controller is null",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": null,
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientJoined",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c3"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c3",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "clientJoined is a no-op for an existing spectator",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientJoined",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c2"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "clientJoined is a no-op for the controller",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientJoined",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "clientJoined treats an empty-string controller as a controller",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientJoined",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c2"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "controlTaken creates a session with fractional dimensions",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/controlTaken",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c1",
+        "cols": 80.5,
+        "rows": 24
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": {
+            "cols": 80.5,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "controlTaken demotes the previous controller to the end of the spectators",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2",
+            "c3"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlTaken",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c3",
+        "cols": 120,
+        "rows": 40
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c3",
+          "spectatorClientIds": [
+            "c2",
+            "c1"
+          ],
+          "size": {
+            "cols": 120,
+            "rows": 40
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "controlTaken keeps the position of a previous controller already in the spectators",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c1",
+            "c2",
+            "c3"
+          ],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlTaken",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c2",
+        "cols": 100,
+        "rows": 30
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c2",
+          "spectatorClientIds": [
+            "c1",
+            "c3"
+          ],
+          "size": {
+            "cols": 100,
+            "rows": 30
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "controlTaken does not demote an empty-string controller",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlTaken",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c3",
+        "cols": 100,
+        "rows": 30
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c3",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 100,
+            "rows": 30
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "controlTaken by the current controller only updates the size",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlTaken",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c1",
+        "cols": 90,
+        "rows": 25
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 90,
+            "rows": 25
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "controlReleased by the controller leaves the controller null",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlReleased",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": null,
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "controlReleased by a spectator removes them from the list",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2",
+            "c3",
+            "c4"
+          ],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlReleased",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c3"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2",
+            "c4"
+          ],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "controlReleased by an unknown client is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlReleased",
+      "payload": {
+        "terminalId": "t1",
+        "clientId": "c9"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "controlReleased on a missing session is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/controlReleased",
+      "payload": {
+        "terminalId": "t9",
+        "clientId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "clientDisconnected sweeps every session",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        },
+        "t2": {
+          "controllerClientId": "c2",
+          "spectatorClientIds": [
+            "c1",
+            "c3"
+          ],
+          "size": null
+        },
+        "t3": {
+          "controllerClientId": "c3",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientDisconnected",
+      "payload": {
+        "clientId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": null,
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        },
+        "t2": {
+          "controllerClientId": "c2",
+          "spectatorClientIds": [
+            "c3"
+          ],
+          "size": null
+        },
+        "t3": {
+          "controllerClientId": "c3",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "clientDisconnected with no matching client is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/clientDisconnected",
+      "payload": {
+        "clientId": "c9"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": null
+        }
+      }
+    }
+  },
+  {
+    "name": "sizeChanged for a new session creates it with no controller",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/sizeChanged",
+      "payload": {
+        "terminalId": "t1",
+        "cols": 80,
+        "rows": 24
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": null,
+          "spectatorClientIds": [],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "sizeChanged with the same size is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/sizeChanged",
+      "payload": {
+        "terminalId": "t1",
+        "cols": 80,
+        "rows": 24
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "sizeChanged with a new size updates the session",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/sizeChanged",
+      "payload": {
+        "terminalId": "t1",
+        "cols": 132.5,
+        "rows": 50
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [
+            "c2"
+          ],
+          "size": {
+            "cols": 132.5,
+            "rows": 50
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "sizeChanged sets the size on a session with a null size",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": null
+        }
+      }
+    },
+    "event": {
+      "type": "terminals/sizeChanged",
+      "payload": {
+        "terminalId": "t1",
+        "cols": 80,
+        "rows": 24
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {},
+      "lastActive": {},
+      "sessions": {
+        "t1": {
+          "controllerClientId": "c1",
+          "spectatorClientIds": [],
+          "size": {
+            "cols": 80,
+            "rows": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "panesReplaced replaces the whole map in payload key order",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/panesReplaced",
+      "payload": {
+        "/z": {
+          "type": "leaf",
+          "id": "pz",
+          "tabs": [
+            {
+              "id": "tz",
+              "type": "shell",
+              "label": "tz"
+            }
+          ],
+          "activeTabId": "tz"
+        },
+        "/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [],
+          "activeTabId": ""
+        },
+        "/m": {
+          "type": "leaf",
+          "id": "pm",
+          "tabs": [
+            {
+              "id": "tm",
+              "type": "shell",
+              "label": "tm"
+            }
+          ],
+          "activeTabId": "tm"
+        }
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/z": {
+          "type": "leaf",
+          "id": "pz",
+          "tabs": [
+            {
+              "id": "tz",
+              "type": "shell",
+              "label": "tz"
+            }
+          ],
+          "activeTabId": "tz"
+        },
+        "/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [],
+          "activeTabId": ""
+        },
+        "/m": {
+          "type": "leaf",
+          "id": "pm",
+          "tabs": [
+            {
+              "id": "tm",
+              "type": "shell",
+              "label": "tm"
+            }
+          ],
+          "activeTabId": "tm"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "panesForWorktreeChanged appends a new worktree after the existing keys",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/panesForWorktreeChanged",
+      "payload": {
+        "worktreePath": "/w/0",
+        "panes": {
+          "type": "leaf",
+          "id": "p0",
+          "tabs": [
+            {
+              "id": "t0",
+              "type": "shell",
+              "label": "t0"
+            }
+          ],
+          "activeTabId": "t0"
+        }
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        },
+        "/w/0": {
+          "type": "leaf",
+          "id": "p0",
+          "tabs": [
+            {
+              "id": "t0",
+              "type": "shell",
+              "label": "t0"
+            }
+          ],
+          "activeTabId": "t0"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "panesForWorktreeChanged replaces a middle worktree in place",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/panesForWorktreeChanged",
+      "payload": {
+        "worktreePath": "/w/b",
+        "panes": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "pb",
+              "tabs": [
+                {
+                  "id": "tb",
+                  "type": "shell",
+                  "label": "tb"
+                }
+              ],
+              "activeTabId": "tb"
+            },
+            {
+              "type": "leaf",
+              "id": "pb2",
+              "tabs": [
+                {
+                  "id": "tb2",
+                  "type": "shell",
+                  "label": "tb2"
+                }
+              ],
+              "activeTabId": "tb2"
+            }
+          ],
+          "ratio": 0.5
+        }
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "pb",
+              "tabs": [
+                {
+                  "id": "tb",
+                  "type": "shell",
+                  "label": "tb"
+                }
+              ],
+              "activeTabId": "tb"
+            },
+            {
+              "type": "leaf",
+              "id": "pb2",
+              "tabs": [
+                {
+                  "id": "tb2",
+                  "type": "shell",
+                  "label": "tb2"
+                }
+              ],
+              "activeTabId": "tb2"
+            }
+          ],
+          "ratio": 0.5
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "panesForWorktreeCleared removes a middle key and keeps the order of the rest",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/panesForWorktreeCleared",
+      "payload": "/w/b"
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "panesForWorktreeCleared on a missing key is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/panesForWorktreeCleared",
+      "payload": "/w/missing"
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "panesForWorktreeChanged re-adds a removed worktree at the end",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/panesForWorktreeChanged",
+      "payload": {
+        "worktreePath": "/w/b",
+        "panes": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        }
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/d": {
+          "type": "leaf",
+          "id": "pd",
+          "tabs": [
+            {
+              "id": "td",
+              "type": "shell",
+              "label": "td"
+            }
+          ],
+          "activeTabId": "td"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "ta",
+              "type": "shell",
+              "label": "ta"
+            }
+          ],
+          "activeTabId": "ta"
+        },
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "tc",
+              "type": "shell",
+              "label": "tc"
+            }
+          ],
+          "activeTabId": "tc"
+        },
+        "/w/b": {
+          "type": "leaf",
+          "id": "pb",
+          "tabs": [
+            {
+              "id": "tb",
+              "type": "shell",
+              "label": "tb"
+            }
+          ],
+          "activeTabId": "tb"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "paneRatioChanged updates a nested split ratio",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/x": {
+          "type": "leaf",
+          "id": "px",
+          "tabs": [],
+          "activeTabId": ""
+        },
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/paneRatioChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "splitId": "s2",
+        "ratio": 0.25
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/x": {
+          "type": "leaf",
+          "id": "px",
+          "tabs": [],
+          "activeTabId": ""
+        },
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.25
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "paneRatioChanged writes a whole ratio as an integer",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/paneRatioChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "splitId": "s1",
+        "ratio": 1
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 1
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "paneRatioChanged on a missing worktree is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/paneRatioChanged",
+      "payload": {
+        "worktreePath": "/nope",
+        "splitId": "s1",
+        "ratio": 0.3
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "paneRatioChanged on a missing split is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/paneRatioChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "splitId": "missing",
+        "ratio": 0.3
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s1",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "a",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "split",
+              "id": "s2",
+              "direction": "vertical",
+              "children": [
+                {
+                  "type": "leaf",
+                  "id": "b",
+                  "tabs": [
+                    {
+                      "id": "t2",
+                      "type": "shell",
+                      "label": "t2"
+                    }
+                  ],
+                  "activeTabId": "t2"
+                },
+                {
+                  "type": "leaf",
+                  "id": "c",
+                  "tabs": [
+                    {
+                      "id": "t3",
+                      "type": "shell",
+                      "label": "t3"
+                    }
+                  ],
+                  "activeTabId": "t3"
+                }
+              ],
+              "ratio": 0.5
+            }
+          ],
+          "ratio": 0.6
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "sessionIdDiscovered backfills empty and missing session ids in every worktree and keeps key order",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "other",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "other"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": ""
+            }
+          ],
+          "activeTabId": "t1"
+        },
+        "/w/b": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "pb",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "pb2",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude",
+                  "sessionId": "keep"
+                }
+              ],
+              "activeTabId": "t1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/sessionIdDiscovered",
+      "payload": {
+        "terminalId": "t1",
+        "sessionId": "sess-1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "other",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "other"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": "sess-1"
+            }
+          ],
+          "activeTabId": "t1"
+        },
+        "/w/b": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "pb",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude",
+                  "sessionId": "sess-1"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "pb2",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude",
+                  "sessionId": "keep"
+                }
+              ],
+              "activeTabId": "t1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "sessionIdDiscovered with no matching tab is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "other",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "other"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": ""
+            }
+          ],
+          "activeTabId": "t1"
+        },
+        "/w/b": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "pb",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "pb2",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude",
+                  "sessionId": "keep"
+                }
+              ],
+              "activeTabId": "t1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/sessionIdDiscovered",
+      "payload": {
+        "terminalId": "t9",
+        "sessionId": "sess-1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w/c": {
+          "type": "leaf",
+          "id": "pc",
+          "tabs": [
+            {
+              "id": "other",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "other"
+        },
+        "/w/a": {
+          "type": "leaf",
+          "id": "pa",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": ""
+            }
+          ],
+          "activeTabId": "t1"
+        },
+        "/w/b": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "pb",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "pb2",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Claude",
+                  "agentKind": "claude",
+                  "sessionId": "keep"
+                }
+              ],
+              "activeTabId": "t1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept flips an awake json-claude tab to asleep",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": "s-a1"
+            },
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": "s-a1"
+            },
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept is a no-op for an asleep tab",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept refuses agent tabs",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": "s-a1"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "a1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": "s-a1"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept flips a shell tab with no mode to asleep",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh"
+            }
+          ],
+          "activeTabId": "sh"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "sh"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "sh"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept on a missing worktree is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/nope",
+        "tabId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept on a missing tab is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "nope"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabSlept checks only the first matching tab in each leaf",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "dup",
+                  "type": "agent",
+                  "label": "A",
+                  "agentKind": "claude"
+                },
+                {
+                  "id": "dup",
+                  "type": "shell",
+                  "label": "dup"
+                }
+              ],
+              "activeTabId": "dup"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "dup",
+                  "type": "shell",
+                  "label": "dup"
+                },
+                {
+                  "id": "dup",
+                  "type": "shell",
+                  "label": "dup",
+                  "mode": "awake"
+                }
+              ],
+              "activeTabId": "dup"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabSlept",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "dup"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "dup",
+                  "type": "agent",
+                  "label": "A",
+                  "agentKind": "claude"
+                },
+                {
+                  "id": "dup",
+                  "type": "shell",
+                  "label": "dup"
+                }
+              ],
+              "activeTabId": "dup"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "dup",
+                  "type": "shell",
+                  "label": "dup",
+                  "mode": "asleep"
+                },
+                {
+                  "id": "dup",
+                  "type": "shell",
+                  "label": "dup",
+                  "mode": "awake"
+                }
+              ],
+              "activeTabId": "dup"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabWoken flips an asleep shell tab to awake",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "sh"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabWoken",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "sh"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "sh"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabWoken flips an asleep json-claude tab to awake",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabWoken",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabWoken treats a missing mode as awake and leaves it absent",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh"
+            }
+          ],
+          "activeTabId": "sh"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabWoken",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "sh"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh"
+            }
+          ],
+          "activeTabId": "sh"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabWoken is a no-op for an awake tab",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabWoken",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged sets the trimmed label and keeps customLabel",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "Old",
+                  "agentKind": "claude",
+                  "customLabel": "Mine"
+                },
+                {
+                  "id": "t2",
+                  "type": "shell",
+                  "label": "t2"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "Other"
+                }
+              ],
+              "activeTabId": "t1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "  New label \n"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "agent",
+                  "label": "New label",
+                  "agentKind": "claude",
+                  "customLabel": "Mine"
+                },
+                {
+                  "id": "t2",
+                  "type": "shell",
+                  "label": "t2"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "New label"
+                }
+              ],
+              "activeTabId": "t1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged with a blank label is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": " \t\n "
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged with an unchanged label is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": " Old "
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged on a missing worktree is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/nope",
+        "tabId": "t1",
+        "label": "New"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged on a missing tab is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "nope",
+        "label": "New"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged trims U+FEFF like JS",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "﻿BOM﻿"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "BOM",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged keeps U+0085 like JS",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "NEL"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "NEL",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged with only U+FEFF is blank and a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "﻿"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged with only U+0085 is not blank and sets it",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": ""
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabLabelChanged trims the other JS whitespace characters",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabLabelChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "        　\u000b\fX　"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "X",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed sets a customLabel on the first matching tab in each leaf",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1"
+                },
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "dup"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "t2",
+                  "type": "shell",
+                  "label": "t2"
+                }
+              ],
+              "activeTabId": "t2"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "Mine"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "t1",
+                  "customLabel": "Mine"
+                },
+                {
+                  "id": "t1",
+                  "type": "shell",
+                  "label": "dup"
+                }
+              ],
+              "activeTabId": "t1"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "t2",
+                  "type": "shell",
+                  "label": "t2"
+                }
+              ],
+              "activeTabId": "t2"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed trims the label before storing",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "  Spaced  "
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1",
+              "customLabel": "Spaced"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed with a blank label removes customLabel",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "   "
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed with a blank label and no customLabel is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": ""
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed with a blank label removes an empty-string customLabel",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1",
+              "customLabel": ""
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": " "
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed with the same trimmed label is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": " Mine "
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed on a missing worktree is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/nope",
+        "tabId": "t1",
+        "label": "X"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed trims U+FEFF like JS",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "﻿BOM﻿"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1",
+              "customLabel": "BOM"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed keeps U+0085 like JS",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "NEL"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "shell",
+              "label": "t1",
+              "customLabel": "NEL"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed with only U+FEFF removes customLabel",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": "﻿﻿"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabRenamed with only U+0085 sets it as customLabel",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": "Mine"
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabRenamed",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "t1",
+        "label": ""
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "t1",
+              "type": "agent",
+              "label": "Old",
+              "agentKind": "claude",
+              "customLabel": ""
+            }
+          ],
+          "activeTabId": "t1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabAgentSessionIdChanged sets agentSessionId on the matching tab only",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "c1",
+                  "type": "json-claude",
+                  "label": "Codex",
+                  "agentKind": "codex",
+                  "sessionId": "c1",
+                  "mode": "awake"
+                },
+                {
+                  "id": "t2",
+                  "type": "shell",
+                  "label": "t2"
+                }
+              ],
+              "activeTabId": "c1"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "t3",
+                  "type": "shell",
+                  "label": "t3"
+                }
+              ],
+              "activeTabId": "t3"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabAgentSessionIdChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "agentSessionId": "acp-1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "c1",
+                  "type": "json-claude",
+                  "label": "Codex",
+                  "agentKind": "codex",
+                  "sessionId": "c1",
+                  "mode": "awake",
+                  "agentSessionId": "acp-1"
+                },
+                {
+                  "id": "t2",
+                  "type": "shell",
+                  "label": "t2"
+                }
+              ],
+              "activeTabId": "c1"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "t3",
+                  "type": "shell",
+                  "label": "t3"
+                }
+              ],
+              "activeTabId": "t3"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabAgentSessionIdChanged with the same value is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake",
+              "agentSessionId": "acp-1"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabAgentSessionIdChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "agentSessionId": "acp-1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake",
+              "agentSessionId": "acp-1"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabAgentSessionIdChanged sets an empty string on a tab without one",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabAgentSessionIdChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "agentSessionId": ""
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake",
+              "agentSessionId": ""
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabAgentSessionIdChanged replaces an existing value",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake",
+              "agentSessionId": "old"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabAgentSessionIdChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "agentSessionId": "new"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake",
+              "agentSessionId": "new"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabAgentSessionIdChanged on a missing worktree or tab is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabAgentSessionIdChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "nope",
+        "agentSessionId": "acp-1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Codex",
+              "agentKind": "codex",
+              "sessionId": "c1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged agent to json-claude with agentSessionId keeps the source sessionId and drops other fields",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh"
+            },
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "a1",
+        "newId": "n1",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "codex",
+        "agentSessionId": "acp-1"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "sh",
+              "type": "shell",
+              "label": "sh"
+            },
+            {
+              "id": "n1",
+              "type": "json-claude",
+              "label": "Chat",
+              "sessionId": "s-a1",
+              "agentKind": "codex",
+              "agentSessionId": "acp-1",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "n1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged agent to json-claude without agentSessionId omits it",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "a1",
+        "newId": "n1",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "codex"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n1",
+              "type": "json-claude",
+              "label": "Chat",
+              "sessionId": "s-a1",
+              "agentKind": "codex",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "n1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged agent to json-claude with an empty agentSessionId omits it",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "a1",
+        "newId": "n1",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "codex",
+        "agentSessionId": ""
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n1",
+              "type": "json-claude",
+              "label": "Chat",
+              "sessionId": "s-a1",
+              "agentKind": "codex",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "n1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged json-claude to agent with agentSessionId resumes it as sessionId",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "opencode",
+              "sessionId": "s-c1",
+              "agentSessionId": "acp-old",
+              "customLabel": "Mine",
+              "model": "m",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "newId": "n2",
+        "newType": "agent",
+        "newLabel": "Agent",
+        "agentKind": "opencode",
+        "agentSessionId": "acp-2"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n2",
+              "type": "agent",
+              "agentKind": "opencode",
+              "label": "Agent",
+              "sessionId": "acp-2"
+            }
+          ],
+          "activeTabId": "n2"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged json-claude to agent without agentSessionId keeps the source sessionId",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "opencode",
+              "sessionId": "s-c1",
+              "agentSessionId": "acp-old",
+              "customLabel": "Mine",
+              "model": "m",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "newId": "n2",
+        "newType": "agent",
+        "newLabel": "Agent",
+        "agentKind": "opencode"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n2",
+              "type": "agent",
+              "agentKind": "opencode",
+              "label": "Agent",
+              "sessionId": "s-c1"
+            }
+          ],
+          "activeTabId": "n2"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged json-claude to agent with an empty agentSessionId keeps the empty string as sessionId",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "opencode",
+              "sessionId": "s-c1",
+              "agentSessionId": "acp-old",
+              "customLabel": "Mine",
+              "model": "m",
+              "mode": "asleep"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "newId": "n2",
+        "newType": "agent",
+        "newLabel": "Agent",
+        "agentKind": "opencode",
+        "agentSessionId": ""
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n2",
+              "type": "agent",
+              "agentKind": "opencode",
+              "label": "Agent",
+              "sessionId": ""
+            }
+          ],
+          "activeTabId": "n2"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged to agent falls back to newId when the source has no sessionId",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "c1",
+              "type": "json-claude",
+              "label": "Chat",
+              "agentKind": "claude"
+            }
+          ],
+          "activeTabId": "c1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "c1",
+        "newId": "n3",
+        "newType": "agent",
+        "newLabel": "Agent",
+        "agentKind": "claude"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n3",
+              "type": "agent",
+              "agentKind": "claude",
+              "label": "Agent",
+              "sessionId": "n3"
+            }
+          ],
+          "activeTabId": "n3"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged to json-claude keeps an empty source sessionId",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "claude",
+              "sessionId": ""
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "a1",
+        "newId": "n4",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "pi"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "n4",
+              "type": "json-claude",
+              "label": "Chat",
+              "sessionId": "",
+              "agentKind": "pi",
+              "mode": "awake"
+            }
+          ],
+          "activeTabId": "n4"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged converts every matching tab in a leaf and leaves another active tab alone",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "a1",
+                  "type": "agent",
+                  "label": "A",
+                  "agentKind": "claude"
+                },
+                {
+                  "id": "sh",
+                  "type": "shell",
+                  "label": "sh"
+                },
+                {
+                  "id": "a1",
+                  "type": "agent",
+                  "label": "B",
+                  "agentKind": "claude",
+                  "sessionId": "x"
+                }
+              ],
+              "activeTabId": "sh"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "a1",
+                  "type": "agent",
+                  "label": "C",
+                  "agentKind": "claude"
+                }
+              ],
+              "activeTabId": "a1"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "a1",
+        "newId": "n5",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "claude"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "split",
+          "id": "s",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "id": "p1",
+              "tabs": [
+                {
+                  "id": "n5",
+                  "type": "json-claude",
+                  "label": "Chat",
+                  "sessionId": "n5",
+                  "agentKind": "claude",
+                  "mode": "awake"
+                },
+                {
+                  "id": "sh",
+                  "type": "shell",
+                  "label": "sh"
+                },
+                {
+                  "id": "n5",
+                  "type": "json-claude",
+                  "label": "Chat",
+                  "sessionId": "x",
+                  "agentKind": "claude",
+                  "mode": "awake"
+                }
+              ],
+              "activeTabId": "sh"
+            },
+            {
+              "type": "leaf",
+              "id": "p2",
+              "tabs": [
+                {
+                  "id": "n5",
+                  "type": "json-claude",
+                  "label": "Chat",
+                  "sessionId": "n5",
+                  "agentKind": "claude",
+                  "mode": "awake"
+                }
+              ],
+              "activeTabId": "n5"
+            }
+          ],
+          "ratio": 0.5
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged on a missing worktree is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/nope",
+        "tabId": "a1",
+        "newId": "n1",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "codex"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  },
+  {
+    "name": "tabTypeChanged on a missing tab is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    },
+    "event": {
+      "type": "terminals/tabTypeChanged",
+      "payload": {
+        "worktreePath": "/w",
+        "tabId": "nope",
+        "newId": "n1",
+        "newType": "json-claude",
+        "newLabel": "Chat",
+        "agentKind": "codex"
+      }
+    },
+    "after": {
+      "statuses": {},
+      "pendingTools": {},
+      "shellActivity": {},
+      "progress": {},
+      "panes": {
+        "/w": {
+          "type": "leaf",
+          "id": "p",
+          "tabs": [
+            {
+              "id": "a1",
+              "type": "agent",
+              "label": "Claude",
+              "agentKind": "codex",
+              "sessionId": "s-a1",
+              "customLabel": "Mine",
+              "model": "gpt-5",
+              "initialPrompt": "go"
+            }
+          ],
+          "activeTabId": "a1"
+        }
+      },
+      "lastActive": {},
+      "sessions": {}
+    }
+  }
+]

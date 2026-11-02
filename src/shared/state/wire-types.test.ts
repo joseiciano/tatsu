@@ -51,7 +51,20 @@ import type {
   WorktreeScripts
 } from './settings'
 import { initialSnooze, snoozeReducer, type SnoozeEvent, type SnoozeState } from './snooze'
-import type { AgentKind, PaneLeaf, PaneNode, PaneSplit, TerminalTab } from './terminals'
+import type {
+  AgentKind,
+  PaneLeaf,
+  PaneNode,
+  PaneSplit,
+  PendingTool,
+  PtyStatus,
+  ShellActivity,
+  TerminalProgress,
+  TerminalSession,
+  TerminalsEvent,
+  TerminalsState,
+  TerminalTab
+} from './terminals'
 import type { UpdaterEvent, UpdaterState, UpdaterStatus } from './updater'
 import type {
   PendingDeletion,
@@ -177,6 +190,15 @@ const terminalTab: WireEqual<Generated.TerminalTab, TerminalTab> = true
 const paneLeaf: WireEqual<Generated.PaneLeaf, Omit<PaneLeaf, 'type'>> = true
 const paneSplit: WireEqual<Generated.PaneSplit, Omit<PaneSplit, 'type'>> = true
 const paneNode: WireEqual<Generated.PaneNode, PaneNode> = true
+const ptyStatus: WireEqual<Generated.PtyStatus, PtyStatus> = true
+const pendingTool: WireEqual<Generated.PendingTool, PendingTool> = true
+const shellActivity: WireEqual<Generated.ShellActivity, ShellActivity> = true
+const terminalProgress: WireEqual<Generated.TerminalProgress, TerminalProgress> = true
+const terminalProgressState: WireEqual<Generated.TerminalProgress['state'], TerminalProgress['state']> = true
+const terminalSession: WireEqual<Generated.TerminalSession, TerminalSession> = true
+const terminalSize: WireEqual<Generated.TerminalSize, NonNullable<TerminalSession['size']>> = true
+const terminalsState: WireEqual<Generated.TerminalsState, TerminalsState> = true
+const terminalsEvent: WireEqual<Generated.TerminalsEvent, TerminalsEvent> = true
 
 const pendingWorktree: WireEqual<Generated.PendingWorktree, PendingWorktree> = true
 const pendingWorktreePatch: WireEqual<Generated.PendingWorktreePatch, Partial<PendingWorktree>> = true

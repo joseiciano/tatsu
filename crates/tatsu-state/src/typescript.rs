@@ -30,7 +30,10 @@ use crate::slices::{
         UiScale, WorktreeBase, WorktreeDetail, WorktreeScripts,
     },
     snooze::{SnoozeEntry, SnoozeEvent, SnoozeState},
-    terminals::{AgentKind, PaneNode, TerminalTab},
+    terminals::{
+        AgentKind, PaneNode, PendingTool, PtyStatus, ShellActivity, TerminalProgress,
+        TerminalSession, TerminalTab, TerminalsEvent, TerminalsState,
+    },
     updater::{UpdaterEvent, UpdaterState, UpdaterStatus},
     worktrees::{
         PendingDeletion, PendingDeletionPatch, PendingWorktree, PendingWorktreePatch, Worktree,
@@ -95,6 +98,13 @@ pub fn wire_types() -> Types {
         .register::<AgentKind>()
         .register::<TerminalTab>()
         .register::<PaneNode>()
+        .register::<PtyStatus>()
+        .register::<PendingTool>()
+        .register::<ShellActivity>()
+        .register::<TerminalProgress>()
+        .register::<TerminalSession>()
+        .register::<TerminalsState>()
+        .register::<TerminalsEvent>()
         .register::<ChatRuntimeId>()
         .register::<JsonClaudePermissionMode>()
         .register::<HarnessConfigResourceType>()

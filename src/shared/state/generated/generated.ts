@@ -83,6 +83,8 @@ export type ContentBreakdown = {
 	toolResults: { [key in string]: number },
 };
 
+export type ConvertibleTabType = "agent" | "json-claude";
+
 export type CostsEvent = { type: "costs/usageUpdated"; payload: CostsUsageUpdate } | { type: "costs/terminalCleared"; payload: CostsTerminalRef } | { type: "costs/hydrated"; payload: CostsState };
 
 export type CostsState = {
@@ -358,6 +360,11 @@ export type PendingDeletionUpdate = {
 
 export type PendingStatus = "creating" | "setup" | "setup-failed" | "error";
 
+export type PendingTool = {
+	name: string,
+	input: { [key in string]: unknown },
+};
+
 export type PendingWorktree = {
 	id: string,
 	repoRoot: string,
@@ -388,6 +395,8 @@ export type PendingWorktreeUpdate = {
 	id: string,
 	patch: PendingWorktreePatch,
 };
+
+export type PtyStatus = "idle" | "processing" | "waiting" | "needs-approval";
 
 export type QuestStep = "hidden" | "spawn-second" | "switch-between" | "finale" | "done";
 
@@ -525,6 +534,11 @@ export type SettingsState = {
 	harnessConfigSourceDir: string | null,
 };
 
+export type ShellActivity = {
+	active: boolean,
+	processName?: string,
+};
+
 export type SnapshotResult = ({ id: string; ok: true; snapshot: unknown }) & { error?: never } | ({ id: string; ok: false; error: string }) & { snapshot?: never };
 
 export type SnoozeEntry = {
@@ -541,7 +555,84 @@ export type SnoozeState = {
 
 export type SplitDirection = "horizontal" | "vertical";
 
-export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
+export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | TerminalsEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
+
+export type TerminalClientDisconnect = {
+	clientId: string,
+};
+
+export type TerminalClientRef = {
+	terminalId: string,
+	clientId: string,
+};
+
+export type TerminalControlTake = {
+	terminalId: string,
+	clientId: string,
+	cols: number,
+	rows: number,
+};
+
+export type TerminalLastActiveChange = {
+	worktreePath: string,
+	ts: number,
+};
+
+export type TerminalPaneRatioChange = {
+	worktreePath: string,
+	splitId: string,
+	ratio: number,
+};
+
+export type TerminalPanesForWorktree = {
+	worktreePath: string,
+	panes: PaneNode,
+};
+
+export type TerminalProgress = {
+	state: 0 | 1 | 2 | 3 | 4,
+	value: number,
+};
+
+export type TerminalProgressChange = {
+	id: string,
+	state: 0 | 1 | 2 | 3 | 4,
+	value: number,
+};
+
+export type TerminalSession = {
+	controllerClientId: string | null,
+	spectatorClientIds: string[],
+	size: TerminalSize | null,
+};
+
+export type TerminalSessionIdDiscovery = {
+	terminalId: string,
+	sessionId: string,
+};
+
+export type TerminalShellActivityChange = {
+	id: string,
+	active: boolean,
+	processName?: string,
+};
+
+export type TerminalSize = {
+	cols: number,
+	rows: number,
+};
+
+export type TerminalSizeChange = {
+	terminalId: string,
+	cols: number,
+	rows: number,
+};
+
+export type TerminalStatusChange = {
+	id: string,
+	status: PtyStatus,
+	pendingTool: PendingTool | null,
+};
 
 export type TerminalTab = {
 	id: string,
@@ -564,9 +655,48 @@ export type TerminalTab = {
 	cwd?: string,
 };
 
+export type TerminalTabAgentSessionIdChange = {
+	worktreePath: string,
+	tabId: string,
+	agentSessionId: string,
+};
+
+export type TerminalTabLabelChange = {
+	worktreePath: string,
+	tabId: string,
+	label: string,
+};
+
 export type TerminalTabMode = "awake" | "asleep";
 
+export type TerminalTabRef = {
+	worktreePath: string,
+	tabId: string,
+};
+
 export type TerminalTabType = "agent" | "shell" | "diff" | "file" | "browser" | "json-claude";
+
+export type TerminalTabTypeChange = {
+	worktreePath: string,
+	tabId: string,
+	newId: string,
+	newType: ConvertibleTabType,
+	newLabel: string,
+	agentKind: AgentKind,
+	agentSessionId?: string,
+};
+
+export type TerminalsEvent = { type: "terminals/statusChanged"; payload: TerminalStatusChange } | { type: "terminals/shellActivityChanged"; payload: TerminalShellActivityChange } | { type: "terminals/progressChanged"; payload: TerminalProgressChange } | { type: "terminals/removed"; payload: string } | { type: "terminals/panesReplaced"; payload: { [key in string]: PaneNode } } | { type: "terminals/panesForWorktreeChanged"; payload: TerminalPanesForWorktree } | { type: "terminals/panesForWorktreeCleared"; payload: string } | { type: "terminals/lastActiveChanged"; payload: TerminalLastActiveChange } | { type: "terminals/paneRatioChanged"; payload: TerminalPaneRatioChange } | { type: "terminals/sessionIdDiscovered"; payload: TerminalSessionIdDiscovery } | { type: "terminals/controlTaken"; payload: TerminalControlTake } | { type: "terminals/controlReleased"; payload: TerminalClientRef } | { type: "terminals/clientJoined"; payload: TerminalClientRef } | { type: "terminals/clientDisconnected"; payload: TerminalClientDisconnect } | { type: "terminals/sizeChanged"; payload: TerminalSizeChange } | { type: "terminals/tabTypeChanged"; payload: TerminalTabTypeChange } | { type: "terminals/tabAgentSessionIdChanged"; payload: TerminalTabAgentSessionIdChange } | { type: "terminals/tabSlept"; payload: TerminalTabRef } | { type: "terminals/tabWoken"; payload: TerminalTabRef } | { type: "terminals/tabRenamed"; payload: TerminalTabLabelChange } | { type: "terminals/tabLabelChanged"; payload: TerminalTabLabelChange };
+
+export type TerminalsState = {
+	statuses: { [key in string]: PtyStatus },
+	pendingTools: { [key in string]: PendingTool | null },
+	shellActivity: { [key in string]: ShellActivity },
+	progress: { [key in string]: TerminalProgress },
+	panes: { [key in string]: PaneNode },
+	lastActive: { [key in string]: number },
+	sessions: { [key in string]: TerminalSession },
+};
 
 export type ThemeMode = "light" | "dark" | "system";
 

@@ -13,6 +13,7 @@ use crate::slices::{
     scratchpad::{self, ScratchpadEvent, ScratchpadState},
     settings::{self, SettingsEvent, SettingsState},
     snooze::{self, SnoozeEvent, SnoozeState},
+    terminals::{self, TerminalsEvent, TerminalsState},
     updater::{self, UpdaterEvent, UpdaterState},
     worktrees::{self, WorktreesEvent, WorktreesState},
 };
@@ -25,6 +26,7 @@ pub struct AppState {
     pub onboarding: OnboardingState,
     pub hooks: HooksState,
     pub worktrees: WorktreesState,
+    pub terminals: TerminalsState,
     pub updater: UpdaterState,
     pub repo_configs: RepoConfigsState,
     pub costs: CostsState,
@@ -43,6 +45,7 @@ pub enum StateEvent {
     Onboarding(OnboardingEvent),
     Hooks(HooksEvent),
     Worktrees(WorktreesEvent),
+    Terminals(TerminalsEvent),
     Updater(UpdaterEvent),
     RepoConfigs(RepoConfigsEvent),
     Costs(CostsEvent),
@@ -60,6 +63,7 @@ pub fn root_reduce(state: &mut AppState, event: StateEvent, _now: i64) {
         StateEvent::Onboarding(event) => onboarding::reduce(&mut state.onboarding, event),
         StateEvent::Hooks(event) => hooks::reduce(&mut state.hooks, event),
         StateEvent::Worktrees(event) => worktrees::reduce(&mut state.worktrees, event),
+        StateEvent::Terminals(event) => terminals::reduce(&mut state.terminals, event),
         StateEvent::Updater(event) => updater::reduce(&mut state.updater, event),
         StateEvent::RepoConfigs(event) => repo_configs::reduce(&mut state.repo_configs, event),
         StateEvent::Costs(event) => costs::reduce(&mut state.costs, event),
@@ -86,6 +90,22 @@ mod tests {
                 "repoRoots": ["/r"],
                 "pending": [{ "id": "pending:1", "repoRoot": "/r", "branchName": "b", "status": "creating" }],
                 "pendingDeletions": [{ "path": "/a", "repoRoot": "/r", "branch": "a", "phase": "running-teardown" }]
+            },
+            "terminals": {
+                "statuses": { "t1": "idle" },
+                "pendingTools": { "t1": null },
+                "shellActivity": { "t1": { "active": false } },
+                "progress": { "t1": { "state": 1, "value": 10 } },
+                "panes": { "/a": { "type": "split", "id": "s1", "direction": "horizontal", "ratio": 0.5, "children": [
+                    { "type": "leaf", "id": "p1", "activeTabId": "a1", "tabs": [
+                        { "id": "a1", "type": "agent", "label": "A", "agentKind": "claude" },
+                        { "id": "c1", "type": "json-claude", "label": "C", "agentKind": "codex", "sessionId": "c1", "mode": "awake" },
+                        { "id": "sh", "type": "shell", "label": "zsh", "mode": "asleep" }
+                    ] },
+                    { "type": "leaf", "id": "p2", "activeTabId": "", "tabs": [] }
+                ] } },
+                "lastActive": { "/a": 1 },
+                "sessions": { "t1": { "controllerClientId": "c1", "spectatorClientIds": ["c2"], "size": { "cols": 80, "rows": 24 } } }
             },
             "updater": { "status": { "state": "checking" } },
             "repoConfigs": { "byRepo": { "/a": { "setupCommand": "make", "hiddenRightPanels": { "pr": true } } } },
@@ -405,6 +425,90 @@ mod tests {
             (
                 "worktrees",
                 json!({ "type": "worktrees/pendingDeletionRemoved", "payload": "/a" }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/statusChanged", "payload": { "id": "t2", "status": "processing", "pendingTool": null } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/shellActivityChanged", "payload": { "id": "t1", "active": true, "processName": "vim" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/progressChanged", "payload": { "id": "t1", "state": 0, "value": 0 } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/removed", "payload": "t1" }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/panesReplaced", "payload": {} }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/panesForWorktreeChanged", "payload": { "worktreePath": "/b", "panes": { "type": "leaf", "id": "pb", "activeTabId": "", "tabs": [] } } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/panesForWorktreeCleared", "payload": "/a" }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/lastActiveChanged", "payload": { "worktreePath": "/a", "ts": 2 } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/paneRatioChanged", "payload": { "worktreePath": "/a", "splitId": "s1", "ratio": 0.3 } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/sessionIdDiscovered", "payload": { "terminalId": "a1", "sessionId": "sess" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/controlTaken", "payload": { "terminalId": "t1", "clientId": "c3", "cols": 80, "rows": 24 } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/controlReleased", "payload": { "terminalId": "t1", "clientId": "c1" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/clientJoined", "payload": { "terminalId": "t2", "clientId": "c1" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/clientDisconnected", "payload": { "clientId": "c2" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/sizeChanged", "payload": { "terminalId": "t1", "cols": 100, "rows": 30 } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/tabTypeChanged", "payload": { "worktreePath": "/a", "tabId": "a1", "newId": "n1", "newType": "json-claude", "newLabel": "Chat", "agentKind": "claude" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/tabAgentSessionIdChanged", "payload": { "worktreePath": "/a", "tabId": "c1", "agentSessionId": "acp" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/tabSlept", "payload": { "worktreePath": "/a", "tabId": "c1" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/tabWoken", "payload": { "worktreePath": "/a", "tabId": "sh" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/tabRenamed", "payload": { "worktreePath": "/a", "tabId": "a1", "label": "Mine" } }),
+            ),
+            (
+                "terminals",
+                json!({ "type": "terminals/tabLabelChanged", "payload": { "worktreePath": "/a", "tabId": "a1", "label": "New" } }),
             ),
             (
                 "updater",
