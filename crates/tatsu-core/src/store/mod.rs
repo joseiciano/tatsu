@@ -114,6 +114,11 @@ impl Store {
         f(&tatsu_js::stringify(&value), seq)
     }
 
+    pub fn record_frames(&self, n: u64) {
+        self.frames_sent
+            .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub fn set_hub_sink(&self, sink: impl Fn(&StateEvent, u64) + Send + Sync + 'static) {
         self.inner.lock().borrow_mut().hub = Some(Arc::new(sink));
     }

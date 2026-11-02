@@ -22,3 +22,4 @@ time = { version = "0.3", features = ["formatting", "macros"] }
 tempfile = "3"
 parking_lot = "0.12"
 tokio = "1"
+uuid = { version = "1", features = ["v4"] }
