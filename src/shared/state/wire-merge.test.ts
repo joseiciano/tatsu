@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import {
   initialState,
   mergeWireSnapshot,
   type AppState,
+  type StateSnapshot,
   type WireSnapshotState
 } from './index'
 import { EMPTY_CUSTOM_THEMES } from './settings'
@@ -206,5 +208,24 @@ describe('mergeWireSnapshot', () => {
     const merged = mergeWireSnapshot(wire)
     // Identity preserved: same session object reference, no throw.
     expect(merged.jsonClaude.sessions['legacy-1']).toBe(legacySession)
+  })
+})
+
+describe('Rust initial snapshot', () => {
+  const snapshot = JSON.parse(
+    readFileSync(new URL('../../../fixtures/wire/rust-initial-snapshot.json', import.meta.url), 'utf8')
+  ) as StateSnapshot
+  const initial = JSON.parse(JSON.stringify(initialState)) as AppState
+
+  it('lists the slices in the same order as initialState', () => {
+    expect(Object.keys(snapshot.state)).toEqual(Object.keys(initialState))
+  })
+
+  it('serializes to the same JSON as initialState', () => {
+    expect(snapshot).toStrictEqual({ state: initial, seq: 0 })
+  })
+
+  it('passes through mergeWireSnapshot unchanged', () => {
+    expect(JSON.parse(JSON.stringify(mergeWireSnapshot(snapshot.state)))).toStrictEqual(initial)
   })
 })

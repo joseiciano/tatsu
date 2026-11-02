@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type * as Generated from './generated'
 import type { WireEqual } from '../wire-check'
+import type { AppState, StateEvent, StateSnapshot } from './index'
 import type { HarnessConfigResourceType as RegistryResourceType } from '../agent-registry'
 import type {
   HarnessConfigChangedRef,
@@ -296,6 +297,10 @@ const pendingDeletionPhase: WireEqual<Generated.PendingDeletionPhase, PendingDel
 const worktree: WireEqual<Generated.Worktree, Worktree> = true
 const worktreesState: WireEqual<Generated.WorktreesState, WorktreesState> = true
 const worktreesEvent: WireEqual<Generated.WorktreesEvent, WorktreesEvent> = true
+
+const appState: WireEqual<Generated.AppState, AppState> = true
+const stateEvent: WireEqual<Generated.StateEvent, StateEvent> = true
+const stateSnapshot: WireEqual<Generated.StateSnapshot, StateSnapshot> = true
 
 describe('generated wire types', () => {
   it('the TS reducer applies events typed with the generated union', () => {

@@ -26,6 +26,25 @@ export type AnnouncementsState = {
 	lastError: string | null,
 };
 
+export type AppState = {
+	settings: SettingsState,
+	prs: PRsState,
+	onboarding: OnboardingState,
+	hooks: HooksState,
+	worktrees: WorktreesState,
+	terminals: TerminalsState,
+	updater: UpdaterState,
+	repoConfigs: RepoConfigsState,
+	costs: CostsState,
+	browser: BrowserState,
+	jsonClaude: JsonClaudeState,
+	snooze: SnoozeState,
+	runtimes: RuntimesState,
+	announcements: AnnouncementsState,
+	scratchpad: ScratchpadState,
+	harnessConfig: HarnessConfigState,
+};
+
 export type AutoReviewDecision = "approve" | "ask";
 
 export type AutoReviewState = "pending" | "finished";
@@ -954,6 +973,11 @@ export type SnoozeState = {
 export type SplitDirection = "horizontal" | "vertical";
 
 export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | TerminalsEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | JsonClaudeEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent | HarnessConfigEvent;
+
+export type StateSnapshot = {
+	state: AppState,
+	seq: number,
+};
 
 export type TerminalClientDisconnect = {
 	clientId: string,

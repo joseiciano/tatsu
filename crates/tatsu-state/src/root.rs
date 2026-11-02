@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
+use serde_json::Value;
 use specta::Type;
 
 use crate::slices::{
@@ -41,7 +42,14 @@ pub struct AppState {
     pub harness_config: HarnessConfigState,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default)]
+pub struct StateSnapshot {
+    pub state: AppState,
+    pub seq: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Type)]
 #[serde(untagged)]
 pub enum StateEvent {
     Settings(SettingsEvent),
@@ -60,6 +68,58 @@ pub enum StateEvent {
     Announcements(AnnouncementsEvent),
     Scratchpad(ScratchpadEvent),
     HarnessConfig(HarnessConfigEvent),
+}
+
+impl StateEvent {
+    pub fn type_name(&self) -> &'static str {
+        crate::wire::event_type(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for StateEvent {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        let Some(kind) = value.get("type").and_then(Value::as_str) else {
+            return Err(D::Error::custom("state event has no string `type`"));
+        };
+        let slice = kind.split_once('/').map_or("", |(slice, _)| slice);
+        fn parse<'de, T: Deserialize<'de>, E: serde::de::Error>(
+            value: &'de Value,
+            kind: &str,
+        ) -> Result<T, E> {
+            T::deserialize(value).map_err(|err| E::custom(format!("`{kind}`: {err}")))
+        }
+        Ok(match slice {
+            "settings" => Self::Settings(parse(&value, kind)?),
+            "prs" => Self::Prs(parse(&value, kind)?),
+            "onboarding" => Self::Onboarding(parse(&value, kind)?),
+            "hooks" => Self::Hooks(parse(&value, kind)?),
+            "worktrees" => Self::Worktrees(parse(&value, kind)?),
+            "terminals" => Self::Terminals(parse(&value, kind)?),
+            "updater" => Self::Updater(parse(&value, kind)?),
+            "repoConfigs" => Self::RepoConfigs(parse(&value, kind)?),
+            "costs" => Self::Costs(parse(&value, kind)?),
+            "browser" => Self::Browser(parse(&value, kind)?),
+            "jsonClaude" => Self::JsonClaude(parse(&value, kind)?),
+            "snooze" => Self::Snooze(parse(&value, kind)?),
+            "runtimes" => Self::Runtimes(parse(&value, kind)?),
+            "announcements" => Self::Announcements(parse(&value, kind)?),
+            "scratchpad" => Self::Scratchpad(parse(&value, kind)?),
+            "harnessConfig" => Self::HarnessConfig(parse(&value, kind)?),
+            _ => {
+                return Err(D::Error::custom(format!(
+                    "unknown state event type `{kind}`"
+                )));
+            }
+        })
+    }
+}
+
+pub fn initial_snapshot_json() -> String {
+    let mut json = serde_json::to_string_pretty(&StateSnapshot::default())
+        .expect("AppState serializes to JSON");
+    json.push('\n');
+    json
 }
 
 pub fn root_reduce(state: &mut AppState, event: StateEvent, now: i64) {
@@ -164,9 +224,8 @@ mod tests {
         .unwrap()
     }
 
-    #[test]
-    fn each_event_changes_only_its_own_slice() {
-        let cases = [
+    fn event_cases() -> Vec<(&'static str, Value)> {
+        vec![
             (
                 "settings",
                 json!({"type": "settings/themeModeChanged", "payload": "dark"}),
@@ -792,7 +851,12 @@ mod tests {
                 "harnessConfig",
                 json!({ "type": "harnessConfig/templateSourceErrorChanged", "payload": { "relativePath": "agents/b.md", "message": null } }),
             ),
-        ];
+        ]
+    }
+
+    #[test]
+    fn each_event_changes_only_its_own_slice() {
+        let cases = event_cases();
         let before = serde_json::to_value(non_default_state()).unwrap();
 
         for (slice, event) in cases {
@@ -816,6 +880,37 @@ mod tests {
     }
 
     #[test]
+    fn type_name_matches_the_serialized_type_for_every_event() {
+        for (_, event) in event_cases() {
+            let parsed: StateEvent = serde_json::from_value(event.clone()).unwrap();
+            assert_eq!(parsed.type_name(), event["type"], "{event}");
+            assert_eq!(
+                serde_json::to_value(&parsed).unwrap()["type"],
+                parsed.type_name()
+            );
+        }
+    }
+
+    #[test]
+    fn event_cases_cover_every_event_type() {
+        let ts = crate::export_typescript(crate::wire_types()).unwrap();
+        let declared: std::collections::BTreeSet<&str> = ts
+            .match_indices("type: \"")
+            .filter_map(|(at, matched)| {
+                let rest = &ts[at + matched.len()..];
+                let name = &rest[..rest.find('"')?];
+                name.contains('/').then_some(name)
+            })
+            .collect();
+        let cases = event_cases();
+        let covered: std::collections::BTreeSet<&str> = cases
+            .iter()
+            .map(|(_, event)| event["type"].as_str().unwrap())
+            .collect();
+        assert_eq!(declared, covered);
+    }
+
+    #[test]
     fn root_event_serializes_without_a_wrapper() {
         let event = StateEvent::Snooze(SnoozeEvent::Clear("/a".to_string()));
         assert_eq!(
@@ -828,6 +923,24 @@ mod tests {
     fn unknown_event_type_is_rejected() {
         let parsed =
             serde_json::from_value::<StateEvent>(json!({ "type": "snooze/nope", "payload": "/a" }));
-        assert!(parsed.is_err());
+        let err = parsed.unwrap_err().to_string();
+        assert!(err.contains("snooze/nope"), "{err}");
+    }
+
+    #[test]
+    fn an_event_from_an_unknown_slice_names_its_type() {
+        let err = serde_json::from_value::<StateEvent>(json!({ "type": "nope/x", "payload": 1 }))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown state event type `nope/x`"), "{err}");
+    }
+
+    #[test]
+    fn a_bad_payload_names_the_event_type() {
+        let err =
+            serde_json::from_value::<StateEvent>(json!({ "type": "snooze/clear", "payload": 1 }))
+                .unwrap_err()
+                .to_string();
+        assert!(err.contains("`snooze/clear`"), "{err}");
     }
 }

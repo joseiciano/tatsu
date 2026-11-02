@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { caseInput, loadCases, reduceCase, sliceFiles } from './fixtures'
+import { caseInput, loadCases, loadRootCases, reduceCase, rootCaseAfter, sliceFiles } from './fixtures'
 
 const files = sliceFiles()
 
@@ -17,3 +17,14 @@ for (const { key, path } of files) {
     }
   })
 }
+
+describe('root', () => {
+  for (const fixture of loadRootCases()) {
+    it(fixture.name, () => {
+      expect(fixture, `"${fixture.name}" has no recorded after; run pnpm fixtures:record`).toHaveProperty('after')
+      expect(rootCaseAfter(fixture), `${fixture.name}\ninput: ${JSON.stringify(fixture.before, null, 2)}`).toStrictEqual(
+        fixture.after
+      )
+    })
+  }
+})

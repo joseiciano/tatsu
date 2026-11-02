@@ -2,7 +2,15 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { vi } from 'vitest'
-import { initialState, rootReducer, type AppState, type StateEvent } from '../../src/shared/state'
+import {
+  initialState,
+  mergeWireSnapshot,
+  rootReducer,
+  stripSnapshotForWire,
+  type AppState,
+  type StateEvent,
+  type WireSnapshotState
+} from '../../src/shared/state'
 
 export const FIXTURES_DIR = fileURLToPath(new URL('../../fixtures/wire/', import.meta.url))
 
@@ -49,4 +57,34 @@ export function reduceCase(key: SliceKey, fixture: FixtureCase): unknown {
   } finally {
     vi.useRealTimers()
   }
+}
+
+export const ROOT_FIXTURES = join(FIXTURES_DIR, 'root.json')
+
+export type RootCase =
+  | { name: string; kind: 'strip'; before: { state: WireSnapshotState; seq: number }; after?: unknown }
+  | { name: string; kind: 'deserialize'; before: Record<string, unknown>; after?: unknown }
+
+export function loadRootCases(): RootCase[] {
+  return JSON.parse(readFileSync(ROOT_FIXTURES, 'utf8')) as RootCase[]
+}
+
+type Slices = Record<string, Record<string, unknown>>
+
+function knownFields(state: AppState): Slices {
+  const slices = state as unknown as Slices
+  return Object.fromEntries(
+    Object.entries(initialState).map(([key, initial]) => [
+      key,
+      Object.fromEntries(Object.keys(initial).map((field) => [field, slices[key][field]]))
+    ])
+  )
+}
+
+export function rootCaseAfter(fixture: RootCase): unknown {
+  const after =
+    fixture.kind === 'strip'
+      ? stripSnapshotForWire({ seq: fixture.before.seq, state: mergeWireSnapshot(fixture.before.state) })
+      : knownFields(mergeWireSnapshot(fixture.before as WireSnapshotState))
+  return JSON.parse(JSON.stringify(after))
 }

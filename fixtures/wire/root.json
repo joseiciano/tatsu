@@ -1,0 +1,1430 @@
+[
+  {
+    "name": "strip: removes entries from every session and marks them unhydrated",
+    "kind": "strip",
+    "before": {
+      "state": {
+        "scratchpad": {
+          "byWorktreePath": {
+            "/wt": "keep me"
+          }
+        },
+        "jsonClaude": {
+          "sessions": {
+            "s1": {
+              "sessionId": "s1",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [
+                {
+                  "entryId": "u1",
+                  "kind": "user",
+                  "text": "hi",
+                  "timestamp": 1
+                },
+                {
+                  "entryId": "a1",
+                  "kind": "assistant",
+                  "timestamp": 2,
+                  "blocks": [
+                    {
+                      "type": "text",
+                      "text": "hello"
+                    }
+                  ]
+                }
+              ],
+              "entriesHydrated": true,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            },
+            "s2": {
+              "sessionId": "s2",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [
+                {
+                  "entryId": "u1",
+                  "kind": "user",
+                  "text": "hi",
+                  "timestamp": 1
+                }
+              ],
+              "entriesHydrated": false,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            }
+          },
+          "pendingApprovals": {
+            "r1": {
+              "requestId": "r1",
+              "sessionId": "s1",
+              "toolName": "Bash",
+              "input": {
+                "command": "ls"
+              },
+              "timestamp": 3
+            }
+          }
+        }
+      },
+      "seq": 42
+    },
+    "after": {
+      "seq": 42,
+      "state": {
+        "settings": {
+          "themeMode": "system",
+          "themeLight": "solarized-light",
+          "themeDark": "dark",
+          "customThemes": [],
+          "hotkeys": null,
+          "defaultAgent": "claude",
+          "claudeCommand": "",
+          "codexCommand": "",
+          "opencodeCommand": "",
+          "worktreeScripts": {
+            "setup": "",
+            "teardown": ""
+          },
+          "claudeEnvVars": {},
+          "codexEnvVars": {},
+          "opencodeEnvVars": {},
+          "harnessMcpEnabled": true,
+          "nameClaudeSessions": false,
+          "terminalFontFamily": "",
+          "terminalFontSize": 13,
+          "editor": "vscode",
+          "worktreeBase": "remote",
+          "mergeStrategy": "squash",
+          "worktreeDetail": "diff",
+          "shareClaudeSettings": true,
+          "claudeModel": null,
+          "codexModel": null,
+          "opencodeModel": null,
+          "piCommand": "",
+          "piEnvVars": {},
+          "piModel": null,
+          "hasGithubToken": false,
+          "githubAuthSource": null,
+          "viewerLogin": null,
+          "harnessStarred": null,
+          "autoUpdateEnabled": true,
+          "experimentalChatAgentsEnabled": false,
+          "harnessSystemPromptEnabled": true,
+          "harnessSystemPrompt": "",
+          "harnessSystemPromptMain": "",
+          "claudeTuiFullscreen": true,
+          "wsTransportEnabled": false,
+          "wsTransportPort": 37291,
+          "wsTransportHost": "127.0.0.1",
+          "browserToolsEnabled": true,
+          "browserToolsMode": "full",
+          "defaultClaudeTabType": "xterm",
+          "defaultOpencodeTabType": "xterm",
+          "defaultCodexTabType": "xterm",
+          "chatPromotionDismissed": false,
+          "autoApprovePermissions": false,
+          "autoApproveSteerInstructions": "",
+          "useSystemClaudeForJsonMode": false,
+          "jsonModeChatDensity": "compact",
+          "uiScale": "small",
+          "jsonModeSendOnEnter": false,
+          "jsonModeDefaultPermissionMode": "acceptEdits",
+          "autoSleepMinutes": 30,
+          "snoozeDefaultDays": 7,
+          "expandedDiagnosticLoggingEnabled": false,
+          "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+          "dismissedAnnouncementIds": [],
+          "announcementsMuted": false,
+          "harnessConfigRoots": {},
+          "harnessConfigSourceDir": null
+        },
+        "prs": {
+          "byPath": {},
+          "mergedByPath": {},
+          "loading": false
+        },
+        "onboarding": {
+          "quest": "hidden"
+        },
+        "hooks": {
+          "consent": "pending"
+        },
+        "worktrees": {
+          "list": [],
+          "repoRoots": [],
+          "pending": [],
+          "pendingDeletions": []
+        },
+        "terminals": {
+          "statuses": {},
+          "pendingTools": {},
+          "shellActivity": {},
+          "progress": {},
+          "panes": {},
+          "lastActive": {},
+          "sessions": {}
+        },
+        "updater": {
+          "status": null
+        },
+        "repoConfigs": {
+          "byRepo": {}
+        },
+        "costs": {
+          "byTerminal": {}
+        },
+        "browser": {
+          "byTab": {}
+        },
+        "jsonClaude": {
+          "sessions": {
+            "s1": {
+              "sessionId": "s1",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [],
+              "entriesHydrated": false,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            },
+            "s2": {
+              "sessionId": "s2",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [],
+              "entriesHydrated": false,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            }
+          },
+          "pendingApprovals": {
+            "r1": {
+              "requestId": "r1",
+              "sessionId": "s1",
+              "toolName": "Bash",
+              "input": {
+                "command": "ls"
+              },
+              "timestamp": 3
+            }
+          }
+        },
+        "snooze": {
+          "byPath": {}
+        },
+        "runtimes": {
+          "byAgent": {}
+        },
+        "announcements": {
+          "items": [],
+          "lastFetched": null,
+          "lastError": null
+        },
+        "scratchpad": {
+          "byWorktreePath": {
+            "/wt": "keep me"
+          }
+        },
+        "harnessConfig": {
+          "resources": {
+            "agents": [],
+            "skills": [],
+            "commands": []
+          },
+          "comparisons": {},
+          "loading": false,
+          "error": null,
+          "lastScannedAt": null,
+          "lastSyncedAt": null,
+          "templates": {
+            "templates": [],
+            "fragments": [],
+            "errors": [],
+            "loadedAt": null
+          },
+          "templateSyncNotice": null
+        }
+      }
+    }
+  },
+  {
+    "name": "strip: a hydrated session with no entries is marked unhydrated",
+    "kind": "strip",
+    "before": {
+      "state": {
+        "jsonClaude": {
+          "sessions": {
+            "s1": {
+              "sessionId": "s1",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [],
+              "entriesHydrated": true,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            }
+          },
+          "pendingApprovals": {}
+        }
+      },
+      "seq": 7
+    },
+    "after": {
+      "seq": 7,
+      "state": {
+        "settings": {
+          "themeMode": "system",
+          "themeLight": "solarized-light",
+          "themeDark": "dark",
+          "customThemes": [],
+          "hotkeys": null,
+          "defaultAgent": "claude",
+          "claudeCommand": "",
+          "codexCommand": "",
+          "opencodeCommand": "",
+          "worktreeScripts": {
+            "setup": "",
+            "teardown": ""
+          },
+          "claudeEnvVars": {},
+          "codexEnvVars": {},
+          "opencodeEnvVars": {},
+          "harnessMcpEnabled": true,
+          "nameClaudeSessions": false,
+          "terminalFontFamily": "",
+          "terminalFontSize": 13,
+          "editor": "vscode",
+          "worktreeBase": "remote",
+          "mergeStrategy": "squash",
+          "worktreeDetail": "diff",
+          "shareClaudeSettings": true,
+          "claudeModel": null,
+          "codexModel": null,
+          "opencodeModel": null,
+          "piCommand": "",
+          "piEnvVars": {},
+          "piModel": null,
+          "hasGithubToken": false,
+          "githubAuthSource": null,
+          "viewerLogin": null,
+          "harnessStarred": null,
+          "autoUpdateEnabled": true,
+          "experimentalChatAgentsEnabled": false,
+          "harnessSystemPromptEnabled": true,
+          "harnessSystemPrompt": "",
+          "harnessSystemPromptMain": "",
+          "claudeTuiFullscreen": true,
+          "wsTransportEnabled": false,
+          "wsTransportPort": 37291,
+          "wsTransportHost": "127.0.0.1",
+          "browserToolsEnabled": true,
+          "browserToolsMode": "full",
+          "defaultClaudeTabType": "xterm",
+          "defaultOpencodeTabType": "xterm",
+          "defaultCodexTabType": "xterm",
+          "chatPromotionDismissed": false,
+          "autoApprovePermissions": false,
+          "autoApproveSteerInstructions": "",
+          "useSystemClaudeForJsonMode": false,
+          "jsonModeChatDensity": "compact",
+          "uiScale": "small",
+          "jsonModeSendOnEnter": false,
+          "jsonModeDefaultPermissionMode": "acceptEdits",
+          "autoSleepMinutes": 30,
+          "snoozeDefaultDays": 7,
+          "expandedDiagnosticLoggingEnabled": false,
+          "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+          "dismissedAnnouncementIds": [],
+          "announcementsMuted": false,
+          "harnessConfigRoots": {},
+          "harnessConfigSourceDir": null
+        },
+        "prs": {
+          "byPath": {},
+          "mergedByPath": {},
+          "loading": false
+        },
+        "onboarding": {
+          "quest": "hidden"
+        },
+        "hooks": {
+          "consent": "pending"
+        },
+        "worktrees": {
+          "list": [],
+          "repoRoots": [],
+          "pending": [],
+          "pendingDeletions": []
+        },
+        "terminals": {
+          "statuses": {},
+          "pendingTools": {},
+          "shellActivity": {},
+          "progress": {},
+          "panes": {},
+          "lastActive": {},
+          "sessions": {}
+        },
+        "updater": {
+          "status": null
+        },
+        "repoConfigs": {
+          "byRepo": {}
+        },
+        "costs": {
+          "byTerminal": {}
+        },
+        "browser": {
+          "byTab": {}
+        },
+        "jsonClaude": {
+          "sessions": {
+            "s1": {
+              "sessionId": "s1",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [],
+              "entriesHydrated": false,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            }
+          },
+          "pendingApprovals": {}
+        },
+        "snooze": {
+          "byPath": {}
+        },
+        "runtimes": {
+          "byAgent": {}
+        },
+        "announcements": {
+          "items": [],
+          "lastFetched": null,
+          "lastError": null
+        },
+        "scratchpad": {
+          "byWorktreePath": {}
+        },
+        "harnessConfig": {
+          "resources": {
+            "agents": [],
+            "skills": [],
+            "commands": []
+          },
+          "comparisons": {},
+          "loading": false,
+          "error": null,
+          "lastScannedAt": null,
+          "lastSyncedAt": null,
+          "templates": {
+            "templates": [],
+            "fragments": [],
+            "errors": [],
+            "loadedAt": null
+          },
+          "templateSyncNotice": null
+        }
+      }
+    }
+  },
+  {
+    "name": "strip: a snapshot without chat entries is unchanged",
+    "kind": "strip",
+    "before": {
+      "state": {
+        "onboarding": {
+          "quest": "done"
+        },
+        "jsonClaude": {
+          "sessions": {
+            "s1": {
+              "sessionId": "s1",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [],
+              "entriesHydrated": false,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            }
+          },
+          "pendingApprovals": {}
+        }
+      },
+      "seq": 1
+    },
+    "after": {
+      "seq": 1,
+      "state": {
+        "settings": {
+          "themeMode": "system",
+          "themeLight": "solarized-light",
+          "themeDark": "dark",
+          "customThemes": [],
+          "hotkeys": null,
+          "defaultAgent": "claude",
+          "claudeCommand": "",
+          "codexCommand": "",
+          "opencodeCommand": "",
+          "worktreeScripts": {
+            "setup": "",
+            "teardown": ""
+          },
+          "claudeEnvVars": {},
+          "codexEnvVars": {},
+          "opencodeEnvVars": {},
+          "harnessMcpEnabled": true,
+          "nameClaudeSessions": false,
+          "terminalFontFamily": "",
+          "terminalFontSize": 13,
+          "editor": "vscode",
+          "worktreeBase": "remote",
+          "mergeStrategy": "squash",
+          "worktreeDetail": "diff",
+          "shareClaudeSettings": true,
+          "claudeModel": null,
+          "codexModel": null,
+          "opencodeModel": null,
+          "piCommand": "",
+          "piEnvVars": {},
+          "piModel": null,
+          "hasGithubToken": false,
+          "githubAuthSource": null,
+          "viewerLogin": null,
+          "harnessStarred": null,
+          "autoUpdateEnabled": true,
+          "experimentalChatAgentsEnabled": false,
+          "harnessSystemPromptEnabled": true,
+          "harnessSystemPrompt": "",
+          "harnessSystemPromptMain": "",
+          "claudeTuiFullscreen": true,
+          "wsTransportEnabled": false,
+          "wsTransportPort": 37291,
+          "wsTransportHost": "127.0.0.1",
+          "browserToolsEnabled": true,
+          "browserToolsMode": "full",
+          "defaultClaudeTabType": "xterm",
+          "defaultOpencodeTabType": "xterm",
+          "defaultCodexTabType": "xterm",
+          "chatPromotionDismissed": false,
+          "autoApprovePermissions": false,
+          "autoApproveSteerInstructions": "",
+          "useSystemClaudeForJsonMode": false,
+          "jsonModeChatDensity": "compact",
+          "uiScale": "small",
+          "jsonModeSendOnEnter": false,
+          "jsonModeDefaultPermissionMode": "acceptEdits",
+          "autoSleepMinutes": 30,
+          "snoozeDefaultDays": 7,
+          "expandedDiagnosticLoggingEnabled": false,
+          "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+          "dismissedAnnouncementIds": [],
+          "announcementsMuted": false,
+          "harnessConfigRoots": {},
+          "harnessConfigSourceDir": null
+        },
+        "prs": {
+          "byPath": {},
+          "mergedByPath": {},
+          "loading": false
+        },
+        "onboarding": {
+          "quest": "done"
+        },
+        "hooks": {
+          "consent": "pending"
+        },
+        "worktrees": {
+          "list": [],
+          "repoRoots": [],
+          "pending": [],
+          "pendingDeletions": []
+        },
+        "terminals": {
+          "statuses": {},
+          "pendingTools": {},
+          "shellActivity": {},
+          "progress": {},
+          "panes": {},
+          "lastActive": {},
+          "sessions": {}
+        },
+        "updater": {
+          "status": null
+        },
+        "repoConfigs": {
+          "byRepo": {}
+        },
+        "costs": {
+          "byTerminal": {}
+        },
+        "browser": {
+          "byTab": {}
+        },
+        "jsonClaude": {
+          "sessions": {
+            "s1": {
+              "sessionId": "s1",
+              "worktreePath": "/wt",
+              "agentKind": "claude",
+              "runtimeId": "claude",
+              "state": "running",
+              "exitCode": null,
+              "exitReason": null,
+              "entries": [],
+              "entriesHydrated": false,
+              "busy": false,
+              "permissionMode": "default",
+              "slashCommands": [
+                "clear"
+              ],
+              "autoApprovedDecisions": {},
+              "sessionToolApprovals": [
+                "Edit"
+              ],
+              "sessionAllowedDecisions": {},
+              "capabilities": {
+                "canInterrupt": true,
+                "canRewind": false,
+                "canSetPermissionMode": true,
+                "canApproveTools": true,
+                "canResume": true,
+                "canOpenAuthLogin": false,
+                "hasSlashCommands": true,
+                "hasCostTracking": true
+              },
+              "title": "Chat"
+            }
+          },
+          "pendingApprovals": {}
+        },
+        "snooze": {
+          "byPath": {}
+        },
+        "runtimes": {
+          "byAgent": {}
+        },
+        "announcements": {
+          "items": [],
+          "lastFetched": null,
+          "lastError": null
+        },
+        "scratchpad": {
+          "byWorktreePath": {}
+        },
+        "harnessConfig": {
+          "resources": {
+            "agents": [],
+            "skills": [],
+            "commands": []
+          },
+          "comparisons": {},
+          "loading": false,
+          "error": null,
+          "lastScannedAt": null,
+          "lastSyncedAt": null,
+          "templates": {
+            "templates": [],
+            "fragments": [],
+            "errors": [],
+            "loadedAt": null
+          },
+          "templateSyncNotice": null
+        }
+      }
+    }
+  },
+  {
+    "name": "deserialize: a slice missing fields gets them from its initial state",
+    "kind": "deserialize",
+    "before": {
+      "settings": {
+        "themeMode": "dark",
+        "terminalFontSize": 15
+      },
+      "hooks": {}
+    },
+    "after": {
+      "settings": {
+        "themeMode": "dark",
+        "themeLight": "solarized-light",
+        "themeDark": "dark",
+        "customThemes": [],
+        "hotkeys": null,
+        "defaultAgent": "claude",
+        "claudeCommand": "",
+        "codexCommand": "",
+        "opencodeCommand": "",
+        "worktreeScripts": {
+          "setup": "",
+          "teardown": ""
+        },
+        "claudeEnvVars": {},
+        "codexEnvVars": {},
+        "opencodeEnvVars": {},
+        "harnessMcpEnabled": true,
+        "nameClaudeSessions": false,
+        "terminalFontFamily": "",
+        "terminalFontSize": 15,
+        "editor": "vscode",
+        "worktreeBase": "remote",
+        "mergeStrategy": "squash",
+        "worktreeDetail": "diff",
+        "shareClaudeSettings": true,
+        "claudeModel": null,
+        "codexModel": null,
+        "opencodeModel": null,
+        "piCommand": "",
+        "piEnvVars": {},
+        "piModel": null,
+        "hasGithubToken": false,
+        "githubAuthSource": null,
+        "viewerLogin": null,
+        "harnessStarred": null,
+        "autoUpdateEnabled": true,
+        "experimentalChatAgentsEnabled": false,
+        "harnessSystemPromptEnabled": true,
+        "harnessSystemPrompt": "",
+        "harnessSystemPromptMain": "",
+        "claudeTuiFullscreen": true,
+        "wsTransportEnabled": false,
+        "wsTransportPort": 37291,
+        "wsTransportHost": "127.0.0.1",
+        "browserToolsEnabled": true,
+        "browserToolsMode": "full",
+        "defaultClaudeTabType": "xterm",
+        "defaultOpencodeTabType": "xterm",
+        "defaultCodexTabType": "xterm",
+        "chatPromotionDismissed": false,
+        "autoApprovePermissions": false,
+        "autoApproveSteerInstructions": "",
+        "useSystemClaudeForJsonMode": false,
+        "jsonModeChatDensity": "compact",
+        "uiScale": "small",
+        "jsonModeSendOnEnter": false,
+        "jsonModeDefaultPermissionMode": "acceptEdits",
+        "autoSleepMinutes": 30,
+        "snoozeDefaultDays": 7,
+        "expandedDiagnosticLoggingEnabled": false,
+        "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+        "dismissedAnnouncementIds": [],
+        "announcementsMuted": false,
+        "harnessConfigRoots": {},
+        "harnessConfigSourceDir": null
+      },
+      "prs": {
+        "byPath": {},
+        "mergedByPath": {},
+        "loading": false
+      },
+      "onboarding": {
+        "quest": "hidden"
+      },
+      "hooks": {
+        "consent": "pending"
+      },
+      "worktrees": {
+        "list": [],
+        "repoRoots": [],
+        "pending": [],
+        "pendingDeletions": []
+      },
+      "terminals": {
+        "statuses": {},
+        "pendingTools": {},
+        "shellActivity": {},
+        "progress": {},
+        "panes": {},
+        "lastActive": {},
+        "sessions": {}
+      },
+      "updater": {
+        "status": null
+      },
+      "repoConfigs": {
+        "byRepo": {}
+      },
+      "costs": {
+        "byTerminal": {}
+      },
+      "browser": {
+        "byTab": {}
+      },
+      "jsonClaude": {
+        "sessions": {},
+        "pendingApprovals": {}
+      },
+      "snooze": {
+        "byPath": {}
+      },
+      "runtimes": {
+        "byAgent": {}
+      },
+      "announcements": {
+        "items": [],
+        "lastFetched": null,
+        "lastError": null
+      },
+      "scratchpad": {
+        "byWorktreePath": {}
+      },
+      "harnessConfig": {
+        "resources": {
+          "agents": [],
+          "skills": [],
+          "commands": []
+        },
+        "comparisons": {},
+        "loading": false,
+        "error": null,
+        "lastScannedAt": null,
+        "lastSyncedAt": null,
+        "templates": {
+          "templates": [],
+          "fragments": [],
+          "errors": [],
+          "loadedAt": null
+        },
+        "templateSyncNotice": null
+      }
+    }
+  },
+  {
+    "name": "deserialize: missing nested template fields get their initial values",
+    "kind": "deserialize",
+    "before": {
+      "harnessConfig": {
+        "loading": true,
+        "templates": {
+          "loadedAt": 5
+        }
+      }
+    },
+    "after": {
+      "settings": {
+        "themeMode": "system",
+        "themeLight": "solarized-light",
+        "themeDark": "dark",
+        "customThemes": [],
+        "hotkeys": null,
+        "defaultAgent": "claude",
+        "claudeCommand": "",
+        "codexCommand": "",
+        "opencodeCommand": "",
+        "worktreeScripts": {
+          "setup": "",
+          "teardown": ""
+        },
+        "claudeEnvVars": {},
+        "codexEnvVars": {},
+        "opencodeEnvVars": {},
+        "harnessMcpEnabled": true,
+        "nameClaudeSessions": false,
+        "terminalFontFamily": "",
+        "terminalFontSize": 13,
+        "editor": "vscode",
+        "worktreeBase": "remote",
+        "mergeStrategy": "squash",
+        "worktreeDetail": "diff",
+        "shareClaudeSettings": true,
+        "claudeModel": null,
+        "codexModel": null,
+        "opencodeModel": null,
+        "piCommand": "",
+        "piEnvVars": {},
+        "piModel": null,
+        "hasGithubToken": false,
+        "githubAuthSource": null,
+        "viewerLogin": null,
+        "harnessStarred": null,
+        "autoUpdateEnabled": true,
+        "experimentalChatAgentsEnabled": false,
+        "harnessSystemPromptEnabled": true,
+        "harnessSystemPrompt": "",
+        "harnessSystemPromptMain": "",
+        "claudeTuiFullscreen": true,
+        "wsTransportEnabled": false,
+        "wsTransportPort": 37291,
+        "wsTransportHost": "127.0.0.1",
+        "browserToolsEnabled": true,
+        "browserToolsMode": "full",
+        "defaultClaudeTabType": "xterm",
+        "defaultOpencodeTabType": "xterm",
+        "defaultCodexTabType": "xterm",
+        "chatPromotionDismissed": false,
+        "autoApprovePermissions": false,
+        "autoApproveSteerInstructions": "",
+        "useSystemClaudeForJsonMode": false,
+        "jsonModeChatDensity": "compact",
+        "uiScale": "small",
+        "jsonModeSendOnEnter": false,
+        "jsonModeDefaultPermissionMode": "acceptEdits",
+        "autoSleepMinutes": 30,
+        "snoozeDefaultDays": 7,
+        "expandedDiagnosticLoggingEnabled": false,
+        "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+        "dismissedAnnouncementIds": [],
+        "announcementsMuted": false,
+        "harnessConfigRoots": {},
+        "harnessConfigSourceDir": null
+      },
+      "prs": {
+        "byPath": {},
+        "mergedByPath": {},
+        "loading": false
+      },
+      "onboarding": {
+        "quest": "hidden"
+      },
+      "hooks": {
+        "consent": "pending"
+      },
+      "worktrees": {
+        "list": [],
+        "repoRoots": [],
+        "pending": [],
+        "pendingDeletions": []
+      },
+      "terminals": {
+        "statuses": {},
+        "pendingTools": {},
+        "shellActivity": {},
+        "progress": {},
+        "panes": {},
+        "lastActive": {},
+        "sessions": {}
+      },
+      "updater": {
+        "status": null
+      },
+      "repoConfigs": {
+        "byRepo": {}
+      },
+      "costs": {
+        "byTerminal": {}
+      },
+      "browser": {
+        "byTab": {}
+      },
+      "jsonClaude": {
+        "sessions": {},
+        "pendingApprovals": {}
+      },
+      "snooze": {
+        "byPath": {}
+      },
+      "runtimes": {
+        "byAgent": {}
+      },
+      "announcements": {
+        "items": [],
+        "lastFetched": null,
+        "lastError": null
+      },
+      "scratchpad": {
+        "byWorktreePath": {}
+      },
+      "harnessConfig": {
+        "resources": {
+          "agents": [],
+          "skills": [],
+          "commands": []
+        },
+        "comparisons": {},
+        "loading": true,
+        "error": null,
+        "lastScannedAt": null,
+        "lastSyncedAt": null,
+        "templates": {
+          "templates": [],
+          "fragments": [],
+          "errors": [],
+          "loadedAt": 5
+        },
+        "templateSyncNotice": null
+      }
+    }
+  },
+  {
+    "name": "deserialize: an unknown field in a slice is dropped",
+    "kind": "deserialize",
+    "before": {
+      "snooze": {
+        "byPath": {},
+        "addedInAFutureVersion": {
+          "x": 1
+        }
+      },
+      "onboarding": {
+        "quest": "finale",
+        "extra": true
+      }
+    },
+    "after": {
+      "settings": {
+        "themeMode": "system",
+        "themeLight": "solarized-light",
+        "themeDark": "dark",
+        "customThemes": [],
+        "hotkeys": null,
+        "defaultAgent": "claude",
+        "claudeCommand": "",
+        "codexCommand": "",
+        "opencodeCommand": "",
+        "worktreeScripts": {
+          "setup": "",
+          "teardown": ""
+        },
+        "claudeEnvVars": {},
+        "codexEnvVars": {},
+        "opencodeEnvVars": {},
+        "harnessMcpEnabled": true,
+        "nameClaudeSessions": false,
+        "terminalFontFamily": "",
+        "terminalFontSize": 13,
+        "editor": "vscode",
+        "worktreeBase": "remote",
+        "mergeStrategy": "squash",
+        "worktreeDetail": "diff",
+        "shareClaudeSettings": true,
+        "claudeModel": null,
+        "codexModel": null,
+        "opencodeModel": null,
+        "piCommand": "",
+        "piEnvVars": {},
+        "piModel": null,
+        "hasGithubToken": false,
+        "githubAuthSource": null,
+        "viewerLogin": null,
+        "harnessStarred": null,
+        "autoUpdateEnabled": true,
+        "experimentalChatAgentsEnabled": false,
+        "harnessSystemPromptEnabled": true,
+        "harnessSystemPrompt": "",
+        "harnessSystemPromptMain": "",
+        "claudeTuiFullscreen": true,
+        "wsTransportEnabled": false,
+        "wsTransportPort": 37291,
+        "wsTransportHost": "127.0.0.1",
+        "browserToolsEnabled": true,
+        "browserToolsMode": "full",
+        "defaultClaudeTabType": "xterm",
+        "defaultOpencodeTabType": "xterm",
+        "defaultCodexTabType": "xterm",
+        "chatPromotionDismissed": false,
+        "autoApprovePermissions": false,
+        "autoApproveSteerInstructions": "",
+        "useSystemClaudeForJsonMode": false,
+        "jsonModeChatDensity": "compact",
+        "uiScale": "small",
+        "jsonModeSendOnEnter": false,
+        "jsonModeDefaultPermissionMode": "acceptEdits",
+        "autoSleepMinutes": 30,
+        "snoozeDefaultDays": 7,
+        "expandedDiagnosticLoggingEnabled": false,
+        "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+        "dismissedAnnouncementIds": [],
+        "announcementsMuted": false,
+        "harnessConfigRoots": {},
+        "harnessConfigSourceDir": null
+      },
+      "prs": {
+        "byPath": {},
+        "mergedByPath": {},
+        "loading": false
+      },
+      "onboarding": {
+        "quest": "finale"
+      },
+      "hooks": {
+        "consent": "pending"
+      },
+      "worktrees": {
+        "list": [],
+        "repoRoots": [],
+        "pending": [],
+        "pendingDeletions": []
+      },
+      "terminals": {
+        "statuses": {},
+        "pendingTools": {},
+        "shellActivity": {},
+        "progress": {},
+        "panes": {},
+        "lastActive": {},
+        "sessions": {}
+      },
+      "updater": {
+        "status": null
+      },
+      "repoConfigs": {
+        "byRepo": {}
+      },
+      "costs": {
+        "byTerminal": {}
+      },
+      "browser": {
+        "byTab": {}
+      },
+      "jsonClaude": {
+        "sessions": {},
+        "pendingApprovals": {}
+      },
+      "snooze": {
+        "byPath": {}
+      },
+      "runtimes": {
+        "byAgent": {}
+      },
+      "announcements": {
+        "items": [],
+        "lastFetched": null,
+        "lastError": null
+      },
+      "scratchpad": {
+        "byWorktreePath": {}
+      },
+      "harnessConfig": {
+        "resources": {
+          "agents": [],
+          "skills": [],
+          "commands": []
+        },
+        "comparisons": {},
+        "loading": false,
+        "error": null,
+        "lastScannedAt": null,
+        "lastSyncedAt": null,
+        "templates": {
+          "templates": [],
+          "fragments": [],
+          "errors": [],
+          "loadedAt": null
+        },
+        "templateSyncNotice": null
+      }
+    }
+  },
+  {
+    "name": "deserialize: an unknown slice is dropped",
+    "kind": "deserialize",
+    "before": {
+      "futureSlice": {
+        "a": 1
+      },
+      "scratchpad": {
+        "byWorktreePath": {
+          "/a": "n"
+        }
+      }
+    },
+    "after": {
+      "settings": {
+        "themeMode": "system",
+        "themeLight": "solarized-light",
+        "themeDark": "dark",
+        "customThemes": [],
+        "hotkeys": null,
+        "defaultAgent": "claude",
+        "claudeCommand": "",
+        "codexCommand": "",
+        "opencodeCommand": "",
+        "worktreeScripts": {
+          "setup": "",
+          "teardown": ""
+        },
+        "claudeEnvVars": {},
+        "codexEnvVars": {},
+        "opencodeEnvVars": {},
+        "harnessMcpEnabled": true,
+        "nameClaudeSessions": false,
+        "terminalFontFamily": "",
+        "terminalFontSize": 13,
+        "editor": "vscode",
+        "worktreeBase": "remote",
+        "mergeStrategy": "squash",
+        "worktreeDetail": "diff",
+        "shareClaudeSettings": true,
+        "claudeModel": null,
+        "codexModel": null,
+        "opencodeModel": null,
+        "piCommand": "",
+        "piEnvVars": {},
+        "piModel": null,
+        "hasGithubToken": false,
+        "githubAuthSource": null,
+        "viewerLogin": null,
+        "harnessStarred": null,
+        "autoUpdateEnabled": true,
+        "experimentalChatAgentsEnabled": false,
+        "harnessSystemPromptEnabled": true,
+        "harnessSystemPrompt": "",
+        "harnessSystemPromptMain": "",
+        "claudeTuiFullscreen": true,
+        "wsTransportEnabled": false,
+        "wsTransportPort": 37291,
+        "wsTransportHost": "127.0.0.1",
+        "browserToolsEnabled": true,
+        "browserToolsMode": "full",
+        "defaultClaudeTabType": "xterm",
+        "defaultOpencodeTabType": "xterm",
+        "defaultCodexTabType": "xterm",
+        "chatPromotionDismissed": false,
+        "autoApprovePermissions": false,
+        "autoApproveSteerInstructions": "",
+        "useSystemClaudeForJsonMode": false,
+        "jsonModeChatDensity": "compact",
+        "uiScale": "small",
+        "jsonModeSendOnEnter": false,
+        "jsonModeDefaultPermissionMode": "acceptEdits",
+        "autoSleepMinutes": 30,
+        "snoozeDefaultDays": 7,
+        "expandedDiagnosticLoggingEnabled": false,
+        "prReviewPrompt": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.",
+        "dismissedAnnouncementIds": [],
+        "announcementsMuted": false,
+        "harnessConfigRoots": {},
+        "harnessConfigSourceDir": null
+      },
+      "prs": {
+        "byPath": {},
+        "mergedByPath": {},
+        "loading": false
+      },
+      "onboarding": {
+        "quest": "hidden"
+      },
+      "hooks": {
+        "consent": "pending"
+      },
+      "worktrees": {
+        "list": [],
+        "repoRoots": [],
+        "pending": [],
+        "pendingDeletions": []
+      },
+      "terminals": {
+        "statuses": {},
+        "pendingTools": {},
+        "shellActivity": {},
+        "progress": {},
+        "panes": {},
+        "lastActive": {},
+        "sessions": {}
+      },
+      "updater": {
+        "status": null
+      },
+      "repoConfigs": {
+        "byRepo": {}
+      },
+      "costs": {
+        "byTerminal": {}
+      },
+      "browser": {
+        "byTab": {}
+      },
+      "jsonClaude": {
+        "sessions": {},
+        "pendingApprovals": {}
+      },
+      "snooze": {
+        "byPath": {}
+      },
+      "runtimes": {
+        "byAgent": {}
+      },
+      "announcements": {
+        "items": [],
+        "lastFetched": null,
+        "lastError": null
+      },
+      "scratchpad": {
+        "byWorktreePath": {
+          "/a": "n"
+        }
+      },
+      "harnessConfig": {
+        "resources": {
+          "agents": [],
+          "skills": [],
+          "commands": []
+        },
+        "comparisons": {},
+        "loading": false,
+        "error": null,
+        "lastScannedAt": null,
+        "lastSyncedAt": null,
+        "templates": {
+          "templates": [],
+          "fragments": [],
+          "errors": [],
+          "loadedAt": null
+        },
+        "templateSyncNotice": null
+      }
+    }
+  }
+]
