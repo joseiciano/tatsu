@@ -15,7 +15,9 @@
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
     "scripts/wire/**/*.ts",
+    "scripts/core/**/*.ts",
     "vitest.wire.config.ts",
+    "vitest.core.config.ts",
     "electron.vite.config.ts",
     "vite.web.config.ts"
   ]

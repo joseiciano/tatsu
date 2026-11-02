@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/tatsu-js", "crates/tatsu-state", "crates/tatsu-state-harness"]
+members = ["crates/tatsu-core", "crates/tatsu-js", "crates/tatsu-state", "crates/tatsu-state-harness"]
 
 [workspace.package]
 edition = "2024"
@@ -18,3 +18,5 @@ specta = { version = "=2.0.0-rc.27", features = ["derive", "indexmap", "serde_js
 specta-serde = "=0.0.14"
 specta-typescript = "=0.0.14"
 proptest = "1"
+time = { version = "0.3", features = ["formatting", "macros"] }
+tempfile = "3"

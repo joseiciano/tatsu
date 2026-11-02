@@ -4,6 +4,6 @@ import { defineConfig } from 'vitest/config'
 // vitest on the sources so a stale emit can never pass or fail a run.
 export default defineConfig({
   test: {
-    exclude: ['**/node_modules/**', 'out/**', 'dist/**', 'dist-headless/**', 'release/**', 'scripts/wire/**']
+    exclude: ['**/node_modules/**', 'out/**', 'dist/**', 'dist-headless/**', 'release/**', 'scripts/wire/**', 'scripts/core/**', '**/*.core.test.ts']
   }
 })
