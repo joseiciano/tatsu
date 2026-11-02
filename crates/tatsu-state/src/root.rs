@@ -6,6 +6,7 @@ use crate::slices::{
     browser::{self, BrowserEvent, BrowserState},
     costs::{self, CostsEvent, CostsState},
     hooks::{self, HooksEvent, HooksState},
+    json_claude::{self, JsonClaudeEvent, JsonClaudeState},
     onboarding::{self, OnboardingEvent, OnboardingState},
     prs::{self, PRsEvent, PRsState},
     repo_configs::{self, RepoConfigsEvent, RepoConfigsState},
@@ -31,6 +32,7 @@ pub struct AppState {
     pub repo_configs: RepoConfigsState,
     pub costs: CostsState,
     pub browser: BrowserState,
+    pub json_claude: JsonClaudeState,
     pub snooze: SnoozeState,
     pub runtimes: RuntimesState,
     pub announcements: AnnouncementsState,
@@ -50,13 +52,14 @@ pub enum StateEvent {
     RepoConfigs(RepoConfigsEvent),
     Costs(CostsEvent),
     Browser(BrowserEvent),
+    JsonClaude(JsonClaudeEvent),
     Snooze(SnoozeEvent),
     Runtimes(RuntimesEvent),
     Announcements(AnnouncementsEvent),
     Scratchpad(ScratchpadEvent),
 }
 
-pub fn root_reduce(state: &mut AppState, event: StateEvent, _now: i64) {
+pub fn root_reduce(state: &mut AppState, event: StateEvent, now: i64) {
     match event {
         StateEvent::Settings(event) => settings::reduce(&mut state.settings, event),
         StateEvent::Prs(event) => prs::reduce(&mut state.prs, event),
@@ -68,6 +71,7 @@ pub fn root_reduce(state: &mut AppState, event: StateEvent, _now: i64) {
         StateEvent::RepoConfigs(event) => repo_configs::reduce(&mut state.repo_configs, event),
         StateEvent::Costs(event) => costs::reduce(&mut state.costs, event),
         StateEvent::Browser(event) => browser::reduce(&mut state.browser, event),
+        StateEvent::JsonClaude(event) => json_claude::reduce(&mut state.json_claude, event, now),
         StateEvent::Snooze(event) => snooze::reduce(&mut state.snooze, event),
         StateEvent::Runtimes(event) => runtimes::reduce(&mut state.runtimes, event),
         StateEvent::Announcements(event) => announcements::reduce(&mut state.announcements, event),
@@ -111,6 +115,22 @@ mod tests {
             "repoConfigs": { "byRepo": { "/a": { "setupCommand": "make", "hiddenRightPanels": { "pr": true } } } },
             "costs": { "byTerminal": { "t1": { "sessionId": "s1", "transcriptPath": "/t", "byModel": {}, "breakdown": { "text": 0.5, "thinking": 0, "toolUse": 0, "userPrompt": 0, "assistantEcho": 0, "toolResults": {} }, "currentModel": null, "updatedAt": 1 } } },
             "browser": { "byTab": { "b1": { "url": "x", "title": "X", "canGoBack": true, "canGoForward": false, "loading": false } } },
+            "jsonClaude": {
+                "sessions": { "s1": {
+                    "sessionId": "s1", "worktreePath": "/a", "agentKind": "codex", "runtimeId": "codex", "state": "running",
+                    "exitCode": null, "exitReason": null,
+                    "entries": [
+                        { "entryId": "u1", "kind": "user", "text": "hi", "timestamp": 1, "isQueued": true },
+                        { "entryId": "a1", "kind": "assistant", "timestamp": 2, "isPartial": true, "blocks": [
+                            { "type": "thinking", "text": "t" }, { "type": "text", "text": "x" }
+                        ] }
+                    ],
+                    "entriesHydrated": true, "busy": false, "permissionMode": "default", "slashCommands": [],
+                    "autoApprovedDecisions": {}, "sessionToolApprovals": ["Edit"], "sessionAllowedDecisions": {},
+                    "capabilities": { "canInterrupt": true, "canRewind": false, "canSetPermissionMode": false, "canApproveTools": false, "canResume": true, "canOpenAuthLogin": false, "hasSlashCommands": false, "hasCostTracking": false }
+                } },
+                "pendingApprovals": { "r1": { "requestId": "r1", "sessionId": "s1", "toolName": "Bash", "input": {}, "timestamp": 1 } }
+            },
             "snooze": { "byPath": { "/a": { "path": "/a", "snoozedAt": 1, "wakeAt": 2 } } },
             "runtimes": { "byAgent": { "codex": { "state": "bundled" } } },
             "announcements": { "items": [], "lastFetched": 1, "lastError": "old" },
@@ -545,6 +565,118 @@ mod tests {
             (
                 "browser",
                 json!({ "type": "browser/tabRemoved", "payload": "b1" }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/sessionStarted", "payload": { "sessionId": "s1", "worktreePath": "/a", "agentKind": "codex", "runtimeId": "codex" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/agentSessionIdChanged", "payload": { "sessionId": "s1", "agentSessionId": "thread-1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/sessionTitleChanged", "payload": { "sessionId": "s1", "title": "T" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/sessionStateChanged", "payload": { "sessionId": "s1", "state": "exited", "exitCode": 1 } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/entryAppended", "payload": { "sessionId": "s1", "entry": { "entryId": "u2", "kind": "user", "timestamp": 3 } } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/entriesSeeded", "payload": { "sessionId": "s1", "entries": [] } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/assistantTextDelta", "payload": { "sessionId": "s1", "entryId": "a1", "textDelta": "y" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/assistantThinkingDelta", "payload": { "sessionId": "s1", "entryId": "a1", "textDelta": "u" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/assistantBlockAppended", "payload": { "sessionId": "s1", "entryId": "a1", "block": { "type": "text" } } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/assistantEntryFinalized", "payload": { "sessionId": "s1", "entryId": "a1", "blocks": [] } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/toolResultAttached", "payload": { "sessionId": "s1", "toolUseId": "tu", "content": "ok", "isError": false } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/busyChanged", "payload": { "sessionId": "s1", "busy": true } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/sessionCleared", "payload": { "sessionId": "s1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/approvalRequested", "payload": { "requestId": "r2", "sessionId": "s1", "toolName": "Edit", "input": { "a": 1 }, "timestamp": 2 } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/approvalResolved", "payload": { "requestId": "r1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/approvalAutoApproved", "payload": { "sessionId": "s1", "toolUseId": "tu", "model": "m", "reason": "r", "timestamp": 2 } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/approvalAutoReviewFinished", "payload": { "requestId": "r1", "decision": "ask", "reason": "r" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/permissionModeChanged", "payload": { "sessionId": "s1", "mode": "plan" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/userEntriesUnqueued", "payload": { "sessionId": "s1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/userEntryUnqueued", "payload": { "sessionId": "s1", "entryId": "u1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/entryRemoved", "payload": { "sessionId": "s1", "entryId": "u1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/entriesTruncated", "payload": { "sessionId": "s1", "fromEntryId": "a1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/slashCommandsChanged", "payload": { "sessionId": "s1", "slashCommands": ["clear"] } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/compactBoundaryReceived", "payload": { "sessionId": "s1", "entryId": "c1", "timestamp": 4 } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/sessionToolApprovalsGranted", "payload": { "sessionId": "s1", "toolNames": ["Write"] } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/sessionToolApprovalsCleared", "payload": { "sessionId": "s1" } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/approvalSessionAllowed", "payload": { "sessionId": "s1", "toolUseId": "tu", "toolName": "Edit", "timestamp": 5 } }),
+            ),
+            (
+                "jsonClaude",
+                json!({ "type": "jsonClaude/capabilitiesChanged", "payload": { "sessionId": "s1", "capabilities": { "canInterrupt": false, "canRewind": false, "canSetPermissionMode": false, "canApproveTools": false, "canResume": true, "canOpenAuthLogin": false, "hasSlashCommands": false, "hasCostTracking": false } } }),
             ),
             (
                 "snooze",

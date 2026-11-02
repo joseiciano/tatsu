@@ -26,6 +26,17 @@ export type AnnouncementsState = {
 	lastError: string | null,
 };
 
+export type AutoReviewDecision = "approve" | "ask";
+
+export type AutoReviewState = "pending" | "finished";
+
+export type AutoReviewStatus = {
+	state: AutoReviewState,
+	decision?: AutoReviewDecision,
+	reason?: string,
+	model?: string,
+};
+
 export type BrowserEvent = { type: "browser/tabStateChanged"; payload: BrowserTabStateChange } | { type: "browser/tabRemoved"; payload: string };
 
 export type BrowserState = {
@@ -56,6 +67,17 @@ export type BrowserTabStatePatch = {
 };
 
 export type BrowserToolsMode = "view" | "full";
+
+export type ChatRuntimeCapabilities = {
+	canInterrupt: boolean,
+	canRewind: boolean,
+	canSetPermissionMode: boolean,
+	canApproveTools: boolean,
+	canResume: boolean,
+	canOpenAuthLogin: boolean,
+	hasSlashCommands: boolean,
+	hasCostTracking: boolean,
+};
 
 export type ChatRuntimeId = "claude" | "opencode" | "codex";
 
@@ -215,7 +237,261 @@ export type HooksState = {
 	consent: HooksConsent,
 };
 
+export type JsonClaudeAgentSessionIdChange = {
+	sessionId: string,
+	agentSessionId: string,
+};
+
+export type JsonClaudeApprovalRef = {
+	requestId: string,
+};
+
+export type JsonClaudeAuthMethod = {
+	id: string,
+	name: string,
+	description?: string,
+	type?: JsonClaudeAuthMethodType,
+};
+
+export type JsonClaudeAuthMethodType = "agent" | "terminal";
+
+export type JsonClaudeAutoApproval = {
+	sessionId: string,
+	toolUseId: string,
+	model: string,
+	reason: string,
+	timestamp: number,
+};
+
+export type JsonClaudeAutoApprovedDecision = {
+	model: string,
+	reason: string,
+	timestamp: number,
+};
+
+export type JsonClaudeAutoReviewFinish = {
+	requestId: string,
+	decision: AutoReviewDecision,
+	reason: string,
+	model?: string,
+};
+
+export type JsonClaudeBlockAppend = {
+	sessionId: string,
+	entryId: string,
+	block: JsonClaudeMessageBlock,
+};
+
+export type JsonClaudeBlockType = "text" | "thinking" | "tool_use" | "tool_result";
+
+export type JsonClaudeBusyChange = {
+	sessionId: string,
+	busy: boolean,
+};
+
+export type JsonClaudeCapabilitiesChange = {
+	sessionId: string,
+	capabilities: ChatRuntimeCapabilities,
+};
+
+export type JsonClaudeChatEntry = {
+	entryId: string,
+	kind: JsonClaudeEntryKind,
+	timestamp: number,
+	blocks?: JsonClaudeMessageBlock[],
+	text?: string,
+	compactTrigger?: JsonClaudeCompactTrigger,
+	compactPreTokens?: number,
+	compactPostTokens?: number,
+	isPartial?: boolean,
+	isQueued?: boolean,
+	images?: JsonClaudeImageAttachment[],
+	parentToolUseId?: string,
+	errorKind?: JsonClaudeErrorKind,
+	errorMessage?: string,
+	authMethods?: JsonClaudeAuthMethod[],
+	exitWasClean?: boolean,
+	transcriptUuid?: string,
+	apiMessageId?: string,
+	rateLimitDetail?: JsonClaudeRateLimitDetail,
+};
+
+export type JsonClaudeCompactBoundary = {
+	sessionId: string,
+	entryId: string,
+	trigger?: JsonClaudeCompactTrigger,
+	preTokens?: number,
+	postTokens?: number,
+	timestamp: number,
+};
+
+export type JsonClaudeCompactTrigger = "auto" | "manual";
+
+export type JsonClaudeEntriesSeed = {
+	sessionId: string,
+	entries: JsonClaudeChatEntry[],
+};
+
+export type JsonClaudeEntriesTruncate = {
+	sessionId: string,
+	fromEntryId: string,
+};
+
+export type JsonClaudeEntryAppend = {
+	sessionId: string,
+	entry: JsonClaudeChatEntry,
+};
+
+export type JsonClaudeEntryFinalize = {
+	sessionId: string,
+	entryId: string,
+	blocks: JsonClaudeMessageBlock[],
+};
+
+export type JsonClaudeEntryKind = "user" | "assistant" | "system" | "error" | "tool_result" | "compact";
+
+export type JsonClaudeEntryRef = {
+	sessionId: string,
+	entryId: string,
+};
+
+export type JsonClaudeErrorKind = "subprocess-exit" | "rate-limit" | "rate-limit-warning" | "rate-limit-error" | "auth-failure" | "protocol-version" | "runtime-missing" | "session-load-failed";
+
+export type JsonClaudeEvent = { type: "jsonClaude/sessionStarted"; payload: JsonClaudeSessionStart } | { type: "jsonClaude/agentSessionIdChanged"; payload: JsonClaudeAgentSessionIdChange } | { type: "jsonClaude/sessionTitleChanged"; payload: JsonClaudeSessionTitleChange } | { type: "jsonClaude/sessionStateChanged"; payload: JsonClaudeSessionStateChange } | { type: "jsonClaude/entryAppended"; payload: JsonClaudeEntryAppend } | { type: "jsonClaude/entriesSeeded"; payload: JsonClaudeEntriesSeed } | { type: "jsonClaude/assistantTextDelta"; payload: JsonClaudeTextDelta } | { type: "jsonClaude/assistantThinkingDelta"; payload: JsonClaudeTextDelta } | { type: "jsonClaude/assistantBlockAppended"; payload: JsonClaudeBlockAppend } | { type: "jsonClaude/assistantEntryFinalized"; payload: JsonClaudeEntryFinalize } | { type: "jsonClaude/toolResultAttached"; payload: JsonClaudeToolResult } | { type: "jsonClaude/busyChanged"; payload: JsonClaudeBusyChange } | { type: "jsonClaude/sessionCleared"; payload: JsonClaudeSessionRef } | { type: "jsonClaude/approvalRequested"; payload: JsonClaudePendingApproval } | { type: "jsonClaude/approvalResolved"; payload: JsonClaudeApprovalRef } | { type: "jsonClaude/approvalAutoApproved"; payload: JsonClaudeAutoApproval } | { type: "jsonClaude/approvalAutoReviewFinished"; payload: JsonClaudeAutoReviewFinish } | { type: "jsonClaude/permissionModeChanged"; payload: JsonClaudePermissionModeChange } | { type: "jsonClaude/userEntriesUnqueued"; payload: JsonClaudeSessionRef } | { type: "jsonClaude/userEntryUnqueued"; payload: JsonClaudeEntryRef } | { type: "jsonClaude/entryRemoved"; payload: JsonClaudeEntryRef } | { type: "jsonClaude/entriesTruncated"; payload: JsonClaudeEntriesTruncate } | { type: "jsonClaude/slashCommandsChanged"; payload: JsonClaudeSlashCommandsChange } | { type: "jsonClaude/compactBoundaryReceived"; payload: JsonClaudeCompactBoundary } | { type: "jsonClaude/sessionToolApprovalsGranted"; payload: JsonClaudeToolApprovalsGrant } | { type: "jsonClaude/sessionToolApprovalsCleared"; payload: JsonClaudeToolApprovalsClear } | { type: "jsonClaude/approvalSessionAllowed"; payload: JsonClaudeSessionAllowance } | { type: "jsonClaude/capabilitiesChanged"; payload: JsonClaudeCapabilitiesChange };
+
+export type JsonClaudeImageAttachment = {
+	path: string,
+	mediaType: string,
+};
+
+export type JsonClaudeMessageBlock = {
+	type: JsonClaudeBlockType,
+	text?: string,
+	id?: string,
+	name?: string,
+	input?: { [key in string]: unknown },
+	toolUseId?: string,
+	content?: string,
+	isError?: boolean,
+};
+
+export type JsonClaudePendingApproval = {
+	requestId: string,
+	sessionId: string,
+	toolName: string,
+	input: { [key in string]: unknown },
+	toolUseId?: string,
+	timestamp: number,
+	autoReview?: AutoReviewStatus,
+};
+
 export type JsonClaudePermissionMode = "default" | "acceptEdits" | "plan";
+
+export type JsonClaudePermissionModeChange = {
+	sessionId: string,
+	mode: JsonClaudePermissionMode,
+};
+
+export type JsonClaudeRateLimitDetail = {
+	utilization?: number,
+	resetAt?: number,
+	tier?: string,
+	isUsingOverage?: boolean,
+};
+
+export type JsonClaudeSession = {
+	sessionId: string,
+	worktreePath: string,
+	agentKind: AgentKind,
+	runtimeId: ChatRuntimeId,
+	agentSessionId?: string,
+	title?: string,
+	state: JsonClaudeSessionState,
+	exitCode: number | null,
+	exitReason: string | null,
+	entries: JsonClaudeChatEntry[],
+	entriesHydrated: boolean,
+	busy: boolean,
+	permissionMode: JsonClaudePermissionMode,
+	slashCommands: string[],
+	autoApprovedDecisions: { [key in string]: JsonClaudeAutoApprovedDecision },
+	sessionToolApprovals: string[],
+	sessionAllowedDecisions: { [key in string]: JsonClaudeSessionAllowedDecision },
+	capabilities: ChatRuntimeCapabilities,
+};
+
+export type JsonClaudeSessionAllowance = {
+	sessionId: string,
+	toolUseId: string,
+	toolName: string,
+	timestamp: number,
+};
+
+export type JsonClaudeSessionAllowedDecision = {
+	toolName: string,
+	timestamp: number,
+};
+
+export type JsonClaudeSessionRef = {
+	sessionId: string,
+};
+
+export type JsonClaudeSessionStart = {
+	sessionId: string,
+	worktreePath: string,
+	agentKind: AgentKind,
+	runtimeId: ChatRuntimeId,
+	defaultPermissionMode?: JsonClaudePermissionMode,
+	capabilities?: ChatRuntimeCapabilities,
+	agentSessionId?: string,
+};
+
+export type JsonClaudeSessionState = "idle" | "connecting" | "running" | "exited" | "auth-required";
+
+export type JsonClaudeSessionStateChange = {
+	sessionId: string,
+	state: JsonClaudeSessionState,
+	exitCode?: number | null,
+	exitReason?: string | null,
+};
+
+export type JsonClaudeSessionTitleChange = {
+	sessionId: string,
+	title: string,
+};
+
+export type JsonClaudeSlashCommandsChange = {
+	sessionId: string,
+	slashCommands: string[],
+};
+
+export type JsonClaudeState = {
+	sessions: { [key in string]: JsonClaudeSession },
+	pendingApprovals: { [key in string]: JsonClaudePendingApproval },
+};
+
+export type JsonClaudeTextDelta = {
+	sessionId: string,
+	entryId: string,
+	textDelta: string,
+};
+
+export type JsonClaudeToolApprovalsClear = {
+	sessionId: string,
+	toolNames?: string[],
+};
+
+export type JsonClaudeToolApprovalsGrant = {
+	sessionId: string,
+	toolNames: string[],
+};
+
+export type JsonClaudeToolResult = {
+	sessionId: string,
+	toolUseId: string,
+	content: string,
+	isError: boolean,
+};
 
 export type JsonModeChatDensity = "compact" | "comfy";
 
@@ -555,7 +831,7 @@ export type SnoozeState = {
 
 export type SplitDirection = "horizontal" | "vertical";
 
-export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | TerminalsEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
+export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | TerminalsEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | JsonClaudeEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
 
 export type TerminalClientDisconnect = {
 	clientId: string,

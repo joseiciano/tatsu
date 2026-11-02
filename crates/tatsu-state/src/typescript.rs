@@ -14,7 +14,11 @@ use crate::slices::{
         HarnessTemplateHarnessBlock, HarnessTemplateHarnesses, ManagedHarnessKind,
     },
     hooks::{HooksConsent, HooksEvent, HooksState},
-    json_claude::{ChatRuntimeId, JsonClaudePermissionMode},
+    json_claude::{
+        AutoReviewStatus, ChatRuntimeCapabilities, ChatRuntimeId, JsonClaudeAuthMethod,
+        JsonClaudeChatEntry, JsonClaudeEvent, JsonClaudeMessageBlock, JsonClaudePendingApproval,
+        JsonClaudePermissionMode, JsonClaudeSession, JsonClaudeSessionState, JsonClaudeState,
+    },
     onboarding::{OnboardingEvent, OnboardingState, QuestStep},
     prs::{
         CheckState, CheckStatus, ChecksOverall, GithubUser, OpenClosed, PRLabel, PRLinkedIssue,
@@ -107,6 +111,16 @@ pub fn wire_types() -> Types {
         .register::<TerminalsEvent>()
         .register::<ChatRuntimeId>()
         .register::<JsonClaudePermissionMode>()
+        .register::<JsonClaudeSessionState>()
+        .register::<JsonClaudeAuthMethod>()
+        .register::<ChatRuntimeCapabilities>()
+        .register::<JsonClaudeMessageBlock>()
+        .register::<JsonClaudeChatEntry>()
+        .register::<JsonClaudeSession>()
+        .register::<AutoReviewStatus>()
+        .register::<JsonClaudePendingApproval>()
+        .register::<JsonClaudeState>()
+        .register::<JsonClaudeEvent>()
         .register::<HarnessConfigResourceType>()
         .register::<ManagedHarnessKind>()
         .register::<HarnessConfigRootKey>()

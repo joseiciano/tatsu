@@ -24,7 +24,20 @@ import type { Announcement, AnnouncementsEvent, AnnouncementsState } from './ann
 import type { BrowserEvent, BrowserState, BrowserTabState } from './browser'
 import type { ContentBreakdown, CostsEvent, CostsState, ModelTally, SessionUsage } from './costs'
 import type { HooksConsent, HooksEvent, HooksState } from './hooks'
-import type { ChatRuntimeId, JsonClaudePermissionMode } from './json-claude'
+import type {
+  AutoReviewStatus,
+  ChatRuntimeCapabilities,
+  ChatRuntimeId,
+  JsonClaudeAuthMethod,
+  JsonClaudeChatEntry,
+  JsonClaudeEvent,
+  JsonClaudeMessageBlock,
+  JsonClaudePendingApproval,
+  JsonClaudePermissionMode,
+  JsonClaudeSession,
+  JsonClaudeSessionState,
+  JsonClaudeState
+} from './json-claude'
 import type { OnboardingEvent, OnboardingState, QuestStep } from './onboarding'
 import type { CheckStatus, PRReview, PRsEvent, PRsState, PRStatus } from './prs'
 import type {
@@ -199,6 +212,58 @@ const terminalSession: WireEqual<Generated.TerminalSession, TerminalSession> = t
 const terminalSize: WireEqual<Generated.TerminalSize, NonNullable<TerminalSession['size']>> = true
 const terminalsState: WireEqual<Generated.TerminalsState, TerminalsState> = true
 const terminalsEvent: WireEqual<Generated.TerminalsEvent, TerminalsEvent> = true
+
+const jsonClaudeSessionState: WireEqual<Generated.JsonClaudeSessionState, JsonClaudeSessionState> = true
+const jsonClaudeAuthMethod: WireEqual<Generated.JsonClaudeAuthMethod, JsonClaudeAuthMethod> = true
+const jsonClaudeAuthMethodType: WireEqual<
+  Generated.JsonClaudeAuthMethodType,
+  NonNullable<JsonClaudeAuthMethod['type']>
+> = true
+const chatRuntimeCapabilities: WireEqual<Generated.ChatRuntimeCapabilities, ChatRuntimeCapabilities> = true
+const jsonClaudeBlockType: WireEqual<Generated.JsonClaudeBlockType, JsonClaudeMessageBlock['type']> = true
+const jsonClaudeBlockInput: WireEqual<
+  NonNullable<Generated.JsonClaudeMessageBlock['input']>,
+  NonNullable<JsonClaudeMessageBlock['input']>
+> = true
+const jsonClaudeMessageBlock: WireEqual<Generated.JsonClaudeMessageBlock, JsonClaudeMessageBlock> = true
+const jsonClaudeEntryKind: WireEqual<Generated.JsonClaudeEntryKind, JsonClaudeChatEntry['kind']> = true
+const jsonClaudeCompactTrigger: WireEqual<
+  Generated.JsonClaudeCompactTrigger,
+  NonNullable<JsonClaudeChatEntry['compactTrigger']>
+> = true
+const jsonClaudeErrorKind: WireEqual<Generated.JsonClaudeErrorKind, NonNullable<JsonClaudeChatEntry['errorKind']>> = true
+const jsonClaudeImage: WireEqual<
+  Generated.JsonClaudeImageAttachment,
+  NonNullable<JsonClaudeChatEntry['images']>[number]
+> = true
+const jsonClaudeRateLimitDetail: WireEqual<
+  Generated.JsonClaudeRateLimitDetail,
+  NonNullable<JsonClaudeChatEntry['rateLimitDetail']>
+> = true
+const jsonClaudeChatEntry: WireEqual<Generated.JsonClaudeChatEntry, JsonClaudeChatEntry> = true
+const jsonClaudeAutoApprovedDecision: WireEqual<
+  Generated.JsonClaudeAutoApprovedDecision,
+  JsonClaudeSession['autoApprovedDecisions'][string]
+> = true
+const jsonClaudeSessionAllowedDecision: WireEqual<
+  Generated.JsonClaudeSessionAllowedDecision,
+  JsonClaudeSession['sessionAllowedDecisions'][string]
+> = true
+const jsonClaudeSession: WireEqual<Generated.JsonClaudeSession, JsonClaudeSession> = true
+const autoReviewState: WireEqual<Generated.AutoReviewState, AutoReviewStatus['state']> = true
+const autoReviewDecision: WireEqual<Generated.AutoReviewDecision, NonNullable<AutoReviewStatus['decision']>> = true
+const autoReviewStatus: WireEqual<Generated.AutoReviewStatus, AutoReviewStatus> = true
+const jsonClaudePendingApproval: WireEqual<Generated.JsonClaudePendingApproval, JsonClaudePendingApproval> = true
+const jsonClaudeStateChangeExitCode: WireEqual<
+  Generated.JsonClaudeSessionStateChange['exitCode'],
+  Extract<JsonClaudeEvent, { type: 'jsonClaude/sessionStateChanged' }>['payload']['exitCode']
+> = true
+const jsonClaudeStateChangeExitReason: WireEqual<
+  Generated.JsonClaudeSessionStateChange['exitReason'],
+  Extract<JsonClaudeEvent, { type: 'jsonClaude/sessionStateChanged' }>['payload']['exitReason']
+> = true
+const jsonClaudeState: WireEqual<Generated.JsonClaudeState, JsonClaudeState> = true
+const jsonClaudeEvent: WireEqual<Generated.JsonClaudeEvent, JsonClaudeEvent> = true
 
 const pendingWorktree: WireEqual<Generated.PendingWorktree, PendingWorktree> = true
 const pendingWorktreePatch: WireEqual<Generated.PendingWorktreePatch, Partial<PendingWorktree>> = true
