@@ -1,0 +1,929 @@
+{
+  "requests": [
+    {
+      "name": "activity:clear",
+      "owner": "core-server"
+    },
+    {
+      "name": "activity:get",
+      "owner": "core-server"
+    },
+    {
+      "name": "agent:buildSpawnArgs",
+      "owner": "terminals"
+    },
+    {
+      "name": "agent:latestSessionId",
+      "owner": "terminals"
+    },
+    {
+      "name": "agent:sessionFileExists",
+      "owner": "terminals"
+    },
+    {
+      "name": "announcements:dismiss",
+      "owner": "aux-services"
+    },
+    {
+      "name": "announcements:mute",
+      "owner": "aux-services"
+    },
+    {
+      "name": "announcements:refresh",
+      "owner": "aux-services"
+    },
+    {
+      "name": "browser:back",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:click",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:forward",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:navigate",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:openDevTools",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:reload",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:screenshot",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:scroll",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:type",
+      "owner": "browser"
+    },
+    {
+      "name": "claude:getAuthStatus",
+      "owner": "chat"
+    },
+    {
+      "name": "config:getAvailableEditors",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "config:getAvailableThemes",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:getDefaultClaudeCommand",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:getDefaultTerminalFontFamily",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:getWsTransportInfo",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:openThemesFolder",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "config:reloadCustomThemes",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:resetHotkeys",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:rotateWsToken",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setAutoSleepMinutes",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setAutoUpdateEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setBrowserToolsEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setBrowserToolsMode",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setChatPromotionDismissed",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setClaudeCommand",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setClaudeEnvVars",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setClaudeModel",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setClaudeTuiFullscreen",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setCodexCommand",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setCodexEnvVars",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setCodexModel",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setDefaultAgent",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setDefaultClaudeTabType",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setDefaultCodexTabType",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setDefaultOpencodeTabType",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setEditor",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setExpandedDiagnosticLoggingEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setExperimentalChatAgentsEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setHarnessMcpEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setHarnessSystemPrompt",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setHarnessSystemPromptEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setHarnessSystemPromptMain",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setHotkeys",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setJsonModeChatDensity",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setJsonModeDefaultPermissionMode",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setJsonModeSendOnEnter",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setMergeStrategy",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setNameClaudeSessions",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setOnboardingQuest",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setOpencodeCommand",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setOpencodeEnvVars",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setOpencodeModel",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setPiCommand",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setPiEnvVars",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setPiModel",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setPrReviewPrompt",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setShareClaudeSettings",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setSnoozeDefaultDays",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setTerminalFontFamily",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setTerminalFontSize",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setThemeDark",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setThemeLight",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setThemeMode",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setUiScale",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setWorktreeBase",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setWorktreeDetail",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setWorktreeScripts",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setWsTransportEnabled",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setWsTransportHost",
+      "owner": "core-server"
+    },
+    {
+      "name": "config:setWsTransportPort",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:add",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:getActive",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:getToken",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:hasToken",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:list",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:remove",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:rename",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:setActive",
+      "owner": "core-server"
+    },
+    {
+      "name": "connections:setLastConnected",
+      "owner": "core-server"
+    },
+    {
+      "name": "costs:getAllSessions",
+      "owner": "aux-services"
+    },
+    {
+      "name": "costs:setInterest",
+      "owner": "chat"
+    },
+    {
+      "name": "debug:logError",
+      "owner": "core-server"
+    },
+    {
+      "name": "debug:openLog",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "debug:readRecentLog",
+      "owner": "core-server"
+    },
+    {
+      "name": "debug:showLogInFolder",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "dialog:pickDirectory",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "editor:open",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "fs:listDir",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "fs:resolveHome",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "harnessConfig:applyImport",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:compare",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:createFile",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:deleteFile",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:deleteFragment",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:deleteTemplate",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:fragmentUsage",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:planSyncToDisk",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:prepareCommandFromSkill",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:prepareCreate",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:prepareDelete",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:prepareSkillFromCommand",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:prepareUpdate",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:previewImport",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:readFile",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:resolveFragmentEdit",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:saveFragment",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:saveTemplate",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:scan",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:syncToDisk",
+      "owner": "harness-config"
+    },
+    {
+      "name": "harnessConfig:updateFile",
+      "owner": "harness-config"
+    },
+    {
+      "name": "hooks:accept",
+      "owner": "core-server"
+    },
+    {
+      "name": "hooks:decline",
+      "owner": "core-server"
+    },
+    {
+      "name": "hooks:uninstall",
+      "owner": "core-server"
+    },
+    {
+      "name": "jsonClaude:authenticate",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:clearSessionToolApprovals",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:getEntries",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:grantSessionToolApprovals",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:interrupt",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:kill",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:openAuthLoginTab",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:readAttachmentImage",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:rerunAutoApprovalReview",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:resolveApproval",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:rewindTo",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:setPermissionMode",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:start",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:writeAttachmentImage",
+      "owner": "chat"
+    },
+    {
+      "name": "mcp:prepareForTerminal",
+      "owner": "mcp-control"
+    },
+    {
+      "name": "net:getLanAddresses",
+      "owner": "core-server"
+    },
+    {
+      "name": "panes:addTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:clearForWorktree",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:closeTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:convertTabType",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:ensureInitialized",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:moveTabToPane",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:renameTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:reorderTabs",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:restartAgentTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:selectTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:setRatio",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:sleepTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:splitPane",
+      "owner": "terminals"
+    },
+    {
+      "name": "panes:wakeTab",
+      "owner": "terminals"
+    },
+    {
+      "name": "perf:getMetrics",
+      "owner": "aux-services"
+    },
+    {
+      "name": "pr:merge",
+      "owner": "github"
+    },
+    {
+      "name": "prs:listOpen",
+      "owner": "github"
+    },
+    {
+      "name": "prs:refreshAll",
+      "owner": "github"
+    },
+    {
+      "name": "prs:refreshAllIfStale",
+      "owner": "github"
+    },
+    {
+      "name": "prs:refreshOne",
+      "owner": "github"
+    },
+    {
+      "name": "prs:refreshOneIfStale",
+      "owner": "github"
+    },
+    {
+      "name": "repo:add",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "repo:addAtPath",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "repo:createNewProject",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "repo:list",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "repo:remove",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "repoConfig:set",
+      "owner": "core-server"
+    },
+    {
+      "name": "runtimes:download",
+      "owner": "chat"
+    },
+    {
+      "name": "runtimes:refresh",
+      "owner": "chat"
+    },
+    {
+      "name": "scratchpad:setText",
+      "owner": "core-server"
+    },
+    {
+      "name": "settings:clearGithubToken",
+      "owner": "github"
+    },
+    {
+      "name": "settings:getHarnessConfigFolderDefaults",
+      "owner": "harness-config"
+    },
+    {
+      "name": "settings:hasGithubToken",
+      "owner": "github"
+    },
+    {
+      "name": "settings:setGithubToken",
+      "owner": "github"
+    },
+    {
+      "name": "settings:setHarnessConfigRoot",
+      "owner": "harness-config"
+    },
+    {
+      "name": "settings:setHarnessConfigSourceDir",
+      "owner": "harness-config"
+    },
+    {
+      "name": "settings:setHarnessStarred",
+      "owner": "github"
+    },
+    {
+      "name": "shell:openPath",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "snooze:snooze",
+      "owner": "aux-services"
+    },
+    {
+      "name": "snooze:unsnooze",
+      "owner": "aux-services"
+    },
+    {
+      "name": "stats:getWeekly",
+      "owner": "aux-services"
+    },
+    {
+      "name": "terminal:forgetHistory",
+      "owner": "terminals"
+    },
+    {
+      "name": "terminal:getHistory",
+      "owner": "terminals"
+    },
+    {
+      "name": "terminals:touchLastActive",
+      "owner": "terminals"
+    },
+    {
+      "name": "updater:checkForUpdates",
+      "owner": "tauri-shell",
+      "headlessOwner": "headless-web"
+    },
+    {
+      "name": "updater:devSimulate",
+      "owner": "tauri-shell",
+      "devOnly": true
+    },
+    {
+      "name": "updater:getVersion",
+      "owner": "core-server"
+    },
+    {
+      "name": "updater:quitAndInstall",
+      "owner": "tauri-shell",
+      "headlessOwner": "headless-web"
+    },
+    {
+      "name": "worktree:branchCommits",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:branches",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:changedFiles",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:commitChangedFiles",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:commitDiff",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:commitFileDiffSides",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:continue",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:dir",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:dismissPendingDeletion",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:fileDiff",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:fileDiffSides",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:isDirty",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:list",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:listFiles",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:mainStatus",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:mergeLocal",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:prepareMain",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:previewMerge",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:readFile",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:readFileBinary",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:remove",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:writeFile",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktrees:dismissPending",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktrees:refreshList",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktrees:retryPending",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktrees:runPending",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktrees:runPendingPR",
+      "owner": "worktrees-git"
+    }
+  ],
+  "signals": [
+    {
+      "name": "activity:record",
+      "owner": "core-server"
+    },
+    {
+      "name": "browser:hide",
+      "owner": "browser"
+    },
+    {
+      "name": "browser:setBounds",
+      "owner": "browser"
+    },
+    {
+      "name": "config:setLastEffectiveAppBg",
+      "owner": "core-server"
+    },
+    {
+      "name": "jsonClaude:cancelQueued",
+      "owner": "chat"
+    },
+    {
+      "name": "jsonClaude:send",
+      "owner": "chat"
+    },
+    {
+      "name": "perf:logSlowRender",
+      "owner": "core-server"
+    },
+    {
+      "name": "pty:create",
+      "owner": "terminals"
+    },
+    {
+      "name": "pty:kill",
+      "owner": "terminals"
+    },
+    {
+      "name": "pty:resize",
+      "owner": "terminals"
+    },
+    {
+      "name": "pty:write",
+      "owner": "terminals"
+    },
+    {
+      "name": "shell:openExternal",
+      "owner": "tauri-shell"
+    },
+    {
+      "name": "terminal:join",
+      "owner": "terminals"
+    },
+    {
+      "name": "terminal:leave",
+      "owner": "terminals"
+    },
+    {
+      "name": "terminal:setProgress",
+      "owner": "terminals"
+    },
+    {
+      "name": "terminal:takeControl",
+      "owner": "terminals"
+    },
+    {
+      "name": "worktree:unwatchChangedFiles",
+      "owner": "worktrees-git"
+    },
+    {
+      "name": "worktree:watchChangedFiles",
+      "owner": "worktrees-git"
+    }
+  ]
+}

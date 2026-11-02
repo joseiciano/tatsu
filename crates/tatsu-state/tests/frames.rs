@@ -40,7 +40,10 @@ fn ts_fixture_events() -> Vec<Value> {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or_default();
-            name.ends_with(".json") && name != "root.json" && !name.starts_with("rust-")
+            name.ends_with(".json")
+                && name != "root.json"
+                && name != "channels.json"
+                && !name.starts_with("rust-")
         })
         .collect();
     paths.sort();
