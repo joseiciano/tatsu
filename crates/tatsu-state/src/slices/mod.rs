@@ -1,9 +1,12 @@
 pub mod announcements;
 pub mod browser;
+pub mod costs;
 pub mod harness_config;
 pub mod hooks;
 pub mod json_claude;
 pub mod onboarding;
+pub mod prs;
+pub mod repo_configs;
 pub mod runtimes;
 pub mod scratchpad;
 pub mod snooze;

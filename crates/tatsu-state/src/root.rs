@@ -4,20 +4,28 @@ use specta::Type;
 use crate::slices::{
     announcements::{self, AnnouncementsEvent, AnnouncementsState},
     browser::{self, BrowserEvent, BrowserState},
+    costs::{self, CostsEvent, CostsState},
     hooks::{self, HooksEvent, HooksState},
     onboarding::{self, OnboardingEvent, OnboardingState},
+    prs::{self, PRsEvent, PRsState},
+    repo_configs::{self, RepoConfigsEvent, RepoConfigsState},
     runtimes::{self, RuntimesEvent, RuntimesState},
     scratchpad::{self, ScratchpadEvent, ScratchpadState},
     snooze::{self, SnoozeEvent, SnoozeState},
     updater::{self, UpdaterEvent, UpdaterState},
+    worktrees::{self, WorktreesEvent, WorktreesState},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppState {
+    pub prs: PRsState,
     pub onboarding: OnboardingState,
     pub hooks: HooksState,
+    pub worktrees: WorktreesState,
     pub updater: UpdaterState,
+    pub repo_configs: RepoConfigsState,
+    pub costs: CostsState,
     pub browser: BrowserState,
     pub snooze: SnoozeState,
     pub runtimes: RuntimesState,
@@ -28,9 +36,13 @@ pub struct AppState {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(untagged)]
 pub enum StateEvent {
+    Prs(PRsEvent),
     Onboarding(OnboardingEvent),
     Hooks(HooksEvent),
+    Worktrees(WorktreesEvent),
     Updater(UpdaterEvent),
+    RepoConfigs(RepoConfigsEvent),
+    Costs(CostsEvent),
     Browser(BrowserEvent),
     Snooze(SnoozeEvent),
     Runtimes(RuntimesEvent),
@@ -40,9 +52,13 @@ pub enum StateEvent {
 
 pub fn root_reduce(state: &mut AppState, event: StateEvent, _now: i64) {
     match event {
+        StateEvent::Prs(event) => prs::reduce(&mut state.prs, event),
         StateEvent::Onboarding(event) => onboarding::reduce(&mut state.onboarding, event),
         StateEvent::Hooks(event) => hooks::reduce(&mut state.hooks, event),
+        StateEvent::Worktrees(event) => worktrees::reduce(&mut state.worktrees, event),
         StateEvent::Updater(event) => updater::reduce(&mut state.updater, event),
+        StateEvent::RepoConfigs(event) => repo_configs::reduce(&mut state.repo_configs, event),
+        StateEvent::Costs(event) => costs::reduce(&mut state.costs, event),
         StateEvent::Browser(event) => browser::reduce(&mut state.browser, event),
         StateEvent::Snooze(event) => snooze::reduce(&mut state.snooze, event),
         StateEvent::Runtimes(event) => runtimes::reduce(&mut state.runtimes, event),
@@ -58,9 +74,18 @@ mod tests {
 
     fn non_default_state() -> AppState {
         serde_json::from_value(json!({
+            "prs": { "byPath": { "/a": null }, "mergedByPath": { "/a": true }, "loading": false },
             "onboarding": { "quest": "finale" },
             "hooks": { "consent": "accepted" },
+            "worktrees": {
+                "list": [{ "path": "/a", "branch": "a", "head": "h", "isBare": false, "isMain": true, "createdAt": 1.5, "repoRoot": "/r" }],
+                "repoRoots": ["/r"],
+                "pending": [{ "id": "pending:1", "repoRoot": "/r", "branchName": "b", "status": "creating" }],
+                "pendingDeletions": [{ "path": "/a", "repoRoot": "/r", "branch": "a", "phase": "running-teardown" }]
+            },
             "updater": { "status": { "state": "checking" } },
+            "repoConfigs": { "byRepo": { "/a": { "setupCommand": "make", "hiddenRightPanels": { "pr": true } } } },
+            "costs": { "byTerminal": { "t1": { "sessionId": "s1", "transcriptPath": "/t", "byModel": {}, "breakdown": { "text": 0.5, "thinking": 0, "toolUse": 0, "userPrompt": 0, "assistantEcho": 0, "toolResults": {} }, "currentModel": null, "updatedAt": 1 } } },
             "browser": { "byTab": { "b1": { "url": "x", "title": "X", "canGoBack": true, "canGoForward": false, "loading": false } } },
             "snooze": { "byPath": { "/a": { "path": "/a", "snoozedAt": 1, "wakeAt": 2 } } },
             "runtimes": { "byAgent": { "codex": { "state": "bundled" } } },
@@ -74,6 +99,22 @@ mod tests {
     fn each_event_changes_only_its_own_slice() {
         let cases = [
             (
+                "prs",
+                json!({ "type": "prs/statusChanged", "payload": { "path": "/b", "status": null } }),
+            ),
+            (
+                "prs",
+                json!({ "type": "prs/bulkStatusChanged", "payload": {} }),
+            ),
+            (
+                "prs",
+                json!({ "type": "prs/mergedChanged", "payload": { "/a": false } }),
+            ),
+            (
+                "prs",
+                json!({ "type": "prs/loadingChanged", "payload": true }),
+            ),
+            (
                 "onboarding",
                 json!({ "type": "onboarding/questChanged", "payload": "done" }),
             ),
@@ -82,8 +123,64 @@ mod tests {
                 json!({ "type": "hooks/consentChanged", "payload": "declined" }),
             ),
             (
+                "worktrees",
+                json!({ "type": "worktrees/listChanged", "payload": [] }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/reposChanged", "payload": ["/r", "/s"] }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/pendingAdded", "payload": { "id": "pending:2", "repoRoot": "/r", "branchName": "c", "status": "setup" } }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/pendingUpdated", "payload": { "id": "pending:1", "patch": { "status": "error", "error": "boom" } } }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/pendingRemoved", "payload": "pending:1" }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/pendingDeletionStarted", "payload": { "path": "/b", "repoRoot": "/r", "branch": "b", "phase": "removing-worktree" } }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/pendingDeletionUpdated", "payload": { "path": "/a", "patch": { "teardownLog": "out" } } }),
+            ),
+            (
+                "worktrees",
+                json!({ "type": "worktrees/pendingDeletionRemoved", "payload": "/a" }),
+            ),
+            (
                 "updater",
                 json!({ "type": "updater/statusChanged", "payload": { "state": "not-available" } }),
+            ),
+            (
+                "repoConfigs",
+                json!({ "type": "repoConfigs/loaded", "payload": { "/b": {} } }),
+            ),
+            (
+                "repoConfigs",
+                json!({ "type": "repoConfigs/changed", "payload": { "repoRoot": "/a", "config": { "rightPanelOrder": ["cost", "pr"] } } }),
+            ),
+            (
+                "repoConfigs",
+                json!({ "type": "repoConfigs/removed", "payload": "/a" }),
+            ),
+            (
+                "costs",
+                json!({ "type": "costs/usageUpdated", "payload": { "terminalId": "t2", "usage": { "sessionId": "s2", "transcriptPath": "/t", "byModel": { "m": { "messages": 1, "input": 2, "output": 3, "cacheRead": 4, "cacheWrite": 5, "cost": 0.25 } }, "breakdown": { "text": 0.1, "thinking": 0, "toolUse": 0, "userPrompt": 0, "assistantEcho": 0, "toolResults": { "Bash": 0.15 } }, "currentModel": "m", "updatedAt": 2 } } }),
+            ),
+            (
+                "costs",
+                json!({ "type": "costs/terminalCleared", "payload": { "terminalId": "t1" } }),
+            ),
+            (
+                "costs",
+                json!({ "type": "costs/hydrated", "payload": { "byTerminal": {} } }),
             ),
             (
                 "browser",

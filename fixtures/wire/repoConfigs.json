@@ -1,0 +1,263 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial repoConfigs state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "byRepo": {}
+    }
+  },
+  {
+    "name": "loaded replaces the whole map",
+    "now": 1700000000000,
+    "before": {
+      "byRepo": {
+        "/old": {
+          "setupCommand": "old"
+        }
+      }
+    },
+    "event": {
+      "type": "repoConfigs/loaded",
+      "payload": {
+        "/b": {},
+        "/a": {
+          "setupCommand": "a"
+        }
+      }
+    },
+    "after": {
+      "byRepo": {
+        "/b": {},
+        "/a": {
+          "setupCommand": "a"
+        }
+      }
+    }
+  },
+  {
+    "name": "loaded keeps every optional RepoConfig field",
+    "now": 1700000000000,
+    "before": {
+      "byRepo": {}
+    },
+    "event": {
+      "type": "repoConfigs/loaded",
+      "payload": {
+        "/a": {
+          "version": 1,
+          "setupCommand": "pnpm install",
+          "teardownCommand": "make clean",
+          "mergeStrategy": "fast-forward",
+          "hideMergePanel": true,
+          "hidePrPanel": false,
+          "hiddenRightPanels": {
+            "scratchpad": false,
+            "pr": true,
+            "changedFiles": true,
+            "allFiles": false
+          },
+          "rightPanelOrder": [
+            "cost",
+            "pr",
+            "merge",
+            "todos",
+            "commits",
+            "changedFiles",
+            "allFiles",
+            "scratchpad"
+          ]
+        },
+        "/b": {
+          "mergeStrategy": "merge-commit",
+          "rightPanelOrder": []
+        }
+      }
+    },
+    "after": {
+      "byRepo": {
+        "/a": {
+          "version": 1,
+          "setupCommand": "pnpm install",
+          "teardownCommand": "make clean",
+          "mergeStrategy": "fast-forward",
+          "hideMergePanel": true,
+          "hidePrPanel": false,
+          "hiddenRightPanels": {
+            "scratchpad": false,
+            "pr": true,
+            "changedFiles": true,
+            "allFiles": false
+          },
+          "rightPanelOrder": [
+            "cost",
+            "pr",
+            "merge",
+            "todos",
+            "commits",
+            "changedFiles",
+            "allFiles",
+            "scratchpad"
+          ]
+        },
+        "/b": {
+          "mergeStrategy": "merge-commit",
+          "rightPanelOrder": []
+        }
+      }
+    }
+  },
+  {
+    "name": "changed replaces a single repo in place without disturbing others",
+    "now": 1700000000000,
+    "before": {
+      "byRepo": {
+        "/a": {
+          "setupCommand": "a"
+        },
+        "/b": {
+          "mergeStrategy": "squash"
+        }
+      }
+    },
+    "event": {
+      "type": "repoConfigs/changed",
+      "payload": {
+        "repoRoot": "/a",
+        "config": {
+          "setupCommand": "a-updated",
+          "hideMergePanel": true
+        }
+      }
+    },
+    "after": {
+      "byRepo": {
+        "/a": {
+          "setupCommand": "a-updated",
+          "hideMergePanel": true
+        },
+        "/b": {
+          "mergeStrategy": "squash"
+        }
+      }
+    }
+  },
+  {
+    "name": "changed adds a new repo at the end",
+    "now": 1700000000000,
+    "before": {
+      "byRepo": {
+        "/a": {}
+      }
+    },
+    "event": {
+      "type": "repoConfigs/changed",
+      "payload": {
+        "repoRoot": "/c",
+        "config": {
+          "version": 1,
+          "setupCommand": "pnpm install",
+          "teardownCommand": "make clean",
+          "mergeStrategy": "fast-forward",
+          "hideMergePanel": true,
+          "hidePrPanel": false,
+          "hiddenRightPanels": {
+            "scratchpad": false,
+            "pr": true,
+            "changedFiles": true,
+            "allFiles": false
+          },
+          "rightPanelOrder": [
+            "cost",
+            "pr",
+            "merge",
+            "todos",
+            "commits",
+            "changedFiles",
+            "allFiles",
+            "scratchpad"
+          ]
+        }
+      }
+    },
+    "after": {
+      "byRepo": {
+        "/a": {},
+        "/c": {
+          "version": 1,
+          "setupCommand": "pnpm install",
+          "teardownCommand": "make clean",
+          "mergeStrategy": "fast-forward",
+          "hideMergePanel": true,
+          "hidePrPanel": false,
+          "hiddenRightPanels": {
+            "scratchpad": false,
+            "pr": true,
+            "changedFiles": true,
+            "allFiles": false
+          },
+          "rightPanelOrder": [
+            "cost",
+            "pr",
+            "merge",
+            "todos",
+            "commits",
+            "changedFiles",
+            "allFiles",
+            "scratchpad"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "removed with a present key drops the matching entry",
+    "now": 1700000000000,
+    "before": {
+      "byRepo": {
+        "/a": {},
+        "/b": {
+          "setupCommand": "b"
+        },
+        "/c": {}
+      }
+    },
+    "event": {
+      "type": "repoConfigs/removed",
+      "payload": "/a"
+    },
+    "after": {
+      "byRepo": {
+        "/b": {
+          "setupCommand": "b"
+        },
+        "/c": {}
+      }
+    }
+  },
+  {
+    "name": "removed with an absent key is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "byRepo": {
+        "/a": {
+          "setupCommand": "a"
+        }
+      }
+    },
+    "event": {
+      "type": "repoConfigs/removed",
+      "payload": "/missing"
+    },
+    "after": {
+      "byRepo": {
+        "/a": {
+          "setupCommand": "a"
+        }
+      }
+    }
+  }
+]

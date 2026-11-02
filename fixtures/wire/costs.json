@@ -1,0 +1,723 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial costs state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "byTerminal": {}
+    }
+  },
+  {
+    "name": "usageUpdated sets a single terminal with fractional costs",
+    "now": 1700000000000,
+    "before": {
+      "byTerminal": {}
+    },
+    "event": {
+      "type": "costs/usageUpdated",
+      "payload": {
+        "terminalId": "t1",
+        "usage": {
+          "sessionId": "sess-1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    },
+    "after": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "sess-1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "usageUpdated keeps long fractions, tiny fractions, whole numbers and a null currentModel",
+    "now": 1700000000000,
+    "before": {
+      "byTerminal": {}
+    },
+    "event": {
+      "type": "costs/usageUpdated",
+      "payload": {
+        "terminalId": "t1",
+        "usage": {
+          "sessionId": "sess-long",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 2,
+              "input": 5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "cost": 0.30000000000000004
+            },
+            "claude-sonnet-4-6": {
+              "messages": 4,
+              "input": 20,
+              "output": 30,
+              "cacheRead": 7,
+              "cacheWrite": 9,
+              "cost": 0
+            }
+          },
+          "breakdown": {
+            "text": 0.1234567890123456,
+            "thinking": 1.5e-7,
+            "toolUse": 2,
+            "userPrompt": 0.30000000000000004,
+            "assistantEcho": 12345.678901,
+            "toolResults": {
+              "Bash": 0.30000000000000004,
+              "Read": 1,
+              "Grep": 1.5e-7
+            }
+          },
+          "currentModel": null,
+          "updatedAt": 1717000000000
+        }
+      }
+    },
+    "after": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "sess-long",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 2,
+              "input": 5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "cost": 0.30000000000000004
+            },
+            "claude-sonnet-4-6": {
+              "messages": 4,
+              "input": 20,
+              "output": 30,
+              "cacheRead": 7,
+              "cacheWrite": 9,
+              "cost": 0
+            }
+          },
+          "breakdown": {
+            "text": 0.1234567890123456,
+            "thinking": 1.5e-7,
+            "toolUse": 2,
+            "userPrompt": 0.30000000000000004,
+            "assistantEcho": 12345.678901,
+            "toolResults": {
+              "Bash": 0.30000000000000004,
+              "Read": 1,
+              "Grep": 1.5e-7
+            }
+          },
+          "currentModel": null,
+          "updatedAt": 1717000000000
+        }
+      }
+    }
+  },
+  {
+    "name": "usageUpdated replaces an existing terminal in place without disturbing others",
+    "now": 1700000000000,
+    "before": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "s1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        },
+        "t2": {
+          "sessionId": "s2",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "costs/usageUpdated",
+      "payload": {
+        "terminalId": "t1",
+        "usage": {
+          "sessionId": "s1-updated",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    },
+    "after": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "s1-updated",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        },
+        "t2": {
+          "sessionId": "s2",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "terminalCleared removes a terminal",
+    "now": 1700000000000,
+    "before": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "sess-1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        },
+        "t2": {
+          "sessionId": "s2",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        },
+        "t3": {
+          "sessionId": "s3",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "costs/terminalCleared",
+      "payload": {
+        "terminalId": "t1"
+      }
+    },
+    "after": {
+      "byTerminal": {
+        "t2": {
+          "sessionId": "s2",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        },
+        "t3": {
+          "sessionId": "s3",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "terminalCleared on an unknown terminal is a no-op",
+    "now": 1700000000000,
+    "before": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "sess-1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "costs/terminalCleared",
+      "payload": {
+        "terminalId": "nope"
+      }
+    },
+    "after": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "sess-1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "hydrated replaces the whole slice",
+    "now": 1700000000000,
+    "before": {
+      "byTerminal": {
+        "t1": {
+          "sessionId": "sess-1",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "costs/hydrated",
+      "payload": {
+        "byTerminal": {
+          "t9": {
+            "sessionId": "s9",
+            "transcriptPath": "/tmp/sess-1.jsonl",
+            "byModel": {
+              "claude-opus-4-6": {
+                "messages": 3,
+                "input": 10,
+                "output": 20,
+                "cacheRead": 100,
+                "cacheWrite": 50,
+                "cost": 1.23
+              }
+            },
+            "breakdown": {
+              "text": 0.1,
+              "thinking": 0.05,
+              "toolUse": 0.2,
+              "userPrompt": 0.1,
+              "assistantEcho": 0.3,
+              "toolResults": {
+                "Bash": 0.4,
+                "Read": 0.08
+              }
+            },
+            "currentModel": "claude-opus-4-6",
+            "updatedAt": 1000
+          },
+          "t3": {
+            "sessionId": "sess-long",
+            "transcriptPath": "/tmp/sess-1.jsonl",
+            "byModel": {
+              "claude-opus-4-6": {
+                "messages": 2,
+                "input": 5,
+                "output": 10,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "cost": 0.30000000000000004
+              },
+              "claude-sonnet-4-6": {
+                "messages": 4,
+                "input": 20,
+                "output": 30,
+                "cacheRead": 7,
+                "cacheWrite": 9,
+                "cost": 0
+              }
+            },
+            "breakdown": {
+              "text": 0.1234567890123456,
+              "thinking": 1.5e-7,
+              "toolUse": 2,
+              "userPrompt": 0.30000000000000004,
+              "assistantEcho": 12345.678901,
+              "toolResults": {
+                "Bash": 0.30000000000000004,
+                "Read": 1,
+                "Grep": 1.5e-7
+              }
+            },
+            "currentModel": null,
+            "updatedAt": 1717000000000
+          }
+        }
+      }
+    },
+    "after": {
+      "byTerminal": {
+        "t9": {
+          "sessionId": "s9",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 3,
+              "input": 10,
+              "output": 20,
+              "cacheRead": 100,
+              "cacheWrite": 50,
+              "cost": 1.23
+            }
+          },
+          "breakdown": {
+            "text": 0.1,
+            "thinking": 0.05,
+            "toolUse": 0.2,
+            "userPrompt": 0.1,
+            "assistantEcho": 0.3,
+            "toolResults": {
+              "Bash": 0.4,
+              "Read": 0.08
+            }
+          },
+          "currentModel": "claude-opus-4-6",
+          "updatedAt": 1000
+        },
+        "t3": {
+          "sessionId": "sess-long",
+          "transcriptPath": "/tmp/sess-1.jsonl",
+          "byModel": {
+            "claude-opus-4-6": {
+              "messages": 2,
+              "input": 5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "cost": 0.30000000000000004
+            },
+            "claude-sonnet-4-6": {
+              "messages": 4,
+              "input": 20,
+              "output": 30,
+              "cacheRead": 7,
+              "cacheWrite": 9,
+              "cost": 0
+            }
+          },
+          "breakdown": {
+            "text": 0.1234567890123456,
+            "thinking": 1.5e-7,
+            "toolUse": 2,
+            "userPrompt": 0.30000000000000004,
+            "assistantEcho": 12345.678901,
+            "toolResults": {
+              "Bash": 0.30000000000000004,
+              "Read": 1,
+              "Grep": 1.5e-7
+            }
+          },
+          "currentModel": null,
+          "updatedAt": 1717000000000
+        }
+      }
+    }
+  }
+]

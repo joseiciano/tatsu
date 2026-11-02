@@ -3,6 +3,20 @@ use specta::Type;
 
 use crate::wire::Patch;
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    pub path: String,
+    pub branch: String,
+    pub head: String,
+    pub is_bare: bool,
+    pub is_main: bool,
+    #[serde(serialize_with = "crate::wire::number::serialize")]
+    #[specta(type = f64)]
+    pub created_at: f64,
+    pub repo_root: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 #[serde(rename_all = "kebab-case")]
 pub enum PendingStatus {
@@ -129,6 +143,80 @@ impl PendingDeletionPatch {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorktreesState {
+    pub list: Vec<Worktree>,
+    pub repo_roots: Vec<String>,
+    pub pending: Vec<PendingWorktree>,
+    pub pending_deletions: Vec<PendingDeletion>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingWorktreeUpdate {
+    pub id: String,
+    pub patch: PendingWorktreePatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingDeletionUpdate {
+    pub path: String,
+    pub patch: PendingDeletionPatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", content = "payload")]
+pub enum WorktreesEvent {
+    #[serde(rename = "worktrees/listChanged")]
+    ListChanged(Vec<Worktree>),
+    #[serde(rename = "worktrees/reposChanged")]
+    ReposChanged(Vec<String>),
+    #[serde(rename = "worktrees/pendingAdded")]
+    PendingAdded(PendingWorktree),
+    #[serde(rename = "worktrees/pendingUpdated")]
+    PendingUpdated(PendingWorktreeUpdate),
+    #[serde(rename = "worktrees/pendingRemoved")]
+    PendingRemoved(String),
+    #[serde(rename = "worktrees/pendingDeletionStarted")]
+    PendingDeletionStarted(PendingDeletion),
+    #[serde(rename = "worktrees/pendingDeletionUpdated")]
+    PendingDeletionUpdated(PendingDeletionUpdate),
+    #[serde(rename = "worktrees/pendingDeletionRemoved")]
+    PendingDeletionRemoved(String),
+}
+
+pub fn reduce(state: &mut WorktreesState, event: WorktreesEvent) {
+    match event {
+        WorktreesEvent::ListChanged(list) => state.list = list,
+        WorktreesEvent::ReposChanged(repo_roots) => state.repo_roots = repo_roots,
+        WorktreesEvent::PendingAdded(pending) => state.pending.push(pending),
+        WorktreesEvent::PendingUpdated(update) => {
+            if let Some(pending) = state.pending.iter_mut().find(|p| p.id == update.id) {
+                update.patch.apply(pending);
+            }
+        }
+        WorktreesEvent::PendingRemoved(id) => state.pending.retain(|p| p.id != id),
+        WorktreesEvent::PendingDeletionStarted(deletion) => {
+            state.pending_deletions.retain(|d| d.path != deletion.path);
+            state.pending_deletions.push(deletion);
+        }
+        WorktreesEvent::PendingDeletionUpdated(update) => {
+            if let Some(deletion) = state
+                .pending_deletions
+                .iter_mut()
+                .find(|d| d.path == update.path)
+            {
+                update.patch.apply(deletion);
+            }
+        }
+        WorktreesEvent::PendingDeletionRemoved(path) => {
+            state.pending_deletions.retain(|d| d.path != path)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,6 +283,55 @@ mod tests {
         assert_eq!(pending.error.as_deref(), Some("boom"));
         assert_eq!(pending.setup_log.as_deref(), Some("more"));
         assert_eq!(pending.status, PendingStatus::Error);
+    }
+
+    #[test]
+    fn pending_updated_with_a_cleared_field_removes_it_from_the_entry_in_state() {
+        let mut state = WorktreesState {
+            pending: vec![failed_pending()],
+            ..Default::default()
+        };
+        let patch = PendingWorktreePatch {
+            status: Patch::Set(PendingStatus::Setup),
+            error: Patch::Cleared,
+            ..Default::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&patch).unwrap(),
+            json!({ "status": "setup" })
+        );
+
+        reduce(
+            &mut state,
+            WorktreesEvent::PendingUpdated(PendingWorktreeUpdate {
+                id: "pending:1".to_string(),
+                patch,
+            }),
+        );
+
+        let entry = &state.pending[0];
+        assert_eq!(entry.status, PendingStatus::Setup);
+        assert_eq!(entry.error, None);
+        assert_eq!(entry.setup_log.as_deref(), Some("log"));
+        assert!(serde_json::to_value(entry).unwrap().get("error").is_none());
+    }
+
+    #[test]
+    fn pending_updated_patches_only_the_first_matching_entry() {
+        let mut state = WorktreesState {
+            pending: vec![failed_pending(), failed_pending()],
+            ..Default::default()
+        };
+        reduce(
+            &mut state,
+            serde_json::from_value(json!({
+                "type": "worktrees/pendingUpdated",
+                "payload": { "id": "pending:1", "patch": { "status": "setup" } }
+            }))
+            .unwrap(),
+        );
+        assert_eq!(state.pending[0].status, PendingStatus::Setup);
+        assert_eq!(state.pending[1].status, PendingStatus::Error);
     }
 
     #[test]

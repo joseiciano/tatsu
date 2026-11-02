@@ -22,16 +22,33 @@ import type {
 } from './harness-config'
 import type { Announcement, AnnouncementsEvent, AnnouncementsState } from './announcements'
 import type { BrowserEvent, BrowserState, BrowserTabState } from './browser'
+import type { ContentBreakdown, CostsEvent, CostsState, ModelTally, SessionUsage } from './costs'
 import type { HooksConsent, HooksEvent, HooksState } from './hooks'
 import type { ChatRuntimeId, JsonClaudePermissionMode } from './json-claude'
 import type { OnboardingEvent, OnboardingState, QuestStep } from './onboarding'
+import type { CheckStatus, PRReview, PRsEvent, PRsState, PRStatus } from './prs'
+import type {
+  HiddenRightPanels,
+  RepoConfig,
+  RepoConfigsEvent,
+  RepoConfigsState,
+  RightPanelKey
+} from './repo-configs'
 import type { DownloadableRuntime, RuntimesEvent, RuntimesState, RuntimeStatus } from './runtimes'
 import type { ScratchpadEvent, ScratchpadState } from './scratchpad'
 import type { SettingsState } from './settings'
 import { initialSnooze, snoozeReducer, type SnoozeEvent, type SnoozeState } from './snooze'
 import type { AgentKind, PaneLeaf, PaneNode, PaneSplit, TerminalTab } from './terminals'
 import type { UpdaterEvent, UpdaterState, UpdaterStatus } from './updater'
-import type { PendingDeletion, PendingWorktree } from './worktrees'
+import type {
+  PendingDeletion,
+  PendingDeletionPhase,
+  PendingStatus,
+  PendingWorktree,
+  Worktree,
+  WorktreesEvent,
+  WorktreesState
+} from './worktrees'
 
 const snoozeState: WireEqual<Generated.SnoozeState, SnoozeState> = true
 const snoozeEvent: WireEqual<Generated.SnoozeEvent, SnoozeEvent> = true
@@ -54,6 +71,33 @@ const announcementsState: WireEqual<Generated.AnnouncementsState, AnnouncementsS
 const announcementsEvent: WireEqual<Generated.AnnouncementsEvent, AnnouncementsEvent> = true
 const scratchpadState: WireEqual<Generated.ScratchpadState, ScratchpadState> = true
 const scratchpadEvent: WireEqual<Generated.ScratchpadEvent, ScratchpadEvent> = true
+const checkStatus: WireEqual<Generated.CheckStatus, CheckStatus> = true
+const checkState: WireEqual<Generated.CheckState, CheckStatus['state']> = true
+const prReview: WireEqual<Generated.PRReview, PRReview> = true
+const prReviewState: WireEqual<Generated.PRReviewState, PRReview['state']> = true
+const prState: WireEqual<Generated.PRState, PRStatus['state']> = true
+const checksOverall: WireEqual<Generated.ChecksOverall, PRStatus['checksOverall']> = true
+const reviewDecision: WireEqual<Generated.ReviewDecision, PRStatus['reviewDecision']> = true
+const prAuthor: WireEqual<Generated.GithubUser, NonNullable<PRStatus['author']>> = true
+const prAssignee: WireEqual<Generated.GithubUser, PRStatus['assignees'][number]> = true
+const prMilestone: WireEqual<Generated.PRMilestone, NonNullable<PRStatus['milestone']>> = true
+const prMilestoneField: WireEqual<Generated.PRStatus['milestone'], PRStatus['milestone']> = true
+const prLinkedIssue: WireEqual<Generated.PRLinkedIssue, PRStatus['linkedIssues'][number]> = true
+const prLabel: WireEqual<Generated.PRLabel, PRStatus['labels'][number]> = true
+const prStatus: WireEqual<Generated.PRStatus, PRStatus> = true
+const prsState: WireEqual<Generated.PRsState, PRsState> = true
+const prsEvent: WireEqual<Generated.PRsEvent, PRsEvent> = true
+const modelTally: WireEqual<Generated.ModelTally, ModelTally> = true
+const contentBreakdown: WireEqual<Generated.ContentBreakdown, ContentBreakdown> = true
+const sessionUsage: WireEqual<Generated.SessionUsage, SessionUsage> = true
+const costsState: WireEqual<Generated.CostsState, CostsState> = true
+const costsEvent: WireEqual<Generated.CostsEvent, CostsEvent> = true
+const rightPanelKey: WireEqual<Generated.RightPanelKey, RightPanelKey> = true
+const mergeStrategy: WireEqual<Generated.MergeStrategy, NonNullable<RepoConfig['mergeStrategy']>> = true
+const hiddenRightPanels: WireEqual<NonNullable<Generated.RepoConfig['hiddenRightPanels']>, HiddenRightPanels> = true
+const repoConfig: WireEqual<Generated.RepoConfig, RepoConfig> = true
+const repoConfigsState: WireEqual<Generated.RepoConfigsState, RepoConfigsState> = true
+const repoConfigsEvent: WireEqual<Generated.RepoConfigsEvent, RepoConfigsEvent> = true
 const runtimesEvent: WireEqual<Generated.RuntimesEvent, RuntimesEvent> = true
 
 const agentKind: WireEqual<Generated.AgentKind, AgentKind> = true
@@ -101,6 +145,11 @@ const pendingWorktree: WireEqual<Generated.PendingWorktree, PendingWorktree> = t
 const pendingWorktreePatch: WireEqual<Generated.PendingWorktreePatch, Partial<PendingWorktree>> = true
 const pendingDeletion: WireEqual<Generated.PendingDeletion, PendingDeletion> = true
 const pendingDeletionPatch: WireEqual<Generated.PendingDeletionPatch, Partial<PendingDeletion>> = true
+const pendingStatus: WireEqual<Generated.PendingStatus, PendingStatus> = true
+const pendingDeletionPhase: WireEqual<Generated.PendingDeletionPhase, PendingDeletionPhase> = true
+const worktree: WireEqual<Generated.Worktree, Worktree> = true
+const worktreesState: WireEqual<Generated.WorktreesState, WorktreesState> = true
+const worktreesEvent: WireEqual<Generated.WorktreesEvent, WorktreesEvent> = true
 
 describe('generated wire types', () => {
   it('the TS reducer applies events typed with the generated union', () => {

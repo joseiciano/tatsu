@@ -55,9 +55,51 @@ export type BrowserTabStatePatch = {
 
 export type ChatRuntimeId = "claude" | "opencode" | "codex";
 
+export type CheckState = "success" | "failure" | "pending" | "neutral" | "skipped" | "error";
+
+export type CheckStatus = {
+	name: string,
+	state: CheckState,
+	description: string,
+	summary?: string,
+	detailsUrl?: string,
+	startedAt?: string,
+};
+
+export type ChecksOverall = "success" | "failure" | "pending" | "none";
+
 export type ClientFrame = { t: "snapreq"; id: string } | { t: "req"; id: string; name: string; args: unknown[] } | { t: "send"; name: string; args: unknown[] };
 
+export type ContentBreakdown = {
+	text: number,
+	thinking: number,
+	toolUse: number,
+	userPrompt: number,
+	assistantEcho: number,
+	toolResults: { [key in string]: number },
+};
+
+export type CostsEvent = { type: "costs/usageUpdated"; payload: CostsUsageUpdate } | { type: "costs/terminalCleared"; payload: CostsTerminalRef } | { type: "costs/hydrated"; payload: CostsState };
+
+export type CostsState = {
+	byTerminal: { [key in string]: SessionUsage },
+};
+
+export type CostsTerminalRef = {
+	terminalId: string,
+};
+
+export type CostsUsageUpdate = {
+	terminalId: string,
+	usage: SessionUsage,
+};
+
 export type DownloadableRuntime = "opencode" | "codex";
+
+export type GithubUser = {
+	login: string,
+	avatarUrl: string,
+};
 
 export type HarnessConfigChangedRef = {
 	disk: HarnessConfigFileRef,
@@ -155,10 +197,95 @@ export type JsonClaudePermissionMode = "default" | "acceptEdits" | "plan";
 
 export type ManagedHarnessKind = "claude" | "codex" | "opencode";
 
+export type MergeStrategy = "squash" | "merge-commit" | "fast-forward";
+
+export type ModelTally = {
+	messages: number,
+	input: number,
+	output: number,
+	cacheRead: number,
+	cacheWrite: number,
+	cost: number,
+};
+
 export type OnboardingEvent = { type: "onboarding/questChanged"; payload: QuestStep };
 
 export type OnboardingState = {
 	quest: QuestStep,
+};
+
+export type OpenClosed = "open" | "closed";
+
+export type PRLabel = {
+	name: string,
+	color: string,
+	description?: string,
+};
+
+export type PRLinkedIssue = {
+	number: number,
+	title: string,
+	state: OpenClosed,
+	url: string,
+};
+
+export type PRMilestone = {
+	title: string,
+	url: string,
+	state: OpenClosed,
+};
+
+export type PRReview = {
+	user: string,
+	avatarUrl: string,
+	state: PRReviewState,
+	body: string,
+	submittedAt: string,
+	htmlUrl: string,
+};
+
+export type PRReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
+
+export type PRState = "open" | "draft" | "merged" | "closed";
+
+export type PRStatus = {
+	number: number,
+	title: string,
+	state: PRState,
+	url: string,
+	branch: string,
+	author: GithubUser | null,
+	checks: CheckStatus[],
+	checksOverall: ChecksOverall,
+	hasConflict: boolean | null,
+	reviews: PRReview[],
+	reviewDecision: ReviewDecision,
+	additions?: number,
+	deletions?: number,
+	baseBranch: string,
+	isDefaultBase: boolean,
+	milestone?: PRMilestone | null,
+	assignees: GithubUser[],
+	queuePosition?: number,
+	queueEstimatedSeconds?: number,
+	behindBy?: number,
+	linkedIssues: PRLinkedIssue[],
+	labels: PRLabel[],
+	firstReleaseTag?: string,
+	hasMilestones?: boolean,
+};
+
+export type PRStatusChange = {
+	path: string,
+	status: PRStatus | null,
+};
+
+export type PRsEvent = { type: "prs/statusChanged"; payload: PRStatusChange } | { type: "prs/bulkStatusChanged"; payload: { [key in string]: PRStatus | null } } | { type: "prs/mergedChanged"; payload: { [key in string]: boolean } } | { type: "prs/loadingChanged"; payload: boolean };
+
+export type PRsState = {
+	byPath: { [key in string]: PRStatus | null },
+	mergedByPath: { [key in string]: boolean },
+	loading: boolean,
 };
 
 export type PaneLeaf = {
@@ -202,6 +329,11 @@ export type PendingDeletionPatch = {
 
 export type PendingDeletionPhase = "running-teardown" | "removing-worktree" | "failed";
 
+export type PendingDeletionUpdate = {
+	path: string,
+	patch: PendingDeletionPatch,
+};
+
 export type PendingStatus = "creating" | "setup" | "setup-failed" | "error";
 
 export type PendingWorktree = {
@@ -230,9 +362,40 @@ export type PendingWorktreePatch = {
 	teleportSessionId?: string,
 };
 
+export type PendingWorktreeUpdate = {
+	id: string,
+	patch: PendingWorktreePatch,
+};
+
 export type QuestStep = "hidden" | "spawn-second" | "switch-between" | "finale" | "done";
 
+export type RepoConfig = {
+	version?: number,
+	setupCommand?: string,
+	teardownCommand?: string,
+	mergeStrategy?: MergeStrategy,
+	hideMergePanel?: boolean,
+	hidePrPanel?: boolean,
+	hiddenRightPanels?: Partial<{ [key in RightPanelKey]: boolean }>,
+	rightPanelOrder?: RightPanelKey[],
+};
+
+export type RepoConfigChange = {
+	repoRoot: string,
+	config: RepoConfig,
+};
+
+export type RepoConfigsEvent = { type: "repoConfigs/loaded"; payload: { [key in string]: RepoConfig } } | { type: "repoConfigs/changed"; payload: RepoConfigChange } | { type: "repoConfigs/removed"; payload: string };
+
+export type RepoConfigsState = {
+	byRepo: { [key in string]: RepoConfig },
+};
+
 export type RequestResult = ({ id: string; ok: true; value: unknown }) & { error?: never } | ({ id: string; ok: false; error: string }) & { value?: never };
+
+export type ReviewDecision = "approved" | "changes_requested" | "review_required" | "none";
+
+export type RightPanelKey = "merge" | "pr" | "todos" | "commits" | "changedFiles" | "allFiles" | "cost" | "scratchpad";
 
 export type RuntimeStatus = { state: "bundled" } | { state: "ready"; version: string } | { state: "missing"; version: string; sizeBytes: number | null } | { state: "downloading"; version: string; receivedBytes: number; totalBytes: number | null } | { state: "error"; version: string; error: string };
 
@@ -264,6 +427,15 @@ export type ServerFrame = ({ t: "state"; event: StateEvent; seq: number }) & { a
 	t: "res",
 } & RequestResult | ({ t: "sig"; name: string; args: unknown[] }) & { event?: never; seq?: never };
 
+export type SessionUsage = {
+	sessionId: string,
+	transcriptPath: string,
+	byModel: { [key in string]: ModelTally },
+	breakdown: ContentBreakdown,
+	currentModel: string | null,
+	updatedAt: number,
+};
+
 export type SnapshotResult = ({ id: string; ok: true; snapshot: unknown }) & { error?: never } | ({ id: string; ok: false; error: string }) & { snapshot?: never };
 
 export type SnoozeEntry = {
@@ -280,7 +452,7 @@ export type SnoozeState = {
 
 export type SplitDirection = "horizontal" | "vertical";
 
-export type StateEvent = OnboardingEvent | HooksEvent | UpdaterEvent | BrowserEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
+export type StateEvent = PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
 
 export type TerminalTab = {
 	id: string,
@@ -314,3 +486,22 @@ export type UpdaterState = {
 };
 
 export type UpdaterStatus = { state: "checking" } | { state: "available"; version: string; releaseUrl?: string; manualInstallRequired?: boolean } | { state: "not-available" } | { state: "downloading"; percent: number; version: string } | { state: "downloaded"; version: string } | { state: "error"; error: string };
+
+export type Worktree = {
+	path: string,
+	branch: string,
+	head: string,
+	isBare: boolean,
+	isMain: boolean,
+	createdAt: number,
+	repoRoot: string,
+};
+
+export type WorktreesEvent = { type: "worktrees/listChanged"; payload: Worktree[] } | { type: "worktrees/reposChanged"; payload: string[] } | { type: "worktrees/pendingAdded"; payload: PendingWorktree } | { type: "worktrees/pendingUpdated"; payload: PendingWorktreeUpdate } | { type: "worktrees/pendingRemoved"; payload: string } | { type: "worktrees/pendingDeletionStarted"; payload: PendingDeletion } | { type: "worktrees/pendingDeletionUpdated"; payload: PendingDeletionUpdate } | { type: "worktrees/pendingDeletionRemoved"; payload: string };
+
+export type WorktreesState = {
+	list: Worktree[],
+	repoRoots: string[],
+	pending: PendingWorktree[],
+	pendingDeletions: PendingDeletion[],
+};

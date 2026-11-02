@@ -1,0 +1,799 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial prs state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "byPath": {},
+      "mergedByPath": {},
+      "loading": false
+    }
+  },
+  {
+    "name": "statusChanged sets a single path with every optional PR field present",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {},
+      "mergedByPath": {},
+      "loading": false
+    },
+    "event": {
+      "type": "prs/statusChanged",
+      "payload": {
+        "path": "/a",
+        "status": {
+          "number": 42,
+          "title": "Add wire contract",
+          "state": "draft",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": {
+            "login": "octo",
+            "avatarUrl": "https://a/octo"
+          },
+          "checks": [
+            {
+              "name": "ci",
+              "state": "failure",
+              "description": "failed",
+              "summary": "## boom\nline 2",
+              "detailsUrl": "https://ci/1",
+              "startedAt": "2026-01-01T00:00:00Z"
+            },
+            {
+              "name": "lint",
+              "state": "success",
+              "description": "ok"
+            }
+          ],
+          "checksOverall": "failure",
+          "hasConflict": false,
+          "reviews": [
+            {
+              "user": "rev",
+              "avatarUrl": "https://a/rev",
+              "state": "CHANGES_REQUESTED",
+              "body": "fix",
+              "submittedAt": "2026-01-02T00:00:00Z",
+              "htmlUrl": "https://r/1"
+            }
+          ],
+          "reviewDecision": "changes_requested",
+          "baseBranch": "release",
+          "isDefaultBase": false,
+          "assignees": [
+            {
+              "login": "octo",
+              "avatarUrl": "https://a/octo"
+            }
+          ],
+          "linkedIssues": [
+            {
+              "number": 7,
+              "title": "bug",
+              "state": "open",
+              "url": "https://i/7"
+            }
+          ],
+          "labels": [
+            {
+              "name": "bug",
+              "color": "d73a4a",
+              "description": "Something is wrong"
+            },
+            {
+              "name": "wip",
+              "color": "ededed"
+            }
+          ],
+          "additions": 120,
+          "deletions": 7,
+          "milestone": {
+            "title": "v1",
+            "url": "https://m/1",
+            "state": "closed"
+          },
+          "queuePosition": 2,
+          "queueEstimatedSeconds": 600,
+          "behindBy": 3,
+          "firstReleaseTag": "v1.2.0",
+          "hasMilestones": true
+        }
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "number": 42,
+          "title": "Add wire contract",
+          "state": "draft",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": {
+            "login": "octo",
+            "avatarUrl": "https://a/octo"
+          },
+          "checks": [
+            {
+              "name": "ci",
+              "state": "failure",
+              "description": "failed",
+              "summary": "## boom\nline 2",
+              "detailsUrl": "https://ci/1",
+              "startedAt": "2026-01-01T00:00:00Z"
+            },
+            {
+              "name": "lint",
+              "state": "success",
+              "description": "ok"
+            }
+          ],
+          "checksOverall": "failure",
+          "hasConflict": false,
+          "reviews": [
+            {
+              "user": "rev",
+              "avatarUrl": "https://a/rev",
+              "state": "CHANGES_REQUESTED",
+              "body": "fix",
+              "submittedAt": "2026-01-02T00:00:00Z",
+              "htmlUrl": "https://r/1"
+            }
+          ],
+          "reviewDecision": "changes_requested",
+          "baseBranch": "release",
+          "isDefaultBase": false,
+          "assignees": [
+            {
+              "login": "octo",
+              "avatarUrl": "https://a/octo"
+            }
+          ],
+          "linkedIssues": [
+            {
+              "number": 7,
+              "title": "bug",
+              "state": "open",
+              "url": "https://i/7"
+            }
+          ],
+          "labels": [
+            {
+              "name": "bug",
+              "color": "d73a4a",
+              "description": "Something is wrong"
+            },
+            {
+              "name": "wip",
+              "color": "ededed"
+            }
+          ],
+          "additions": 120,
+          "deletions": 7,
+          "milestone": {
+            "title": "v1",
+            "url": "https://m/1",
+            "state": "closed"
+          },
+          "queuePosition": 2,
+          "queueEstimatedSeconds": 600,
+          "behindBy": 3,
+          "firstReleaseTag": "v1.2.0",
+          "hasMilestones": true
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    }
+  },
+  {
+    "name": "statusChanged replaces an existing path in place without disturbing other paths",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        },
+        "/b": {
+          "number": 2,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    },
+    "event": {
+      "type": "prs/statusChanged",
+      "payload": {
+        "path": "/a",
+        "status": {
+          "number": 99,
+          "title": "stub",
+          "state": "merged",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "number": 99,
+          "title": "stub",
+          "state": "merged",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        },
+        "/b": {
+          "number": 2,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    }
+  },
+  {
+    "name": "statusChanged accepts null (no PR for this branch)",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {},
+      "mergedByPath": {},
+      "loading": false
+    },
+    "event": {
+      "type": "prs/statusChanged",
+      "payload": {
+        "path": "/a",
+        "status": null
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": null
+      },
+      "mergedByPath": {},
+      "loading": false
+    }
+  },
+  {
+    "name": "statusChanged keeps a null milestone apart from an absent one",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    },
+    "event": {
+      "type": "prs/statusChanged",
+      "payload": {
+        "path": "/b",
+        "status": {
+          "number": 5,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": true,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": [],
+          "milestone": null
+        }
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        },
+        "/b": {
+          "number": 5,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": true,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": [],
+          "milestone": null
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    }
+  },
+  {
+    "name": "bulkStatusChanged replaces the whole map",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        },
+        "/b": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        },
+        "/c": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    },
+    "event": {
+      "type": "prs/bulkStatusChanged",
+      "payload": {
+        "/c": {
+          "number": 42,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": [],
+          "milestone": null
+        },
+        "/a": null,
+        "/d": {
+          "number": 42,
+          "title": "Add wire contract",
+          "state": "draft",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": {
+            "login": "octo",
+            "avatarUrl": "https://a/octo"
+          },
+          "checks": [
+            {
+              "name": "ci",
+              "state": "failure",
+              "description": "failed",
+              "summary": "## boom\nline 2",
+              "detailsUrl": "https://ci/1",
+              "startedAt": "2026-01-01T00:00:00Z"
+            },
+            {
+              "name": "lint",
+              "state": "success",
+              "description": "ok"
+            }
+          ],
+          "checksOverall": "failure",
+          "hasConflict": false,
+          "reviews": [
+            {
+              "user": "rev",
+              "avatarUrl": "https://a/rev",
+              "state": "CHANGES_REQUESTED",
+              "body": "fix",
+              "submittedAt": "2026-01-02T00:00:00Z",
+              "htmlUrl": "https://r/1"
+            }
+          ],
+          "reviewDecision": "changes_requested",
+          "baseBranch": "release",
+          "isDefaultBase": false,
+          "assignees": [
+            {
+              "login": "octo",
+              "avatarUrl": "https://a/octo"
+            }
+          ],
+          "linkedIssues": [
+            {
+              "number": 7,
+              "title": "bug",
+              "state": "open",
+              "url": "https://i/7"
+            }
+          ],
+          "labels": [
+            {
+              "name": "bug",
+              "color": "d73a4a",
+              "description": "Something is wrong"
+            },
+            {
+              "name": "wip",
+              "color": "ededed"
+            }
+          ],
+          "additions": 120,
+          "deletions": 7,
+          "milestone": {
+            "title": "v1",
+            "url": "https://m/1",
+            "state": "closed"
+          },
+          "queuePosition": 2,
+          "queueEstimatedSeconds": 600,
+          "behindBy": 3,
+          "firstReleaseTag": "v1.2.0",
+          "hasMilestones": true
+        }
+      }
+    },
+    "after": {
+      "byPath": {
+        "/c": {
+          "number": 42,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": [],
+          "milestone": null
+        },
+        "/a": null,
+        "/d": {
+          "number": 42,
+          "title": "Add wire contract",
+          "state": "draft",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": {
+            "login": "octo",
+            "avatarUrl": "https://a/octo"
+          },
+          "checks": [
+            {
+              "name": "ci",
+              "state": "failure",
+              "description": "failed",
+              "summary": "## boom\nline 2",
+              "detailsUrl": "https://ci/1",
+              "startedAt": "2026-01-01T00:00:00Z"
+            },
+            {
+              "name": "lint",
+              "state": "success",
+              "description": "ok"
+            }
+          ],
+          "checksOverall": "failure",
+          "hasConflict": false,
+          "reviews": [
+            {
+              "user": "rev",
+              "avatarUrl": "https://a/rev",
+              "state": "CHANGES_REQUESTED",
+              "body": "fix",
+              "submittedAt": "2026-01-02T00:00:00Z",
+              "htmlUrl": "https://r/1"
+            }
+          ],
+          "reviewDecision": "changes_requested",
+          "baseBranch": "release",
+          "isDefaultBase": false,
+          "assignees": [
+            {
+              "login": "octo",
+              "avatarUrl": "https://a/octo"
+            }
+          ],
+          "linkedIssues": [
+            {
+              "number": 7,
+              "title": "bug",
+              "state": "open",
+              "url": "https://i/7"
+            }
+          ],
+          "labels": [
+            {
+              "name": "bug",
+              "color": "d73a4a",
+              "description": "Something is wrong"
+            },
+            {
+              "name": "wip",
+              "color": "ededed"
+            }
+          ],
+          "additions": 120,
+          "deletions": 7,
+          "milestone": {
+            "title": "v1",
+            "url": "https://m/1",
+            "state": "closed"
+          },
+          "queuePosition": 2,
+          "queueEstimatedSeconds": 600,
+          "behindBy": 3,
+          "firstReleaseTag": "v1.2.0",
+          "hasMilestones": true
+        }
+      },
+      "mergedByPath": {},
+      "loading": false
+    }
+  },
+  {
+    "name": "mergedChanged replaces the mergedByPath map",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {},
+      "mergedByPath": {
+        "/a": true,
+        "/b": true
+      },
+      "loading": false
+    },
+    "event": {
+      "type": "prs/mergedChanged",
+      "payload": {
+        "/a": false,
+        "/c": true
+      }
+    },
+    "after": {
+      "byPath": {},
+      "mergedByPath": {
+        "/a": false,
+        "/c": true
+      },
+      "loading": false
+    }
+  },
+  {
+    "name": "loadingChanged turns the flag on",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {},
+      "mergedByPath": {},
+      "loading": false
+    },
+    "event": {
+      "type": "prs/loadingChanged",
+      "payload": true
+    },
+    "after": {
+      "byPath": {},
+      "mergedByPath": {},
+      "loading": true
+    }
+  },
+  {
+    "name": "loadingChanged turns the flag off and leaves unrelated fields untouched",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      },
+      "mergedByPath": {
+        "/a": true
+      },
+      "loading": true
+    },
+    "event": {
+      "type": "prs/loadingChanged",
+      "payload": false
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "number": 1,
+          "title": "stub",
+          "state": "open",
+          "url": "https://example.com/pr/1",
+          "branch": "feature/x",
+          "author": null,
+          "checks": [],
+          "checksOverall": "none",
+          "hasConflict": null,
+          "reviews": [],
+          "reviewDecision": "none",
+          "baseBranch": "main",
+          "isDefaultBase": true,
+          "assignees": [],
+          "linkedIssues": [],
+          "labels": []
+        }
+      },
+      "mergedByPath": {
+        "/a": true
+      },
+      "loading": false
+    }
+  }
+]

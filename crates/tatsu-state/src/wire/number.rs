@@ -24,6 +24,31 @@ pub mod option {
     }
 }
 
+pub mod map {
+    use indexmap::IndexMap;
+    use serde::{Serializer, ser::SerializeMap};
+
+    pub fn serialize<S: Serializer>(
+        value: &IndexMap<String, f64>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(value.len()))?;
+        for (key, value) in value {
+            map.serialize_key(key)?;
+            map.serialize_value(&super::Js(*value))?;
+        }
+        map.end()
+    }
+}
+
+struct Js(f64);
+
+impl serde::Serialize for Js {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serialize(&self.0, serializer)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
@@ -78,5 +103,22 @@ mod tests {
         assert_eq!(js_option(None), "null");
         assert_eq!(js_option(Some(1_717_000_000_000.0)), "1717000000000");
         assert_eq!(js_option(Some(2.5)), "2.5");
+    }
+
+    #[derive(Serialize)]
+    struct JsMap(
+        #[serde(serialize_with = "super::map::serialize")] indexmap::IndexMap<String, f64>,
+    );
+
+    #[test]
+    fn map_values_are_written_like_json_stringify_in_insert_order() {
+        let map = [("b", 1.0), ("a", 0.25)]
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value))
+            .collect();
+        assert_eq!(
+            serde_json::to_string(&JsMap(map)).unwrap(),
+            r#"{"b":1,"a":0.25}"#
+        );
     }
 }

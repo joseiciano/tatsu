@@ -7,6 +7,7 @@ use specta_typescript::Typescript;
 use crate::slices::{
     announcements::{Announcement, AnnouncementsEvent, AnnouncementsState},
     browser::{BrowserEvent, BrowserState, BrowserTabState, BrowserTabStatePatch},
+    costs::{ContentBreakdown, CostsEvent, CostsState, ModelTally, SessionUsage},
     harness_config::{
         HarnessConfigComparisons, HarnessConfigFileRef, HarnessConfigResourceType,
         HarnessConfigRootKey, HarnessConfigRoots, HarnessConfigScopeKey, HarnessConfigSyncStatus,
@@ -15,12 +16,21 @@ use crate::slices::{
     hooks::{HooksConsent, HooksEvent, HooksState},
     json_claude::{ChatRuntimeId, JsonClaudePermissionMode},
     onboarding::{OnboardingEvent, OnboardingState, QuestStep},
+    prs::{
+        CheckState, CheckStatus, ChecksOverall, GithubUser, OpenClosed, PRLabel, PRLinkedIssue,
+        PRMilestone, PRReview, PRReviewState, PRState, PRStatus, PRsEvent, PRsState,
+        ReviewDecision,
+    },
+    repo_configs::{MergeStrategy, RepoConfig, RepoConfigsEvent, RepoConfigsState, RightPanelKey},
     runtimes::{DownloadableRuntime, RuntimeStatus, RuntimesEvent, RuntimesState},
     scratchpad::{ScratchpadEvent, ScratchpadState},
     snooze::{SnoozeEntry, SnoozeEvent, SnoozeState},
     terminals::{AgentKind, PaneNode, TerminalTab},
     updater::{UpdaterEvent, UpdaterState, UpdaterStatus},
-    worktrees::{PendingDeletion, PendingDeletionPatch, PendingWorktree, PendingWorktreePatch},
+    worktrees::{
+        PendingDeletion, PendingDeletionPatch, PendingWorktree, PendingWorktreePatch, Worktree,
+        WorktreesEvent, WorktreesState,
+    },
 };
 use crate::wire::frames::{ClientFrame, ServerFrame};
 
@@ -49,6 +59,31 @@ pub fn wire_types() -> Types {
         .register::<Announcement>()
         .register::<AnnouncementsState>()
         .register::<AnnouncementsEvent>()
+        .register::<CheckState>()
+        .register::<CheckStatus>()
+        .register::<PRReviewState>()
+        .register::<PRReview>()
+        .register::<PRState>()
+        .register::<ChecksOverall>()
+        .register::<ReviewDecision>()
+        .register::<OpenClosed>()
+        .register::<GithubUser>()
+        .register::<PRMilestone>()
+        .register::<PRLinkedIssue>()
+        .register::<PRLabel>()
+        .register::<PRStatus>()
+        .register::<PRsState>()
+        .register::<PRsEvent>()
+        .register::<ModelTally>()
+        .register::<ContentBreakdown>()
+        .register::<SessionUsage>()
+        .register::<CostsState>()
+        .register::<CostsEvent>()
+        .register::<RightPanelKey>()
+        .register::<MergeStrategy>()
+        .register::<RepoConfig>()
+        .register::<RepoConfigsState>()
+        .register::<RepoConfigsEvent>()
         .register::<ScratchpadState>()
         .register::<ScratchpadEvent>()
         .register::<AgentKind>()
@@ -74,6 +109,9 @@ pub fn wire_types() -> Types {
         .register::<PendingWorktreePatch>()
         .register::<PendingDeletion>()
         .register::<PendingDeletionPatch>()
+        .register::<Worktree>()
+        .register::<WorktreesState>()
+        .register::<WorktreesEvent>()
         .register::<ServerFrame>()
         .register::<ClientFrame>()
 }
@@ -256,5 +294,18 @@ mod tests {
             "{ts}"
         );
         assert!(!ts.contains("export type Value"), "{ts}");
+    }
+
+    #[test]
+    fn exports_a_skipped_double_option_as_optional_and_nullable() {
+        #[derive(Type, serde::Serialize)]
+        #[allow(dead_code)]
+        struct Probe {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            milestone: Option<Option<String>>,
+        }
+
+        let ts = export_typescript(Types::default().register::<Probe>()).unwrap();
+        assert!(ts.contains("\tmilestone?: string | null,\n"), "{ts}");
     }
 }
