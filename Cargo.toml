@@ -20,3 +20,4 @@ specta-typescript = "=0.0.14"
 proptest = "1"
 time = { version = "0.3", features = ["formatting", "macros"] }
 tempfile = "3"
+parking_lot = "0.12"
