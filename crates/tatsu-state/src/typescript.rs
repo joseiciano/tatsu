@@ -53,11 +53,7 @@ pub fn wire_types() -> Types {
         .register::<ClientFrame>()
 }
 
-pub fn export_typescript() -> Result<String, specta_typescript::Error> {
-    render(wire_types())
-}
-
-fn render(mut types: Types) -> Result<String, specta_typescript::Error> {
+pub fn export_typescript(mut types: Types) -> Result<String, specta_typescript::Error> {
     let opaque = Opaque {
         number: specta_typescript::Number::<()>::definition(&mut Types::default()),
         unknown: specta_typescript::Unknown::<()>::definition(&mut Types::default()),
@@ -188,7 +184,7 @@ mod tests {
 
     #[test]
     fn exports_the_serialized_snooze_shape() {
-        let ts = render(
+        let ts = export_typescript(
             Types::default()
                 .register::<SnoozeState>()
                 .register::<SnoozeEvent>(),
@@ -209,7 +205,7 @@ mod tests {
             bytes: u64,
         }
 
-        let ts = render(Types::default().register::<Clock>()).unwrap();
+        let ts = export_typescript(Types::default().register::<Clock>()).unwrap();
         assert!(ts.contains("\tat: number,\n"), "{ts}");
         assert!(ts.contains("\tbytes: number,\n"), "{ts}");
     }
@@ -226,7 +222,7 @@ mod tests {
             map: serde_json::Map<String, serde_json::Value>,
         }
 
-        let ts = render(Types::default().register::<Probe>()).unwrap();
+        let ts = export_typescript(Types::default().register::<Probe>()).unwrap();
         assert!(ts.contains("\tlabel?: string,\n"), "{ts}");
         assert!(ts.contains("\tsize: number | null,\n"), "{ts}");
         assert!(ts.contains("\traw: unknown,\n"), "{ts}");

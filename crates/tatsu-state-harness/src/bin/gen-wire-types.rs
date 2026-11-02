@@ -5,7 +5,7 @@ const BARREL: &str =
 
 fn main() -> ExitCode {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/shared/state/generated");
-    let ts = match tatsu_state::export_typescript() {
+    let ts = match tatsu_state::export_typescript(tatsu_state::wire_types()) {
         Ok(ts) => ts,
         Err(err) => {
             eprintln!("gen-wire-types: {err}");

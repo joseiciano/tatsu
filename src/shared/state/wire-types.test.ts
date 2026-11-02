@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type * as Generated from './generated'
+import type { WireEqual } from '../wire-check'
 import type { HarnessConfigResourceType as RegistryResourceType } from '../agent-registry'
 import type {
   HarnessConfigChangedRef,
@@ -25,9 +26,6 @@ import type { SettingsState } from './settings'
 import { initialSnooze, snoozeReducer, type SnoozeEvent, type SnoozeState } from './snooze'
 import type { AgentKind, PaneLeaf, PaneNode, PaneSplit, TerminalTab } from './terminals'
 import type { PendingDeletion, PendingWorktree } from './worktrees'
-
-type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
-type WireEqual<A, B> = MutuallyAssignable<A, B> extends true ? MutuallyAssignable<keyof A, keyof B> : false
 
 const snoozeState: WireEqual<Generated.SnoozeState, SnoozeState> = true
 const snoozeEvent: WireEqual<Generated.SnoozeEvent, SnoozeEvent> = true

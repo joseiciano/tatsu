@@ -11,9 +11,8 @@ import { WebSocketServerTransport } from '.'
 import { rootReducer, initialState, type AppState, type StateEvent } from '../../shared/state'
 import type * as Generated from '../../shared/state/generated'
 import type { ClientFrame, ServerFrame } from './types'
+import type { MutuallyAssignable, WireEqual } from '../../shared/wire-check'
 
-type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
-type WireEqual<A, B> = MutuallyAssignable<A, B> extends true ? MutuallyAssignable<keyof A, keyof B> : false
 type StateFrame<F> = Extract<F, { t: 'state' }>
 type WithGeneratedEvent<F> = Omit<F, 'event'> & { event: Generated.StateEvent }
 
