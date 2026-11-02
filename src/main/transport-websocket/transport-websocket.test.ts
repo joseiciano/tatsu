@@ -8,23 +8,47 @@ import { describe, it, expect, vi } from 'vitest'
 import { WebSocket as WSClient } from 'ws'
 import { Store } from '../store'
 import { WebSocketServerTransport } from '.'
-import { rootReducer, initialState, type AppState, type StateEvent } from '../../shared/state'
+import {
+  rootReducer,
+  initialState,
+  type AppState,
+  type StateEvent,
+  type StateSnapshot
+} from '../../shared/state'
 import type * as Generated from '../../shared/state/generated'
+import type { ServerFrame as ClientSideServerFrame } from '../../shared/transport/transport-websocket'
 import type { ClientFrame, ServerFrame } from './types'
 import type { MutuallyAssignable, WireEqual } from '../../shared/wire-check'
 
-type StateFrame<F> = Extract<F, { t: 'state' }>
-type WithGeneratedEvent<F> = Omit<F, 'event'> & { event: Generated.StateEvent }
+type Tagged<F, T extends string> = Extract<F, { t: T }>
+type Assignable<A, B> = [A] extends [B] ? true : false
+type WithStateSnapshot<F> = F extends { snapshot: unknown }
+  ? Omit<F, 'snapshot'> & { snapshot: StateSnapshot }
+  : F
 
 const generatedClientFrame: WireEqual<Generated.ClientFrame, ClientFrame> = true
-const generatedServerFrameWithoutState: WireEqual<
-  Exclude<Generated.ServerFrame, { t: 'state' }>,
-  Exclude<ServerFrame, { t: 'state' }>
+const generatedResAndSigFrames: WireEqual<
+  Tagged<Generated.ServerFrame, 'res' | 'sig'>,
+  Tagged<ServerFrame, 'res' | 'sig'>
 > = true
 // specta marks the generated `state` variant with `args?: never; name?: never`, so its key set differs.
 const generatedServerStateFrame: MutuallyAssignable<
-  StateFrame<Generated.ServerFrame>,
-  WithGeneratedEvent<StateFrame<ServerFrame>>
+  Tagged<Generated.ServerFrame, 'state'>,
+  Tagged<ServerFrame, 'state'>
+> = true
+const generatedSnapresAssignsToServerSide: Assignable<
+  Tagged<Generated.ServerFrame, 'snapres'>,
+  Tagged<ServerFrame, 'snapres'>
+> = true
+// The server-side `snapshot` is `unknown`; Rust types it as `StateSnapshot`. The generated
+// `ok` variants also carry `error?: never` / `snapshot?: never`, so their key sets differ.
+const generatedSnapresFrame: MutuallyAssignable<
+  Tagged<Generated.ServerFrame, 'snapres'>,
+  WithStateSnapshot<Tagged<ServerFrame, 'snapres'>>
+> = true
+const generatedServerFrameAssignsToClientSide: Assignable<
+  Generated.ServerFrame,
+  ClientSideServerFrame
 > = true
 
 type AnyFrame = { t: string } & Record<string, unknown>

@@ -956,7 +956,7 @@ export type ShellActivity = {
 	processName?: string,
 };
 
-export type SnapshotResult = ({ id: string; ok: true; snapshot: unknown }) & { error?: never } | ({ id: string; ok: false; error: string }) & { snapshot?: never };
+export type SnapshotResult = ({ id: string; ok: true; snapshot: StateSnapshot }) & { error?: never } | ({ id: string; ok: false; error: string }) & { snapshot?: never };
 
 export type SnoozeEntry = {
 	path: string,
