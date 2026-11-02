@@ -13,6 +13,6 @@ tatsu-state = { path = "crates/tatsu-state" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 indexmap = { version = "2", features = ["serde"] }
-specta = { version = "=2.0.0-rc.27", features = ["derive", "indexmap"] }
+specta = { version = "=2.0.0-rc.27", features = ["derive", "indexmap", "serde_json"] }
 specta-serde = "=0.0.14"
 specta-typescript = "=0.0.14"

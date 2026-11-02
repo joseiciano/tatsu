@@ -1,4 +1,5 @@
 pub mod slices;
+pub mod wire;
 
 mod root;
 mod typescript;

@@ -136,6 +136,7 @@ checksum = "81633014710ece1c7e8ac99e1bc9ad8d4339a2ccbae89ca2aa1095d4262c86b8"
 dependencies = [
  "indexmap",
  "rustc_version",
+ "serde_json",
  "specta-macros",
 ]
 

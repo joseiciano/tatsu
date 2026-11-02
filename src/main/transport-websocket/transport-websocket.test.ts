@@ -9,6 +9,24 @@ import { WebSocket as WSClient } from 'ws'
 import { Store } from '../store'
 import { WebSocketServerTransport } from '.'
 import { rootReducer, initialState, type AppState, type StateEvent } from '../../shared/state'
+import type * as Generated from '../../shared/state/generated'
+import type { ClientFrame, ServerFrame } from './types'
+
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+type WireEqual<A, B> = MutuallyAssignable<A, B> extends true ? MutuallyAssignable<keyof A, keyof B> : false
+type StateFrame<F> = Extract<F, { t: 'state' }>
+type WithGeneratedEvent<F> = Omit<F, 'event'> & { event: Generated.StateEvent }
+
+const generatedClientFrame: WireEqual<Generated.ClientFrame, ClientFrame> = true
+const generatedServerFrameWithoutState: WireEqual<
+  Exclude<Generated.ServerFrame, { t: 'state' }>,
+  Exclude<ServerFrame, { t: 'state' }>
+> = true
+// specta marks the generated `state` variant with `args?: never; name?: never`, so its key set differs.
+const generatedServerStateFrame: MutuallyAssignable<
+  StateFrame<Generated.ServerFrame>,
+  WithGeneratedEvent<StateFrame<ServerFrame>>
+> = true
 
 type AnyFrame = { t: string } & Record<string, unknown>
 
