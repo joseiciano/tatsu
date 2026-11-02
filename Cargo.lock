@@ -209,6 +209,8 @@ dependencies = [
 name = "tatsu-state-harness"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "tatsu-state",
 ]
 

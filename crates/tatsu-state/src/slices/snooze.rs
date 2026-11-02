@@ -6,7 +6,11 @@ use specta::Type;
 #[serde(rename_all = "camelCase")]
 pub struct SnoozeEntry {
     pub path: String,
+    #[serde(serialize_with = "crate::wire::number::serialize")]
+    #[specta(type = f64)]
     pub snoozed_at: f64,
+    #[serde(serialize_with = "crate::wire::number::serialize")]
+    #[specta(type = f64)]
     pub wake_at: f64,
 }
 
@@ -89,7 +93,7 @@ mod tests {
         let state = reduced(vec![SnoozeEvent::Set(entry("/a", 1000.0))]);
         assert_eq!(
             serde_json::to_value(&state).unwrap(),
-            json!({ "byPath": { "/a": { "path": "/a", "snoozedAt": 100.0, "wakeAt": 1000.0 } } })
+            json!({ "byPath": { "/a": { "path": "/a", "snoozedAt": 100, "wakeAt": 1000 } } })
         );
     }
 

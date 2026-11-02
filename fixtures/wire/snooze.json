@@ -1,0 +1,191 @@
+[
+  {
+    "name": "set adds an entry to an empty state",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {}
+    },
+    "event": {
+      "type": "snooze/set",
+      "payload": {
+        "path": "/a",
+        "snoozedAt": 100,
+        "wakeAt": 1000
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "set replaces an existing entry for the same path in place",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        },
+        "/b": {
+          "path": "/b",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "snooze/set",
+      "payload": {
+        "path": "/a",
+        "snoozedAt": 100,
+        "wakeAt": 2000
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 2000
+        },
+        "/b": {
+          "path": "/b",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "set accepts MAX_WAKE for Never",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {}
+    },
+    "event": {
+      "type": "snooze/set",
+      "payload": {
+        "path": "/a",
+        "snoozedAt": 100,
+        "wakeAt": 9007199254740991
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 9007199254740991
+        }
+      }
+    }
+  },
+  {
+    "name": "set keeps fractional snoozedAt and wakeAt",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {}
+    },
+    "event": {
+      "type": "snooze/set",
+      "payload": {
+        "path": "/a",
+        "snoozedAt": 100.25,
+        "wakeAt": 1000.5
+      }
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100.25,
+          "wakeAt": 1000.5
+        }
+      }
+    }
+  },
+  {
+    "name": "clear removes an entry",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/a"
+    },
+    "after": {
+      "byPath": {}
+    }
+  },
+  {
+    "name": "clear is a no-op for an unknown path",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/missing"
+    },
+    "after": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    }
+  },
+  {
+    "name": "clear preserves other entries",
+    "now": 1700000000000,
+    "before": {
+      "byPath": {
+        "/a": {
+          "path": "/a",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        },
+        "/b": {
+          "path": "/b",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    },
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/a"
+    },
+    "after": {
+      "byPath": {
+        "/b": {
+          "path": "/b",
+          "snoozedAt": 100,
+          "wakeAt": 1000
+        }
+      }
+    }
+  }
+]

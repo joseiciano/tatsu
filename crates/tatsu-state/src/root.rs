@@ -39,7 +39,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(&state).unwrap(),
-            json!({ "snooze": { "byPath": { "/a": { "path": "/a", "snoozedAt": 1.0, "wakeAt": 2.5 } } } })
+            json!({ "snooze": { "byPath": { "/a": { "path": "/a", "snoozedAt": 1, "wakeAt": 2.5 } } } })
         );
     }
 

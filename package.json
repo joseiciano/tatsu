@@ -32,6 +32,8 @@
     "gen:wire-types": "cargo run -q -p tatsu-state-harness --bin gen-wire-types",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:wire": "vitest run --config vitest.wire.config.ts scripts/wire/fixtures.wire.test.ts",
+    "fixtures:record": "node scripts/wire/record-fixtures.mjs",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:dev": "electron-rebuild -f -w node-pty",
     "pack": "pnpm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --arm64 --config.mac.identity=null && node scripts/smoke-packed-desktop.mjs",
