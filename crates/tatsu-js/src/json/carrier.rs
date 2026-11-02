@@ -20,12 +20,12 @@ pub(super) fn push_lone_surrogate(out: &mut String, unit: u16) {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum Unit {
+pub(crate) enum Unit {
     Char(char),
     LoneSurrogate(u16),
 }
 
-pub(super) fn decode(s: &str) -> impl Iterator<Item = Unit> + '_ {
+pub(crate) fn decode(s: &str) -> impl Iterator<Item = Unit> + '_ {
     let mut chars = s.chars().peekable();
     std::iter::from_fn(move || {
         let c = chars.next()?;

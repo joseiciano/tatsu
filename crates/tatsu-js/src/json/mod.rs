@@ -1,4 +1,4 @@
-mod carrier;
+pub(crate) mod carrier;
 mod parse;
 mod write;
 
