@@ -1,0 +1,17 @@
+[package]
+name = "tatsu-core-testserver"
+version.workspace = true
+edition.workspace = true
+publish = false
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+tatsu-core.workspace = true
+tatsu-state.workspace = true
+tatsu-ws.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-tungstenite.workspace = true

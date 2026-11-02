@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/tatsu-core", "crates/tatsu-js", "crates/tatsu-state", "crates/tatsu-state-harness"]
+members = [
+    "crates/tatsu-core",
+    "crates/tatsu-core-testserver",
+    "crates/tatsu-js",
+    "crates/tatsu-state",
+    "crates/tatsu-state-harness",
+    "crates/tatsu-ws",
+]
 
 [workspace.package]
 edition = "2024"
@@ -11,6 +18,8 @@ license = "MIT"
 [workspace.dependencies]
 tatsu-js = { path = "crates/tatsu-js" }
 tatsu-state = { path = "crates/tatsu-state" }
+tatsu-core = { path = "crates/tatsu-core" }
+tatsu-ws = { path = "crates/tatsu-ws" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 indexmap = { version = "2", features = ["serde"] }
@@ -23,3 +32,5 @@ tempfile = "3"
 parking_lot = "0.12"
 tokio = "1"
 uuid = { version = "1", features = ["v4"] }
+axum = { version = "0.8", default-features = false }
+tokio-tungstenite = "0.29"

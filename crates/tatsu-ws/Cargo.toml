@@ -1,0 +1,18 @@
+[package]
+name = "tatsu-ws"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = { workspace = true, features = ["ws", "tokio", "http1"] }
+serde_json.workspace = true
+tatsu-core.workspace = true
+tokio = { workspace = true, features = ["net", "rt", "sync", "time", "macros"] }
+
+[dev-dependencies]
+parking_lot.workspace = true
+tatsu-state.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio-tungstenite.workspace = true
