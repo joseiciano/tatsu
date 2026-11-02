@@ -20,5 +20,6 @@
     "src/web-client/**/*.tsx",
     "src/shared/**/*.ts",
     "scripts/core/**/*.ts"
-  ]
+  ],
+  "exclude": ["scripts/core/record-core.core.test.ts", "scripts/core/recorders/**"]
 }

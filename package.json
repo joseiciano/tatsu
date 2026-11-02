@@ -36,6 +36,7 @@
     "test:wire-diff": "node scripts/wire/diff.mjs",
     "test:core-parity": "vitest run --config vitest.core.config.ts src/renderer/store/core-parity.core.test.ts",
     "fixtures:record": "node scripts/wire/record-fixtures.mjs",
+    "fixtures:record-core": "node scripts/core/record-core.mjs",
     "gen:channels": "node scripts/wire/gen-channels.mjs",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:dev": "electron-rebuild -f -w node-pty",

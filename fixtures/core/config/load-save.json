@@ -1,0 +1,107 @@
+[
+  {
+    "name": "unknown and index-like keys stay in place",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"zeta\": {\"nested\": [1, \"two\", null]}, \"repoRoots\": [\"/repo/a\", \"/repo/b\"], \"42\": \"index-like\", \"7\": true, \"theme\": \"dark\", \"harnessConfig\": {\"files\": {\"CLAUDE.md\": \"# hi\\n\"}}, \"windowBounds\": {\"x\": 10, \"y\": 20, \"width\": 1200.5, \"height\": 800}, \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 1690000000000}], \"activeBackendId\": \"local\", \"locallyMerged\": {}}",
+    "expected": "{\n  \"7\": true,\n  \"42\": \"index-like\",\n  \"schemaVersion\": 9,\n  \"windowBounds\": {\n    \"x\": 10,\n    \"y\": 20,\n    \"width\": 1200.5,\n    \"height\": 800\n  },\n  \"repoRoots\": [\n    \"/repo/a\",\n    \"/repo/b\"\n  ],\n  \"zeta\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"theme\": \"dark\",\n  \"harnessConfig\": {\n    \"files\": {\n      \"CLAUDE.md\": \"# hi\\n\"\n    }\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1690000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"locallyMerged\": {}\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "missing file loads defaults without harnessConfig",
+    "now": 1730000000000,
+    "input": null,
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "bad JSON loads defaults",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"repoRoots\": [\"/repo\"",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "top-level null loads defaults",
+    "now": 1730000000000,
+    "input": "null",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "lone surrogates in labels",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"repoRoots\": [\"/repo\"], \"panes\": {\"/repo\": {\"/repo/wt\": {\"type\": \"leaf\", \"id\": \"p1\", \"tabs\": [{\"id\": \"t1\", \"type\": \"agent\", \"label\": \"broken \\ud800 high\"}, {\"id\": \"t2\", \"type\": \"shell\", \"label\": \"\\udfff low 😀 pair\"}], \"activeTabId\": \"t1\"}}}, \"connections\": [{\"id\": \"remote\", \"label\": \"box \\udc00\", \"url\": \"ws://h:1\", \"kind\": \"remote\", \"addedAt\": 1}], \"activeBackendId\": \"remote\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo\"\n  ],\n  \"panes\": {\n    \"/repo\": {\n      \"/repo/wt\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"agent\",\n            \"label\": \"broken \\ud800 high\"\n          },\n          {\n            \"id\": \"t2\",\n            \"type\": \"shell\",\n            \"label\": \"\\udfff low 😀 pair\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      }\n    }\n  },\n  \"connections\": [\n    {\n      \"id\": \"remote\",\n      \"label\": \"box \\udc00\",\n      \"url\": \"ws://h:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"remote\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "floats and integers in pane ratios and costs",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"repoRoots\": [], \"panes\": {\"/repo\": {\"/repo/wt\": {\"type\": \"split\", \"id\": \"s1\", \"direction\": \"horizontal\", \"ratio\": 0.30000000000000004, \"children\": [{\"type\": \"split\", \"id\": \"s2\", \"direction\": \"vertical\", \"ratio\": 1.0, \"children\": [{\"type\": \"leaf\", \"id\": \"a\", \"tabs\": [], \"activeTabId\": \"\", \"ratio\": -0}, {\"type\": \"leaf\", \"id\": \"b\", \"tabs\": [], \"activeTabId\": \"\", \"ratio\": 0.5}]}, {\"type\": \"leaf\", \"id\": \"c\", \"tabs\": [], \"activeTabId\": \"\"}]}}}, \"costs\": {\"totalUsd\": 1e21, \"tiny\": 5e-7, \"big\": 12345678901234567890, \"sum\": 0.1, \"whole\": 3.000, \"neg\": -2.5e-3, \"exp\": 1E+2}, \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 1690000000000}], \"activeBackendId\": \"local\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"panes\": {\n    \"/repo\": {\n      \"/repo/wt\": {\n        \"type\": \"split\",\n        \"id\": \"s1\",\n        \"direction\": \"horizontal\",\n        \"ratio\": 0.30000000000000004,\n        \"children\": [\n          {\n            \"type\": \"split\",\n            \"id\": \"s2\",\n            \"direction\": \"vertical\",\n            \"ratio\": 1,\n            \"children\": [\n              {\n                \"type\": \"leaf\",\n                \"id\": \"a\",\n                \"tabs\": [],\n                \"activeTabId\": \"\",\n                \"ratio\": 0\n              },\n              {\n                \"type\": \"leaf\",\n                \"id\": \"b\",\n                \"tabs\": [],\n                \"activeTabId\": \"\",\n                \"ratio\": 0.5\n              }\n            ]\n          },\n          {\n            \"type\": \"leaf\",\n            \"id\": \"c\",\n            \"tabs\": [],\n            \"activeTabId\": \"\"\n          }\n        ]\n      }\n    }\n  },\n  \"costs\": {\n    \"totalUsd\": 1e+21,\n    \"tiny\": 5e-7,\n    \"big\": 12345678901234567000,\n    \"sum\": 0.1,\n    \"whole\": 3,\n    \"neg\": -0.0025,\n    \"exp\": 100\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1690000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "legacy tab runtime key survives",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"repoRoots\": [\"/repo\"], \"panes\": {\"/repo\": {\"/repo/wt\": {\"type\": \"leaf\", \"id\": \"p1\", \"tabs\": [{\"id\": \"t1\", \"type\": \"json-claude\", \"runtime\": \"acp\", \"label\": \"Chat\", \"agentKind\": \"claude\"}, {\"id\": \"t2\", \"type\": \"agent\", \"label\": \"Claude\", \"runtime\": \"pty\"}], \"activeTabId\": \"t1\"}}}, \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 1690000000000}], \"activeBackendId\": \"local\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo\"\n  ],\n  \"panes\": {\n    \"/repo\": {\n      \"/repo/wt\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"json-claude\",\n            \"runtime\": \"acp\",\n            \"label\": \"Chat\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"t2\",\n            \"type\": \"agent\",\n            \"label\": \"Claude\",\n            \"runtime\": \"pty\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      }\n    }\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1690000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "connections absent adds local after parsed keys",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"repoRoots\": [\"/repo\"], \"theme\": \"dark\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo\"\n  ],\n  \"theme\": \"dark\",\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "connections empty is replaced in place",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"connections\": [], \"theme\": \"dark\", \"activeBackendId\": \"local\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"theme\": \"dark\",\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "connections null is replaced in place",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"connections\": null, \"theme\": \"dark\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"theme\": \"dark\",\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "connections present are kept",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 5}, {\"id\": \"box\", \"label\": \"Box\", \"url\": \"ws://box:8080?token=abc\", \"kind\": \"remote\", \"addedAt\": 6, \"extra\": [1]}], \"activeBackendId\": \"box\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 5\n    },\n    {\n      \"id\": \"box\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:8080?token=abc\",\n      \"kind\": \"remote\",\n      \"addedAt\": 6,\n      \"extra\": [\n        1\n      ]\n    }\n  ],\n  \"activeBackendId\": \"box\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "activeBackendId empty is replaced in place",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"activeBackendId\": \"\", \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 5}], \"theme\": \"light\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"activeBackendId\": \"local\",\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 5\n    }\n  ],\n  \"theme\": \"light\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "duplicate keys keep the first position and the last value",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 9, \"theme\": \"dark\", \"repoRoots\": [\"/a\"], \"theme\": \"light\", \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 1690000000000}], \"activeBackendId\": \"local\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/a\"\n  ],\n  \"theme\": \"light\",\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1690000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "higher schemaVersion is written down to the current version",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\": 12, \"futureKey\": {\"a\": 1}, \"connections\": [{\"id\": \"local\", \"label\": \"Local\", \"url\": \"\", \"kind\": \"local\", \"addedAt\": 1690000000000}], \"activeBackendId\": \"local\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"futureKey\": {\n    \"a\": 1\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1690000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9
+  },
+  {
+    "name": "realistic config saved by the Electron build round-trips unchanged",
+    "now": 1730000000000,
+    "input": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": {\n    \"x\": 0,\n    \"y\": 25,\n    \"width\": 1512,\n    \"height\": 920\n  },\n  \"repoRoots\": [\n    \"/Users/u/code/app\",\n    \"/Users/u/code/lib\"\n  ],\n  \"theme\": \"solarized\",\n  \"hooksConsent\": \"accepted\",\n  \"onboarding\": {\n    \"quest\": \"done\"\n  },\n  \"panes\": {\n    \"/Users/u/code/app\": {\n      \"/Users/u/code/app-wt/feat\": {\n        \"type\": \"split\",\n        \"id\": \"pane-1\",\n        \"direction\": \"horizontal\",\n        \"ratio\": 0.6180339887498949,\n        \"children\": [\n          {\n            \"type\": \"leaf\",\n            \"id\": \"pane-2\",\n            \"tabs\": [\n              {\n                \"id\": \"agent-1\",\n                \"type\": \"agent\",\n                \"label\": \"Claude\",\n                \"agentKind\": \"claude\",\n                \"sessionId\": \"abc-123\"\n              },\n              {\n                \"id\": \"json-1\",\n                \"type\": \"json-claude\",\n                \"label\": \"Chat\",\n                \"agentKind\": \"claude\",\n                \"model\": \"opus\",\n                \"runtime\": \"acp\"\n              }\n            ],\n            \"activeTabId\": \"agent-1\"\n          },\n          {\n            \"type\": \"leaf\",\n            \"id\": \"pane-3\",\n            \"tabs\": [\n              {\n                \"id\": \"shell-1\",\n                \"type\": \"shell\",\n                \"label\": \"Shell\",\n                \"command\": \"pnpm dev\",\n                \"cwd\": \"packages/web\"\n              },\n              {\n                \"id\": \"browser-1\",\n                \"type\": \"browser\",\n                \"label\": \"Browser\",\n                \"url\": \"http://localhost:5173/?q=a%20b\"\n              }\n            ],\n            \"activeTabId\": \"browser-1\"\n          }\n        ]\n      }\n    }\n  },\n  \"legacyPanes\": {},\n  \"costs\": {\n    \"sessions\": {\n      \"abc-123\": {\n        \"usd\": 0.4219999999999999,\n        \"inputTokens\": 120394,\n        \"outputTokens\": 8812,\n        \"cacheRead\": 1500000\n      }\n    },\n    \"totalUsd\": 12.75\n  },\n  \"snooze\": {\n    \"/Users/u/code/app-wt/feat\": {\n      \"until\": 1730003600000,\n      \"reason\": \"lunch\"\n    }\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"srv\",\n      \"label\": \"Server ✓\",\n      \"url\": \"ws://10.0.0.2:7171\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000500000\n    }\n  ],\n  \"activeBackendId\": \"srv\",\n  \"locallyMerged\": {\n    \"/Users/u/code/app-wt/old\": true\n  },\n  \"harnessConfigRoots\": [],\n  \"uiScale\": 1.125\n}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": {\n    \"x\": 0,\n    \"y\": 25,\n    \"width\": 1512,\n    \"height\": 920\n  },\n  \"repoRoots\": [\n    \"/Users/u/code/app\",\n    \"/Users/u/code/lib\"\n  ],\n  \"theme\": \"solarized\",\n  \"hooksConsent\": \"accepted\",\n  \"onboarding\": {\n    \"quest\": \"done\"\n  },\n  \"panes\": {\n    \"/Users/u/code/app\": {\n      \"/Users/u/code/app-wt/feat\": {\n        \"type\": \"split\",\n        \"id\": \"pane-1\",\n        \"direction\": \"horizontal\",\n        \"ratio\": 0.6180339887498949,\n        \"children\": [\n          {\n            \"type\": \"leaf\",\n            \"id\": \"pane-2\",\n            \"tabs\": [\n              {\n                \"id\": \"agent-1\",\n                \"type\": \"agent\",\n                \"label\": \"Claude\",\n                \"agentKind\": \"claude\",\n                \"sessionId\": \"abc-123\"\n              },\n              {\n                \"id\": \"json-1\",\n                \"type\": \"json-claude\",\n                \"label\": \"Chat\",\n                \"agentKind\": \"claude\",\n                \"model\": \"opus\",\n                \"runtime\": \"acp\"\n              }\n            ],\n            \"activeTabId\": \"agent-1\"\n          },\n          {\n            \"type\": \"leaf\",\n            \"id\": \"pane-3\",\n            \"tabs\": [\n              {\n                \"id\": \"shell-1\",\n                \"type\": \"shell\",\n                \"label\": \"Shell\",\n                \"command\": \"pnpm dev\",\n                \"cwd\": \"packages/web\"\n              },\n              {\n                \"id\": \"browser-1\",\n                \"type\": \"browser\",\n                \"label\": \"Browser\",\n                \"url\": \"http://localhost:5173/?q=a%20b\"\n              }\n            ],\n            \"activeTabId\": \"browser-1\"\n          }\n        ]\n      }\n    }\n  },\n  \"legacyPanes\": {},\n  \"costs\": {\n    \"sessions\": {\n      \"abc-123\": {\n        \"usd\": 0.4219999999999999,\n        \"inputTokens\": 120394,\n        \"outputTokens\": 8812,\n        \"cacheRead\": 1500000\n      }\n    },\n    \"totalUsd\": 12.75\n  },\n  \"snooze\": {\n    \"/Users/u/code/app-wt/feat\": {\n      \"until\": 1730003600000,\n      \"reason\": \"lunch\"\n    }\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"srv\",\n      \"label\": \"Server ✓\",\n      \"url\": \"ws://10.0.0.2:7171\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000500000\n    }\n  ],\n  \"activeBackendId\": \"srv\",\n  \"locallyMerged\": {\n    \"/Users/u/code/app-wt/old\": true\n  },\n  \"harnessConfigRoots\": [],\n  \"uiScale\": 1.125\n}",
+    "schemaVersion": 9
+  }
+]
