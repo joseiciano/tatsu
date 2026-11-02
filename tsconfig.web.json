@@ -18,6 +18,7 @@
     "src/renderer/**/*.d.ts",
     "src/web-client/**/*.ts",
     "src/web-client/**/*.tsx",
-    "src/shared/**/*.ts"
+    "src/shared/**/*.ts",
+    "scripts/core/**/*.ts"
   ]
 }
