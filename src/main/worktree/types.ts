@@ -119,3 +119,14 @@ export interface WorktreeScriptResult {
   stderr: string
   error?: string
 }
+
+export type {
+  CodeDiffStatus,
+  CodeDiffFile,
+  CodeDiffFileList,
+  CodeDiffSides,
+  ValidateRefResult,
+  BranchForCompare,
+  DefaultCompareRef,
+  FetchCompareRefResult
+} from '../../shared/code-diff'

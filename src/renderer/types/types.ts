@@ -18,6 +18,27 @@ import type { AddRepoResult } from '../../shared/repo-pick'
 export type { AddRepoResult }
 
 import type {
+  CodeDiffStatus,
+  CodeDiffFile,
+  CodeDiffFileList,
+  CodeDiffSides,
+  ValidateRefResult,
+  BranchForCompare,
+  DefaultCompareRef,
+  FetchCompareRefResult
+} from '../../shared/code-diff'
+export type {
+  CodeDiffStatus,
+  CodeDiffFile,
+  CodeDiffFileList,
+  CodeDiffSides,
+  ValidateRefResult,
+  BranchForCompare,
+  DefaultCompareRef,
+  FetchCompareRefResult
+}
+
+import type {
   HarnessConfigApplyRequest,
   HarnessConfigApplyResult,
   HarnessConfigComparison,
@@ -365,6 +386,17 @@ export interface ElectronAPI {
     staged: boolean,
     mode?: 'working' | 'branch'
   ): Promise<FileDiffSides>
+  getCodeDiffFiles(worktreePath: string, baseRef: string): Promise<CodeDiffFileList>
+  getCodeDiffFileSides(
+    worktreePath: string,
+    baseRef: string,
+    filePath: string,
+    previousPath?: string
+  ): Promise<CodeDiffSides>
+  validateRef(worktreePath: string, ref: string): Promise<ValidateRefResult>
+  listBranchesForCompare(worktreePath: string): Promise<BranchForCompare[]>
+  getDefaultCompareRef(worktreePath: string): Promise<DefaultCompareRef>
+  fetchCompareRef(worktreePath: string, ref: string): Promise<FetchCompareRefResult>
 
   // Settings — all reads come from useSettings()/useRepoConfigs()/etc.
   // Only the mutation methods + a few constant accessors remain on the IPC.

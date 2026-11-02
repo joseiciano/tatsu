@@ -41,6 +41,7 @@ export type Action =
   | 'togglePerfMonitor'
   | 'hotkeyCheatsheet'
   | 'openReview'
+  | 'toggleCodeDiff'
   | 'openSettings'
   | 'uiScaleUp'
   | 'uiScaleDown'

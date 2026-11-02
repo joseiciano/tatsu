@@ -34,6 +34,7 @@ import { Activity, type ActivityTab } from '../components/Activity'
 import { NotificationCenter, getActiveAnnouncements, countUnreadAnnouncements } from '../components/NotificationCenter'
 import { Cleanup } from '../components/Cleanup'
 import { ReviewScreen } from '../components/ReviewScreen'
+import { CodeDiffTool } from '../components/CodeDiffTool'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
 import { NewProjectScreen } from '../components/NewProjectScreen'
@@ -50,7 +51,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { type GroupKey } from '../worktree-sort'
 import { useViewport } from '../hooks/useViewport'
 import { MobileApp } from '../components/MobileApp'
-import { ENABLE_NOTIFICATION_CENTER, harnessReleaseNotesUrl } from '../../shared/constants'
+import { ENABLE_CODE_DIFF, ENABLE_NOTIFICATION_CENTER, harnessReleaseNotesUrl } from '../../shared/constants'
 
 function isPendingId(id: string | null | undefined): id is string {
   return typeof id === 'string' && id.startsWith('pending:')
@@ -242,7 +243,27 @@ function DesktopApp(): JSX.Element {
   const [activityTab, setActivityTab] = useState<ActivityTab>('command')
   const [showNotifications, setShowNotifications] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
-  const [showReview, setShowReview] = useState(false)
+  const [showReview, setShowReviewRaw] = useState(false)
+  const [showCodeDiff, setShowCodeDiffRaw] = useState(false)
+  // Review, code diff and notifications share the full-screen slot; opening one closes the others.
+  const showReviewRef = useRef(showReview)
+  showReviewRef.current = showReview
+  const showCodeDiffRef = useRef(showCodeDiff)
+  showCodeDiffRef.current = showCodeDiff
+  const setShowReview = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
+    const visible = typeof next === 'function' ? next(showReviewRef.current) : next
+    setShowReviewRaw(visible)
+    if (!visible) return
+    setShowCodeDiffRaw(false)
+    setShowNotifications(false)
+  }, [])
+  const setShowCodeDiff = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
+    const visible = ENABLE_CODE_DIFF && (typeof next === 'function' ? next(showCodeDiffRef.current) : next)
+    setShowCodeDiffRaw(visible)
+    if (!visible) return
+    setShowReviewRaw(false)
+    setShowNotifications(false)
+  }, [])
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -270,6 +291,7 @@ function DesktopApp(): JSX.Element {
       setShowNotifications(false)
       setShowCleanup(false)
       setShowReview(false)
+      setShowCodeDiff(false)
       setReportIssueState(null)
       setShowNewProject(false)
       setActivityTab('command')
@@ -618,6 +640,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowNotifications(false)
     setShowCleanup(false)
     setShowReview(false)
+    setShowCodeDiff(false)
     setReportIssueState(null)
     setShowNewProject(false)
   }, [])
@@ -734,6 +757,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowPerfMonitor,
     setShowHotkeyCheatsheet,
     setShowReview,
+    setShowCodeDiff,
     toggleNotifications,
     handleAddTerminalTab,
     handleCloseTab,
@@ -1544,7 +1568,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
           if (!paneTree) return null
           const leaves = getLeaves(paneTree)
           if (leaves.length === 0 || !leaves.some((l) => l.tabs.length > 0)) return null
-          const isVisible = !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && wt.path === activeWorktreeId && !pendingDeletionByPath[wt.path]
+          const isVisible = !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && wt.path === activeWorktreeId && !pendingDeletionByPath[wt.path]
           return (
             <div
               key={wt.path}
@@ -1583,7 +1607,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                     singleScreenMode ? 0 : sidebarVisible ? sidebarWidth + 1 : 48
                   }
                   topBarTrailingExtendPx={
-                    !singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null
+                    !singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null
                       ? rightColumnHidden
                         ? 48
                         : rightPanelWidth + 1
@@ -1669,12 +1693,26 @@ const setQuestStep = useCallback((next: QuestStep) => {
             </div>
           )
         })()}
-        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !activeWorktreeId && worktrees.length > 0 && (
+        {showCodeDiff && activeWorktreeId && !isPendingId(activeWorktreeId) && (() => {
+          const diffWt = worktrees.find((w) => w.path === activeWorktreeId)
+          return (
+            <div className="flex-1 min-w-0 flex">
+              <CodeDiffTool
+                key={activeWorktreeId}
+                worktreePath={activeWorktreeId}
+                branchName={diffWt?.branch ?? 'unknown'}
+                repoLabel={diffWt ? (diffWt.repoRoot.split('/').pop() || diffWt.repoRoot) : ''}
+                onClose={() => setShowCodeDiff(false)}
+              />
+            </div>
+          )
+        })()}
+        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && !activeWorktreeId && worktrees.length > 0 && (
           <div className="flex-1 flex items-center justify-center text-dim">
             Select a worktree to begin
           </div>
         )}
-        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && isPendingId(activeWorktreeId) && (() => {
+        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && isPendingId(activeWorktreeId) && (() => {
           const pending = pendingWorktrees.find((p) => p.id === activeWorktreeId)
           if (!pending) return null
           return (
@@ -1686,7 +1724,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             />
           )
         })()}
-        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && activeWorktreeId && pendingDeletionByPath[activeWorktreeId] && (
+        {!showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && activeWorktreeId && pendingDeletionByPath[activeWorktreeId] && (
           <DeletingWorktreeScreen
             deletion={pendingDeletionByPath[activeWorktreeId]}
             onDismiss={handleDismissPendingDeletion}
@@ -1699,10 +1737,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
         />
         {/* Right panel — hidden on the new-worktree screen so the form gets the full width.
             Pushed down 40px so the workspace tab bar can extend across the top, full width. */}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && !rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><ResizeHandle onDelta={handleRightPanelResize} /></div>
         )}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && !rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><RightColumn
             width={rightPanelWidth}
             activeWorktreeId={activeWorktreeId}
@@ -1728,6 +1766,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setReviewCommit(undefined)
               setShowReview(true)
             }}
+            onOpenCodeDiff={ENABLE_CODE_DIFF ? () => setShowCodeDiff(true) : undefined}
             onOpenCommitReview={(hash, shortHash, subject) => {
               setReviewMode('branch')
               setReviewCommit({ hash, shortHash, subject })
@@ -1736,7 +1775,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onCollapse={() => setRightColumnHidden(true)}
           /></div>
         )}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showNotifications && !showCleanup && !showCommandCenter && !showReview && !showCodeDiff && reportIssueState === null && rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><CollapsedRightPanel
             worktreePath={activeWorktreeId}
             onExpand={() => setRightColumnHidden(false)}

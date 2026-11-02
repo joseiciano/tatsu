@@ -37,13 +37,15 @@ const STATUS_COLOR: Record<ChangedFile['status'], string> = {
   untracked: 'text-dim'
 }
 
-interface FileGroup {
+type GroupableFile = Pick<ChangedFile, 'path' | 'status' | 'additions' | 'deletions'>
+
+export interface FileGroup<T extends GroupableFile = ChangedFile> {
   dir: string
-  files: ChangedFile[]
+  files: T[]
 }
 
-function groupAndSortFiles(files: ChangedFile[]): FileGroup[] {
-  const groups = new Map<string, ChangedFile[]>()
+export function groupAndSortFiles<T extends GroupableFile>(files: T[]): FileGroup<T>[] {
+  const groups = new Map<string, T[]>()
   for (const file of files) {
     const lastSlash = file.path.lastIndexOf('/')
     const dir = lastSlash >= 0 ? file.path.slice(0, lastSlash + 1) : ''
@@ -52,7 +54,7 @@ function groupAndSortFiles(files: ChangedFile[]): FileGroup[] {
     groups.set(dir, list)
   }
 
-  const result: FileGroup[] = []
+  const result: FileGroup<T>[] = []
   for (const [dir, dirFiles] of groups) {
     dirFiles.sort((a, b) => {
       const statusOrder = (s: ChangedFile['status']): number => {

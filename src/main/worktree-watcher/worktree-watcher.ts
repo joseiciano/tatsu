@@ -1,15 +1,28 @@
 // Reference-counted fs.watch manager for worktree change notifications.
-// Watches the worktree's .git/ directory for index/HEAD/MERGE_HEAD changes
+// Watches the worktree's git dir for index/HEAD/MERGE_HEAD changes
 // (covers stage, commit, branch switch, merge), debounces, and notifies
 // every subscriber. Working-tree edits that don't touch .git/ are covered
 // by a slow renderer-side fallback poll.
 
 import fs, { type FSWatcher } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 
 const DEBOUNCE_MS = 200
 
 const RELEVANT_FILES = new Set(['index', 'HEAD', 'MERGE_HEAD'])
+
+// In a linked worktree `.git` is a file (`gitdir: <common>/worktrees/<name>`)
+// and the index/HEAD files live in that directory instead.
+export function resolveGitDir(worktreePath: string): string | null {
+  const dotGit = join(worktreePath, '.git')
+  try {
+    if (fs.statSync(dotGit).isDirectory()) return dotGit
+    const match = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf8'))
+    return match ? resolve(worktreePath, match[1]) : null
+  } catch {
+    return null
+  }
+}
 
 export type WorktreeChangeListener = () => void
 
@@ -69,7 +82,7 @@ export class WorktreeWatcher {
   }
 
   private openWatchers(worktreePath: string): FSWatcher[] {
-    const gitDir = join(worktreePath, '.git')
+    const gitDir = resolveGitDir(worktreePath) ?? join(worktreePath, '.git')
     const watchers: FSWatcher[] = []
     const onEvent = (_eventType: string, filename: string | Buffer | null): void => {
       const name = typeof filename === 'string' ? filename : filename?.toString()

@@ -70,6 +70,11 @@ export function useWatchedQuery<T>(
   const mountedRef = useRef(true)
   const currentPathRef = useRef(worktreePath)
   currentPathRef.current = worktreePath
+  // One request per (cacheKey, path) at a time. A refresh asked for while
+  // one is in flight runs once after it settles, so no change is missed.
+  const inFlightRef = useRef<string | null>(null)
+  const rerunRef = useRef(false)
+  const refreshRef = useRef<() => void>(() => {})
   useEffect(() => {
     mountedRef.current = true
     return () => {
@@ -80,6 +85,13 @@ export function useWatchedQuery<T>(
   const refresh = useCallback(() => {
     if (!worktreePath) return
     const path = worktreePath
+    const key = `${cacheKey}\0${path}`
+    if (inFlightRef.current === key) {
+      rerunRef.current = true
+      return
+    }
+    inFlightRef.current = key
+    rerunRef.current = false
     fetcher(path)
       .then((result) => {
         cacheSet(cacheKey, path, result)
@@ -94,7 +106,16 @@ export function useWatchedQuery<T>(
         if (currentPathRef.current !== path) return
         setLoading(false)
       })
+      .finally(() => {
+        if (inFlightRef.current !== key) return
+        inFlightRef.current = null
+        if (rerunRef.current && mountedRef.current) {
+          rerunRef.current = false
+          refreshRef.current()
+        }
+      })
   }, [worktreePath, cacheKey, fetcher])
+  refreshRef.current = refresh
 
   useEffect(() => {
     if (!worktreePath) {
@@ -121,7 +142,10 @@ export function useWatchedQuery<T>(
       cacheDelete(cacheKey, worktreePath)
       refresh()
     })
-    const interval = setInterval(refresh, fallbackPollMs)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+      refresh()
+    }, fallbackPollMs)
     return () => {
       clearInterval(interval)
       offInvalidated()

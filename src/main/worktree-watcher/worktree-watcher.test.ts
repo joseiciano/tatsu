@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
-import { join } from 'path'
+import { execFileSync } from 'child_process'
+import { tmpdir } from 'os'
+import { join, resolve } from 'path'
 
-import { WorktreeWatcher } from '.'
+import { WorktreeWatcher, resolveGitDir } from '.'
 
 type FsCallback = (eventType: string, filename: string | null) => void
 
@@ -194,5 +196,77 @@ describe('WorktreeWatcher', () => {
 
     vi.advanceTimersByTime(500)
     expect(listener).not.toHaveBeenCalled()
+  })
+})
+
+function git(cwd: string, args: string[]): string {
+  return execFileSync('git', args, {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@t',
+      GIT_COMMITTER_NAME: 't',
+      GIT_COMMITTER_EMAIL: 't@t'
+    }
+  }).toString()
+}
+
+describe('resolveGitDir', () => {
+  let root: string
+  let repo: string
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(join(tmpdir(), 'harness-gitdir-'))
+    repo = join(root, 'repo')
+    fs.mkdirSync(repo)
+    git(repo, ['init', '-q', '-b', 'main'])
+    git(repo, ['config', 'commit.gpgsign', 'false'])
+    fs.writeFileSync(join(repo, 'f.txt'), 'base\n')
+    git(repo, ['add', 'f.txt'])
+    git(repo, ['commit', '-q', '-m', 'base'])
+  })
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('returns <repo>/.git for a normal repository', () => {
+    expect(resolveGitDir(repo)).toBe(join(repo, '.git'))
+  })
+
+  it('follows the .git file of a linked worktree to its per-worktree gitdir', () => {
+    const wt = join(root, 'linked')
+    git(repo, ['worktree', 'add', '-q', '-b', 'feature', wt])
+
+    const result = resolveGitDir(wt)
+
+    expect(result).not.toBeNull()
+    expect(fs.realpathSync(result!)).toBe(
+      fs.realpathSync(join(repo, '.git', 'worktrees', 'linked'))
+    )
+  })
+
+  it('resolves a relative gitdir against the worktree path, not the cwd', () => {
+    const wt = join(root, 'handmade')
+    fs.mkdirSync(wt)
+    fs.writeFileSync(join(wt, '.git'), 'gitdir: ../repo/.git/worktrees/x\n')
+
+    expect(resolveGitDir(wt)).toBe(resolve(wt, '../repo/.git/worktrees/x'))
+  })
+
+  it('returns null when .git is missing', () => {
+    const bare = join(root, 'plain-dir')
+    fs.mkdirSync(bare)
+
+    expect(resolveGitDir(bare)).toBeNull()
+  })
+
+  it('returns null when .git is a file without a gitdir line', () => {
+    const wt = join(root, 'garbage')
+    fs.mkdirSync(wt)
+    fs.writeFileSync(join(wt, '.git'), 'not a pointer\n')
+
+    expect(resolveGitDir(wt)).toBeNull()
   })
 })

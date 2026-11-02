@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch Tatsu (the Electron agent-harness app) headless with a sandboxed HOME, drive its web client with Playwright, and capture evidence that a feature works the way a user sees it. Reach for it to prove a change to the renderer, the Config page (skills, agents, commands, templates, sync, import), Settings, or any main-process behavior visible in the UI. For the OpenCode and Codex chat agents (ACP runtimes, chat-agents flag, login, session continuity, tool approvals, runtime packaging) it drives the headless server over WebSocket with `scripts/control.mjs` instead. Never touches the user's real ~/.claude, ~/.codex, ~/.agents or ~/.config/opencode.
+description: Launch Tatsu (the Electron agent-harness app) headless with a sandboxed HOME, drive its web client with Playwright, and capture evidence that a feature works the way a user sees it. Reach for it to prove a change to the renderer, the Config page (skills, agents, commands, templates, sync, import), Settings, or any main-process behavior visible in the UI. For the OpenCode and Codex chat agents (ACP runtimes, chat-agents flag, login, session continuity, tool approvals, runtime packaging) it drives the headless server over WebSocket with `scripts/control.mjs` instead. For the code diff tool (worktree vs a chosen base ref) it uses the fixture-repo harness in `scripts/code-diff/`. Never touches the user's real ~/.claude, ~/.codex, ~/.agents or ~/.config/opencode.
 ---
 
 # Verify Tatsu by driving the real app
@@ -202,6 +202,15 @@ which sends transport requests and signals over WebSocket instead of clicking
 the web client. Its static gate (`scripts/gate.sh`), launch, doctor, drive,
 evidence and report steps are in [`chat-agents.md`](chat-agents.md). Run that
 gate when a change touches packaging, `scripts/` or `package.json`.
+
+## Code diff tool
+
+The code diff tool is driven by a third harness in `scripts/code-diff/`: a
+fixture repo with a `feature/diff-demo` worktree, its own `launch.sh`,
+`doctor.sh` and `cleanup.sh` keyed by a run root, and `drive.mjs` for its
+journeys. Launch, doctor, drive, evidence and cleanup steps are in
+[`code-diff.md`](code-diff.md). Run it when a change touches the code diff
+tool, its transport handlers, or the git functions behind it.
 
 ## Feature map
 
