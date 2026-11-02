@@ -33,6 +33,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:wire": "vitest run --config vitest.wire.config.ts scripts/wire/fixtures.wire.test.ts",
+    "test:wire-diff": "node scripts/wire/diff.mjs",
     "fixtures:record": "node scripts/wire/record-fixtures.mjs",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:dev": "electron-rebuild -f -w node-pty",
