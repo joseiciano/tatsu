@@ -36,7 +36,20 @@ import type {
 } from './repo-configs'
 import type { DownloadableRuntime, RuntimesEvent, RuntimesState, RuntimeStatus } from './runtimes'
 import type { ScratchpadEvent, ScratchpadState } from './scratchpad'
-import type { SettingsState } from './settings'
+import type {
+  AgentKindSetting,
+  BrowserToolsMode,
+  CustomTheme,
+  JsonModeChatDensity,
+  MergeStrategy as SettingsMergeStrategy,
+  SettingsEvent,
+  SettingsState,
+  ThemeMode,
+  UiScale,
+  WorktreeBase,
+  WorktreeDetail,
+  WorktreeScripts
+} from './settings'
 import { initialSnooze, snoozeReducer, type SnoozeEvent, type SnoozeState } from './snooze'
 import type { AgentKind, PaneLeaf, PaneNode, PaneSplit, TerminalTab } from './terminals'
 import type { UpdaterEvent, UpdaterState, UpdaterStatus } from './updater'
@@ -135,6 +148,30 @@ const comparison: WireEqual<Generated.HarnessConfigComparison, HarnessConfigComp
 const comparisons: WireEqual<Generated.HarnessConfigComparisons, HarnessConfigState['comparisons']> = true
 const runtimesState: WireEqual<Generated.RuntimesState, RuntimesState> = true
 const byAgent: WireEqual<Generated.RuntimesState['byAgent'], RuntimesState['byAgent']> = true
+
+const themeMode: WireEqual<Generated.ThemeMode, ThemeMode> = true
+const customThemeMode: WireEqual<Generated.CustomThemeMode, CustomTheme['mode']> = true
+const customTheme: WireEqual<Generated.CustomTheme, CustomTheme> = true
+const worktreeScripts: WireEqual<Generated.WorktreeScripts, WorktreeScripts> = true
+const worktreeBase: WireEqual<Generated.WorktreeBase, WorktreeBase> = true
+const worktreeDetail: WireEqual<Generated.WorktreeDetail, WorktreeDetail> = true
+const settingsMergeStrategy: WireEqual<Generated.MergeStrategy, SettingsMergeStrategy> = true
+const agentKindSetting: WireEqual<Generated.AgentKind, AgentKindSetting> = true
+const githubAuthSource: WireEqual<Generated.GithubAuthSource, NonNullable<SettingsState['githubAuthSource']>> = true
+const browserToolsMode: WireEqual<Generated.BrowserToolsMode, BrowserToolsMode> = true
+const claudeTabType: WireEqual<Generated.AgentTabType, SettingsState['defaultClaudeTabType']> = true
+const opencodeTabType: WireEqual<Generated.AgentTabType, SettingsState['defaultOpencodeTabType']> = true
+const codexTabType: WireEqual<Generated.AgentTabType, SettingsState['defaultCodexTabType']> = true
+const chatDensity: WireEqual<Generated.JsonModeChatDensity, JsonModeChatDensity> = true
+const uiScale: WireEqual<Generated.UiScale, UiScale> = true
+const settingsHotkeys: WireEqual<Generated.SettingsState['hotkeys'], SettingsState['hotkeys']> = true
+const settingsEnvVars: WireEqual<Generated.SettingsState['claudeEnvVars'], SettingsState['claudeEnvVars']> = true
+const rootChange: WireEqual<
+  Generated.HarnessConfigRootChange,
+  Extract<SettingsEvent, { type: 'settings/harnessConfigRootsChanged' }>['payload']
+> = true
+const settingsState: WireEqual<Generated.SettingsState, SettingsState> = true
+const settingsEvent: WireEqual<Generated.SettingsEvent, SettingsEvent> = true
 
 const terminalTab: WireEqual<Generated.TerminalTab, TerminalTab> = true
 const paneLeaf: WireEqual<Generated.PaneLeaf, Omit<PaneLeaf, 'type'>> = true

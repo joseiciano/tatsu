@@ -11,6 +11,7 @@ use crate::slices::{
     repo_configs::{self, RepoConfigsEvent, RepoConfigsState},
     runtimes::{self, RuntimesEvent, RuntimesState},
     scratchpad::{self, ScratchpadEvent, ScratchpadState},
+    settings::{self, SettingsEvent, SettingsState},
     snooze::{self, SnoozeEvent, SnoozeState},
     updater::{self, UpdaterEvent, UpdaterState},
     worktrees::{self, WorktreesEvent, WorktreesState},
@@ -19,6 +20,7 @@ use crate::slices::{
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppState {
+    pub settings: SettingsState,
     pub prs: PRsState,
     pub onboarding: OnboardingState,
     pub hooks: HooksState,
@@ -36,6 +38,7 @@ pub struct AppState {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(untagged)]
 pub enum StateEvent {
+    Settings(SettingsEvent),
     Prs(PRsEvent),
     Onboarding(OnboardingEvent),
     Hooks(HooksEvent),
@@ -52,6 +55,7 @@ pub enum StateEvent {
 
 pub fn root_reduce(state: &mut AppState, event: StateEvent, _now: i64) {
     match event {
+        StateEvent::Settings(event) => settings::reduce(&mut state.settings, event),
         StateEvent::Prs(event) => prs::reduce(&mut state.prs, event),
         StateEvent::Onboarding(event) => onboarding::reduce(&mut state.onboarding, event),
         StateEvent::Hooks(event) => hooks::reduce(&mut state.hooks, event),
@@ -98,6 +102,254 @@ mod tests {
     #[test]
     fn each_event_changes_only_its_own_slice() {
         let cases = [
+            (
+                "settings",
+                json!({"type": "settings/themeModeChanged", "payload": "dark"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/themeLightChanged", "payload": "github-light"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/themeDarkChanged", "payload": "dracula"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/customThemesChanged", "payload": [{"id": "night-owl", "name": "Night Owl", "mode": "dark", "colors": {"surface": "#011627", "accent": "#82aaff", "base": "#000"}}, {"id": "paper", "name": "Paper", "mode": "light", "colors": {}}]}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/hotkeysChanged", "payload": {"tab.new": "Cmd+T", "pane.split": "Cmd+D", "app.settings": "Cmd+,"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/defaultAgentChanged", "payload": "opencode"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/claudeCommandChanged", "payload": "claude --verbose"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/codexCommandChanged", "payload": "codex --full-auto"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/opencodeCommandChanged", "payload": "opencode"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/worktreeScriptsChanged", "payload": {"setup": "pnpm install", "teardown": "rm -rf node_modules"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/claudeEnvVarsChanged", "payload": {"ZED": "1", "ANTHROPIC_LOG": "debug"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/codexEnvVarsChanged", "payload": {"OPENAI_LOG": "info"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/opencodeEnvVarsChanged", "payload": {"OPENCODE_X": "y", "A": "b"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessMcpEnabledChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/nameClaudeSessionsChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/terminalFontFamilyChanged", "payload": "JetBrains Mono"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/terminalFontSizeChanged", "payload": 16}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/editorChanged", "payload": "cursor"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/worktreeBaseChanged", "payload": "local"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/mergeStrategyChanged", "payload": "fast-forward"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/worktreeDetailChanged", "payload": "none"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/shareClaudeSettingsChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/hasGithubTokenChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/githubAuthSourceChanged", "payload": "gh-cli"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/viewerLoginChanged", "payload": "octocat"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessStarredChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/claudeModelChanged", "payload": "claude-opus-4"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/codexModelChanged", "payload": "gpt-5-codex"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/opencodeModelChanged", "payload": "anthropic/claude-sonnet"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/autoUpdateEnabledChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/experimentalChatAgentsEnabledChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessSystemPromptEnabledChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessSystemPromptChanged", "payload": "You are in a worktree.\nBe brief."}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessSystemPromptMainChanged", "payload": "You are on main."}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/claudeTuiFullscreenChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/wsTransportEnabledChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/wsTransportPortChanged", "payload": 40000}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/wsTransportHostChanged", "payload": "0.0.0.0"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/browserToolsEnabledChanged", "payload": false}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/browserToolsModeChanged", "payload": "view"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/defaultClaudeTabTypeChanged", "payload": "json"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/defaultOpencodeTabTypeChanged", "payload": "json"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/defaultCodexTabTypeChanged", "payload": "json"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/chatPromotionDismissedChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/autoApprovePermissionsChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/autoApproveSteerInstructionsChanged", "payload": "approve pnpm install"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/useSystemClaudeForJsonModeChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/jsonModeChatDensityChanged", "payload": "comfy"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/uiScaleChanged", "payload": "x-large"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/jsonModeSendOnEnterChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/jsonModeDefaultPermissionModeChanged", "payload": "plan"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/autoSleepMinutesChanged", "payload": 0}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/snoozeDefaultDaysChanged", "payload": 14}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/expandedDiagnosticLoggingEnabledChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/prReviewPromptChanged", "payload": "Check the tests."}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/announcementDismissed", "payload": "b"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/announcementsMutedChanged", "payload": true}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/piCommandChanged", "payload": "pi --fast"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/piEnvVarsChanged", "payload": {"PI_HOME": "/p"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/piModelChanged", "payload": "pi-large"}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessConfigRootsChanged", "payload": {"key": "claudeAgents", "path": "/c/agents"}}),
+            ),
+            (
+                "settings",
+                json!({"type": "settings/harnessConfigSourceDirChanged", "payload": "/templates"}),
+            ),
             (
                 "prs",
                 json!({ "type": "prs/statusChanged", "payload": { "path": "/b", "status": null } }),

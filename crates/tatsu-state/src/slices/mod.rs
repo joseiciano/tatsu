@@ -9,6 +9,7 @@ pub mod prs;
 pub mod repo_configs;
 pub mod runtimes;
 pub mod scratchpad;
+pub mod settings;
 pub mod snooze;
 pub mod terminals;
 pub mod updater;
