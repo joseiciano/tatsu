@@ -29,6 +29,7 @@
     "pack:headless:all": "echo 'Cross-platform packaging happens in CI. Run pack:headless to build for the current host.'",
     "preview": "electron-vite preview",
     "typecheck": "tsc -b --force",
+    "gen:wire-types": "cargo run -q -p tatsu-state-harness --bin gen-wire-types",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "electron-builder install-app-deps",

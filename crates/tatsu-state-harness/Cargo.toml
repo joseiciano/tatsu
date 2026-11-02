@@ -1,0 +1,9 @@
+[package]
+name = "tatsu-state-harness"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+tatsu-state.workspace = true
