@@ -1,0 +1,5596 @@
+[
+  {
+    "name": "initial state: a no-op event from another slice leaves the initial harnessConfig state",
+    "now": 1700000000000,
+    "event": {
+      "type": "snooze/clear",
+      "payload": "/none"
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "loadingChanged sets loading",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {
+        "claude:skills": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "skills"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": false,
+      "error": "previous failure",
+      "lastScannedAt": 100,
+      "lastSyncedAt": 150,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/loadingChanged",
+      "payload": true
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {
+        "claude:skills": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "skills"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": true,
+      "error": "previous failure",
+      "lastScannedAt": 100,
+      "lastSyncedAt": 150,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "loadingChanged to the same value leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {
+        "claude:skills": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "skills"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": false,
+      "error": "previous failure",
+      "lastScannedAt": 100,
+      "lastSyncedAt": 150,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/loadingChanged",
+      "payload": false
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {
+        "claude:skills": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "skills"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": false,
+      "error": "previous failure",
+      "lastScannedAt": 100,
+      "lastSyncedAt": 150,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourcesLoaded replaces only the selected harness in one logical view",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [
+          {
+            "id": "claude:agent",
+            "agentKind": "claude",
+            "resourceType": "agents",
+            "canonicalResourceType": "agents",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "agents/one.md",
+            "absolutePath": "/workspace/.claude/agents/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "skills": [
+          {
+            "id": "claude:skill",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "Claude skill",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex:skill",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.codex/skills/skill.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode:skill",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.opencode/skills/skill.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": [
+          {
+            "id": "claude:command",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/one.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": "scan warning",
+      "lastScannedAt": 100,
+      "lastSyncedAt": 90,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourcesLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "resources": [
+          {
+            "id": "claude:replacement",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "Replacement",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "scannedAt": 400
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [
+          {
+            "id": "claude:agent",
+            "agentKind": "claude",
+            "resourceType": "agents",
+            "canonicalResourceType": "agents",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "agents/one.md",
+            "absolutePath": "/workspace/.claude/agents/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "skills": [
+          {
+            "id": "claude:replacement",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "Replacement",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex:skill",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.codex/skills/skill.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode:skill",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.opencode/skills/skill.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": [
+          {
+            "id": "claude:command",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/one.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": "scan warning",
+      "lastScannedAt": 400,
+      "lastSyncedAt": 90,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourcesLoaded orders by harness, relative path, then id, with a fractional updatedAt",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "opencode",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.opencode/skills/shared/path.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.codex/skills/shared/path.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "b",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourcesLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "resources": [
+          {
+            "id": "b",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "a",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 1717000000123.456
+          }
+        ],
+        "scannedAt": 1000
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "a",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 1717000000123.456
+          },
+          {
+            "id": "b",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.codex/skills/shared/path.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "shared/path.md",
+            "absolutePath": "/workspace/.opencode/skills/shared/path.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": 1000,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourcesLoaded drops incoming refs of another harness or another logical view",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": [
+          {
+            "id": "old",
+            "agentKind": "codex",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/old.md",
+            "absolutePath": "/workspace/.codex/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "other",
+            "agentKind": "opencode",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/other.md",
+            "absolutePath": "/workspace/.opencode/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourcesLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "codex",
+          "resourceType": "commands"
+        },
+        "resources": [
+          {
+            "id": "keep",
+            "agentKind": "codex",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/keep.md",
+            "absolutePath": "/workspace/.codex/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "wrong-kind",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/a.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "wrong-type",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/b.md",
+            "absolutePath": "/workspace/.codex/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "scannedAt": 5
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": [
+          {
+            "id": "keep",
+            "agentKind": "codex",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/keep.md",
+            "absolutePath": "/workspace/.codex/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "other",
+            "agentKind": "opencode",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/other.md",
+            "absolutePath": "/workspace/.opencode/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": 5,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourcesLoaded with the same sequence only advances the scan time",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": 900,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourcesLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "resources": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "scannedAt": 901
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": 901,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourcesLoaded sorts relative paths by UTF-16 code units",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourcesLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "resources": [
+          {
+            "id": "wave",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/～.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "smile",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/😀.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "plain",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/z.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "scannedAt": 7
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "plain",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/z.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "smile",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/😀.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "wave",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/～.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": 7,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourcesLoaded keeps the input order of equal sort keys",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourcesLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "resources": [
+          {
+            "id": "same",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "first",
+            "relativePath": "skills/same.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "same",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "second",
+            "relativePath": "skills/same.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "scannedAt": 8
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "same",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "first",
+            "relativePath": "skills/same.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "same",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "second",
+            "relativePath": "skills/same.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": 8,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "comparisonLoaded adds a new scope key after the existing ones",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {
+        "claude:commands": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "commands"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": 350,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/comparisonLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "status": "conflict",
+        "configOnly": [],
+        "changed": [
+          {
+            "disk": {
+              "id": "disk:one",
+              "agentKind": "claude",
+              "resourceType": "skills",
+              "canonicalResourceType": "skills",
+              "aliasResourceTypes": [],
+              "label": "One",
+              "relativePath": "skills/one.md",
+              "absolutePath": "/workspace/.claude/skills/one.md",
+              "hash": "sha256:disk",
+              "existsOnDisk": true,
+              "managed": true,
+              "updatedAt": 100
+            },
+            "config": {
+              "id": "config:one",
+              "agentKind": "claude",
+              "resourceType": "skills",
+              "canonicalResourceType": "skills",
+              "aliasResourceTypes": [],
+              "label": "One",
+              "relativePath": "skills/one.md",
+              "absolutePath": "/workspace/.claude/skills/one.md",
+              "hash": "sha256:config",
+              "existsOnDisk": true,
+              "managed": true,
+              "updatedAt": 100
+            }
+          }
+        ],
+        "comparedAt": 401,
+        "renderErrors": [
+          {
+            "templateRef": "agent/x",
+            "message": "m",
+            "held": [
+              {
+                "id": "held",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:one",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            ]
+          }
+        ],
+        "fragmentErrors": [
+          {
+            "id": "f",
+            "label": "F",
+            "relativePath": "skills/f.md",
+            "message": "m",
+            "held": {
+              "id": "fh",
+              "agentKind": "claude",
+              "resourceType": "skills",
+              "canonicalResourceType": "skills",
+              "aliasResourceTypes": [],
+              "label": "One",
+              "relativePath": "skills/one.md",
+              "absolutePath": "/workspace/.claude/skills/one.md",
+              "hash": "sha256:one",
+              "existsOnDisk": true,
+              "managed": true,
+              "updatedAt": 100
+            }
+          },
+          {
+            "id": "g",
+            "label": "G",
+            "relativePath": "skills/g.md",
+            "message": "m"
+          }
+        ],
+        "fragmentEdits": [
+          {
+            "id": "e",
+            "label": "E",
+            "relativePath": "skills/e.md",
+            "fragments": [
+              "style"
+            ]
+          }
+        ]
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {
+        "claude:commands": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "commands"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        },
+        "claude:skills": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "skills"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 401,
+          "renderErrors": [
+            {
+              "templateRef": "agent/x",
+              "message": "m",
+              "held": [
+                {
+                  "id": "held",
+                  "agentKind": "claude",
+                  "resourceType": "skills",
+                  "canonicalResourceType": "skills",
+                  "aliasResourceTypes": [],
+                  "label": "One",
+                  "relativePath": "skills/one.md",
+                  "absolutePath": "/workspace/.claude/skills/one.md",
+                  "hash": "sha256:one",
+                  "existsOnDisk": true,
+                  "managed": true,
+                  "updatedAt": 100
+                }
+              ]
+            }
+          ],
+          "fragmentErrors": [
+            {
+              "id": "f",
+              "label": "F",
+              "relativePath": "skills/f.md",
+              "message": "m",
+              "held": {
+                "id": "fh",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:one",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            },
+            {
+              "id": "g",
+              "label": "G",
+              "relativePath": "skills/g.md",
+              "message": "m"
+            }
+          ],
+          "fragmentEdits": [
+            {
+              "id": "e",
+              "label": "E",
+              "relativePath": "skills/e.md",
+              "fragments": [
+                "style"
+              ]
+            }
+          ]
+        }
+      },
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": 350,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "comparisonLoaded on an existing scope key replaces it in place",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {
+        "opencode:agents": {
+          "scope": {
+            "agentKind": "opencode",
+            "resourceType": "agents"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        },
+        "codex:skills": {
+          "scope": {
+            "agentKind": "codex",
+            "resourceType": "skills"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        },
+        "claude:commands": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "commands"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/comparisonLoaded",
+      "payload": {
+        "scope": {
+          "agentKind": "codex",
+          "resourceType": "skills"
+        },
+        "status": "synced",
+        "configOnly": [],
+        "changed": [],
+        "comparedAt": 900
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {
+        "opencode:agents": {
+          "scope": {
+            "agentKind": "opencode",
+            "resourceType": "agents"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        },
+        "codex:skills": {
+          "scope": {
+            "agentKind": "codex",
+            "resourceType": "skills"
+          },
+          "status": "synced",
+          "configOnly": [],
+          "changed": [],
+          "comparedAt": 900
+        },
+        "claude:commands": {
+          "scope": {
+            "agentKind": "claude",
+            "resourceType": "commands"
+          },
+          "status": "conflict",
+          "configOnly": [],
+          "changed": [
+            {
+              "disk": {
+                "id": "disk:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:disk",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              },
+              "config": {
+                "id": "config:one",
+                "agentKind": "claude",
+                "resourceType": "skills",
+                "canonicalResourceType": "skills",
+                "aliasResourceTypes": [],
+                "label": "One",
+                "relativePath": "skills/one.md",
+                "absolutePath": "/workspace/.claude/skills/one.md",
+                "hash": "sha256:config",
+                "existsOnDisk": true,
+                "managed": true,
+                "updatedAt": 100
+              }
+            }
+          ],
+          "comparedAt": 200
+        }
+      },
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "syncApplied records the sync time",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": true,
+      "error": "existing error",
+      "lastScannedAt": 410,
+      "lastSyncedAt": 420,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/syncApplied",
+      "payload": {
+        "scope": {
+          "agentKind": "codex",
+          "resourceType": "skills"
+        },
+        "syncedAt": 500
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": true,
+      "error": "existing error",
+      "lastScannedAt": 410,
+      "lastSyncedAt": 500,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "syncApplied with the same time leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": 800,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/syncApplied",
+      "payload": {
+        "scope": {
+          "agentKind": "claude",
+          "resourceType": "skills"
+        },
+        "syncedAt": 800
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": 800,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourceUpserted replaces the matching harness and id in place",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "shared-id",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "before",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "sibling",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/sibling.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": [
+          {
+            "id": "shared-id",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/shared-id.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourceUpserted",
+      "payload": {
+        "id": "shared-id",
+        "agentKind": "claude",
+        "resourceType": "skills",
+        "canonicalResourceType": "skills",
+        "aliasResourceTypes": [],
+        "label": "after",
+        "relativePath": "skills/zzz.md",
+        "absolutePath": "/workspace/.claude/skills/one.md",
+        "hash": "sha256:one",
+        "existsOnDisk": true,
+        "managed": true,
+        "updatedAt": 100
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "shared-id",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "after",
+            "relativePath": "skills/zzz.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "sibling",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/sibling.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": [
+          {
+            "id": "shared-id",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "commands",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "commands/shared-id.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourceUpserted inserts before the first entry that sorts after it",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "claude",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex-late",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.codex/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "a.md",
+            "absolutePath": "/workspace/.opencode/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourceUpserted",
+      "payload": {
+        "id": "codex-early",
+        "agentKind": "codex",
+        "resourceType": "skills",
+        "canonicalResourceType": "skills",
+        "aliasResourceTypes": [],
+        "label": "One",
+        "relativePath": "a.md",
+        "absolutePath": "/workspace/.codex/skills/one.md",
+        "hash": "sha256:one",
+        "existsOnDisk": true,
+        "managed": true,
+        "updatedAt": 100
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "claude",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex-early",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "a.md",
+            "absolutePath": "/workspace/.codex/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "codex-late",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.codex/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "a.md",
+            "absolutePath": "/workspace/.opencode/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourceUpserted appends when nothing sorts after it and keeps optional fields",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "claude",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "a.md",
+            "absolutePath": "/workspace/.opencode/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourceUpserted",
+      "payload": {
+        "id": "tail",
+        "agentKind": "opencode",
+        "resourceType": "skills",
+        "canonicalResourceType": "skills",
+        "aliasResourceTypes": [],
+        "label": "One",
+        "relativePath": "z.md",
+        "absolutePath": "/workspace/.opencode/skills/one.md",
+        "hash": "sha256:one",
+        "existsOnDisk": true,
+        "managed": true,
+        "updatedAt": 0.5,
+        "linkedFrom": "/real/z.md",
+        "templateRef": "skill/z",
+        "source": "template"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "claude",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "opencode",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "a.md",
+            "absolutePath": "/workspace/.opencode/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "tail",
+            "agentKind": "opencode",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "z.md",
+            "absolutePath": "/workspace/.opencode/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 0.5,
+            "linkedFrom": "/real/z.md",
+            "templateRef": "skill/z",
+            "source": "template"
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourceUpserted with an equal resource leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourceUpserted",
+      "payload": {
+        "id": "ref:claude:skills:one",
+        "agentKind": "claude",
+        "resourceType": "skills",
+        "canonicalResourceType": "skills",
+        "aliasResourceTypes": [],
+        "label": "One",
+        "relativePath": "skills/one.md",
+        "absolutePath": "/workspace/.claude/skills/one.md",
+        "hash": "sha256:one",
+        "existsOnDisk": true,
+        "managed": true,
+        "updatedAt": 100
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourceDeleted removes only the matching harness, view, and id",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "alias-id",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          },
+          {
+            "id": "alias-id",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.codex/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": [
+          {
+            "id": "alias-id",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [
+              "commands"
+            ],
+            "label": "One",
+            "relativePath": "commands/one.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourceDeleted",
+      "payload": {
+        "agentKind": "claude",
+        "resourceType": "skills",
+        "id": "alias-id"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "alias-id",
+            "agentKind": "codex",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.codex/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": [
+          {
+            "id": "alias-id",
+            "agentKind": "claude",
+            "resourceType": "commands",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [
+              "commands"
+            ],
+            "label": "One",
+            "relativePath": "commands/one.md",
+            "absolutePath": "/workspace/.claude/commands/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ]
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "resourceDeleted with a missing id leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/resourceDeleted",
+      "payload": {
+        "agentKind": "claude",
+        "resourceType": "skills",
+        "id": "missing"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [
+          {
+            "id": "ref:claude:skills:one",
+            "agentKind": "claude",
+            "resourceType": "skills",
+            "canonicalResourceType": "skills",
+            "aliasResourceTypes": [],
+            "label": "One",
+            "relativePath": "skills/one.md",
+            "absolutePath": "/workspace/.claude/skills/one.md",
+            "hash": "sha256:one",
+            "existsOnDisk": true,
+            "managed": true,
+            "updatedAt": 100
+          }
+        ],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "errorChanged sets an error",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": "old",
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/errorChanged",
+      "payload": "scan failed"
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": "scan failed",
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "errorChanged clears the error",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": true,
+      "error": "failure",
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/errorChanged",
+      "payload": null
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": true,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "errorChanged to the same value leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/errorChanged",
+      "payload": null
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templatesLoaded sorts templates and replaces only template-file errors",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "style",
+            "content": "Be brief.",
+            "relativePath": "fragments/style.md",
+            "hash": "sha256:style"
+          }
+        ],
+        "errors": [
+          {
+            "relativePath": "agents/old.md",
+            "message": "old"
+          },
+          {
+            "relativePath": "fragments/bad.md",
+            "message": "bad fragment"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templatesLoaded",
+      "payload": {
+        "templates": [
+          {
+            "kind": "skill",
+            "name": "alpha",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "skills/alpha/TEMPLATE.md",
+            "hash": "sha256:skill:alpha"
+          },
+          {
+            "kind": "command",
+            "name": "beta",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "commands/beta.md",
+            "hash": "sha256:command:beta"
+          },
+          {
+            "kind": "agent",
+            "name": "zeta",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/zeta.md",
+            "hash": "sha256:agent:zeta"
+          }
+        ],
+        "errors": [
+          {
+            "relativePath": "agents/broken.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": 5
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "zeta",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/zeta.md",
+            "hash": "sha256:agent:zeta"
+          },
+          {
+            "kind": "skill",
+            "name": "alpha",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "skills/alpha/TEMPLATE.md",
+            "hash": "sha256:skill:alpha"
+          },
+          {
+            "kind": "command",
+            "name": "beta",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "commands/beta.md",
+            "hash": "sha256:command:beta"
+          }
+        ],
+        "fragments": [
+          {
+            "name": "style",
+            "content": "Be brief.",
+            "relativePath": "fragments/style.md",
+            "hash": "sha256:style"
+          }
+        ],
+        "errors": [
+          {
+            "relativePath": "agents/broken.md",
+            "message": "broken"
+          },
+          {
+            "relativePath": "fragments/bad.md",
+            "message": "bad fragment"
+          }
+        ],
+        "loadedAt": 5
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templatesLoaded sorts template names by UTF-16 code units",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templatesLoaded",
+      "payload": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "～",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/～.md",
+            "hash": "sha256:agent:～"
+          },
+          {
+            "kind": "agent",
+            "name": "😀",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/😀.md",
+            "hash": "sha256:agent:😀"
+          },
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          }
+        ],
+        "errors": [],
+        "loadedAt": 6
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "😀",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/😀.md",
+            "hash": "sha256:agent:😀"
+          },
+          {
+            "kind": "agent",
+            "name": "～",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/～.md",
+            "hash": "sha256:agent:～"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 6
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templatesLoaded keeps frontmatter key order and disabled harnesses",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templatesLoaded",
+      "payload": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "fm",
+            "description": "Reviews code",
+            "fragments": [
+              "style"
+            ],
+            "body": "Body",
+            "harnesses": {
+              "opencode": false,
+              "claude": {
+                "name": "fm-claude",
+                "fragments": [
+                  "tone"
+                ],
+                "frontmatter": {
+                  "zeta": 1,
+                  "alpha": {
+                    "zz": true,
+                    "aa": [
+                      1,
+                      null,
+                      "x"
+                    ]
+                  },
+                  "model": "opus",
+                  "beta": 2.5
+                }
+              },
+              "codex": {
+                "frontmatter": {
+                  "tools": [
+                    "read"
+                  ],
+                  "description": "d"
+                }
+              }
+            },
+            "references": [
+              {
+                "fileName": "ref.md",
+                "content": "R"
+              }
+            ],
+            "relativePath": "agents/fm.md",
+            "hash": "sha256:agent:fm"
+          }
+        ],
+        "errors": [],
+        "loadedAt": 7
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "fm",
+            "description": "Reviews code",
+            "fragments": [
+              "style"
+            ],
+            "body": "Body",
+            "harnesses": {
+              "opencode": false,
+              "claude": {
+                "name": "fm-claude",
+                "fragments": [
+                  "tone"
+                ],
+                "frontmatter": {
+                  "zeta": 1,
+                  "alpha": {
+                    "zz": true,
+                    "aa": [
+                      1,
+                      null,
+                      "x"
+                    ]
+                  },
+                  "model": "opus",
+                  "beta": 2.5
+                }
+              },
+              "codex": {
+                "frontmatter": {
+                  "tools": [
+                    "read"
+                  ],
+                  "description": "d"
+                }
+              }
+            },
+            "references": [
+              {
+                "fileName": "ref.md",
+                "content": "R"
+              }
+            ],
+            "relativePath": "agents/fm.md",
+            "hash": "sha256:agent:fm"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 7
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templatesLoaded sorts errors stably with kept errors before incoming ones",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "fragments/a.md",
+            "message": "kept"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templatesLoaded",
+      "payload": {
+        "templates": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "incoming one"
+          },
+          {
+            "relativePath": "fragments/a.md",
+            "message": "incoming fragment-path"
+          },
+          {
+            "relativePath": "agents/a.md",
+            "message": "incoming two"
+          }
+        ],
+        "loadedAt": 8
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "incoming one"
+          },
+          {
+            "relativePath": "agents/a.md",
+            "message": "incoming two"
+          },
+          {
+            "relativePath": "fragments/a.md",
+            "message": "kept"
+          },
+          {
+            "relativePath": "fragments/a.md",
+            "message": "incoming fragment-path"
+          }
+        ],
+        "loadedAt": 8
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateChanged inserts in order and clears that file error",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "c",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/c.md",
+            "hash": "sha256:agent:c"
+          }
+        ],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/b.md",
+            "message": "x"
+          },
+          {
+            "relativePath": "agents/c.md",
+            "message": "y"
+          }
+        ],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateChanged",
+      "payload": {
+        "kind": "agent",
+        "name": "b",
+        "description": "Reviews code",
+        "fragments": [],
+        "body": "Body",
+        "harnesses": {
+          "claude": {
+            "frontmatter": {}
+          }
+        },
+        "references": [],
+        "relativePath": "agents/b.md",
+        "hash": "sha256:agent:b"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "b",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/b.md",
+            "hash": "sha256:agent:b"
+          },
+          {
+            "kind": "agent",
+            "name": "c",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/c.md",
+            "hash": "sha256:agent:c"
+          }
+        ],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/c.md",
+            "message": "y"
+          }
+        ],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateChanged replaces a template in place",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "b",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/b.md",
+            "hash": "sha256:agent:b"
+          },
+          {
+            "kind": "agent",
+            "name": "c",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/c.md",
+            "hash": "sha256:agent:c"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateChanged",
+      "payload": {
+        "kind": "agent",
+        "name": "b",
+        "description": "Reviews code",
+        "fragments": [],
+        "body": "Changed",
+        "harnesses": {
+          "claude": {
+            "frontmatter": {}
+          }
+        },
+        "references": [],
+        "relativePath": "agents/b.md",
+        "hash": "sha256:agent:b"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "b",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Changed",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/b.md",
+            "hash": "sha256:agent:b"
+          },
+          {
+            "kind": "agent",
+            "name": "c",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/c.md",
+            "hash": "sha256:agent:c"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateChanged with an equal template leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "b",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/b.md",
+            "hash": "sha256:agent:b"
+          },
+          {
+            "kind": "agent",
+            "name": "c",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/c.md",
+            "hash": "sha256:agent:c"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateChanged",
+      "payload": {
+        "kind": "agent",
+        "name": "b",
+        "description": "Reviews code",
+        "fragments": [],
+        "body": "Body",
+        "harnesses": {
+          "claude": {
+            "frontmatter": {}
+          }
+        },
+        "references": [],
+        "relativePath": "agents/b.md",
+        "hash": "sha256:agent:b"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "b",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/b.md",
+            "hash": "sha256:agent:b"
+          },
+          {
+            "kind": "agent",
+            "name": "c",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/c.md",
+            "hash": "sha256:agent:c"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateChanged sorts by kind before name",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "z",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/z.md",
+            "hash": "sha256:agent:z"
+          },
+          {
+            "kind": "command",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "commands/a.md",
+            "hash": "sha256:command:a"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateChanged",
+      "payload": {
+        "kind": "skill",
+        "name": "a",
+        "description": "Reviews code",
+        "fragments": [],
+        "body": "Body",
+        "harnesses": {
+          "claude": {
+            "frontmatter": {}
+          }
+        },
+        "references": [],
+        "relativePath": "skills/a/TEMPLATE.md",
+        "hash": "sha256:skill:a"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "z",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/z.md",
+            "hash": "sha256:agent:z"
+          },
+          {
+            "kind": "skill",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "skills/a/TEMPLATE.md",
+            "hash": "sha256:skill:a"
+          },
+          {
+            "kind": "command",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "commands/a.md",
+            "hash": "sha256:command:a"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateChanged inserts a name above U+FFFF by UTF-16 order",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "～",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/～.md",
+            "hash": "sha256:agent:～"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateChanged",
+      "payload": {
+        "kind": "agent",
+        "name": "😀",
+        "description": "Reviews code",
+        "fragments": [],
+        "body": "Body",
+        "harnesses": {
+          "claude": {
+            "frontmatter": {}
+          }
+        },
+        "references": [],
+        "relativePath": "agents/😀.md",
+        "hash": "sha256:agent:😀"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "agent",
+            "name": "😀",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/😀.md",
+            "hash": "sha256:agent:😀"
+          },
+          {
+            "kind": "agent",
+            "name": "～",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/～.md",
+            "hash": "sha256:agent:～"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateRemoved removes one template",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          },
+          {
+            "kind": "command",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "commands/a.md",
+            "hash": "sha256:command:a"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateRemoved",
+      "payload": {
+        "kind": "command",
+        "name": "a"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateRemoved with a missing template leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateRemoved",
+      "payload": {
+        "kind": "skill",
+        "name": "a"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "a",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/a.md",
+            "hash": "sha256:agent:a"
+          }
+        ],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": 1
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentsLoaded sorts fragments and replaces only fragment errors",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "reviewer",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/reviewer.md",
+            "hash": "sha256:agent:reviewer"
+          }
+        ],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/bad.md",
+            "message": "bad template"
+          },
+          {
+            "relativePath": "fragments/old.md",
+            "message": "old"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentsLoaded",
+      "payload": {
+        "fragments": [
+          {
+            "name": "z",
+            "content": "Be brief.",
+            "relativePath": "fragments/z.md",
+            "hash": "sha256:z"
+          },
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          }
+        ],
+        "errors": [
+          {
+            "relativePath": "fragments/x.md",
+            "message": "x"
+          }
+        ],
+        "loadedAt": 9
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [
+          {
+            "kind": "agent",
+            "name": "reviewer",
+            "description": "Reviews code",
+            "fragments": [],
+            "body": "Body",
+            "harnesses": {
+              "claude": {
+                "frontmatter": {}
+              }
+            },
+            "references": [],
+            "relativePath": "agents/reviewer.md",
+            "hash": "sha256:agent:reviewer"
+          }
+        ],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "z",
+            "content": "Be brief.",
+            "relativePath": "fragments/z.md",
+            "hash": "sha256:z"
+          }
+        ],
+        "errors": [
+          {
+            "relativePath": "agents/bad.md",
+            "message": "bad template"
+          },
+          {
+            "relativePath": "fragments/x.md",
+            "message": "x"
+          }
+        ],
+        "loadedAt": 9
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentsLoaded sorts fragment names by UTF-16 code units",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentsLoaded",
+      "payload": {
+        "fragments": [
+          {
+            "name": "～",
+            "content": "Be brief.",
+            "relativePath": "fragments/～.md",
+            "hash": "sha256:～"
+          },
+          {
+            "name": "😀",
+            "content": "Be brief.",
+            "relativePath": "fragments/😀.md",
+            "hash": "sha256:😀"
+          },
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          }
+        ],
+        "errors": [],
+        "loadedAt": 10
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "😀",
+            "content": "Be brief.",
+            "relativePath": "fragments/😀.md",
+            "hash": "sha256:😀"
+          },
+          {
+            "name": "～",
+            "content": "Be brief.",
+            "relativePath": "fragments/～.md",
+            "hash": "sha256:～"
+          }
+        ],
+        "errors": [],
+        "loadedAt": 10
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentChanged inserts by name and clears that file error",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "z",
+            "content": "Be brief.",
+            "relativePath": "fragments/z.md",
+            "hash": "sha256:z"
+          }
+        ],
+        "errors": [
+          {
+            "relativePath": "fragments/m.md",
+            "message": "unreadable"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentChanged",
+      "payload": {
+        "name": "m",
+        "content": "Be brief.",
+        "relativePath": "fragments/m.md",
+        "hash": "sha256:m"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "m",
+            "content": "Be brief.",
+            "relativePath": "fragments/m.md",
+            "hash": "sha256:m"
+          },
+          {
+            "name": "z",
+            "content": "Be brief.",
+            "relativePath": "fragments/z.md",
+            "hash": "sha256:z"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentChanged replaces a fragment in place",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "m",
+            "content": "Be brief.",
+            "relativePath": "fragments/m.md",
+            "hash": "sha256:m"
+          },
+          {
+            "name": "z",
+            "content": "Be brief.",
+            "relativePath": "fragments/z.md",
+            "hash": "sha256:z"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentChanged",
+      "payload": {
+        "name": "m",
+        "content": "New",
+        "relativePath": "fragments/m.md",
+        "hash": "sha256:m"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "m",
+            "content": "New",
+            "relativePath": "fragments/m.md",
+            "hash": "sha256:m"
+          },
+          {
+            "name": "z",
+            "content": "Be brief.",
+            "relativePath": "fragments/z.md",
+            "hash": "sha256:z"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentChanged with an equal fragment leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "style",
+            "content": "Be brief.",
+            "relativePath": "fragments/style.md",
+            "hash": "sha256:style"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentChanged",
+      "payload": {
+        "name": "style",
+        "content": "Be brief.",
+        "relativePath": "fragments/style.md",
+        "hash": "sha256:style"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "style",
+            "content": "Be brief.",
+            "relativePath": "fragments/style.md",
+            "hash": "sha256:style"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentChanged inserts a name above U+FFFF by UTF-16 order",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "～",
+            "content": "Be brief.",
+            "relativePath": "fragments/～.md",
+            "hash": "sha256:～"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentChanged",
+      "payload": {
+        "name": "😀",
+        "content": "Be brief.",
+        "relativePath": "fragments/😀.md",
+        "hash": "sha256:😀"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "😀",
+            "content": "Be brief.",
+            "relativePath": "fragments/😀.md",
+            "hash": "sha256:😀"
+          },
+          {
+            "name": "～",
+            "content": "Be brief.",
+            "relativePath": "fragments/～.md",
+            "hash": "sha256:～"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentRemoved removes by name",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          },
+          {
+            "name": "style",
+            "content": "Be brief.",
+            "relativePath": "fragments/style.md",
+            "hash": "sha256:style"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentRemoved",
+      "payload": {
+        "name": "style"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "fragmentRemoved with a missing name leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/fragmentRemoved",
+      "payload": {
+        "name": "style"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [
+          {
+            "name": "a",
+            "content": "Be brief.",
+            "relativePath": "fragments/a.md",
+            "hash": "sha256:a"
+          }
+        ],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSourceErrorChanged inserts an error in path order",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "broken"
+          },
+          {
+            "relativePath": "agents/c.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSourceErrorChanged",
+      "payload": {
+        "relativePath": "agents/b.md",
+        "message": "broken"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "broken"
+          },
+          {
+            "relativePath": "agents/b.md",
+            "message": "broken"
+          },
+          {
+            "relativePath": "agents/c.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSourceErrorChanged replaces the message in place",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "broken"
+          },
+          {
+            "relativePath": "agents/c.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSourceErrorChanged",
+      "payload": {
+        "relativePath": "agents/a.md",
+        "message": "still broken"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "still broken"
+          },
+          {
+            "relativePath": "agents/c.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSourceErrorChanged with the same message leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSourceErrorChanged",
+      "payload": {
+        "relativePath": "agents/a.md",
+        "message": "broken"
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSourceErrorChanged with a null message clears the error",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "agents/a.md",
+            "message": "broken"
+          },
+          {
+            "relativePath": "fragments/a.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSourceErrorChanged",
+      "payload": {
+        "relativePath": "agents/a.md",
+        "message": null
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "fragments/a.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSourceErrorChanged clearing an absent error leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "fragments/a.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSourceErrorChanged",
+      "payload": {
+        "relativePath": "agents/a.md",
+        "message": null
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [
+          {
+            "relativePath": "fragments/a.md",
+            "message": "broken"
+          }
+        ],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSyncNoticeChanged sets the notice",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSyncNoticeChanged",
+      "payload": {
+        "scopes": [
+          "opencode:agents",
+          "claude:agents"
+        ],
+        "changedAt": 10
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": {
+        "scopes": [
+          "opencode:agents",
+          "claude:agents"
+        ],
+        "changedAt": 10
+      }
+    }
+  },
+  {
+    "name": "templateSyncNoticeChanged with an equal notice leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": {
+        "scopes": [
+          "claude:agents",
+          "opencode:agents"
+        ],
+        "changedAt": 10
+      }
+    },
+    "event": {
+      "type": "harnessConfig/templateSyncNoticeChanged",
+      "payload": {
+        "scopes": [
+          "claude:agents",
+          "opencode:agents"
+        ],
+        "changedAt": 10
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": {
+        "scopes": [
+          "claude:agents",
+          "opencode:agents"
+        ],
+        "changedAt": 10
+      }
+    }
+  },
+  {
+    "name": "templateSyncNoticeChanged with reordered scopes replaces the notice",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": {
+        "scopes": [
+          "claude:agents",
+          "opencode:agents"
+        ],
+        "changedAt": 10
+      }
+    },
+    "event": {
+      "type": "harnessConfig/templateSyncNoticeChanged",
+      "payload": {
+        "scopes": [
+          "opencode:agents",
+          "claude:agents"
+        ],
+        "changedAt": 10
+      }
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": {
+        "scopes": [
+          "opencode:agents",
+          "claude:agents"
+        ],
+        "changedAt": 10
+      }
+    }
+  },
+  {
+    "name": "templateSyncNoticeChanged clears the notice",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": {
+        "scopes": [
+          "codex:skills"
+        ],
+        "changedAt": 3
+      }
+    },
+    "event": {
+      "type": "harnessConfig/templateSyncNoticeChanged",
+      "payload": null
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  },
+  {
+    "name": "templateSyncNoticeChanged null on a null notice leaves the state",
+    "now": 1700000000000,
+    "before": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    },
+    "event": {
+      "type": "harnessConfig/templateSyncNoticeChanged",
+      "payload": null
+    },
+    "after": {
+      "resources": {
+        "agents": [],
+        "skills": [],
+        "commands": []
+      },
+      "comparisons": {},
+      "loading": false,
+      "error": null,
+      "lastScannedAt": null,
+      "lastSyncedAt": null,
+      "templates": {
+        "templates": [],
+        "fragments": [],
+        "errors": [],
+        "loadedAt": null
+      },
+      "templateSyncNotice": null
+    }
+  }
+]

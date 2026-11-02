@@ -158,6 +158,8 @@ export type HarnessConfigComparison = {
 
 export type HarnessConfigComparisons = Partial<{ [key in HarnessConfigScopeKey]: HarnessConfigComparison }>;
 
+export type HarnessConfigEvent = { type: "harnessConfig/loadingChanged"; payload: boolean } | { type: "harnessConfig/resourcesLoaded"; payload: HarnessConfigResourcesLoaded } | { type: "harnessConfig/comparisonLoaded"; payload: HarnessConfigComparison } | { type: "harnessConfig/syncApplied"; payload: HarnessConfigSyncApplied } | { type: "harnessConfig/resourceUpserted"; payload: HarnessConfigFileRef } | { type: "harnessConfig/resourceDeleted"; payload: HarnessConfigResourceDeleted } | { type: "harnessConfig/errorChanged"; payload: string | null } | { type: "harnessConfig/templatesLoaded"; payload: HarnessTemplatesLoaded } | { type: "harnessConfig/templateChanged"; payload: HarnessTemplate } | { type: "harnessConfig/templateRemoved"; payload: HarnessTemplateRemoved } | { type: "harnessConfig/fragmentsLoaded"; payload: HarnessFragmentsLoaded } | { type: "harnessConfig/fragmentChanged"; payload: HarnessFragment } | { type: "harnessConfig/fragmentRemoved"; payload: HarnessFragmentRemoved } | { type: "harnessConfig/templateSyncNoticeChanged"; payload: HarnessConfigTemplateSyncNotice | null } | { type: "harnessConfig/templateSourceErrorChanged"; payload: HarnessTemplateSourceErrorChange };
+
 export type HarnessConfigFileRef = {
 	id: string,
 	agentKind: ManagedHarnessKind,
@@ -199,7 +201,25 @@ export type HarnessConfigRenderErrorEntry = {
 	held: HarnessConfigFileRef[],
 };
 
+export type HarnessConfigResourceDeleted = {
+	agentKind: ManagedHarnessKind,
+	resourceType: HarnessConfigResourceType,
+	id: string,
+};
+
 export type HarnessConfigResourceType = "agents" | "skills" | "commands";
+
+export type HarnessConfigResources = {
+	agents: HarnessConfigFileRef[],
+	skills: HarnessConfigFileRef[],
+	commands: HarnessConfigFileRef[],
+};
+
+export type HarnessConfigResourcesLoaded = {
+	scope: HarnessConfigScope,
+	resources: HarnessConfigFileRef[],
+	scannedAt: number,
+};
 
 export type HarnessConfigRootChange = {
 	key: HarnessConfigRootKey,
@@ -217,7 +237,74 @@ export type HarnessConfigScope = {
 
 export type HarnessConfigScopeKey = "claude:agents" | "claude:skills" | "claude:commands" | "codex:agents" | "codex:skills" | "codex:commands" | "opencode:agents" | "opencode:skills" | "opencode:commands";
 
+export type HarnessConfigState = {
+	resources: HarnessConfigResources,
+	comparisons: HarnessConfigComparisons,
+	loading: boolean,
+	error: string | null,
+	lastScannedAt: number | null,
+	lastSyncedAt: number | null,
+	templates: HarnessTemplateSourceState,
+	templateSyncNotice: HarnessConfigTemplateSyncNotice | null,
+};
+
+export type HarnessConfigSyncApplied = {
+	scope: HarnessConfigScope,
+	syncedAt: number,
+};
+
+export type HarnessConfigSyncDirection = "sync-to-disk";
+
+export type HarnessConfigSyncPlan = {
+	planId: string,
+	scope: HarnessConfigScope,
+	direction: HarnessConfigSyncDirection,
+	status: HarnessConfigSyncStatus,
+	configOnly: HarnessConfigFileRef[],
+	changed: HarnessConfigChangedRef[],
+	generatedAt: number,
+	fingerprint: string,
+	renderErrors?: HarnessConfigRenderErrorEntry[],
+	fragmentErrors?: HarnessConfigFragmentErrorEntry[],
+	fragmentEdits?: HarnessConfigFragmentEditEntry[],
+	detach?: string[],
+};
+
 export type HarnessConfigSyncStatus = "synced" | "config-only" | "conflict";
+
+export type HarnessConfigTemplateSyncNotice = {
+	scopes: HarnessConfigScopeKey[],
+	changedAt: number,
+};
+
+export type HarnessFragment = {
+	name: string,
+	content: string,
+	relativePath: string,
+	hash: string,
+};
+
+export type HarnessFragmentRemoved = {
+	name: string,
+};
+
+export type HarnessFragmentsLoaded = {
+	fragments: HarnessFragment[],
+	errors: HarnessTemplateParseError[],
+	loadedAt: number,
+};
+
+export type HarnessTemplate = {
+	kind: HarnessTemplateKind,
+	name: string,
+	description: string,
+	fragments: string[],
+	body: string,
+	harnesses: HarnessTemplateHarnesses,
+	references: HarnessTemplateReference[],
+	relativePath: string,
+	hash: string,
+};
 
 export type HarnessTemplateHarnessBlock = {
 	name?: string,
@@ -228,6 +315,41 @@ export type HarnessTemplateHarnessBlock = {
 export type HarnessTemplateHarnessEntry = HarnessTemplateHarnessBlock | false;
 
 export type HarnessTemplateHarnesses = Partial<{ [key in ManagedHarnessKind]: HarnessTemplateHarnessEntry }>;
+
+export type HarnessTemplateKind = "agent" | "skill" | "command";
+
+export type HarnessTemplateParseError = {
+	relativePath: string,
+	message: string,
+};
+
+export type HarnessTemplateReference = {
+	fileName: string,
+	content: string,
+};
+
+export type HarnessTemplateRemoved = {
+	kind: HarnessTemplateKind,
+	name: string,
+};
+
+export type HarnessTemplateSourceErrorChange = {
+	relativePath: string,
+	message: string | null,
+};
+
+export type HarnessTemplateSourceState = {
+	templates: HarnessTemplate[],
+	fragments: HarnessFragment[],
+	errors: HarnessTemplateParseError[],
+	loadedAt: number | null,
+};
+
+export type HarnessTemplatesLoaded = {
+	templates: HarnessTemplate[],
+	errors: HarnessTemplateParseError[],
+	loadedAt: number,
+};
 
 export type HooksConsent = "pending" | "accepted" | "declined";
 
@@ -831,7 +953,7 @@ export type SnoozeState = {
 
 export type SplitDirection = "horizontal" | "vertical";
 
-export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | TerminalsEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | JsonClaudeEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent;
+export type StateEvent = SettingsEvent | PRsEvent | OnboardingEvent | HooksEvent | WorktreesEvent | TerminalsEvent | UpdaterEvent | RepoConfigsEvent | CostsEvent | BrowserEvent | JsonClaudeEvent | SnoozeEvent | RuntimesEvent | AnnouncementsEvent | ScratchpadEvent | HarnessConfigEvent;
 
 export type TerminalClientDisconnect = {
 	clientId: string,

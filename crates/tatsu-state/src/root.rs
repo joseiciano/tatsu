@@ -5,6 +5,7 @@ use crate::slices::{
     announcements::{self, AnnouncementsEvent, AnnouncementsState},
     browser::{self, BrowserEvent, BrowserState},
     costs::{self, CostsEvent, CostsState},
+    harness_config::{self, HarnessConfigEvent, HarnessConfigState},
     hooks::{self, HooksEvent, HooksState},
     json_claude::{self, JsonClaudeEvent, JsonClaudeState},
     onboarding::{self, OnboardingEvent, OnboardingState},
@@ -37,6 +38,7 @@ pub struct AppState {
     pub runtimes: RuntimesState,
     pub announcements: AnnouncementsState,
     pub scratchpad: ScratchpadState,
+    pub harness_config: HarnessConfigState,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
@@ -57,6 +59,7 @@ pub enum StateEvent {
     Runtimes(RuntimesEvent),
     Announcements(AnnouncementsEvent),
     Scratchpad(ScratchpadEvent),
+    HarnessConfig(HarnessConfigEvent),
 }
 
 pub fn root_reduce(state: &mut AppState, event: StateEvent, now: i64) {
@@ -76,6 +79,9 @@ pub fn root_reduce(state: &mut AppState, event: StateEvent, now: i64) {
         StateEvent::Runtimes(event) => runtimes::reduce(&mut state.runtimes, event),
         StateEvent::Announcements(event) => announcements::reduce(&mut state.announcements, event),
         StateEvent::Scratchpad(event) => scratchpad::reduce(&mut state.scratchpad, event),
+        StateEvent::HarnessConfig(event) => {
+            harness_config::reduce(&mut state.harness_config, event)
+        }
     }
 }
 
@@ -134,7 +140,26 @@ mod tests {
             "snooze": { "byPath": { "/a": { "path": "/a", "snoozedAt": 1, "wakeAt": 2 } } },
             "runtimes": { "byAgent": { "codex": { "state": "bundled" } } },
             "announcements": { "items": [], "lastFetched": 1, "lastError": "old" },
-            "scratchpad": { "byWorktreePath": { "/a": "note" } }
+            "scratchpad": { "byWorktreePath": { "/a": "note" } },
+            "harnessConfig": {
+                "resources": {
+                    "agents": [],
+                    "skills": [{ "id": "s1", "agentKind": "claude", "resourceType": "skills", "canonicalResourceType": "skills", "aliasResourceTypes": [], "label": "S", "relativePath": "skills/s1.md", "absolutePath": "/s1", "hash": "h", "existsOnDisk": true, "managed": true, "updatedAt": 1.5 }],
+                    "commands": []
+                },
+                "comparisons": { "claude:skills": { "scope": { "agentKind": "claude", "resourceType": "skills" }, "status": "synced", "configOnly": [], "changed": [], "comparedAt": 1 } },
+                "loading": false,
+                "error": "old",
+                "lastScannedAt": 1,
+                "lastSyncedAt": 1,
+                "templates": {
+                    "templates": [{ "kind": "agent", "name": "a", "description": "", "fragments": [], "body": "", "harnesses": { "claude": { "frontmatter": { "z": 1, "a": 2 } }, "codex": false }, "references": [], "relativePath": "agents/a.md", "hash": "h" }],
+                    "fragments": [{ "name": "f", "content": "c", "relativePath": "fragments/f.md", "hash": "h" }],
+                    "errors": [{ "relativePath": "agents/b.md", "message": "bad" }],
+                    "loadedAt": 1
+                },
+                "templateSyncNotice": { "scopes": ["claude:agents"], "changedAt": 1 }
+            }
         }))
         .unwrap()
     }
@@ -706,6 +731,66 @@ mod tests {
             (
                 "scratchpad",
                 json!({ "type": "scratchpad/worktreeRemoved", "payload": "/a" }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/loadingChanged", "payload": true }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/resourcesLoaded", "payload": { "scope": { "agentKind": "claude", "resourceType": "skills" }, "resources": [], "scannedAt": 2 } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/comparisonLoaded", "payload": { "scope": { "agentKind": "codex", "resourceType": "agents" }, "status": "conflict", "configOnly": [], "changed": [], "comparedAt": 2 } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/syncApplied", "payload": { "scope": { "agentKind": "claude", "resourceType": "skills" }, "syncedAt": 2 } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/resourceUpserted", "payload": { "id": "s0", "agentKind": "claude", "resourceType": "skills", "canonicalResourceType": "skills", "aliasResourceTypes": [], "label": "S0", "relativePath": "skills/s0.md", "absolutePath": "/s0", "hash": "h", "existsOnDisk": false, "managed": false, "updatedAt": 2, "source": "template" } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/resourceDeleted", "payload": { "agentKind": "claude", "resourceType": "skills", "id": "s1" } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/errorChanged", "payload": null }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/templatesLoaded", "payload": { "templates": [], "errors": [], "loadedAt": 2 } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/templateChanged", "payload": { "kind": "skill", "name": "b", "description": "", "fragments": [], "body": "", "harnesses": {}, "references": [], "relativePath": "skills/b/TEMPLATE.md", "hash": "h" } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/templateRemoved", "payload": { "kind": "agent", "name": "a" } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/fragmentsLoaded", "payload": { "fragments": [], "errors": [], "loadedAt": 1 } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/fragmentChanged", "payload": { "name": "g", "content": "c", "relativePath": "fragments/g.md", "hash": "h" } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/fragmentRemoved", "payload": { "name": "f" } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/templateSyncNoticeChanged", "payload": { "scopes": ["codex:skills"], "changedAt": 1 } }),
+            ),
+            (
+                "harnessConfig",
+                json!({ "type": "harnessConfig/templateSourceErrorChanged", "payload": { "relativePath": "agents/b.md", "message": null } }),
             ),
         ];
         let before = serde_json::to_value(non_default_state()).unwrap();

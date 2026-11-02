@@ -14,10 +14,20 @@ import type {
   HarnessConfigRootKey,
   HarnessConfigRoots,
   HarnessConfigScopeKey,
+  HarnessConfigEvent,
   HarnessConfigState,
+  HarnessConfigSyncDirection,
+  HarnessConfigSyncPlan,
   HarnessConfigSyncStatus,
+  HarnessConfigTemplateSyncNotice,
+  HarnessFragment,
+  HarnessTemplate,
   HarnessTemplateHarnessBlock,
   HarnessTemplateHarnesses,
+  HarnessTemplateKind,
+  HarnessTemplateParseError,
+  HarnessTemplateReference,
+  HarnessTemplateSourceState,
   ManagedHarnessKind
 } from './harness-config'
 import type { Announcement, AnnouncementsEvent, AnnouncementsState } from './announcements'
@@ -172,6 +182,18 @@ const roots: WireEqual<Generated.HarnessConfigRoots, HarnessConfigRoots> = true
 const settingsRoots: WireEqual<Generated.HarnessConfigRoots, SettingsState['harnessConfigRoots']> = true
 const comparison: WireEqual<Generated.HarnessConfigComparison, HarnessConfigComparison> = true
 const comparisons: WireEqual<Generated.HarnessConfigComparisons, HarnessConfigState['comparisons']> = true
+const syncDirection: WireEqual<Generated.HarnessConfigSyncDirection, HarnessConfigSyncDirection> = true
+const syncPlan: WireEqual<Generated.HarnessConfigSyncPlan, HarnessConfigSyncPlan> = true
+const templateKind: WireEqual<Generated.HarnessTemplateKind, HarnessTemplateKind> = true
+const templateReference: WireEqual<Generated.HarnessTemplateReference, HarnessTemplateReference> = true
+const harnessTemplate: WireEqual<Generated.HarnessTemplate, HarnessTemplate> = true
+const harnessFragment: WireEqual<Generated.HarnessFragment, HarnessFragment> = true
+const templateParseError: WireEqual<Generated.HarnessTemplateParseError, HarnessTemplateParseError> = true
+const templateSource: WireEqual<Generated.HarnessTemplateSourceState, HarnessTemplateSourceState> = true
+const templateSyncNotice: WireEqual<Generated.HarnessConfigTemplateSyncNotice, HarnessConfigTemplateSyncNotice> = true
+const harnessResources: WireEqual<Generated.HarnessConfigResources, HarnessConfigState['resources']> = true
+const harnessConfigState: WireEqual<Generated.HarnessConfigState, HarnessConfigState> = true
+const harnessConfigEvent: WireEqual<Generated.HarnessConfigEvent, HarnessConfigEvent> = true
 const runtimesState: WireEqual<Generated.RuntimesState, RuntimesState> = true
 const byAgent: WireEqual<Generated.RuntimesState['byAgent'], RuntimesState['byAgent']> = true
 

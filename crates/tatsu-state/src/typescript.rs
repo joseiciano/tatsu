@@ -9,9 +9,13 @@ use crate::slices::{
     browser::{BrowserEvent, BrowserState, BrowserTabState, BrowserTabStatePatch},
     costs::{ContentBreakdown, CostsEvent, CostsState, ModelTally, SessionUsage},
     harness_config::{
-        HarnessConfigComparisons, HarnessConfigFileRef, HarnessConfigResourceType,
-        HarnessConfigRootKey, HarnessConfigRoots, HarnessConfigScopeKey, HarnessConfigSyncStatus,
-        HarnessTemplateHarnessBlock, HarnessTemplateHarnesses, ManagedHarnessKind,
+        HarnessConfigComparisons, HarnessConfigEvent, HarnessConfigFileRef,
+        HarnessConfigResourceType, HarnessConfigResources, HarnessConfigRootKey,
+        HarnessConfigRoots, HarnessConfigScopeKey, HarnessConfigState, HarnessConfigSyncDirection,
+        HarnessConfigSyncPlan, HarnessConfigSyncStatus, HarnessConfigTemplateSyncNotice,
+        HarnessFragment, HarnessTemplate, HarnessTemplateHarnessBlock, HarnessTemplateHarnesses,
+        HarnessTemplateKind, HarnessTemplateParseError, HarnessTemplateReference,
+        HarnessTemplateSourceState, ManagedHarnessKind,
     },
     hooks::{HooksConsent, HooksEvent, HooksState},
     json_claude::{
@@ -131,6 +135,18 @@ pub fn wire_types() -> Types {
         .register::<HarnessConfigComparisons>()
         .register::<HarnessTemplateHarnessBlock>()
         .register::<HarnessTemplateHarnesses>()
+        .register::<HarnessConfigSyncDirection>()
+        .register::<HarnessConfigSyncPlan>()
+        .register::<HarnessTemplateKind>()
+        .register::<HarnessTemplateReference>()
+        .register::<HarnessTemplate>()
+        .register::<HarnessFragment>()
+        .register::<HarnessTemplateParseError>()
+        .register::<HarnessTemplateSourceState>()
+        .register::<HarnessConfigTemplateSyncNotice>()
+        .register::<HarnessConfigResources>()
+        .register::<HarnessConfigState>()
+        .register::<HarnessConfigEvent>()
         .register::<DownloadableRuntime>()
         .register::<RuntimeStatus>()
         .register::<RuntimesState>()

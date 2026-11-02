@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 fn is_js_trimmed(c: char) -> bool {
     matches!(
         c,
@@ -24,9 +26,30 @@ pub(crate) fn trim(s: &str) -> &str {
     s.trim_matches(is_js_trimmed)
 }
 
+pub(crate) fn compare(left: &str, right: &str) -> Ordering {
+    left.encode_utf16().cmp(right.encode_utf16())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::trim;
+    use std::cmp::Ordering;
+
+    use super::{compare, trim};
+
+    #[test]
+    fn compares_utf16_code_units_not_code_points() {
+        assert_eq!(compare("\u{FF5E}", "\u{1F600}"), Ordering::Greater);
+        assert!("\u{FF5E}" < "\u{1F600}");
+        assert_eq!(compare("a\u{10000}", "a\u{FFFF}"), Ordering::Less);
+    }
+
+    #[test]
+    fn compares_like_js_less_than_for_prefixes_and_equal_strings() {
+        assert_eq!(compare("ab", "abc"), Ordering::Less);
+        assert_eq!(compare("b", "abc"), Ordering::Greater);
+        assert_eq!(compare("\u{1F600}", "\u{1F600}"), Ordering::Equal);
+        assert_eq!(compare("", ""), Ordering::Equal);
+    }
 
     #[test]
     fn trims_the_byte_order_mark_like_js() {
