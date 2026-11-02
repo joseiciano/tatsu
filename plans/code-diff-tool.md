@@ -80,6 +80,7 @@ Facts checked against the code on 2026-10-23.
 3. **Types live in `src/shared/code-diff/`.** The renderer cannot import from `src/main`. `src/main/worktree/types.ts` re-exports them. `CodeDiffFile` is a separate type, not `extends ChangedFile`, because `staged` has no meaning against a merge-base.
 4. **Modified side: `lstat` first, then `readWorktreeFile`.** `readWorktreeFile` gives path containment, the 2 MiB cap, binary sniffing, and truncation, but follows symlinks. For a symlink, the modified side is the `readlink` output (what git stores as the blob), and the target is never read.
 5. **Original side: `git cat-file`, size-capped.** `git cat-file -s <mergeBase>:<path>` gives the size. At or below 2 MiB, read it with `git cat-file blob`. Above, stream `git cat-file blob` with `spawn`, stop after 2 MiB, kill the process, and set `truncated: true`. Same 8 KiB NUL sniff as the modified side, so both sides report `binary`, `truncated`, `size` the same way. This replaces the 16 MiB `maxBuffer` behavior, which reports large files as missing.
+   - **Large files show hunks, not truncated sides.** When either side is over 2 MiB or over `CODE_DIFF_MAX_EDITOR_LINES` (20,000 lines), `original` and `modified` are sent empty and `large.patch` carries `git diff -U3 <mergeBase> -- [previousPath] <path>` from its first `@@`, read with `maxBuffer` `CODE_DIFF_MAX_PATCH_BYTES` (512 KiB). Over that cap, or when one side is missing (added, untracked, deleted), `large.patch` is `null`. Truncating each side separately hid changes past the cut and showed a fake change on the last line.
 6. **Refresh = fixed watcher + active-view poll.** The fixed `WorktreeWatcher` covers commit, stage, checkout, merge (a commit rewrites `<gitdir>/index`, tested on git 2.52). While the tool is open and the window is visible, `useWatchedQuery` runs with `fallbackPollMs: 3000`. Rules:
    - The fetcher is wrapped in `useCallback` keyed on `baseRef`, so it is stable between renders.
    - `refresh` skips a call while the previous one is in flight (hook change).
@@ -130,7 +131,8 @@ Directory mode reuses `groupAndSortFiles()` from `ReviewFileTree` (export it).
 | No merge-base | "`<baseRef>` and this branch share no history." + "Reset to default" |
 | Too many files | List capped at 2000 entries + "Showing 2000 of N files" |
 | Binary file | "Binary file — cannot display diff" (same text as `ReviewDiffPane`) |
-| Truncated file | Diff of the first 2 MiB + banner "File is larger than 2 MB; showing the first 2 MB" |
+| Large file (over 2 MiB or 20,000 lines) | Changed hunks with old/new line numbers + banner "Large file (`<size>`) — showing changed hunks only" |
+| Large file, hunks over 512 KiB or file added/deleted | "Large file (`<size>`) — diff too large to display" |
 | Renamed / copied | Badge `R` / `C`, label `previousPath → path` |
 | Deleted | Badge `D`, full deletion |
 | Untracked | Badge `U`, full addition |
@@ -248,7 +250,7 @@ Tests:
 - `getCodeDiffFiles`: committed change reverted in the working tree → not listed; no merge-base → `error: 'no-merge-base'`; more than the cap → `totalFiles` > `files.length` and totals cover all files; untracked text file → `additions` = line count; `mtimeMs` set for existing files.
 - `getCodeDiffFileSides`: `filePath` of `../outside.txt` → `error`, no read.
 - `getCodeDiffFileSides`: symlink pointing outside the worktree → modified side is the link text, target not read.
-- `getCodeDiffFileSides`: original blob over 2 MiB → `originalTruncated: true`, `originalExists: true`, content length 2 MiB.
+- `getCodeDiffFileSides`: file over 2 MiB edited past the 2 MiB offset → `large.patch` holds that edit, sides empty; over 20,000 lines → `large.patch` set; full rewrite over 512 KiB, or large untracked file → `large.patch: null`.
 - `fetchCompareRef`: repo with no `origin` → `{ok: false}`, no throw; two concurrent calls → one `git fetch` process.
 
 Commit: `feat(code-diff): git functions for worktree vs base-ref diff`
@@ -293,7 +295,7 @@ Changes:
 6. Sides reload when the selected file changes, or when `shouldReloadSides(prev, next)` is true (`mtimeMs`, `additions`, or `deletions` changed).
 7. `CodeDiffSummaryBar` — back button, repo / branch / "vs" / combobox, Fetch button (remote-tracking bases only), file count, `+totalAdditions −totalDeletions`, fetch-failed note.
 8. `CodeDiffFileTree` — groups, badges `A M D R C U`, `previousPath → path`, counts, j/k and [/] (next/prev group). Keydown handler is scoped to the tool container, not `window`, so it does not fight `ReviewFileTree`.
-9. `CodeDiffDiffPane` — header, `MonacoDiffEditor`, binary / truncated / symlink / error states.
+9. `CodeDiffDiffPane` — header, `MonacoDiffEditor`, binary / large-file hunks (`CodeDiffHunks`) / too-large / symlink / error states.
 10. All text and icon sizes from the canonical `text-*` / `icon-*` sets.
 
 Tests:
