@@ -1,6 +1,9 @@
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use serde_json::Value;
-use specta::Type;
+use specta::{
+    Type, Types,
+    datatype::{DataType, Enum, Fields, Reference},
+};
 
 use crate::slices::{
     announcements::{self, AnnouncementsEvent, AnnouncementsState},
@@ -73,6 +76,47 @@ pub enum StateEvent {
 impl StateEvent {
     pub fn type_name(&self) -> &'static str {
         crate::wire::event_type(self)
+    }
+
+    pub fn type_names() -> Vec<String> {
+        let mut types = Types::default();
+        let root = StateEvent::definition(&mut types);
+        let slice_events = resolve_enum(&types, &root);
+        slice_events
+            .variants
+            .iter()
+            .flat_map(|(_, variant)| {
+                let Fields::Unnamed(fields) = &variant.fields else {
+                    panic!("StateEvent variants wrap one slice event");
+                };
+                let slice_event = fields.fields[0].ty.as_ref().expect("slice event type");
+                resolve_enum(&types, slice_event)
+                    .variants
+                    .iter()
+                    .map(|(name, variant)| {
+                        variant
+                            .attributes
+                            .get_named_as::<String>("serde:variant:rename_serialize")
+                            .unwrap_or_else(|| panic!("event variant `{name}` has no serde rename"))
+                            .clone()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+}
+
+fn resolve_enum<'a>(types: &'a Types, ty: &'a DataType) -> &'a Enum {
+    let ty = match ty {
+        DataType::Reference(Reference::Named(reference)) => types
+            .get(reference)
+            .and_then(|named| named.ty.as_ref())
+            .expect("registered named type"),
+        ty => ty,
+    };
+    match ty {
+        DataType::Enum(e) => e,
+        _ => panic!("expected an enum"),
     }
 }
 
@@ -908,6 +952,23 @@ mod tests {
             .map(|(_, event)| event["type"].as_str().unwrap())
             .collect();
         assert_eq!(declared, covered);
+    }
+
+    #[test]
+    fn type_names_match_the_committed_generated_state_event() {
+        let ts = include_str!("../../../src/shared/state/generated/generated.ts");
+        let declared: std::collections::BTreeSet<&str> = ts
+            .match_indices("type: \"")
+            .filter_map(|(at, matched)| {
+                let rest = &ts[at + matched.len()..];
+                let name = &rest[..rest.find('"')?];
+                name.contains('/').then_some(name)
+            })
+            .collect();
+        let names = StateEvent::type_names();
+        let listed: std::collections::BTreeSet<&str> = names.iter().map(String::as_str).collect();
+        assert_eq!(names.len(), declared.len());
+        assert_eq!(listed, declared);
     }
 
     #[test]
