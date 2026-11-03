@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch Tatsu's headless server in a scratch sandbox (fake HOME, fake-agent `claude` shim), drive its web client in headless system Chrome with playwright-core, and capture screenshot and on-disk evidence that a workflow feature works the way a user sees it. Reach for it to prove a change to the Labs workflow UI (Run workflow here…, launch sheet, step strip, Needs you, step tabs) or the workflow runner it drives. Never runs a real agent, the user's login shell rc files, or touches the user's ~/.claude or ~/.codex.
+description: Launch Tatsu's headless server in a scratch sandbox (fake HOME, fake-agent `claude` and `codex` shims), drive its web client in headless system Chrome with playwright-core, and capture screenshot and on-disk evidence that a workflow feature works the way a user sees it. Reach for it to prove a change to the Labs workflow UI (Run workflow here…, launch sheet, step strip, Needs you, step tabs) or the workflow runner it drives. Never runs a real agent, the user's login shell rc files, or touches the user's ~/.claude or ~/.codex.
 ---
 
 # Verify Tatsu by driving the real app
@@ -23,8 +23,12 @@ this matters:
 - `HOME`, `ZDOTDIR`, `XDG_CONFIG_HOME` and `CODEX_HOME` point into
   `$TMPDIR/tatsu-verify/<run>/home`. `SHELL=/bin/bash`, so no zsh rc runs.
   `CLAUDE_CONFIG_DIR` and `OPENCODE_CONFIG_DIR` are unset.
-- `config.json` sets `claudeCommand` to a shim that execs
-  `scripts/fake-agent.mjs`, so no real `claude` runs. The fake agent reads a
+- `config.json` sets `claudeCommand` and `codexCommand` to shims that exec
+  `scripts/fake-agent.mjs` (the `codex` shim adds `FAKE_AGENT_KIND=codex`), so
+  no real `claude` or `codex` runs. `scripts/codex-trust-fixture.mjs` seeds the
+  scratch `CODEX_HOME/config.toml` with `trusted_hash` entries for Tatsu's
+  hooks and `trust_level` for the repo, as if `/hooks` had been run; it
+  refuses a `CODEX_HOME` outside the scratch dir. The fake agent reads a
   `FAKE_AGENT_MODE=<mode>` marker from the step prompt (`hang`,
   `exit-no-complete`; no marker = complete the step).
 - Not isolated: `/tmp/harness-status` (status NDJSON) is shared with any
@@ -52,6 +56,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | Definition | Steps | Fake agent |
 |---|---|---|
 | `smoke` | `plan` (claude) then `echo` (shell) | default: calls `complete_step` |
+| `smoke-codex` | `plan` (codex, `read-only`, `model: fake-codex-model`) then `echo` (shell) | codex mode: SessionStart + Stop through `$CODEX_HOME/harness-hook.sh`, calls `complete_step` |
 | `smoke-retry` | `check` (shell `test -f flag`) | none |
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
@@ -73,7 +78,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 
 Read-only. Checks: PID alive; server env has the sandbox `HOME`, `ZDOTDIR`,
 `XDG_CONFIG_HOME`, `CODEX_HOME`, `HARNESS_DATA_DIR` and `SHELL=/bin/bash`;
-`CLAUDE_CONFIG_DIR` unset; `claudeCommand` is the shim; the port belongs to
+`CLAUDE_CONFIG_DIR` unset; `claudeCommand` and `codexCommand` are the shims; the port belongs to
 the PID; the tokenized URL answers 200; `scripts/ws-smoke.mjs` round-trips a
 snapshot; `dist-headless` is newer than `src/`; launch commit is HEAD. Any
 `FAIL` line: do not drive; clean up and relaunch.
@@ -81,7 +86,7 @@ snapshot; `dist-headless` is newer than `src/`; launch commit is HEAD. Any
 ## Drive
 
 ```bash
-node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke]
+node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke|smoke-codex]
 .claude/skills/verify/scripts/journeys/workflow-flows.sh "$STATE"
 ```
 
@@ -111,7 +116,8 @@ Stable handles (no `data-testid` convention in this repo):
   `listitem`s reading `<worktree> · <reason> · <stepId>` (`Step failed`,
   `Cancelled by user`, …); action buttons are named
   `<Action>: <workflow> on <worktree>` (`Jump to tab: browser-exit on repo`).
-- Step tab: label `⚙ <stepId> · Claude`; close button
+- Step tab: label `⚙ <stepId> · Claude` (`⚙ <stepId> · Codex` for a codex
+  step); close button
   `getByRole('button', { name: 'Close tab ⚙ hang · Claude' })`. Closing a
   running step opens `getByRole('alertdialog', { name: 'Cancel step “hang”?' })`
   with `Cancel step and close tab`.
@@ -160,7 +166,7 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/home-guard.sh` | `home-guard.sh snapshot > f` / `home-guard.sh check f` | Fingerprint of the real agent config files |
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
-| `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record; exit 0 on PASS |
+| `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record -> step tab per agent step; exit 0 on PASS |
 | `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Cancel-via-close-tab and Mark-done flows; exit 0 on PASS |
 
 ## Not covered

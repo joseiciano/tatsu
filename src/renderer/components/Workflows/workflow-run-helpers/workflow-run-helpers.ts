@@ -8,6 +8,7 @@ import type {
   WorkflowRunRecord,
   WorkflowStepStatus
 } from '../../../../shared/state/workflows'
+import { RESUMABLE_AGENTS } from '../../../../shared/state/workflows'
 import type { ElectronAPI } from '../../../types'
 import type { AgentKind } from '../../../../shared/state/terminals'
 
@@ -124,7 +125,8 @@ export function deriveStepStrip(run: WorkflowRun, stepOrder: readonly string[]):
 function canResume(step: NeedsYouStepInfo | null, attempt: NeedsYouAttemptInfo | null): boolean {
   return (
     step?.kind === 'agent' &&
-    step.agent === 'claude' &&
+    step.agent !== undefined &&
+    RESUMABLE_AGENTS.has(step.agent) &&
     attempt?.status === 'interrupted' &&
     attempt.resumable
   )

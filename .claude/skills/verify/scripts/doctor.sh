@@ -25,6 +25,8 @@ done
 
 CMD="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claudeCommand||"")' "$DATA_DIR/config.json" 2>/dev/null)"
 case "$CMD" in "$SCRATCH/bin/claude") ok "claudeCommand is the fake-agent shim" ;; *) bad "claudeCommand is '$CMD', not the shim" ;; esac
+CODEX_CMD="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).codexCommand||"")' "$DATA_DIR/config.json" 2>/dev/null)"
+case "$CODEX_CMD" in "$SCRATCH/bin/codex") ok "codexCommand is the fake-agent shim" ;; *) bad "codexCommand is '$CODEX_CMD', not the shim" ;; esac
 
 LISTENER="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1)"
 if [ "$LISTENER" = "$PID" ]; then ok "port $PORT owned by pid $PID"; else bad "port $PORT owned by '${LISTENER:-nobody}', not $PID"; fi

@@ -19,7 +19,7 @@ interface LoadedDefinition {
 export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.Element {
   const backend = useBackend()
   const definitions = useWorkflowDefinitions()
-  const { consent } = useHooks()
+  const { consent, codexTrust } = useHooks()
   const [chosenId, setChosenId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState<LoadedDefinition | null>(null)
   const [inputs, setInputs] = useState<Record<string, string>>({})
@@ -71,7 +71,7 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
     ? 'Starting…'
     : loading
       ? 'Loading workflow…'
-      : startBlockReason({ consent, inputs, needsFull, allowFull, definition })
+      : startBlockReason({ consent, codexTrust, inputs, needsFull, allowFull, definition })
 
   const handleSelect = useCallback((id: string) => {
     setChosenId(id)

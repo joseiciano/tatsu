@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildInputFields, canStart, needsFull, showRunWorkflowItem, startBlockReason, type CanStartArgs } from '.'
 import { validateWorkflowDefinition, type ResolvedDefinition } from '../../../../shared/workflow-def'
 import type { WorkflowRun, WorkflowRunStatus } from '../../../../shared/state/workflows'
+import type { CodexHookTrustSummary } from '../../../../shared/state/hooks'
 
 function resolve(yaml: string): ResolvedDefinition {
   const definition = validateWorkflowDefinition(yaml).definition
@@ -56,10 +57,31 @@ steps:
     prompt: go
 `)
 
+const CODEX_STEP = resolve(`name: codex
+steps:
+  - id: plan
+    agent: codex
+    permissions: read-only
+    prompt: go
+  - id: test
+    kind: shell
+    run: "true"
+`)
+
+const CODEX_OK: CodexHookTrustSummary = { state: 'ok', reviewEvents: [] }
+
 const FILLED = { task: 'ship it', issue: '#1', pr: '#2', file: 'a.ts' }
 
 function args(overrides: Partial<CanStartArgs> = {}): CanStartArgs {
-  return { consent: 'accepted', inputs: FILLED, needsFull: false, allowFull: false, definition: ALL_INPUTS, ...overrides }
+  return {
+    consent: 'accepted',
+    codexTrust: null,
+    inputs: FILLED,
+    needsFull: false,
+    allowFull: false,
+    definition: ALL_INPUTS,
+    ...overrides
+  }
 }
 
 describe('buildInputFields', () => {
@@ -92,6 +114,24 @@ describe('needsFull', () => {
 })
 
 describe('canStart', () => {
+  it.each<[string, CodexHookTrustSummary | null]>([
+    ['not computed yet', null],
+    ['needing review', { state: 'needs-review', reviewEvents: ['Stop'] }],
+    ['not installed', { state: 'not-installed', reviewEvents: [] }]
+  ])('blocks a Codex definition while Codex hooks are %s', (_name, codexTrust) => {
+    const codex = args({ definition: CODEX_STEP, inputs: {}, codexTrust })
+    expect(canStart(codex)).toBe(false)
+    expect(startBlockReason(codex)).toBe('Open a Codex tab and run /hooks')
+    expect(canStart(args({ codexTrust }))).toBe(true)
+  })
+
+  it('starts a Codex definition once Codex trusts the hooks, after the consent check', () => {
+    expect(canStart(args({ definition: CODEX_STEP, inputs: {}, codexTrust: CODEX_OK }))).toBe(true)
+    expect(startBlockReason(args({ definition: CODEX_STEP, inputs: {}, consent: 'pending' }))).toBe(
+      'Install hooks to start a workflow'
+    )
+  })
+
   it('is true with consent accepted, every input filled and no full step', () => {
     expect(canStart(args())).toBe(true)
     expect(startBlockReason(args())).toBeNull()

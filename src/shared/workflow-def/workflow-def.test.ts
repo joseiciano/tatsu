@@ -656,11 +656,18 @@ describe('validateWorkflowDefinition: unsupported features', () => {
     expect(featuresOf(PLAN_EXAMPLE)).toEqual([
       { code: 'unsupported-feature', feature: 'item_input', path: 'item_input', line: 4, col: 1 },
       { code: 'unsupported-feature', feature: 'gate', path: 'steps[0].gate', line: 14, col: 5 },
-      { code: 'unsupported-feature', feature: 'agent-codex', path: 'steps[1].agent', line: 16, col: 12 },
       { code: 'unsupported-feature', feature: 'on_loop', path: 'steps[1].on_loop', line: 18, col: 5 },
       { code: 'unsupported-feature', feature: 'agent-opencode', path: 'steps[3].agent', line: 23, col: 12 },
       { code: 'unsupported-feature', feature: 'loop', path: 'steps[3].loop', line: 29, col: 5 }
     ])
+  })
+
+  it('accepts a codex agent step by default and still reports an opencode one', () => {
+    const codex = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: codex\n    prompt: go\n')
+    expect(codex.diagnostics).toEqual([])
+    expect(codex.definition?.steps[0]).toMatchObject({ kind: 'agent', agent: 'codex' })
+    const opencode = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: opencode\n    prompt: go\n')
+    expect(opencode.diagnostics.map((d) => d.feature)).toEqual(['agent-opencode'])
   })
 
   it('keeps parsed but withholds the definition when only feature errors remain', () => {

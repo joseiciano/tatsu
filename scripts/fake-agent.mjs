@@ -17,16 +17,27 @@
 //                     SIGHUP (agent cancel) ends it, a 5 min cap bounds leaks
 //   exit-no-complete  run the Stop hook once (expects a block), then exit 1
 //                     without complete_step, so the step fails by exit
+//
+// FAKE_AGENT_KIND=codex (set by the `codex` shim) stands in for the `codex`
+// CLI instead: it reads the harness-control MCP server from the
+// `-c mcp_servers.harness-control.*` TOML overrides, requires the sandbox,
+// approval and model flags, runs `$CODEX_HOME/harness-hook.sh` through the
+// hooks.json commands (SessionStart with a fresh session id, then Stop) and
+// calls complete_step. Only the default mode exists for Codex.
 
 import { spawn, spawnSync } from 'child_process'
-import { appendFileSync, readFileSync } from 'fs'
+import { randomUUID } from 'crypto'
+import { appendFileSync, readFileSync, realpathSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
+import { parse as parseToml } from 'smol-toml'
 
 const TIMEOUT_MS = 30_000
 const HANG_LIFETIME_MS = 5 * 60_000
 const MODES = new Set(['default', 'hang', 'exit-no-complete'])
 const HOOK_SIGNATURE = 'harness-status'
+const CODEX_SERVER_PREFIX = 'mcp_servers.harness-control.'
+const CODEX_DISCOVERY_SLACK_MS = 1500
 
 function log(message) {
   const line = `[fake-agent] ${message}`
@@ -111,15 +122,18 @@ function isBlock(reply) {
   }
 }
 
-function startBridge(mcpConfigPath) {
+function serverFromConfig(mcpConfigPath) {
   let config
   try {
     config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'))
   } catch (err) {
     fail(`cannot read MCP config ${mcpConfigPath}: ${err.message}`)
   }
-  const server = config?.mcpServers?.['harness-control']
-  if (!server || typeof server.command !== 'string') fail('MCP config has no harness-control server')
+  return config?.mcpServers?.['harness-control']
+}
+
+function startBridge(server) {
+  if (!server || typeof server.command !== 'string') fail('no harness-control MCP server')
   const child = spawn(server.command, Array.isArray(server.args) ? server.args : [], {
     env: { ...process.env, ...(server.env ?? {}) },
     stdio: ['pipe', 'pipe', 'inherit']
@@ -166,7 +180,121 @@ function startBridge(mcpConfigPath) {
   }
 }
 
+async function completeStep(server, summary) {
+  const bridge = startBridge(server)
+  const init = await bridge.request('initialize', {
+    protocolVersion: '2024-11-05',
+    capabilities: {},
+    clientInfo: { name: 'fake-agent', version: '0' }
+  })
+  if (init.error) fail(`initialize failed: ${JSON.stringify(init.error)}`)
+  const listed = await bridge.request('tools/list', {})
+  const tools = listed.result?.tools ?? []
+  if (!tools.some((tool) => tool.name === 'complete_step')) {
+    fail(`complete_step not listed (tools: ${tools.map((tool) => tool.name).join(',')})`)
+  }
+  const called = await bridge.request('tools/call', { name: 'complete_step', arguments: { summary } })
+  if (called.error || called.result?.isError) fail(`complete_step failed: ${JSON.stringify(called)}`)
+  log('complete_step: ok')
+  bridge.close()
+}
+
+function parseCodexArgs(argv) {
+  const out = { overrides: {}, sandbox: null, approval: null, model: null, resume: null, prompt: null }
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === '-c') {
+      const pair = argv[++i] ?? ''
+      const eq = pair.indexOf('=')
+      if (eq <= 0) fail(`malformed -c override ${JSON.stringify(pair)}`)
+      try {
+        out.overrides[pair.slice(0, eq)] = parseToml(`value = ${pair.slice(eq + 1)}`).value
+      } catch (err) {
+        fail(`-c ${pair.slice(0, eq)} is not a TOML value: ${err.message}`)
+      }
+    } else if (arg === '--sandbox') out.sandbox = argv[++i] ?? null
+    else if (arg === '--ask-for-approval') out.approval = argv[++i] ?? null
+    else if (arg === '--model') out.model = argv[++i] ?? null
+    else if (arg === 'resume') out.resume = argv[++i] ?? null
+    else if (arg.startsWith('-')) fail(`unexpected codex flag ${arg}`)
+    else if (out.prompt === null) out.prompt = arg
+    else fail('more than one positional prompt')
+  }
+  return out
+}
+
+function codexHookCommand(codexHome, event) {
+  const path = join(codexHome, 'hooks.json')
+  let hooks
+  try {
+    hooks = JSON.parse(readFileSync(path, 'utf-8'))
+  } catch (err) {
+    fail(`cannot read ${path}: ${err.message}`)
+  }
+  const expected = `bash '${join(codexHome, 'harness-hook.sh')}' ${event}`
+  const entries = Array.isArray(hooks?.hooks?.[event]) ? hooks.hooks[event] : []
+  for (const entry of entries) {
+    for (const hook of Array.isArray(entry?.hooks) ? entry.hooks : []) {
+      if (hook?.command === expected) return hook.command
+    }
+  }
+  fail(`no Tatsu ${event} hook ${JSON.stringify(expected)} in ${path}`)
+}
+
+async function mainCodex() {
+  const args = parseCodexArgs(process.argv.slice(2))
+  const mode = modeFrom(args.prompt)
+  if (mode !== 'default') fail(`codex supports only the default mode, got ${mode}`)
+  if (!args.prompt) fail('missing prompt')
+  if (args.sandbox !== 'read-only') fail(`--sandbox ${args.sandbox}, expected read-only`)
+  if (args.approval !== 'never') fail(`--ask-for-approval ${args.approval}, expected never`)
+  if (!args.model) fail('missing --model')
+  const server = {
+    command: args.overrides[`${CODEX_SERVER_PREFIX}command`],
+    args: args.overrides[`${CODEX_SERVER_PREFIX}args`],
+    env: args.overrides[`${CODEX_SERVER_PREFIX}env`]
+  }
+  if (!Array.isArray(server.args) || typeof server.env !== 'object') fail('incomplete harness-control overrides')
+  if (args.overrides[`${CODEX_SERVER_PREFIX}default_tools_approval_mode`] !== 'approve') {
+    fail('harness-control tools are not pre-approved')
+  }
+  const codexHomeEnv = process.env.CODEX_HOME
+  if (!codexHomeEnv) fail('CODEX_HOME is not set')
+  const codexHome = realpathSync(codexHomeEnv)
+  const sessionId = args.resume ?? randomUUID()
+  log(
+    `start codex session=${sessionId} terminal=${process.env.HARNESS_TERMINAL_ID ?? ''} model=${args.model} sandbox=${args.sandbox}`
+  )
+
+  runStopHook(codexHookCommand(codexHome, 'SessionStart'), {
+    session_id: sessionId,
+    hook_event_name: 'SessionStart',
+    source: args.resume ? 'resume' : 'startup',
+    cwd: process.cwd()
+  })
+  await new Promise((resolve) => setTimeout(resolve, CODEX_DISCOVERY_SLACK_MS))
+
+  const stop = codexHookCommand(codexHome, 'Stop')
+  const summary = `PLAN-OK ${sessionId}`
+  const reply = runStopHook(stop, { session_id: sessionId, hook_event_name: 'Stop', last_assistant_message: summary })
+  if (isBlock(reply)) {
+    log('stop hook: block')
+  } else if (curlPresent()) {
+    fail(`Stop hook did not return a block: ${JSON.stringify(reply)}`)
+  } else {
+    log('::warning::curl is missing, so the Stop hook could not ask for a continuation')
+  }
+
+  await completeStep(server, summary)
+
+  const after = runStopHook(stop, { session_id: sessionId, hook_event_name: 'Stop', last_assistant_message: summary })
+  if (isBlock(after)) fail(`Stop hook blocked again after complete_step: ${after}`)
+  log('done')
+  process.exit(0)
+}
+
 async function main() {
+  if (process.env.FAKE_AGENT_KIND === 'codex') return mainCodex()
   const args = parseArgs(process.argv.slice(2))
   if (!args.mcpConfig) fail('missing --mcp-config')
   if (!args.sessionId) fail('missing --session-id')
@@ -200,22 +328,7 @@ async function main() {
     process.exit(1)
   }
 
-  const bridge = startBridge(args.mcpConfig)
-  const init = await bridge.request('initialize', {
-    protocolVersion: '2024-11-05',
-    capabilities: {},
-    clientInfo: { name: 'fake-agent', version: '0' }
-  })
-  if (init.error) fail(`initialize failed: ${JSON.stringify(init.error)}`)
-  const listed = await bridge.request('tools/list', {})
-  const tools = listed.result?.tools ?? []
-  if (!tools.some((tool) => tool.name === 'complete_step')) {
-    fail(`complete_step not listed (tools: ${tools.map((tool) => tool.name).join(',')})`)
-  }
-  const called = await bridge.request('tools/call', { name: 'complete_step', arguments: { summary } })
-  if (called.error || called.result?.isError) fail(`complete_step failed: ${JSON.stringify(called)}`)
-  log('complete_step: ok')
-  bridge.close()
+  await completeStep(serverFromConfig(args.mcpConfig), summary)
 
   const after = runStopHook(hook, { session_id: args.sessionId, last_assistant_message: summary, stop_hook_active: true })
   if (isBlock(after)) fail(`Stop hook blocked again after complete_step: ${after}`)

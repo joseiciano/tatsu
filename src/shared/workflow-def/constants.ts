@@ -1,7 +1,7 @@
 import type { StepOutputStatus, WorkflowFeature, WorkflowFeatureInfo } from './types'
 
 export const WORKFLOW_FEATURES: Readonly<Record<WorkflowFeature, WorkflowFeatureInfo>> = {
-  'agent-codex': { phase: 3, message: 'Codex steps ("agent: codex") need phase 3', supported: false },
+  'agent-codex': { phase: 3, message: 'Codex steps ("agent: codex") need phase 3', supported: true },
   'agent-opencode': { phase: 3, message: 'opencode steps ("agent: opencode") need phase 3', supported: false },
   gate: { phase: 4, message: 'Gates ("gate") need phase 4', supported: false },
   loop: { phase: 4, message: 'Loops ("loop") need phase 4', supported: false },

@@ -23,7 +23,7 @@ import {
   createClaudeStepDriver,
   stepPromptPath,
   writeStepPromptFile,
-  type ClaudeStopEvent,
+  type AgentStopEvent,
   type StepAttempt,
   type StepDriverEvent,
   type StepExecution
@@ -93,7 +93,7 @@ class FakeClaude {
   trustChecks = 0
   failSpawn = false
   private readonly exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
-  private readonly stopListeners = new Set<(event: ClaudeStopEvent) => void>()
+  private readonly stopListeners = new Set<(event: AgentStopEvent) => void>()
   private readonly promptListeners = new Set<(event: { terminalId: string }) => void>()
   private ids = 0
 

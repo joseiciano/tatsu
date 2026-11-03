@@ -80,7 +80,7 @@ import {
   DEFAULT_PR_REVIEW_PROMPT
 } from '../shared/state/settings'
 import { onPromptSubmit, onStopEvent, watchStatusDir } from './hooks'
-import { checkClaudeFolderTrust } from './folder-trust'
+import { checkClaudeFolderTrust, checkCodexFolderTrust } from './folder-trust'
 import { getAgent, codexHomeDir, codexHookTrustReport, codexHookEvents, type AgentKind } from './agents'
 import { startCodexHookTrustMonitor, summarizeCodexHookTrust } from './codex-hook-trust'
 import { AGENT_REGISTRY } from '../shared/agent-registry'
@@ -106,7 +106,9 @@ import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
 import {
   WorkflowRunner,
-  createClaudeStepDriver,
+  claudeProfile,
+  codexProfile,
+  createAgentStepDriver,
   createGitRunArtifacts,
   createShellStepDriver,
   writeStepPromptFile
@@ -785,7 +787,11 @@ const shellStepDriver = createShellStepDriver({
   kill: (id, signal) => ptyManager.kill(id, signal),
   newTabId: () => `shell-${randomUUID()}`
 })
-const claudeStepDriver = createClaudeStepDriver({
+const agentStepDriver = createAgentStepDriver({
+  profiles: [
+    claudeProfile((path) => checkClaudeFolderTrust(path)),
+    codexProfile((path) => checkCodexFolderTrust(path))
+  ],
   addTab: (wtPath, tab, spawn) => panesFSM.addTab(wtPath, tab, undefined, { fromMain: true, spawn }),
   hasTerminal: (id) => ptyManager.hasTerminal(id),
   onExit: (listener) => ptyManager.onExit(listener),
@@ -793,7 +799,6 @@ const claudeStepDriver = createClaudeStepDriver({
   onStopEvent,
   onPromptSubmit,
   store,
-  checkFolderTrust: (path) => checkClaudeFolderTrust(path),
   writeMarker: (id, marker) => {
     writeStepMarker(id, marker)
   },
@@ -806,7 +811,7 @@ const claudeStepDriver = createClaudeStepDriver({
 const workflowRunner = new WorkflowRunner({
   store,
   loader: workflowDefsLoader,
-  drivers: { agent: claudeStepDriver, shell: shellStepDriver },
+  drivers: { agent: agentStepDriver, shell: shellStepDriver },
   now: () => Date.now(),
   newId: () => randomUUID(),
   log,
@@ -3635,7 +3640,7 @@ if (desktopShellMod && desktopEarly) {
       codexHookTrustMonitor?.stop()
       workflowRunner.dispose()
       shellStepDriver.dispose()
-      claudeStepDriver.dispose()
+      agentStepDriver.dispose()
       chatRuntimeRegistry.killAll()
     },
     flushBeforeQuit: flushWorkflowRunRecords
@@ -3658,7 +3663,7 @@ if (desktopShellMod && desktopEarly) {
     codexHookTrustMonitor?.stop()
     workflowRunner.dispose()
     shellStepDriver.dispose()
-    claudeStepDriver.dispose()
+    agentStepDriver.dispose()
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')

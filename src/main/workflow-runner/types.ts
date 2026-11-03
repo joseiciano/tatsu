@@ -31,6 +31,7 @@ export type StartRefusal =
   | 'invalid-inputs'
   | 'missing-input'
   | 'hooks-consent'
+  | 'codex-hooks-untrusted'
   | 'starting'
 
 export type StartRunResult = { ok: true; runId: string } | { ok: false; reason: StartRefusal }
@@ -85,7 +86,7 @@ export type StepActionRefusal =
   | 'live-attempt'
   | 'no-snapshot'
   | 'restore-failed'
-  | 'not-claude-step'
+  | 'not-resumable-step'
   | 'not-interrupted'
   | 'no-session'
   | 'nothing-to-cancel'

@@ -68,7 +68,17 @@ describe('hook command pins', () => {
     expect(stop).toMatch(/^bash -c '[^']*'$/)
   })
 
-  it('keeps the standalone hook script byte-identical', () => {
+  it('pins the standalone hook script, whose Stop path runs the same stop-check as the Claude Stop command', () => {
+    const stopCheck =
+      String.raw`if [ "$1" = Stop ] && [ -n "$m" ] && [ -f "${'$'}{m%.json}.step" ] && command -v curl >/dev/null 2>&1; then ` +
+      String.raw`o=$(sed -n "s/^ *\"HARNESS_PORT\": \"\([0-9][0-9]*\)\",\{0,1\} *$/\1/p" "$m" 2>/dev/null); ` +
+      String.raw`t=$(sed -n "s/^ *\"HARNESS_TOKEN\": \"\([0-9a-f][0-9a-f]*\)\",\{0,1\} *$/\1/p" "$m" 2>/dev/null); ` +
+      String.raw`case "$o" in ""|*[!0-9]*) o=;; esac; case "$t" in ""|*[!0-9a-f]*) t=;; esac; ` +
+      String.raw`case "$h" in *[!A-Za-z0-9._-]*) o=;; esac; ` +
+      String.raw`if [ -n "$o" ] && [ -n "$t" ] && r=$(printf "%s" "$p" | curl -sf --connect-timeout 1 --max-time 2 ` +
+      String.raw`-H "Content-Type: application/json" -H "X-Harness-Terminal-Id: $h" -H @/dev/fd/3 --data-binary @- ` +
+      String.raw`"http://127.0.0.1:$o/workflow/stop-check" 3<<<"Authorization: Bearer $t" 2>/dev/null); then ` +
+      String.raw`case "$r" in *\"decision\":\"block\"*) c=",\"continued\":true";; *) r=;; esac; else r=; fi; fi`
     expect(makeHookScript()).toBe(
       [
         '#!/bin/bash',
@@ -76,10 +86,15 @@ describe('hook command pins', () => {
         'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
         'd=/tmp/harness-status; mkdir -p "$d"',
         'p=$(cat); [ -z "$p" ] && p=null',
-        String.raw`printf '{"event":"%s","ts":%s,"payload":%s}\n' "$1" "$(date +%s)" "$p" >> "$d/$h.ndjson"`,
+        'r=; c=; m="$HARNESS_MCP_CONFIG"',
+        stopCheck,
+        String.raw`printf '{"event":"%s","ts":%s%s,"payload":%s}\n' "$1" "$(date +%s)" "$c" "$p" >> "$d/$h.ndjson"`,
+        String.raw`[ -n "$r" ] && printf "%s\n" "$r"`,
+        'exit 0',
         ''
       ].join('\n')
     )
+    expect(makeHookCommand('Stop')).toContain(`; r=; c=; m="$HARNESS_MCP_CONFIG"; ${stopCheck.replace('[ "$1" = Stop ] && ', '')}; `)
   })
 })
 

@@ -4,7 +4,7 @@ import {
   WorkflowRunner,
   createClaudeStepDriver,
   createShellStepDriver,
-  type ClaudeStopEvent,
+  type AgentStopEvent,
   type RunArtifacts,
   type StepAttempt,
   type StepDriver,
@@ -1175,7 +1175,7 @@ function claudeHarness() {
   const markers = new Set<string>()
   const killed: string[] = []
   const exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
-  const stopListeners = new Set<(event: ClaudeStopEvent) => void>()
+  const stopListeners = new Set<(event: AgentStopEvent) => void>()
   const promptListeners = new Set<(event: { terminalId: string }) => void>()
   const alive = new Set<string>()
   const state: { trust: TrustStatus; store?: Store; runner?: WorkflowRunner } = { trust: 'trusted' }
