@@ -54,35 +54,42 @@ export function makeHookCommand(event: string): string {
   return `bash -c '${inner}'`
 }
 
-// The stop-check runs before the NDJSON append so the runner knows about a block before the Stop arrives.
-function stopHookInner(): string {
+// Shared by the Claude Stop command and the Codex hook script; contains no single quote so it fits inside bash -c '...'.
+function stopCheckLines(guard: string): string[] {
   const curl =
     'curl -sf --connect-timeout 1 --max-time 2 -H "Content-Type: application/json" -H "X-Harness-Terminal-Id: $h" ' +
     '-H @/dev/fd/3 --data-binary @- "http://127.0.0.1:$o/workflow/stop-check" 3<<<"Authorization: Bearer $t" 2>/dev/null'
   return [
-    'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
-    `d=${STATUS_DIR}; mkdir -p "$d"`,
-    'p=$(cat); [ -z "$p" ] && p=null',
     'r=; c=; m="$HARNESS_MCP_CONFIG"',
-    'if [ -n "$m" ] && [ -f "${m%.json}.step" ] && command -v curl >/dev/null 2>&1; then ' +
+    `if ${guard}[ -n "$m" ] && [ -f "\${m%.json}.step" ] && command -v curl >/dev/null 2>&1; then ` +
       String.raw`o=$(sed -n "s/^ *\"HARNESS_PORT\": \"\([0-9][0-9]*\)\",\{0,1\} *$/\1/p" "$m" 2>/dev/null); ` +
       String.raw`t=$(sed -n "s/^ *\"HARNESS_TOKEN\": \"\([0-9a-f][0-9a-f]*\)\",\{0,1\} *$/\1/p" "$m" 2>/dev/null); ` +
       'case "$o" in ""|*[!0-9]*) o=;; esac; case "$t" in ""|*[!0-9a-f]*) t=;; esac; ' +
       'case "$h" in *[!A-Za-z0-9._-]*) o=;; esac; ' +
       `if [ -n "$o" ] && [ -n "$t" ] && r=$(printf "%s" "$p" | ${curl}); then ` +
       String.raw`case "$r" in *\"decision\":\"block\"*) c=",\"continued\":true";; *) r=;; esac; ` +
-      'else r=; fi; fi',
+      'else r=; fi; fi'
+  ]
+}
+
+// The stop-check runs before the NDJSON append so the runner knows about a block before the Stop arrives.
+function stopHookInner(): string {
+  return [
+    'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
+    `d=${STATUS_DIR}; mkdir -p "$d"`,
+    'p=$(cat); [ -z "$p" ] && p=null',
+    ...stopCheckLines(''),
     String.raw`printf "{\"event\":\"Stop\",\"ts\":%s%s,\"payload\":%s}\n" "$(date +%s)" "$c" "$p" >> "$d/$h.ndjson"`,
     String.raw`[ -n "$r" ] && printf "%s\n" "$r"`,
     'exit 0'
   ].join('; ')
 }
 
-// Same NDJSON writer as makeHookCommand, as a standalone script that takes
-// the event name as $1. Codex trusts hooks by the hash of their command
-// text, so its hooks.json entries point at this script with a fixed
-// command; logic changes ship by rewriting the script, not the command,
-// and don't send the user back to /hooks to re-approve.
+// Same NDJSON writer and Stop stop-check as makeHookCommand, as a
+// standalone script that takes the event name as $1. Codex trusts hooks by
+// the hash of their command text, so its hooks.json entries point at this
+// script with a fixed command; logic changes ship by rewriting the script,
+// not the command, and don't send the user back to /hooks to re-approve.
 export function makeHookScript(): string {
   return [
     '#!/bin/bash',
@@ -90,7 +97,10 @@ export function makeHookScript(): string {
     'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
     `d=${STATUS_DIR}; mkdir -p "$d"`,
     'p=$(cat); [ -z "$p" ] && p=null',
-    'printf \'{"event":"%s","ts":%s,"payload":%s}\\n\' "$1" "$(date +%s)" "$p" >> "$d/$h.ndjson"',
+    ...stopCheckLines('[ "$1" = Stop ] && '),
+    'printf \'{"event":"%s","ts":%s%s,"payload":%s}\\n\' "$1" "$(date +%s)" "$c" "$p" >> "$d/$h.ndjson"',
+    String.raw`[ -n "$r" ] && printf "%s\n" "$r"`,
+    'exit 0',
     ''
   ].join('\n')
 }

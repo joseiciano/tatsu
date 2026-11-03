@@ -452,6 +452,22 @@ describe('CODEX_HOME (TEST-014)', () => {
     expect(fsState.writes.filter((p) => p.startsWith(HOME_CODEX))).toEqual([])
   })
 
+  it('(b2) pins every hooks.json entry byte for byte so Codex /hooks trust survives script changes', () => {
+    vi.stubEnv('CODEX_HOME', H)
+
+    installHooks()
+
+    const data = JSON.parse(fsState.files.get(join(H, 'hooks.json')) as string)
+    const entries = Object.fromEntries(hookEvents.map((event) => [event, JSON.stringify(data.hooks[event])]))
+    expect(entries).toEqual({
+      SessionStart: `[{"hooks":[{"type":"command","command":"bash '/codex-home/harness-hook.sh' SessionStart","timeout":5}]}]`,
+      PreToolUse: `[{"hooks":[{"type":"command","command":"bash '/codex-home/harness-hook.sh' PreToolUse","timeout":5}]}]`,
+      PostToolUse: `[{"hooks":[{"type":"command","command":"bash '/codex-home/harness-hook.sh' PostToolUse","timeout":5}]}]`,
+      UserPromptSubmit: `[{"hooks":[{"type":"command","command":"bash '/codex-home/harness-hook.sh' UserPromptSubmit","timeout":5}]}]`,
+      Stop: `[{"hooks":[{"type":"command","command":"bash '/codex-home/harness-hook.sh' Stop","timeout":5}]}]`
+    })
+  })
+
   it('(c) the feature flag goes to CODEX_HOME/config.toml', () => {
     vi.stubEnv('CODEX_HOME', H)
 

@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSy
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { AddressInfo } from 'net'
-import { makeHookCommand } from '.'
+import { makeHookCommand, makeHookScript } from '.'
 
 vi.mock('../debug', () => ({ log: vi.fn() }))
 
@@ -43,14 +43,37 @@ interface RunResult {
   ms: number
 }
 
-function stopInner(): string {
-  return makeHookCommand('Stop').replace(/^bash -c '/, '').replace(/'$/, '')
+const SHARED_STATUS_DIR = 'd=/tmp/harness-status;'
+
+function inScratchStatusDir(text: string, statusDir: string): string {
+  if (!text.includes(SHARED_STATUS_DIR)) throw new Error('hook text no longer sets the status dir')
+  return text.replace(SHARED_STATUS_DIR, `d=${statusDir};`)
 }
 
-function runStop(env: Record<string, string>, payload = PAYLOAD): Promise<RunResult> {
+const SCRIPT_NAME = 'harness-hook.sh'
+
+function stopInner(statusDir: string): string {
+  return inScratchStatusDir(makeHookCommand('Stop').replace(/^bash -c '/, '').replace(/'$/, ''), statusDir)
+}
+
+function writeHookScript(scratch: string, statusDir: string): void {
+  writeFileSync(join(scratch, SCRIPT_NAME), inScratchStatusDir(makeHookScript(), statusDir), { mode: 0o755 })
+}
+
+interface HookVariant {
+  name: string
+  argv(scratch: string, event: string): string[]
+}
+
+const VARIANTS: HookVariant[] = [
+  { name: 'Claude Stop command', argv: (scratch) => ['-c', stopInner(join(scratch, 'status'))] },
+  { name: 'Codex hook script', argv: (scratch, event) => [join(scratch, SCRIPT_NAME), event] }
+]
+
+function runHook(argv: string[], env: Record<string, string>, payload = PAYLOAD): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const started = Date.now()
-    const child = spawn(BASH, ['--noprofile', '--norc', '-c', stopInner()], { env, stdio: ['pipe', 'pipe', 'ignore'] })
+    const child = spawn(BASH, ['--noprofile', '--norc', ...argv], { env, stdio: ['pipe', 'pipe', 'ignore'] })
     let stdout = ''
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf-8')
@@ -61,7 +84,7 @@ function runStop(env: Record<string, string>, payload = PAYLOAD): Promise<RunRes
   })
 }
 
-describe.skipIf(!canRun)('Stop hook command with a stub control server', () => {
+describe.skipIf(!canRun).each(VARIANTS)('$name Stop path with a stub control server', (variant) => {
   let scratch: string
   let configDir: string
   let shimDir: string
@@ -84,6 +107,7 @@ describe.skipIf(!canRun)('Stop hook command with a stub control server', () => {
     mkdirSync(shimDir)
     mkdirSync(noCurlDir)
     curlLog = join(scratch, 'curl-args.log')
+    writeHookScript(scratch, join(scratch, 'status'))
     const shim = join(shimDir, 'curl')
     writeFileSync(shim, `#!/bin/sh\nprintf '%s\\n' "$@" >> '${curlLog}'\nexec '${REAL_CURL}' "$@"\n`)
     chmodSync(shim, 0o755)
@@ -128,7 +152,7 @@ describe.skipIf(!canRun)('Stop hook command with a stub control server', () => {
     configDir = mkdtempSync(join(scratch, 'configs-'))
     configPath = writeConfig(port)
     writeFileSync(`${configPath.replace(/\.json$/, '')}.step`, '{}', { mode: 0o600 })
-    ndjson = `/tmp/harness-status/${terminalId}.ndjson`
+    ndjson = join(scratch, 'status', `${terminalId}.ndjson`)
     rmSync(curlLog, { force: true })
   })
 
@@ -158,6 +182,10 @@ describe.skipIf(!canRun)('Stop hook command with a stub control server', () => {
     }
     writeFileSync(path, JSON.stringify(config, null, 2), { mode: 0o600 })
     return path
+  }
+
+  function runStop(environment: Record<string, string>, payload = PAYLOAD): Promise<RunResult> {
+    return runHook(variant.argv(scratch, 'Stop'), environment, payload)
   }
 
   function env(overrides: Record<string, string | undefined> = {}): Record<string, string> {
@@ -290,4 +318,58 @@ describe.skipIf(!canRun)('Stop hook command with a stub control server', () => {
     expect(received).toEqual([])
     expectPlainStopLine()
   })
+})
+
+describe.skipIf(!canRun)('Codex hook script outside Stop', () => {
+  let scratch: string
+  let server: Server
+  let requests = 0
+  let terminalId = ''
+
+  beforeAll(async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'codex-hook-'))
+    writeHookScript(scratch, join(scratch, 'status'))
+    server = createServer((_req, res) => {
+      requests += 1
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(BLOCK_REPLY)
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  })
+
+  afterAll(async () => {
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    rmSync(scratch, { recursive: true, force: true })
+  })
+
+  afterEach(() => {
+    rmSync(join(scratch, 'status', `${terminalId}.ndjson`), { force: true })
+  })
+
+  it.each(['SessionStart', 'PreToolUse', 'PostToolUse', 'UserPromptSubmit'])(
+    'makes no stop-check for %s even with a step marker and writes a plain line',
+    async (event) => {
+      terminalId = `vitest-codex-${randomUUID()}`
+      const token = randomBytes(32).toString('hex')
+      const configPath = join(scratch, `${terminalId}.json`)
+      const port = (server.address() as AddressInfo).port
+      const config = { mcpServers: { 'harness-control': { env: { HARNESS_PORT: String(port), HARNESS_TOKEN: token } } } }
+      writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 })
+      writeFileSync(`${configPath.replace(/\.json$/, '')}.step`, '{}', { mode: 0o600 })
+      requests = 0
+      const result = await runHook([join(scratch, SCRIPT_NAME), event], {
+        PATH: SYSTEM_PATH,
+        HOME: scratch,
+        HARNESS_TERMINAL_ID: terminalId,
+        HARNESS_MCP_CONFIG: configPath
+      })
+      expect(result).toMatchObject({ code: 0, stdout: '' })
+      expect(requests).toBe(0)
+      const lines = readFileSync(join(scratch, 'status', `${terminalId}.ndjson`), 'utf-8').trim().split('\n')
+      expect(lines.map((line) => JSON.parse(line) as unknown)).toEqual([
+        { event, ts: expect.any(Number), payload: JSON.parse(PAYLOAD) }
+      ])
+    }
+  )
 })
