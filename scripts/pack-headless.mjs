@@ -10,10 +10,12 @@
 // Layout of the staged tarball (extracted under ~/.harness-server/):
 //   harness-server-<version>-<platform>/
 //     bin/harness-server                            shell shim
+//     bin/tatsu                                     shell shim for the CLI
 //     VERSION
 //     lib/
 //       node                                        pinned Node binary
 //       main/index.js                               vite-bundled main process
+//       cli/index.js                                vite-bundled tatsu CLI
 //       web-client/                                 vite-bundled renderer
 //       mcp/{permission-prompt-mcp.js, mcp-bridge.js}
 //       node_modules/
@@ -135,6 +137,9 @@ async function main() {
   if (!existsSync(join(repoRoot, 'dist-headless', 'main', 'index.js'))) {
     throw new Error(`dist-headless/main/index.js missing — run "pnpm run build:headless" first`)
   }
+  if (!existsSync(join(repoRoot, 'dist-headless', 'cli', 'index.js'))) {
+    throw new Error(`dist-headless/cli/index.js missing — run "pnpm run build:headless" first`)
+  }
   if (!existsSync(join(repoRoot, 'dist-headless', 'web-client'))) {
     throw new Error(`dist-headless/web-client missing — run "pnpm run build:headless" first`)
   }
@@ -143,6 +148,7 @@ async function main() {
   await mkdir(join(stageDir, 'bin'), { recursive: true })
   await mkdir(join(stageDir, 'lib', 'main'), { recursive: true })
   await mkdir(join(stageDir, 'lib', 'mcp'), { recursive: true })
+  await mkdir(join(stageDir, 'lib', 'cli'), { recursive: true })
 
   const nodeBin = await downloadNodeBinary(platform, nodeDist)
   await cp(nodeBin, join(stageDir, 'lib', 'node'))
@@ -152,6 +158,7 @@ async function main() {
 
   const libDir = join(stageDir, 'lib')
   await cp(join(repoRoot, 'dist-headless', 'main', 'index.js'), join(libDir, 'main', 'index.js'))
+  await cp(join(repoRoot, 'dist-headless', 'cli', 'index.js'), join(libDir, 'cli', 'index.js'))
   await cp(join(repoRoot, 'dist-headless', 'web-client'), join(libDir, 'web-client'), {
     recursive: true
   })
@@ -196,6 +203,14 @@ exec "$DIR/lib/node" "$DIR/lib/main/index.js" "$@"
   const shimPath = join(stageDir, 'bin', 'harness-server')
   await writeFile(shimPath, shim, 'utf8')
   await chmod(shimPath, 0o755)
+
+  const cliShim = `#!/bin/sh
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$DIR/lib/node" "$DIR/lib/cli/index.js" "$@"
+`
+  const cliShimPath = join(stageDir, 'bin', 'tatsu')
+  await writeFile(cliShimPath, cliShim, 'utf8')
+  await chmod(cliShimPath, 0o755)
 
   await writeFile(join(stageDir, 'VERSION'), `${version}\n`, 'utf8')
 
