@@ -321,6 +321,7 @@ function SortableTab({ tab, isActive, status, shellActivity, showClose, onSelect
               e.stopPropagation()
               onClose()
             }}
+            aria-label={`Close tab ${displayLabel}`}
             className="ml-1 text-faint hover:text-fg transition-colors"
           >
             <X className="icon-2xs" />

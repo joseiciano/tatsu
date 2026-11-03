@@ -46,10 +46,10 @@ import { CancelStepDialog } from '../components/Workflows/StepTab'
 import { MonacoWorkerFailedBanner } from '../components/MonacoWorkerFailedBanner'
 import iconUrl from '../../../resources/icon.png'
 import { PerfMonitorHUD } from '../components/PerfMonitorHUD'
-import { focusTerminalById } from '../components/XTerminal'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { type GroupKey } from '../worktree-sort'
 import { useViewport } from '../hooks/useViewport'
+import { useFocusActiveTerminal } from '../hooks/useFocusActiveTerminal'
 import { MobileApp } from '../components/MobileApp'
 import { harnessReleaseNotesUrl } from '../../shared/constants'
 
@@ -538,13 +538,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
   // Auto-focus the active terminal when switching worktrees so the user can
   // start typing immediately. Deferred to the next frame so the xterm layer
   // is visible (TerminalPanels use display:none for inactive worktrees).
-  useEffect(() => {
-    if (!activeWorktreeId) return
-    const tabId = activeTabId[activeWorktreeId]
-    if (!tabId || tabId.startsWith('diff-')) return
-    const raf = requestAnimationFrame(() => focusTerminalById(tabId))
-    return () => cancelAnimationFrame(raf)
-  }, [activeWorktreeId, activeTabId])
+  useFocusActiveTerminal(activeWorktreeId, activeTabId)
 
   // When a worktree becomes active, refresh its PR status if stale. Hooks
   // installation and pane initialization both run in main now (see

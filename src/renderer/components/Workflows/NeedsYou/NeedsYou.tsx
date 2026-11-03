@@ -11,10 +11,10 @@ import {
 } from '../../../store'
 import { findWorkflowStepTab } from '../../../workflow-selectors'
 import {
-  PAUSED_REASON_LABELS,
   confirmRetryFromClean,
   currentStepId,
   needsYouActions,
+  pausedReasonLabel,
   recordStepContext,
   runNeedsYouAction,
   stepOrderFor,
@@ -126,7 +126,7 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
         </span>
       </div>
       <div className="text-xs text-faint truncate" title={run.worktreePath}>
-        {worktreeName} · <span className="text-warning">{PAUSED_REASON_LABELS[reason]}</span>
+        {worktreeName} · <span className="text-warning">{pausedReasonLabel(reason, stepId ? run.steps[stepId]?.status ?? null : null)}</span>
         {stepId ? ` · ${stepId}` : ''}
       </div>
       <div className="flex flex-wrap gap-1">

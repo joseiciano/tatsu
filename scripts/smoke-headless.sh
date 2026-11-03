@@ -4,8 +4,9 @@
 # Launches dist-headless/main/index.js on an ephemeral port + localhost,
 # parses the [web-client] URL out of stdout, then delegates to
 # scripts/web-smoke.mjs and scripts/ws-smoke.mjs for HTTP + WS
-# validation, and scripts/workflow-smoke.mjs for a real workflow run
-# (agent step via scripts/fake-agent.mjs, then shell steps). Finally
+# validation, scripts/workflow-smoke.mjs for a real workflow run
+# (agent step via scripts/fake-agent.mjs, then shell steps), and
+# scripts/browser-smoke.mjs for the workflow UI in headless Chrome. Finally
 # SIGTERMs the server and confirms it exits within 5s (no zombies).
 #
 # Run locally:  pnpm run build:headless && bash scripts/smoke-headless.sh
@@ -17,44 +18,46 @@
 set -euo pipefail
 
 REPO_DIR="$(pwd -P)"
-NODE_BIN="$(command -v node)"
-LOG="${HARNESS_SMOKE_LOG:-/tmp/harness-server.log}"
 SCRATCH="$(mktemp -d)"
 SCRATCH="$(cd "$SCRATCH" && pwd -P)"
+LOG="${HARNESS_SMOKE_LOG:-$SCRATCH/server.log}"
+EVIDENCE="${HARNESS_SMOKE_EVIDENCE:-$SCRATCH/evidence}"
 SERVER_PID=""
 
-# Everything the server, its PTYs and installed hooks write goes under
-# $SCRATCH: the server installs agent hooks into $HOME, the boot PATH probe
-# and every tab run `$SHELL -ilc`, and snapshot commits need a git identity.
-export HARNESS_DATA_DIR="$SCRATCH/data"
-export HOME="$SCRATCH/home"
-export ZDOTDIR="$HOME"
-export XDG_CONFIG_HOME="$HOME/.config"
-export CODEX_HOME="$HOME/.codex"
-export SHELL=/bin/bash
-export BASH_SILENCE_DEPRECATION_WARNING=1
-export GIT_AUTHOR_NAME="Tatsu Smoke" GIT_AUTHOR_EMAIL="smoke@example.invalid"
-export GIT_COMMITTER_NAME="Tatsu Smoke" GIT_COMMITTER_EMAIL="smoke@example.invalid"
-export FAKE_AGENT_LOG="$SCRATCH/fake-agent.log"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SANDBOXED
-mkdir -p "$HARNESS_DATA_DIR/workflows" "$HOME" "$SCRATCH/bin"
+stop_server() {
+  kill "$SERVER_PID" 2>/dev/null || true
+  for _ in $(seq 1 25); do
+    if ! kill -0 "$SERVER_PID" 2>/dev/null; then break; fi
+    sleep 0.2
+  done
+  if kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "server ignored SIGTERM for 5s; sending SIGKILL" >&2
+    kill -9 "$SERVER_PID" 2>/dev/null || true
+  fi
+  wait "$SERVER_PID" 2>/dev/null || true
+}
 
 cleanup() {
   local status=$?
   if [ -n "$SERVER_PID" ]; then
-    kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
+    stop_server
   fi
   if [ "$status" -ne 0 ]; then
     echo "--- server log ---" >&2
     cat "$LOG" >&2 || true
-    if [ -f "$HARNESS_DATA_DIR/debug.log" ]; then
+    if [ -f "${HARNESS_DATA_DIR:-}/debug.log" ]; then
       echo "--- debug.log (tail) ---" >&2
       tail -n 200 "$HARNESS_DATA_DIR/debug.log" >&2 || true
     fi
-    if [ -f "$FAKE_AGENT_LOG" ]; then
+    if [ -f "${FAKE_AGENT_LOG:-}" ]; then
       echo "--- fake-agent log ---" >&2
       cat "$FAKE_AGENT_LOG" >&2 || true
+    fi
+    if [ "$EVIDENCE" = "$SCRATCH/evidence" ] && [ -n "$(ls -A "$EVIDENCE" 2>/dev/null)" ]; then
+      local kept
+      kept="$(mktemp -d "${TMPDIR:-/tmp}/tatsu-smoke-evidence.XXXXXX")"
+      cp -R "$EVIDENCE/." "$kept/"
+      echo "browser smoke evidence kept at $kept" >&2
     fi
   fi
   rm -rf "$SCRATCH"
@@ -62,59 +65,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Fake `claude`: an absolute path, because the login shell may reorder PATH.
-CLAUDE_SHIM="$SCRATCH/bin/claude"
-printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$NODE_BIN" "$REPO_DIR/scripts/fake-agent.mjs" > "$CLAUDE_SHIM"
-chmod +x "$CLAUDE_SHIM"
-
-# Temp repo; its main checkout is the workflow worktree.
-mkdir -p "$SCRATCH/repo"
-git -C "$SCRATCH/repo" init -q
-printf 'smoke\n' > "$SCRATCH/repo/README.md"
-git -C "$SCRATCH/repo" add README.md
-git -C "$SCRATCH/repo" commit -q -m init
-WORKTREE="$(git -C "$SCRATCH/repo" rev-parse --show-toplevel)"
-
-"$NODE_BIN" -e '
-const fs = require("fs")
-const [home, dataDir, worktree, shim] = process.argv.slice(1)
-fs.writeFileSync(`${home}/.claude.json`, JSON.stringify({ projects: { [worktree]: { hasTrustDialogAccepted: true } } }))
-fs.writeFileSync(`${dataDir}/config.json`, JSON.stringify({
-  repoRoots: [],
-  claudeCommand: shim,
-  hooksConsent: "accepted",
-  hooksMigratedToGlobal: true,
-  labs: { workflows: true },
-  workflowSettings: { maxConcurrentAgents: 1 }
-}))
-' "$HOME" "$HARNESS_DATA_DIR" "$WORKTREE" "$CLAUDE_SHIM"
-
-cat > "$HARNESS_DATA_DIR/workflows/smoke.yaml" <<'YAML'
-name: smoke
-steps:
-  - id: plan
-    agent: claude
-    permissions: read-only
-    prompt: "Reply PLAN-OK and call complete_step."
-  - id: echo
-    kind: shell
-    run: echo {{steps.plan.summary}}
-YAML
-cat > "$HARNESS_DATA_DIR/workflows/smoke-retry.yaml" <<'YAML'
-name: smoke-retry
-steps:
-  - id: check
-    kind: shell
-    run: test -f flag
-YAML
-cat > "$HARNESS_DATA_DIR/workflows/smoke-full.yaml" <<'YAML'
-name: smoke-full
-steps:
-  - id: plan
-    agent: claude
-    permissions: full
-    prompt: "This must never start without allowFull."
-YAML
+# shellcheck source=scripts/smoke-sandbox.sh
+. "$REPO_DIR/scripts/smoke-sandbox.sh"
+smoke_sandbox "$SCRATCH" "$REPO_DIR" no
+mkdir -p "$EVIDENCE"
 
 if command -v curl >/dev/null 2>&1; then CURL=yes; else CURL=no; fi
 echo "curl present: $CURL"
@@ -156,7 +110,32 @@ node scripts/ws-smoke.mjs "$TOKEN" "$PORT"
 # 4. Workflow runs: agent + shell steps, then shell fail -> retry -> done.
 node scripts/workflow-smoke.mjs "$TOKEN" "$PORT" "$WORKTREE" "$CURL"
 
-# 5. Clean shutdown — SIGTERM should exit within 5s. Catches "server
+# 5. Browser: the Phase 2 workflow UI in headless Chrome. Browser
+# resolution follows HARNESS_PLAYWRIGHT_BROWSER (used exclusively when set),
+# then a Chrome/Chromium on PATH, then playwright's channel:'chrome'.
+# browser-smoke exits 77 only when no browser launches: that skips with a
+# WARN locally and fails under CI.
+if [ -z "${HARNESS_PLAYWRIGHT_BROWSER:-}" ]; then
+  for candidate in google-chrome google-chrome-stable chromium; do
+    if found="$(command -v "$candidate")"; then
+      export HARNESS_PLAYWRIGHT_BROWSER="$found"
+      break
+    fi
+  done
+fi
+BROWSER_STATUS=0
+node scripts/browser-smoke.mjs "$TOKEN" "$PORT" "$WORKTREE" "$EVIDENCE" "$CURL" || BROWSER_STATUS=$?
+if [ "$BROWSER_STATUS" -eq 77 ]; then
+  if [ -n "${CI:-}" ]; then
+    echo "::error::browser smoke: no browser could be launched, and CI requires the browser leg" >&2
+    exit 1
+  fi
+  echo "WARN: browser smoke SKIPPED: no browser could be launched (set HARNESS_PLAYWRIGHT_BROWSER or install Chrome); CI fails here" >&2
+elif [ "$BROWSER_STATUS" -ne 0 ]; then
+  exit "$BROWSER_STATUS"
+fi
+
+# 6. Clean shutdown — SIGTERM should exit within 5s. Catches "server
 # hangs on SIGTERM" bugs that would leave zombies in CI.
 kill -TERM "$SERVER_PID"
 for _ in $(seq 1 25); do

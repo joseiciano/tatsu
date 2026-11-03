@@ -121,4 +121,25 @@ describe('StepResultOverlay', () => {
     expect(container.querySelector('form')).toBeNull()
     expect(container.textContent).toContain('Tests still fail')
   })
+
+  it('shows the Mark done completion once the user marks the exited step done', async () => {
+    const markedDone: WorkflowAttemptRecord = {
+      attemptId: 'att-2',
+      stepId: 'fix',
+      n: 2,
+      status: 'done',
+      startedAt: 3,
+      endedAt: 3,
+      result: { status: 'done', summary: 'Fixed by hand', completedBy: 'user' },
+      metrics: { continuations: 0, pauses: [] }
+    }
+    backendApi.getWorkflowRun.mockResolvedValue({ ...record('done'), steps: { fix: 'done' }, attempts: [ATTEMPT, markedDone] })
+    slice.run = sliceRun('done')
+    await render()
+    const text = container.textContent ?? ''
+    expect(text).toContain('you (Mark done)')
+    expect(text).toContain('Fixed by hand')
+    expect(text).not.toContain('process exit')
+    expect(container.querySelector('form')).toBeNull()
+  })
 })

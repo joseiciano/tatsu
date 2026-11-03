@@ -78,6 +78,16 @@ export function stepTabOverlayMode(
   return latest?.attemptId === attemptId ? 'result-with-mark-done' : 'result'
 }
 
+export function markedDoneAfter(
+  run: WorkflowRunRecord | null,
+  stepId: string,
+  attemptId: string
+): WorkflowAttemptRecord | null {
+  const latest = run?.attempts.filter((a) => a.stepId === stepId).at(-1)
+  if (!latest || latest.attemptId === attemptId || latest.result?.completedBy !== 'user') return null
+  return latest
+}
+
 export function stepOutputSchema(step: ResolvedWorkflowStep | undefined): WorkflowOutputSchema | undefined {
   return step?.kind === 'agent' ? step.output : undefined
 }

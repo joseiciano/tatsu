@@ -8,7 +8,7 @@ import type {
   WorkflowRunRecord
 } from '../../../../shared/state/workflows'
 import { STEP_STATUS_LABELS } from '../workflow-run-helpers'
-import { COMPLETED_BY_LABELS, stepTabOverlayMode } from './StepTab'
+import { COMPLETED_BY_LABELS, markedDoneAfter, stepTabOverlayMode } from './StepTab'
 import { MarkDoneForm } from './MarkDoneForm'
 
 interface StepResultOverlayProps {
@@ -48,9 +48,11 @@ export function StepResultOverlay({ workflow, title }: StepResultOverlayProps): 
     }
   }, [backend, attemptId, runId, attemptStatus, attemptEndedAt, runStatus, pausedReason, stepStatus])
 
-  const attempt = records?.attempt ?? null
-  const mode = stepTabOverlayMode({ workflow }, attempt, records?.run ?? null)
+  const tabAttempt = records?.attempt ?? null
+  const mode = stepTabOverlayMode({ workflow }, tabAttempt, records?.run ?? null)
   const step = records?.run?.definition.steps.find((s) => s.id === stepId)
+  const markedDone = markedDoneAfter(records?.run ?? null, stepId, attemptId)
+  const attempt = markedDone ?? tabAttempt
   const completedBy = attempt?.metrics.completedBy ?? attempt?.result?.completedBy
   const summary = attempt?.result?.summary ?? sliceAttempt?.summaryPreview ?? ''
   const status = attempt?.status ?? sliceAttempt?.status

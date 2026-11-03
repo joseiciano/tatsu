@@ -69,7 +69,7 @@ const BUILD_CLAUDE: ResolvedWorkflowStep = {
 }
 const BUILD_SHELL: ResolvedWorkflowStep = { id: 'build', kind: 'shell', run: 'make', needs: ['plan'] }
 
-function pausedRun(reason: WorkflowPausedReason, buildAttemptIds: string[], buildStatus: 'failed' | 'interrupted' | 'pending' | 'running' = 'failed'): WorkflowRun {
+function pausedRun(reason: WorkflowPausedReason, buildAttemptIds: string[], buildStatus: 'failed' | 'interrupted' | 'pending' | 'running' | 'cancelled' = 'failed'): WorkflowRun {
   return {
     defId: SUMMARY.id,
     defHash: 'h',
@@ -204,6 +204,13 @@ describe('NeedsYouGroup', () => {
     expect(container.textContent).toContain('feature · Step failed · build')
     expect(buttonLabels()).toEqual(['Retry', 'Retry from clean', 'Skip', 'Cancel run', 'Jump to tab'])
     expect(button('Retry').getAttribute('aria-label')).toBe('Retry: Ship it on feature')
+  })
+
+  it('says a step the user cancelled was cancelled by the user, not that it failed', async () => {
+    setState({ runs: { r1: pausedRun('step-failed', ['a1'], 'cancelled') }, attempts: { a1: attempt('build', 'cancelled') } })
+    await render()
+    expect(container.textContent).toContain('feature · Cancelled by user · build')
+    expect(container.textContent).not.toContain('Step failed')
   })
 
   it('runs Retry, Skip and Cancel against the current step', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  pausedReasonLabel,
   confirmRetryFromClean,
   currentStepId,
   recordStepContext,
@@ -103,6 +104,18 @@ const SHELL: NeedsYouStepInfo = { kind: 'shell' }
 const FAILED: NeedsYouAttemptInfo = { status: 'failed' }
 const LIVE: NeedsYouAttemptInfo = { status: 'running', sessionId: 's-1' }
 const INTERRUPTED_SESSION: NeedsYouAttemptInfo = { status: 'interrupted', sessionId: 's-1' }
+
+describe('pausedReasonLabel', () => {
+  it('reads a step-failed pause on a cancelled step as cancelled by user', () => {
+    expect(pausedReasonLabel('step-failed', 'cancelled')).toBe('Cancelled by user')
+  })
+
+  it('keeps the reason label for every other step status and reason', () => {
+    expect(pausedReasonLabel('step-failed', 'failed')).toBe('Step failed')
+    expect(pausedReasonLabel('step-failed', null)).toBe('Step failed')
+    expect(pausedReasonLabel('interrupted', 'cancelled')).toBe('Interrupted')
+  })
+})
 
 describe('needsYouActions', () => {
   it.each<[string, WorkflowPausedReason, NeedsYouStepInfo | null, NeedsYouAttemptInfo | null, boolean, NeedsYouActionKind[]]>([
