@@ -574,6 +574,7 @@ describe('WorkflowRunner dispatch order and dedup', () => {
       'runResumed',
       'attemptEnded',
       'stepStatusChanged',
+      'cursorChanged',
       'stepStarted',
       'attemptStarted'
     ])
@@ -1892,5 +1893,70 @@ describe('WorkflowRunner before boot reconcile', () => {
     expect(runner.start(request)).toMatchObject({ ok: false })
     runner.reconcile([])
     expect(runner.start(request)).toEqual({ ok: false, reason: 'worktree-busy' })
+  })
+})
+
+describe('WorkflowRunner slice step facts and cursor', () => {
+  it('starts the run with each step kind and agent and the first step as cursor', () => {
+    const ctx = setup()
+    const runId = ctx.startRun('shell-then-agent')
+    const run = ctx.wf().runs[runId]
+    expect(run.cursorStepId).toBe('test')
+    expect(run.steps.test).toMatchObject({ kind: 'shell' })
+    expect('agent' in run.steps.test).toBe(false)
+    expect(run.steps.fix).toMatchObject({ kind: 'agent', agent: 'claude' })
+  })
+
+  it('moves the cursor when a step is skipped even if the next step is held with labs off', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('two-agent')
+    await flush()
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    const types = ctx.eventsSince(() => expect(ctx.runner.skipStep(runId, 'plan')).toEqual({ ok: true }))
+    expect(types).toContain('cursorChanged')
+    expect(ctx.wf().runs[runId]).toMatchObject({ cursorStepId: 'build', status: 'paused', pausedReason: 'interrupted' })
+    expect(ctx.stepStatus(runId, 'build')).toBe('pending')
+  })
+
+  it('moves the cursor on completion and dispatches no cursor change past the last step', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('two-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    expect(ctx.wf().runs[runId].cursorStepId).toBe('build')
+    await flush()
+    const types = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'build'), done()))
+    expect(types).not.toContain('cursorChanged')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'done', cursorStepId: 'build' })
+  })
+})
+
+describe('WorkflowRunner attemptSessionRecorded', () => {
+  it('dispatches once for a Claude attempt after the session id is persisted', async () => {
+    const claude = claudeHarness()
+    const ctx = setup({ agentDriver: claude.factory })
+    claude.attach(ctx.runner)
+    const persistedAtDispatch: Array<string | undefined> = []
+    ctx.store.subscribe((event) => {
+      if (event.type === 'workflows/attemptSessionRecorded') {
+        persistedAtDispatch.push(ctx.records.at(-1)?.attempts.at(-1)?.sessionId)
+      }
+    })
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const recorded = ctx.events.filter((event) => event.type === 'workflows/attemptSessionRecorded')
+    expect(recorded).toEqual([{ type: 'workflows/attemptSessionRecorded', payload: { attemptId } }])
+    expect(persistedAtDispatch).toEqual([claude.tabs[0].spawn.sessionId])
+    expect(ctx.wf().attempts[attemptId].resumable).toBe(true)
+  })
+
+  it('does not dispatch for an execution bound without a session', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-shell')
+    await flush()
+    expect(ctx.events.some((event) => event.type === 'workflows/attemptSessionRecorded')).toBe(false)
+    expect('resumable' in ctx.wf().attempts[ctx.attemptOf(runId, 'test')]).toBe(false)
   })
 })

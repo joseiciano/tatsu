@@ -17,6 +17,7 @@ import {
   pausedReasonLabel,
   recordStepContext,
   runNeedsYouAction,
+  sliceStepContext,
   stepOrderFor,
   type NeedsYouActionKind,
   type RecordStepContext
@@ -37,10 +38,11 @@ const ACTION_LABELS: Record<NeedsYouActionKind, string> = {
 
 const ACTION_FAILED = 'Action failed'
 
-function useRecordStepContext(runId: string, fetchKey: string): RecordStepContext | null {
+function useRecordStepContext(runId: string, fetchKey: string, enabled: boolean): RecordStepContext | null {
   const backend = useBackend()
   const [loaded, setLoaded] = useState<{ key: string; value: RecordStepContext | null } | null>(null)
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     backend
       .getWorkflowRun(runId)
@@ -53,18 +55,24 @@ function useRecordStepContext(runId: string, fetchKey: string): RecordStepContex
     return () => {
       cancelled = true
     }
-  }, [backend, runId, fetchKey])
-  return loaded?.key === fetchKey ? loaded.value : null
+  }, [backend, runId, fetchKey, enabled])
+  return enabled && loaded?.key === fetchKey ? loaded.value : null
 }
 
 function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: JumpToTabHandler }): JSX.Element | null {
   const backend = useBackend()
   const run = useWorkflowRun(runId)
   const summary = useWorkflowDefinition(run?.defId ?? null)
-  const sliceStepId = run ? currentStepId(run, stepOrderFor(run, summary)) : null
+  const sliceStepId = run ? run.cursorStepId ?? currentStepId(run, stepOrderFor(run, summary)) : null
   const lastAttemptId = (sliceStepId && run?.steps[sliceStepId]?.attemptIds.at(-1)) || null
-  const lastAttemptStatus = useWorkflowAttempt(lastAttemptId)?.status ?? null
-  const context = useRecordStepContext(runId, `${run?.pausedReason}|${lastAttemptId}|${lastAttemptStatus}`)
+  const lastAttempt = useWorkflowAttempt(lastAttemptId)
+  const sliceContext = run ? sliceStepContext(run, lastAttempt) : null
+  const fetched = useRecordStepContext(
+    runId,
+    `${run?.pausedReason}|${lastAttemptId}|${lastAttempt?.status ?? null}`,
+    run !== null && sliceContext === null
+  )
+  const context = sliceContext ?? fetched
   const stepId = context?.stepId ?? sliceStepId
   const tabRef = { runId, stepId: stepId ?? '', attemptId: lastAttemptId }
   const leaf = useWorkflowStepTabLeaf(run && stepId ? run.worktreePath : null, tabRef)

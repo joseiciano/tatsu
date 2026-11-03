@@ -270,7 +270,7 @@ describe('NeedsYouGroup', () => {
     expect(onJumpToTab).toHaveBeenCalledWith('/wt/feature', 'pane-1', 'tab-build')
   })
 
-  it('offers Resume for an interrupted Claude step with a session', async () => {
+  it('falls back to the run record to offer Resume when the server omits step kinds', async () => {
     backendApi.getWorkflowRun.mockResolvedValue(record(BUILD_CLAUDE, [attemptRecord('a1', 'build', 'interrupted', 's-1')]))
     setState({ runs: { r1: pausedRun('interrupted', ['a1'], 'interrupted') }, attempts: { a1: attempt('build', 'interrupted') } })
     await render()
@@ -295,5 +295,61 @@ describe('NeedsYouGroup', () => {
     expect(buttonLabels()).toEqual(['Retry', 'Cancel run'])
     await click(button('Retry'))
     expect(backendApi.retryWorkflowStep).toHaveBeenCalledWith('r1', 'build')
+  })
+})
+
+function slicedRun(
+  build: Pick<WorkflowRun['steps'][string], 'kind' | 'agent'>,
+  buildAttemptIds: string[],
+  buildStatus: 'interrupted' | 'pending'
+): WorkflowRun {
+  const base = pausedRun('interrupted', buildAttemptIds, buildStatus)
+  return {
+    ...base,
+    cursorStepId: 'build',
+    steps: {
+      plan: { ...base.steps.plan, kind: 'shell' },
+      build: { ...base.steps.build, ...build }
+    }
+  }
+}
+
+describe('NeedsYouGroup from slice data', () => {
+  it('renders Resume and Cancel on first paint without fetching the run record', async () => {
+    setState({
+      runs: { r1: slicedRun({ kind: 'agent', agent: 'claude' }, ['a1'], 'interrupted') },
+      attempts: { a1: { ...attempt('build', 'interrupted'), resumable: true } }
+    })
+    act(() => {
+      root.render(<NeedsYouGroup onJumpToTab={onJumpToTab} />)
+    })
+    expect(buttonLabels()).toEqual(['Resume', 'Retry', 'Cancel run'])
+    expect(button('Resume').disabled).toBe(false)
+    expect(button('Cancel run').disabled).toBe(false)
+    await click(button('Resume'))
+    await click(button('Cancel run'))
+    expect(backendApi.resumeWorkflowStep).toHaveBeenCalledWith('r1', 'build')
+    expect(backendApi.cancelWorkflowRun).toHaveBeenCalledWith('r1')
+    expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+  })
+
+  it('offers no Resume for an interrupted Claude attempt without a recorded session', async () => {
+    setState({
+      runs: { r1: slicedRun({ kind: 'agent', agent: 'claude' }, ['a1'], 'interrupted') },
+      attempts: { a1: attempt('build', 'interrupted') }
+    })
+    await render()
+    expect(buttonLabels()).toEqual(['Retry', 'Cancel run'])
+    expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+  })
+
+  it('targets the cursor step of a held run without fetching the run record', async () => {
+    setState({ runs: { r1: slicedRun({ kind: 'agent', agent: 'claude' }, [], 'pending') } })
+    await render()
+    expect(container.textContent).toContain('Interrupted · build')
+    expect(button('Cancel run').disabled).toBe(false)
+    await click(button('Retry'))
+    expect(backendApi.retryWorkflowStep).toHaveBeenCalledWith('r1', 'build')
+    expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
   })
 })

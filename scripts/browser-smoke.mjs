@@ -208,6 +208,9 @@ async function flowHangCancel(page, backend) {
     const row = needsYouRow(page, 'browser-hang')
     await row.filter({ hasText: 'Cancelled by user · hang' }).waitFor()
     await stepStrip(page, 'hang paused').waitFor()
+    const cancelRunButton = row.getByRole('button', { name: 'Cancel run: browser-hang on repo', exact: true })
+    await cancelRunButton.waitFor()
+    if (!(await cancelRunButton.isEnabled())) throw new Error('Needs-you Cancel run is disabled')
     await shot('needs-you-cancelled')
 
     const runId = await liveRunId(backend, 'browser-hang')

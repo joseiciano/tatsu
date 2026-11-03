@@ -1,4 +1,5 @@
 import type { ResolvedDefinition, WorkflowValidationResult } from '../../workflow-def'
+import type { AgentKind } from '../terminals'
 
 export type WorkflowScope = 'personal'
 
@@ -46,9 +47,13 @@ export type WorkflowCompletedBy = 'tool' | 'fallback' | 'user' | 'exit'
 
 export type WorkflowAttemptStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
 
+export type WorkflowRunStepKind = 'agent' | 'shell'
+
 export interface WorkflowRunStep {
   status: WorkflowStepStatus
   attemptIds: string[]
+  kind?: WorkflowRunStepKind
+  agent?: AgentKind
 }
 
 export interface WorkflowRun {
@@ -62,6 +67,7 @@ export interface WorkflowRun {
   startedAt: number
   finishedAt?: number
   costUsd?: number
+  cursorStepId?: string
   steps: Record<string, WorkflowRunStep>
 }
 
@@ -75,6 +81,7 @@ export interface WorkflowAttempt {
   costUsd?: number
   startedAt: number
   endedAt?: number
+  resumable?: true
 }
 
 export interface WorkflowsState {
@@ -119,6 +126,8 @@ export type WorkflowsEvent =
       }
     }
   | { type: 'workflows/runsEvicted'; payload: { runIds: string[] } }
+  | { type: 'workflows/cursorChanged'; payload: { runId: string; stepId: string } }
+  | { type: 'workflows/attemptSessionRecorded'; payload: { attemptId: string } }
 
 export interface StepResult {
   status: 'done' | 'failed' | 'needs-input'

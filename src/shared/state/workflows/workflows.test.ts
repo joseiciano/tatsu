@@ -6,6 +6,7 @@ import {
   WORKFLOW_RUN_RECORD_VERSION,
   hydrateWorkflowRuns,
   projectRunRecord,
+  runStepFacts,
   runsToEvict,
   workflowsReducer,
   type WorkflowAttempt,
@@ -751,5 +752,130 @@ describe('hydrateWorkflowRuns', () => {
 
   it('returns empty maps for no records', () => {
     expect(hydrateWorkflowRuns([])).toEqual({ runs: {}, attempts: {} })
+  })
+})
+
+describe('workflowsReducer cursorChanged', () => {
+  it('moves the cursor to the named step', () => {
+    const start = fixture({ cursorStepId: 'plan' })
+    const next = workflowsReducer(start, {
+      type: 'workflows/cursorChanged',
+      payload: { runId: 'run-a', stepId: 'build' }
+    })
+    expect(next.runs['run-a'].cursorStepId).toBe('build')
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+    expect(next.attempts).toBe(start.attempts)
+  })
+
+  it('returns the same state for the same step, an unknown step or run, or a terminal run', () => {
+    const start = fixture({ cursorStepId: 'plan' })
+    const done = fixture({ cursorStepId: 'plan', status: 'done', finishedAt: 2000 })
+    const events: Array<[WorkflowsState, string, string]> = [
+      [start, 'run-a', 'plan'],
+      [start, 'run-a', 'ship'],
+      [start, 'run-x', 'build'],
+      [done, 'run-a', 'build']
+    ]
+    for (const [state, runId, stepId] of events) {
+      expect(workflowsReducer(state, { type: 'workflows/cursorChanged', payload: { runId, stepId } })).toBe(state)
+    }
+  })
+})
+
+describe('workflowsReducer attemptSessionRecorded', () => {
+  it('marks the attempt resumable once and keeps other references', () => {
+    const start = fixture()
+    const event: WorkflowsEvent = { type: 'workflows/attemptSessionRecorded', payload: { attemptId: 'att-a1' } }
+    const next = workflowsReducer(start, event)
+    expect(next.attempts['att-a1']).toEqual({ ...start.attempts['att-a1'], resumable: true })
+    expect(next.attempts['att-b1']).toBe(start.attempts['att-b1'])
+    expect(next.runs).toBe(start.runs)
+    expect(workflowsReducer(next, event)).toBe(next)
+  })
+
+  it('returns the same state for an unknown attempt or an attempt of a terminal run', () => {
+    const start = fixture({ status: 'cancelled', finishedAt: 2000 })
+    for (const attemptId of ['att-zz', 'att-a1']) {
+      expect(
+        workflowsReducer(start, { type: 'workflows/attemptSessionRecorded', payload: { attemptId } })
+      ).toBe(start)
+    }
+  })
+})
+
+describe('runStepFacts', () => {
+  it('carries the kind and agent of runnable steps only', () => {
+    expect(
+      runStepFacts({ id: 'a', kind: 'agent', agent: 'claude', prompt: 'p', permissions: 'read-only', allow: [], needs: [] })
+    ).toEqual({ kind: 'agent', agent: 'claude' })
+    expect(runStepFacts({ id: 's', kind: 'shell', run: 'true', needs: [] })).toEqual({ kind: 'shell' })
+    expect(runStepFacts({ id: 'f', kind: 'foreach', needs: [] })).toEqual({})
+  })
+})
+
+describe('projectRunRecord step facts, cursor and resumability', () => {
+  const definition: WorkflowRunRecord['definition'] = {
+    name: 'two',
+    inputs: {},
+    steps: [
+      { id: 'plan', kind: 'agent', agent: 'claude', prompt: 'p', permissions: 'read-only', allow: [], needs: [] },
+      { id: 'test', kind: 'shell', run: 'true', needs: [] }
+    ]
+  }
+
+  it('hydrates an interrupted attempt with a session as resumable and the cursor step id', () => {
+    const projected = projectRunRecord(
+      runRecord('run-1', {
+        status: 'paused',
+        pausedReason: 'interrupted',
+        finishedAt: undefined,
+        definition,
+        cursor: 0,
+        steps: { plan: 'interrupted', test: 'pending' },
+        attempts: [
+          {
+            attemptId: 'att-1',
+            stepId: 'plan',
+            n: 1,
+            status: 'interrupted',
+            startedAt: 110,
+            endedAt: 120,
+            executionId: 'exec-1',
+            sessionId: '6f1c2a4e-1b2c-4d3e-8f90-123456789abc',
+            metrics: { continuations: 0, pauses: [] }
+          }
+        ]
+      })
+    )
+    expect(projected.attempts['att-1'].resumable).toBe(true)
+    expect(projected.run.cursorStepId).toBe('plan')
+    expect(projected.run.steps).toEqual({
+      plan: { status: 'interrupted', attemptIds: ['att-1'], kind: 'agent', agent: 'claude' },
+      test: { status: 'pending', attemptIds: [], kind: 'shell' }
+    })
+    expect(JSON.stringify(projected)).not.toContain('6f1c2a4e')
+  })
+
+  it('omits resumable without a session and the cursor step id when the cursor is out of range', () => {
+    const projected = projectRunRecord(
+      runRecord('run-2', {
+        definition,
+        cursor: 2,
+        steps: { plan: 'done', test: 'done' },
+        attempts: [
+          {
+            attemptId: 'att-2',
+            stepId: 'test',
+            n: 1,
+            status: 'done',
+            startedAt: 110,
+            endedAt: 120,
+            metrics: { continuations: 0, pauses: [] }
+          }
+        ]
+      })
+    )
+    expect('resumable' in projected.attempts['att-2']).toBe(false)
+    expect('cursorStepId' in projected.run).toBe(false)
   })
 })

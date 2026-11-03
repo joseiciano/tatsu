@@ -41,7 +41,8 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     `document.activeElement` inside the dialog -> Escape closes it.
   - `hang-cancel`: start `browser-hang` -> strip `hang running` -> close tab
     `⚙ hang · Claude` -> `Cancel step and close tab` -> Needs-you row
-    `repo · Cancelled by user · hang`, strip `hang paused` -> run record paused
+    `repo · Cancelled by user · hang` with `Cancel run: browser-hang on repo`
+    visible and enabled, strip `hang paused` -> run record paused
     step-failed with a cancelled attempt -> `cancelRun` over WS -> row and strip
     gone.
   - `exit-mark-done`: start `browser-exit` -> Needs-you row

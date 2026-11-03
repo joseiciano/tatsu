@@ -1,5 +1,6 @@
 import type {
   WorkflowActionResponse,
+  WorkflowAttempt,
   WorkflowAttemptStatus,
   WorkflowDefinitionSummary,
   WorkflowPausedReason,
@@ -8,7 +9,7 @@ import type {
   WorkflowStepStatus
 } from '../../../../shared/state/workflows'
 import type { ElectronAPI } from '../../../types'
-import type { WorkflowAgent } from '../../../../shared/workflow-def'
+import type { AgentKind } from '../../../../shared/state/terminals'
 
 export type StepGlyph = '✓' | '●' | '✕' | '↷' | '○' | '!'
 
@@ -23,12 +24,12 @@ export type NeedsYouActionKind = 'jump' | 'resume' | 'retry' | 'retry-from-clean
 
 export interface NeedsYouStepInfo {
   kind: 'agent' | 'shell' | 'foreach' | 'orchestrator'
-  agent?: WorkflowAgent
+  agent?: AgentKind
 }
 
 export interface NeedsYouAttemptInfo {
   status: WorkflowAttemptStatus
-  sessionId?: string
+  resumable: boolean
 }
 
 export interface NeedsYouActionsArgs {
@@ -125,7 +126,7 @@ function canResume(step: NeedsYouStepInfo | null, attempt: NeedsYouAttemptInfo |
     step?.kind === 'agent' &&
     step.agent === 'claude' &&
     attempt?.status === 'interrupted' &&
-    attempt.sessionId !== undefined
+    attempt.resumable
   )
 }
 
@@ -162,7 +163,18 @@ export function recordStepContext(record: WorkflowRunRecord): RecordStepContext 
   return {
     stepId: step.id,
     step: step.kind === 'agent' ? { kind: step.kind, agent: step.agent } : { kind: step.kind },
-    attempt: last ? { status: last.status, ...(last.sessionId === undefined ? {} : { sessionId: last.sessionId }) } : null
+    attempt: last ? { status: last.status, resumable: last.sessionId !== undefined } : null
+  }
+}
+
+export function sliceStepContext(run: WorkflowRun, lastAttempt: WorkflowAttempt | null): RecordStepContext | null {
+  const stepId = run.cursorStepId
+  const step = stepId === undefined ? undefined : run.steps[stepId]
+  if (stepId === undefined || step?.kind === undefined) return null
+  return {
+    stepId,
+    step: step.agent === undefined ? { kind: step.kind } : { kind: step.kind, agent: step.agent },
+    attempt: lastAttempt ? { status: lastAttempt.status, resumable: lastAttempt.resumable === true } : null
   }
 }
 
