@@ -4,14 +4,23 @@ import type { ResolvedEndpoint } from '../endpoint'
 import { CliError } from '../errors'
 import { initialState } from '../../shared/state'
 import type { Command, CommandContext } from '../commands'
-import { CLI_VERSION, main } from '.'
+import { CLI_VERSION, main, type CliIO } from '.'
+
+const NO_FILES: CliIO['files'] = {
+  readFile: async (path) => {
+    throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' })
+  },
+  homedir: () => '/nonexistent-home',
+  platform: 'linux',
+  isPidAlive: () => false
+}
 
 async function run(argv: string[], registry: readonly Command[] = []) {
   let stdout = ''
   let stderr = ''
   const code = await main(
     argv,
-    { stdout: (t) => (stdout += t), stderr: (t) => (stderr += t), env: {} },
+    { stdout: (t) => (stdout += t), stderr: (t) => (stderr += t), env: {}, files: NO_FILES },
     registry
   )
   return { code, stdout, stderr }
@@ -172,7 +181,7 @@ describe('main: client lifecycle', () => {
   async function runWith(argv: string[], command: Command, connect: typeof connectWs, env = {}) {
     let stdout = ''
     let stderr = ''
-    const code = await main(argv, { stdout: (t) => (stdout += t), stderr: (t) => (stderr += t), env, connect }, [command])
+    const code = await main(argv, { stdout: (t) => (stdout += t), stderr: (t) => (stderr += t), env, files: NO_FILES, connect }, [command])
     return { code, stdout, stderr }
   }
 

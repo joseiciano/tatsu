@@ -1,7 +1,7 @@
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { connect as connectWs, type TatsuClient } from '../client'
 import { commands, findCommand, type Command, type CommandOption, type GlobalOptions } from '../commands'
-import { resolveEndpoint } from '../endpoint'
+import { resolveEndpoint, type EndpointIO } from '../endpoint'
 import { CliError, exitCodeFor, toCliError } from '../errors'
 import { createOutput, formatTable, printError, type Write } from '../output'
 
@@ -13,6 +13,7 @@ export interface CliIO {
   stdout: Write
   stderr: Write
   env: Readonly<Record<string, string | undefined>>
+  files: Omit<EndpointIO, 'env'>
   connect?: typeof connectWs
 }
 
@@ -148,7 +149,7 @@ async function dispatch(argv: string[], io: CliIO, registry: readonly Command[])
       globals,
       env: io.env,
       client: () =>
-        (client ??= resolveEndpoint(globals, { env: io.env }).then((endpoint) =>
+        (client ??= resolveEndpoint(globals, { ...io.files, env: io.env }).then((endpoint) =>
           connect(endpoint, { timeoutMs: globals.timeoutMs })
         )),
       output

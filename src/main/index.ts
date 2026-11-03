@@ -21,6 +21,7 @@ import { networkInterfaces } from 'os'
 import type { Server as HttpServer } from 'http'
 import type { ServerTransport } from '../shared/transport/transport'
 import { detectRuntime, resolveRuntimeManifestPath, userDataDir } from './paths'
+import { cliEndpointPath, removeCliEndpoint, writeCliEndpoint } from './cli-endpoint'
 import { shellQuote } from './shell-quote'
 import { RuntimeDownloader, readRuntimeManifest } from './runtime-downloader'
 import { fixPathFromLoginShell } from './path-fix'
@@ -373,6 +374,8 @@ const wsTransport =
       )
     : null
 
+ptyManager.setCliEndpointFile(wsTransport ? cliEndpointPath() : null)
+
 const transports: ServerTransport[] = []
 if (desktopEarly) transports.push(desktopEarly.transport)
 if (wsTransport) transports.push(wsTransport)
@@ -400,6 +403,7 @@ if (webHttpServer && wsTransport) {
     // address() is the only place the real port surfaces.
     const addr = webHttpServer.address()
     const boundPort = addr && typeof addr === 'object' ? addr.port : wsPort
+    writeCliEndpoint({ port: boundPort, token: wsTransport.getToken(), bindHost: wsHost })
     // Log to stdout so the user can paste the URL into another browser
     // without digging through the debug log. TODO(production): expose
     // through a Settings UI screen with a copy button + regenerate action.
@@ -3858,6 +3862,7 @@ if (desktopShellMod && desktopEarly) {
     },
     onBeforeQuit: () => {
       chatRuntimeRegistry.killAll()
+      removeCliEndpoint()
     }
   })
   desktopHooks.startAutoUpdateChecks = handle.startAutoUpdateChecks
@@ -3872,6 +3877,7 @@ if (desktopShellMod && desktopEarly) {
   // headless host can shut down cleanly. browserManager.destroyAll() is
   // still safe to call — the headless stub no-ops it.
   const shutdown = (): void => {
+    removeCliEndpoint()
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')
