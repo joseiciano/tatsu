@@ -205,7 +205,7 @@ describe('createWorkflowDefsLoader().reload', () => {
     expect(logs).toContainEqual({
       category: 'workflow',
       message: 'definition loaded',
-      data: { file: 'plan.yaml', id: 'personal:plan', errors: 6, warnings: 0, unsupported: 6 }
+      data: { file: 'plan.yaml', id: 'personal:plan', errors: 5, warnings: 0, unsupported: 5 }
     })
     expect(logs.every((line) => line.category === 'workflow')).toBe(true)
   })

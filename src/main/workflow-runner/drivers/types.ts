@@ -1,6 +1,8 @@
 import type { ResolvedAgentStep, ResolvedShellStep, TemplateScope } from '../../../shared/workflow-def'
 import type { WorkflowPausedReason } from '../../../shared/state/workflows'
 
+export const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export type RunnableStep = ResolvedAgentStep | ResolvedShellStep
 
 export type StepDriverKind = RunnableStep['kind']
@@ -28,6 +30,7 @@ export type StepDriverEvent =
   | { type: 'promptSubmitted'; executionId: string }
   | { type: 'exited'; executionId: string; code: number | null; summary?: string }
   | { type: 'needsApproval'; executionId: string }
+  | { type: 'sessionDiscovered'; executionId: string; sessionId: string }
 
 export type StepDriverListener = (event: StepDriverEvent) => void
 

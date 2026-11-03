@@ -509,7 +509,7 @@ describe('WorkflowRunner.resumeStep', () => {
       })
     ])
     shell.runner.reconcile(shell.records)
-    expect(shell.runner.resumeStep('run-a', 'plan')).toEqual({ ok: false, reason: 'not-claude-step' })
+    expect(shell.runner.resumeStep('run-a', 'plan')).toEqual({ ok: false, reason: 'not-resumable-step' })
 
     const failed = boot([
       record('run-a', {

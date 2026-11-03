@@ -102,6 +102,7 @@ describe('currentStepId', () => {
 
 const CLAUDE: NeedsYouStepInfo = { kind: 'agent', agent: 'claude' }
 const CODEX: NeedsYouStepInfo = { kind: 'agent', agent: 'codex' }
+const OPENCODE: NeedsYouStepInfo = { kind: 'agent', agent: 'opencode' }
 const SHELL: NeedsYouStepInfo = { kind: 'shell' }
 const FAILED: NeedsYouAttemptInfo = { status: 'failed', resumable: false }
 const LIVE: NeedsYouAttemptInfo = { status: 'running', resumable: true }
@@ -129,7 +130,8 @@ describe('needsYouActions', () => {
     ['needs-approval without a tab', 'needs-approval', CLAUDE, LIVE, false, ['cancel']],
     ['interrupted Claude step with a session', 'interrupted', CLAUDE, INTERRUPTED_SESSION, true, ['resume', 'retry', 'cancel']],
     ['interrupted Claude step without a session', 'interrupted', CLAUDE, { status: 'interrupted', resumable: false }, false, ['retry', 'cancel']],
-    ['interrupted non-Claude agent step', 'interrupted', CODEX, INTERRUPTED_SESSION, false, ['retry', 'cancel']],
+    ['interrupted Codex step with a session', 'interrupted', CODEX, INTERRUPTED_SESSION, false, ['resume', 'retry', 'cancel']],
+    ['interrupted opencode step with a session', 'interrupted', OPENCODE, INTERRUPTED_SESSION, false, ['retry', 'cancel']],
     ['interrupted shell step', 'interrupted', SHELL, INTERRUPTED_SESSION, false, ['retry', 'cancel']],
     ['interrupted run held while labs was off', 'interrupted', CLAUDE, null, false, ['retry', 'cancel']],
     ['interrupted step not loaded yet', 'interrupted', null, null, false, ['retry', 'cancel']],

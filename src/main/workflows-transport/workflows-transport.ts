@@ -47,6 +47,7 @@ const START_ERRORS: Record<StartRefusal, string> = {
   'invalid-inputs': 'The workflow inputs are invalid',
   'missing-input': 'A required workflow input is missing',
   'hooks-consent': 'Accept the hooks install before running agent steps',
+  'codex-hooks-untrusted': 'Open a Codex tab and run /hooks',
   starting: 'Tatsu is still starting; try again'
 }
 
@@ -60,7 +61,7 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   'live-attempt': 'Cancel the running step first',
   'no-snapshot': 'This step has no clean snapshot to restore',
   'restore-failed': 'Could not restore the clean snapshot',
-  'not-claude-step': 'Only Claude agent steps can be resumed',
+  'not-resumable-step': 'Only Claude and Codex agent steps can be resumed',
   'not-interrupted': 'Only an interrupted attempt can be resumed',
   'no-session': 'The attempt has no stored session to resume; use Retry instead',
   'nothing-to-cancel': 'The step is not running or queued',

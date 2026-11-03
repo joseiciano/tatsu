@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { renderTemplate, type WorkflowAgent } from '../../../shared/workflow-def'
 import { isPermissionLevel, sanitizeBashAllow } from '../../../shared/permission-level'
+import type { HooksState } from '../../../shared/state/hooks'
 import type { PtyStatus, TerminalTab } from '../../../shared/state/terminals'
 import type { StepSpawnExtras } from '../../agent-spawn'
 import type { TrustStatus } from '../../folder-trust'
@@ -19,16 +20,17 @@ import {
   type StepExecution
 } from './types'
 
-export const CLAUDE_CANCEL_SIGNAL = 'SIGHUP'
+export const AGENT_CANCEL_SIGNAL: NodeJS.Signals = 'SIGHUP'
 export const PROMPT_INLINE_MAX_BYTES = 8192
 
 const FILE_SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 
 export const AGENT_START_SUMMARIES = {
-  unsupported: 'not a claude agent step',
+  unsupported: 'not a supported agent step',
   noPermission: 'step has no explicit permission level',
   unsafeId: 'step or run id is not a safe file name',
   consent: 'hooks consent required',
+  codexHooks: 'codex hooks need /hooks approval',
   ended: 'attempt ended before spawn'
 } as const
 
@@ -42,15 +44,22 @@ export const CLAUDE_START_SUMMARIES = {
   spawnFailed: 'claude failed to start'
 } as const
 
+export const CODEX_START_SUMMARIES = {
+  trust: 'codex folder trust required',
+  spawnFailed: 'codex failed to start'
+} as const
+
 export interface AgentProfile {
   kind: WorkflowAgent
   label: string
   session: 'preassigned' | 'discovered'
+  cancelSignal: NodeJS.Signals
   checkTrust(worktreePath: string): Promise<TrustStatus>
+  hooksBlocked?(hooks: HooksState): string | null
   startSummaries: { trust: string; spawnFailed: string }
 }
 
-export interface ClaudeStopEvent {
+export interface AgentStopEvent {
   terminalId: string
   lastAssistantMessage: string | null
   continued?: boolean
@@ -61,8 +70,8 @@ export interface AgentStepDriverDeps {
   addTab(worktreePath: string, tab: TerminalTab, spawn: StepSpawnExtras): void
   hasTerminal(id: string): boolean
   onExit(listener: (id: string, exitCode: number, signal?: number) => void): () => void
-  kill(id: string, signal: typeof CLAUDE_CANCEL_SIGNAL): void
-  onStopEvent(listener: (event: ClaudeStopEvent) => void): () => void
+  kill(id: string, signal: NodeJS.Signals): void
+  onStopEvent(listener: (event: AgentStopEvent) => void): () => void
   onPromptSubmit(listener: (event: { terminalId: string }) => void): () => void
   store: Pick<Store, 'getSnapshot' | 'subscribe'>
   writeMarker(terminalId: string, marker: StepMarker): void
@@ -73,8 +82,10 @@ export interface AgentStepDriverDeps {
   log: WorkflowLog
 }
 
+type FolderTrustCheck = (path: string) => Promise<{ status: TrustStatus }>
+
 export interface ClaudeStepDriverDeps extends Omit<AgentStepDriverDeps, 'profiles'> {
-  checkFolderTrust(path: string): Promise<{ status: TrustStatus }>
+  checkFolderTrust: FolderTrustCheck
 }
 
 export interface AgentStepDriver extends StepDriver {
@@ -100,13 +111,26 @@ async function folderTrust(profile: AgentProfile, path: string): Promise<TrustSt
   }
 }
 
-export function claudeProfile(checkFolderTrust: ClaudeStepDriverDeps['checkFolderTrust']): AgentProfile {
+export function claudeProfile(checkFolderTrust: FolderTrustCheck): AgentProfile {
   return {
     kind: 'claude',
     label: 'Claude',
     session: 'preassigned',
+    cancelSignal: AGENT_CANCEL_SIGNAL,
     checkTrust: async (path) => (await checkFolderTrust(path)).status,
     startSummaries: { trust: CLAUDE_START_SUMMARIES.trust, spawnFailed: CLAUDE_START_SUMMARIES.spawnFailed }
+  }
+}
+
+export function codexProfile(checkFolderTrust: FolderTrustCheck): AgentProfile {
+  return {
+    kind: 'codex',
+    label: 'Codex',
+    session: 'discovered',
+    cancelSignal: AGENT_CANCEL_SIGNAL,
+    checkTrust: async (path) => (await checkFolderTrust(path)).status,
+    hooksBlocked: (hooks) => (hooks.codexTrust?.state === 'ok' ? null : AGENT_START_SUMMARIES.codexHooks),
+    startSummaries: CODEX_START_SUMMARIES
   }
 }
 
@@ -117,7 +141,7 @@ export function createClaudeStepDriver({ checkFolderTrust, ...deps }: ClaudeStep
 export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDriver {
   const profiles = new Map(deps.profiles.map((profile) => [profile.kind, profile]))
   const listeners = new Set<StepDriverListener>()
-  const owned = new Set<string>()
+  const owned = new Map<string, AgentProfile>()
   const lastStatus = new Map<string, PtyStatus>()
   const emit = (event: StepDriverEvent): void => {
     for (const listener of [...listeners]) listener(event)
@@ -141,6 +165,13 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
       if (owned.has(terminalId)) emit({ type: 'promptSubmitted', executionId: terminalId })
     }),
     deps.store.subscribe((event) => {
+      if (event.type === 'terminals/sessionIdDiscovered') {
+        const { terminalId, sessionId } = event.payload
+        if (owned.get(terminalId)?.session === 'discovered') {
+          emit({ type: 'sessionDiscovered', executionId: terminalId, sessionId })
+        }
+        return
+      }
       if (event.type !== 'terminals/statusChanged') return
       const { id, status } = event.payload
       if (!owned.has(id) || lastStatus.get(id) === status) return
@@ -167,9 +198,15 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
       if (!FILE_SAFE_ID.test(runId) || !FILE_SAFE_ID.test(stepId)) {
         throw new StepStartError(AGENT_START_SUMMARIES.unsafeId)
       }
-      if (deps.store.getSnapshot().state.hooks.consent !== 'accepted') {
+      const hooks = deps.store.getSnapshot().state.hooks
+      if (hooks.consent !== 'accepted') {
         log('step blocked consent', ids)
         throw new StepPauseError('needs-input', AGENT_START_SUMMARIES.consent)
+      }
+      const hooksBlocked = profile.hooksBlocked?.(hooks) ?? null
+      if (hooksBlocked !== null) {
+        log(`step blocked ${profile.kind} hooks`, ids)
+        throw new StepPauseError('needs-input', hooksBlocked)
       }
       const trust = await folderTrust(profile, worktreePath)
       if (trust !== 'trusted') {
@@ -190,7 +227,7 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
         profile.session === 'preassigned' ? (attempt.resumeSessionId ?? deps.newSessionId()) : attempt.resumeSessionId
       const execution: StepExecution = sessionId === undefined ? { executionId } : { executionId, sessionId }
       if (!attempt.bind(execution)) throw new StepStartError(AGENT_START_SUMMARIES.ended)
-      owned.add(executionId)
+      owned.set(executionId, profile)
       deps.writeMarker(executionId, ids)
       const tab: TerminalTab = {
         id: executionId,
@@ -212,7 +249,7 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
     },
     continue() {},
     cancel(executionId: string) {
-      deps.kill(executionId, CLAUDE_CANCEL_SIGNAL)
+      deps.kill(executionId, owned.get(executionId)?.cancelSignal ?? AGENT_CANCEL_SIGNAL)
       release(executionId)
     },
     release,

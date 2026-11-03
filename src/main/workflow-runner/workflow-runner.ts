@@ -14,6 +14,7 @@ import type {
   StopCheckDecision
 } from './types'
 import {
+  SESSION_ID_PATTERN,
   StepPauseError,
   StepStartError,
   type RunnableStep,
@@ -35,6 +36,7 @@ import {
 import type { StateEvent } from '../../shared/state'
 import {
   RECENT_RUNS_MAX,
+  RESUMABLE_AGENTS,
   WORKFLOW_RUN_RECORD_VERSION,
   runStepFacts,
   runsToEvict,
@@ -52,7 +54,6 @@ export const RUN_INPUTS_MAX = 64
 export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
 
 const ACTION_OK: StepActionResult = { ok: true }
-const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
 
@@ -273,7 +274,10 @@ export class WorkflowRunner {
     const badInputs = inputsRefusal(definition, request.inputs)
     if (badInputs) return this.refuse(badInputs)
     const needsConsent = definition.steps.some((step) => step.kind === 'agent')
-    if (needsConsent && store.getSnapshot().state.hooks.consent !== 'accepted') return this.refuse('hooks-consent')
+    const hooks = store.getSnapshot().state.hooks
+    if (needsConsent && hooks.consent !== 'accepted') return this.refuse('hooks-consent')
+    const needsCodexHooks = definition.steps.some((step) => step.kind === 'agent' && step.agent === 'codex')
+    if (needsCodexHooks && hooks.codexTrust?.state !== 'ok') return this.refuse('codex-hooks-untrusted')
     if (this.worktreeBusy(request.worktreePath)) return this.refuse('worktree-busy')
 
     const runId = newId()
@@ -436,7 +440,7 @@ export class WorkflowRunner {
     const target = this.retryTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, ids)
     const { state, step } = target
-    if (step.kind !== 'agent' || step.agent !== 'claude') return this.refuseAction('not-claude-step', ids)
+    if (step.kind !== 'agent' || !RESUMABLE_AGENTS.has(step.agent)) return this.refuseAction('not-resumable-step', ids)
     if (state.live) return this.refuseAction('live-attempt', ids)
     const last = this.lastAttempt(state, stepId)
     if (last?.status !== 'interrupted') return this.refuseAction('not-interrupted', ids)
@@ -916,11 +920,35 @@ export class WorkflowRunner {
         this.pause(state, 'needs-approval')
         this.persist(state.record)
         return
+      case 'sessionDiscovered':
+        this.onSessionDiscovered(state, event.sessionId)
+        return
       default: {
         const _exhaustive: never = event
         void _exhaustive
       }
     }
+  }
+
+  private onSessionDiscovered(state: RunState, sessionId: string): void {
+    const live = state.live
+    if (!live || live.kind !== 'agent') return
+    const { attemptId, stepId } = live.record
+    const ids = { runId: state.record.runId, stepId, attemptId }
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
+      this.log('discovered session id rejected', ids)
+      return
+    }
+    const previous = live.record.sessionId
+    if (previous === sessionId) return
+    live.record.sessionId = sessionId
+    this.persist(state.record)
+    if (previous !== undefined) {
+      this.log('discovered session id replaced', ids)
+      return
+    }
+    this.log('discovered session id recorded', ids)
+    this.deps.store.dispatch({ type: 'workflows/attemptSessionRecorded', payload: { attemptId } })
   }
 
   private awaitingInput(state: RunState): boolean {

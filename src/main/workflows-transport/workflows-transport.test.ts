@@ -14,6 +14,7 @@ import {
   type StepDriver
 } from '../workflow-runner'
 import { initialState } from '../../shared/state'
+import type { CodexHookTrustSummary } from '../../shared/state/hooks'
 import { createWorkflowDefsLoader } from '../workflow-defs-loader'
 import { createWorkflowRunLookup, createWorkflowRunRecords, type WorkflowRunRecords } from '../workflow-run-records'
 import type {
@@ -41,6 +42,14 @@ steps:
   - id: plan
     agent: claude
     permissions: full
+    prompt: Plan it
+`
+
+const CODEX_YAML = `name: Codex flow
+steps:
+  - id: plan
+    agent: codex
+    permissions: read-only
     prompt: Plan it
 `
 
@@ -479,10 +488,12 @@ describe('workflows:startRun against the runner', () => {
     cancel: () => {},
     onEvent: () => () => {}
   })
-  function realRunner(options: { labs?: boolean; consent?: 'accepted' | 'pending'; yaml?: string } = {}) {
+  function realRunner(
+    options: { labs?: boolean; consent?: 'accepted' | 'pending'; yaml?: string; codexTrust?: CodexHookTrustSummary } = {}
+  ) {
     const store = new Store({
       ...initialState,
-      hooks: { ...initialState.hooks, consent: options.consent ?? 'accepted' },
+      hooks: { ...initialState.hooks, consent: options.consent ?? 'accepted', codexTrust: options.codexTrust ?? null },
       worktrees: {
         ...initialState.worktrees,
         list: [{ path: '/wt/a', branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/wt/a' }]
@@ -548,6 +559,17 @@ describe('workflows:startRun against the runner', () => {
   it('returns the hooks consent error while consent is pending', async () => {
     expect(await realRunner({ consent: 'pending' }).call('workflows:startRun', payload)).toEqual({
       error: 'Accept the hooks install before running agent steps'
+    })
+  })
+
+  it('returns the Codex hooks error until Codex trusts the hooks, then starts', async () => {
+    const message = { error: 'Open a Codex tab and run /hooks' }
+    expect(await realRunner({ yaml: CODEX_YAML }).call('workflows:startRun', payload)).toEqual(message)
+    const review: CodexHookTrustSummary = { state: 'needs-review', reviewEvents: ['Stop'] }
+    expect(await realRunner({ yaml: CODEX_YAML, codexTrust: review }).call('workflows:startRun', payload)).toEqual(message)
+    const ok: CodexHookTrustSummary = { state: 'ok', reviewEvents: [] }
+    expect(await realRunner({ yaml: CODEX_YAML, codexTrust: ok }).call('workflows:startRun', payload)).toEqual({
+      runId: 'id-1'
     })
   })
 
