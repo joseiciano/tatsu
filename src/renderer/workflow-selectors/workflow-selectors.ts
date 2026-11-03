@@ -1,7 +1,9 @@
-import type { WorkflowRun, WorkflowRunStatus, WorkflowsState } from '../../shared/state/workflows'
+import type { WorkflowAttempt, WorkflowRun, WorkflowRunStatus, WorkflowsState } from '../../shared/state/workflows'
 import type { PaneLeaf, PaneNode } from '../../shared/state/terminals'
 
 export type PausedRunIdsSelector = (workflows: WorkflowsState) => readonly string[]
+
+export type RunAttemptsSelector = (workflows: WorkflowsState, runId: string) => readonly WorkflowAttempt[]
 
 export interface WorkflowStepTabRef {
   runId: string
@@ -46,6 +48,34 @@ export function createPausedRunIdsSelector(): PausedRunIdsSelector {
       .map(({ id }) => id)
     if (!sameIds(ids, lastIds)) lastIds = ids
     return lastIds
+  }
+}
+
+const NO_ATTEMPTS: readonly WorkflowAttempt[] = []
+
+function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((item, i) => item === b[i])
+}
+
+export function createRunAttemptsSelector(): RunAttemptsSelector {
+  const byRun = new Map<string, readonly WorkflowAttempt[]>()
+  return ({ runs, attempts }, runId) => {
+    const run = runs[runId]
+    if (!run) {
+      byRun.delete(runId)
+      return NO_ATTEMPTS
+    }
+    const next: WorkflowAttempt[] = []
+    for (const step of Object.values(run.steps)) {
+      for (const attemptId of step.attemptIds) {
+        const attempt = attempts[attemptId]
+        if (attempt) next.push(attempt)
+      }
+    }
+    const previous = byRun.get(runId)
+    if (previous && sameItems(previous, next)) return previous
+    byRun.set(runId, next)
+    return next
   }
 }
 
