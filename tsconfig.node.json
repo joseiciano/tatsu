@@ -14,7 +14,9 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
+    "src/cli/**/*.ts",
     "electron.vite.config.ts",
-    "vite.web.config.ts"
+    "vite.web.config.ts",
+    "vite.cli.config.ts"
   ]
 }
