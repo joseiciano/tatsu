@@ -53,7 +53,7 @@ export type NeedsYouActionsApi = Pick<
   'retryWorkflowStep' | 'skipWorkflowStep' | 'resumeWorkflowStep' | 'cancelWorkflowRun' | 'retryWorkflowStepFromClean'
 >
 
-const STEP_GLYPHS: Record<WorkflowStepStatus, StepGlyph> = {
+export const STEP_GLYPHS: Record<WorkflowStepStatus, StepGlyph> = {
   done: '✓',
   running: '●',
   failed: '✕',
@@ -63,6 +63,15 @@ const STEP_GLYPHS: Record<WorkflowStepStatus, StepGlyph> = {
   'awaiting-gate': '!',
   cancelled: '✕',
   interrupted: '!'
+}
+
+export const GLYPH_COLORS: Record<StepGlyph, string> = {
+  '✓': 'text-success',
+  '●': 'text-accent',
+  '✕': 'text-danger',
+  '↷': 'text-dim',
+  '○': 'text-faint',
+  '!': 'text-warning'
 }
 
 export const STEP_STATUS_LABELS: Record<WorkflowStepStatus, string> = {

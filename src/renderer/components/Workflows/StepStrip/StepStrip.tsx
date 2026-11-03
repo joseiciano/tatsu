@@ -1,21 +1,12 @@
 import { Fragment, useMemo } from 'react'
 import { useWorkflowDefinition, useWorkflowRun } from '../../../store'
 import {
+  GLYPH_COLORS,
   STEP_STATUS_LABELS,
   deriveStepStrip,
   stepOrderFor,
-  type StepGlyph,
   type StepStripEntry
 } from '../workflow-run-helpers'
-
-const GLYPH_COLORS: Record<StepGlyph, string> = {
-  '✓': 'text-success',
-  '●': 'text-accent',
-  '✕': 'text-danger',
-  '↷': 'text-dim',
-  '○': 'text-faint',
-  '!': 'text-warning'
-}
 
 function stepLabel(entry: StepStripEntry): string {
   return `${entry.id} ${entry.paused ? 'paused' : STEP_STATUS_LABELS[entry.status]}`
