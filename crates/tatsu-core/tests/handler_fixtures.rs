@@ -23,11 +23,6 @@ enum Pending {
 
 const PENDING: &[(&str, &str, Pending)] = &[
     (
-        "themesDir: reloadCustomThemes reads the copied folder",
-        "ticket 23",
-        Pending::Unregistered,
-    ),
-    (
         "repoFiles: repoConfig:set merges and writes .harness.json",
         "ticket 24",
         Pending::Unregistered,
@@ -70,16 +65,6 @@ const PENDING: &[(&str, &str, Pending)] = &[
     (
         "wsBound null: getWsTransportInfo returns null",
         "ticket 27",
-        Pending::Unregistered,
-    ),
-    (
-        "kind signal: setLastEffectiveAppBg saves the hex",
-        "ticket 23",
-        Pending::Unregistered,
-    ),
-    (
-        "kind signal: same hex is not saved again",
-        "ticket 23",
         Pending::Unregistered,
     ),
     (
@@ -500,17 +485,12 @@ async fn smoke_now_and_setup_reach_the_core_before_the_handler() {
 #[tokio::test]
 async fn smoke_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled() {
     let case = smoke_case("kind signal: setLastEffectiveAppBg saves the hex");
-    let channel = case["channel"].as_str().unwrap();
     let p = prepare(&case).unwrap();
-    let weak = std::sync::Arc::downgrade(&p.core);
-    p.core
-        .router()
-        .signal(channel, move |_ctx, args| {
-            let core = weak.upgrade().unwrap();
-            core.config().set("lastEffectiveAppBg", args[0].clone());
-            Ok(())
-        })
-        .unwrap();
+    assert!(
+        p.core
+            .router()
+            .has_signal(case["channel"].as_str().unwrap())
+    );
     let CaseResult::Compared { mismatched, actual } =
         runner::run_prepared(&p, &case).await.unwrap()
     else {

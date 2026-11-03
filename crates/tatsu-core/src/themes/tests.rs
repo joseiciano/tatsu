@@ -189,3 +189,23 @@ fn dir_creates_the_themes_folder_when_missing() {
     assert_eq!(dir, tmp.path().join("themes"));
     assert!(dir.is_dir());
 }
+
+#[cfg(unix)]
+#[test]
+fn dir_reports_a_mkdir_failure_with_the_node_message() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let data = DataDir::from_path(tmp.path()).unwrap();
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o555)).unwrap();
+
+    let result = dir(&data);
+
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        format!(
+            "EACCES: permission denied, mkdir '{}'",
+            tmp.path().join("themes").display()
+        )
+    );
+}

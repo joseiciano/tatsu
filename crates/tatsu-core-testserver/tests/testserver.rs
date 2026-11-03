@@ -167,7 +167,9 @@ fn test_hooks_give_reply_shapes_echo_signals_and_nested_dispatches() {
     );
 
     send(&mut client, json!({"t": "snapreq", "id": "s"}));
-    next_frame(&mut client, |f| f["t"] == "snapres");
+    let base = next_frame(&mut client, |f| f["t"] == "snapres")["snapshot"]["seq"]
+        .as_u64()
+        .unwrap();
     let marker = json!({"type": "settings/themeLightChanged", "payload": "nested:3"});
     send(
         &mut client,
@@ -181,8 +183,8 @@ fn test_hooks_give_reply_shapes_echo_signals_and_nested_dispatches() {
         f["t"] == "res"
     });
     assert_eq!(res, json!({"t": "res", "id": "d", "ok": true}));
-    let seqs: Vec<&Value> = states.iter().map(|f| &f["seq"]).collect();
-    assert_eq!(seqs, [&json!(1), &json!(2), &json!(3), &json!(4)]);
+    let seqs: Vec<u64> = states.iter().map(|f| f["seq"].as_u64().unwrap()).collect();
+    assert_eq!(seqs, [base + 1, base + 2, base + 3, base + 4]);
     assert_eq!(states[0]["event"], marker);
     assert_eq!(states[3]["event"]["payload"], "nested-2");
 

@@ -15,7 +15,8 @@ use crate::logs;
 pub fn dir(data_dir: &DataDir) -> io::Result<PathBuf> {
     let dir = data_dir.path().join("themes");
     if !dir.exists() {
-        std::fs::create_dir_all(&dir)?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|err| io::Error::new(err.kind(), node_message(&err, "mkdir", &dir)))?;
     }
     Ok(dir)
 }
@@ -34,7 +35,7 @@ pub(crate) fn load_from(dir: &Path, log: &mut impl FnMut(String)) -> Vec<CustomT
             log(format!(
                 "failed to read {}: {}",
                 dir.display(),
-                scandir_message(&err, dir)
+                node_message(&err, "scandir", dir)
             ));
             return Vec::new();
         }
@@ -90,7 +91,7 @@ fn sorted_entries(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     Ok(entries)
 }
 
-fn scandir_message(err: &io::Error, dir: &Path) -> String {
+fn node_message(err: &io::Error, syscall: &str, path: &Path) -> String {
     let node = match err.raw_os_error() {
         Some(2) => Some(("ENOENT", "no such file or directory")),
         Some(13) => Some(("EACCES", "permission denied")),
@@ -98,7 +99,7 @@ fn scandir_message(err: &io::Error, dir: &Path) -> String {
         _ => None,
     };
     match node {
-        Some((code, text)) => format!("{code}: {text}, scandir '{}'", dir.display()),
+        Some((code, text)) => format!("{code}: {text}, {syscall} '{}'", path.display()),
         None => err.to_string(),
     }
 }

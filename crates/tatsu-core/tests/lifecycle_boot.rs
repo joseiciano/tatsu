@@ -167,3 +167,32 @@ async fn reducers_that_read_time_see_the_injected_clock() {
         json!(1_700_000_000_123_i64)
     );
 }
+
+#[tokio::test]
+async fn boot_lists_the_custom_themes_in_the_first_snapshot() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("themes")).unwrap();
+    std::fs::write(
+        dir.path().join("themes/Ocean Deep.json"),
+        r##"{"name": "Ocean", "mode": "dark", "colors": {"background": "#001122"}}"##,
+    )
+    .unwrap();
+
+    let core = boot(dir.path());
+
+    assert_eq!(
+        wire_state(&core)["settings"]["customThemes"],
+        json!([{"id": "ocean-deep", "name": "Ocean", "mode": "dark", "colors": {"background": "#001122"}}])
+    );
+}
+
+#[tokio::test]
+async fn boot_continues_when_the_themes_path_cannot_be_read() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("themes"), "not a folder").unwrap();
+
+    let core = boot(dir.path());
+
+    assert_eq!(wire_state(&core)["settings"]["customThemes"], json!([]));
+    assert!(core.router().has_request("config:reloadCustomThemes"));
+}

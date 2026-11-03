@@ -5,6 +5,7 @@ mod prompts;
 mod settings;
 mod tab_types;
 mod terminal_font;
+mod themes;
 mod timers;
 mod toggles;
 mod worktree_settings;
@@ -14,6 +15,8 @@ use std::sync::{Arc, Weak};
 use serde_json::Value;
 
 use crate::lifecycle::Core;
+
+pub(crate) use themes::reload_custom_themes;
 
 pub fn register_core_handlers(core: &Arc<Core>) {
     settings::register(core);
@@ -26,6 +29,7 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     timers::register(core);
     tab_types::register(core);
     chat_ui::register(core);
+    themes::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {

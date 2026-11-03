@@ -13,7 +13,7 @@ use tokio::sync::watch;
 
 use crate::config::{self, CONFIG_FILE, ConfigHandle};
 use crate::data_dir::{DataDir, Env, Runtime};
-use crate::handlers::register_core_handlers;
+use crate::handlers::{register_core_handlers, reload_custom_themes};
 use crate::hub::{Hub, SHUTDOWN_CODE, SHUTDOWN_REASON};
 use crate::initial_state::{SeedHook, build_initial_state};
 use crate::logs;
@@ -191,7 +191,12 @@ impl PreRuntime {
         );
         for slot in BOOT_SLOTS {
             match slot {
-                BootSlot::ThemeScan | BootSlot::RepoConfigsLoaded => {}
+                BootSlot::ThemeScan => {
+                    if let Err(message) = reload_custom_themes(&core) {
+                        logs::log("themes", &format!("initial scan failed: {message}"));
+                    }
+                }
+                BootSlot::RepoConfigsLoaded => {}
                 BootSlot::CoreHandlers => register_core_handlers(&core),
             }
         }
