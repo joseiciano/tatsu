@@ -1,0 +1,2860 @@
+[
+  {
+    "name": "setWorktreeScripts: trims and stores both scripts",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": "  pnpm install \n",
+        "teardown": "\tpnpm clean "
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"pnpm install\",\n  \"worktreeTeardownCommand\": \"pnpm clean\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "pnpm install",
+            "teardown": "pnpm clean"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: empty strings remove stored scripts",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": "",
+        "teardown": ""
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\",\n  \"worktreeTeardownCommand\": \"b\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: whitespace removes stored scripts",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": " \n\t",
+        "teardown": "　"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\",\n  \"worktreeTeardownCommand\": \"b\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: setup only removes teardown",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeTeardownCommand\": \"b\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"make\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "make",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: teardown only removes setup",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "teardown": "make down"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeTeardownCommand\": \"make down\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": "make down"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: replaces existing scripts",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": "x",
+        "teardown": "y"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\",\n  \"worktreeTeardownCommand\": \"b\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"x\",\n  \"worktreeTeardownCommand\": \"y\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "x",
+            "teardown": "y"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: null scripts clears both",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\",\n  \"worktreeTeardownCommand\": \"b\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: missing argument clears both",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: string argument has no setup",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      "pnpm i"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: array argument has no setup",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      [
+        "pnpm i"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: number argument has no setup",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: null fields are empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": null,
+        "teardown": null
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: false and zero fields are empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": false,
+        "teardown": 0
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: numeric setup throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": 5,
+        "teardown": "y"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "((intermediate value) || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: object teardown throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": "x",
+        "teardown": {
+          "cmd": "y"
+        }
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeSetupCommand\": \"a\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "((intermediate value) || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: array setup throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": [
+          "x"
+        ]
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "((intermediate value) || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: true teardown throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "setup": "x",
+        "teardown": true
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "((intermediate value) || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setWorktreeScripts: __proto__ key is not setup",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeScripts",
+    "args": [
+      {
+        "__proto__": {
+          "setup": "x"
+        }
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeScriptsChanged",
+          "payload": {
+            "setup": "",
+            "teardown": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: local is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      "local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeBase\": \"local\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeBaseChanged",
+          "payload": "local"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: remote removes the stored value",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      "remote"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeBase\": \"local\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeBaseChanged",
+          "payload": "remote"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: unknown string is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      "origin"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeBase\": \"local\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: wrong case is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      "Local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: padded string is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      " local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: null is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: missing argument is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: array of local is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      [
+        "local"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeBase: object is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeBase",
+    "args": [
+      {
+        "local": null
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: merge-commit is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      "merge-commit"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"merge-commit\"\n}",
+      "events": [
+        {
+          "type": "settings/mergeStrategyChanged",
+          "payload": "merge-commit"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: fast-forward is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      "fast-forward"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"merge-commit\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"fast-forward\"\n}",
+      "events": [
+        {
+          "type": "settings/mergeStrategyChanged",
+          "payload": "fast-forward"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: squash is stored, not removed",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      "squash"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"merge-commit\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"squash\"\n}",
+      "events": [
+        {
+          "type": "settings/mergeStrategyChanged",
+          "payload": "squash"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: squash is stored on an empty config",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      "squash"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"squash\"\n}",
+      "events": [
+        {
+          "type": "settings/mergeStrategyChanged",
+          "payload": "squash"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: unknown string is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      "rebase"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"mergeStrategy\": \"merge-commit\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: camel case is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      "mergeCommit"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: null is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: missing argument is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: number is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setMergeStrategy: array is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setMergeStrategy",
+    "args": [
+      [
+        "squash"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: age is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      "age"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeDetail\": \"age\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeDetailChanged",
+          "payload": "age"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: pr is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      "pr"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeDetail\": \"pr\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeDetailChanged",
+          "payload": "pr"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: none is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      "none"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeDetail\": \"none\"\n}",
+      "events": [
+        {
+          "type": "settings/worktreeDetailChanged",
+          "payload": "none"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: diff removes the stored value",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      "diff"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeDetail\": \"pr\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/worktreeDetailChanged",
+          "payload": "diff"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: unknown string is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      "size"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"worktreeDetail\": \"pr\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: upper case is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      "PR"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: null is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: missing argument is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setWorktreeDetail: boolean is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWorktreeDetail",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: trims and stores a custom font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      "  Fira Code \n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "Fira Code"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: empty removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: whitespace removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      " \t　"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: null removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: missing argument removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: false removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: zero removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      0
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: number throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      12
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "(fontFamily || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: true throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "(fontFamily || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: array throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      [
+        "Fira Code"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "(fontFamily || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: object throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      {}
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "(fontFamily || \"\").trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: padded default font removes the stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      "  'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontFamily: replaces a stored font",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontFamily",
+    "args": [
+      "JetBrains Mono"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"JetBrains Mono\"\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontFamilyChanged",
+          "payload": "JetBrains Mono"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "getDefaultTerminalFontFamily: returns the default",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:getDefaultTerminalFontFamily",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+      }
+    }
+  },
+  {
+    "name": "getDefaultTerminalFontFamily: ignores the stored font and arguments",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:getDefaultTerminalFontFamily",
+    "args": [
+      "x"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontFamily\": \"Fira Code\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace"
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 16 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      16
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 16\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 16
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: default size removes the stored value",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      13
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 13
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: lower bound 8 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      8
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 8\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 8
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: upper bound 48 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      48
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 48\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 48
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 7.5 is below the range",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      7.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 48.4 is above the range",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      48.4
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 48.6 is above the range",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      48.6
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 7.99 is below the range",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      7.99
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 12.5 rounds up to the default",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      12.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 13
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 13.5 rounds up to 14",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      13.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 14\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 14
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 8.4 rounds down to 8",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      8.4
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 8\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 8
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 47.5 rounds up to 48",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      47.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 48\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 48
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: string \"12\" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "12"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 12\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 12
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: padded string \" 12 \" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      " 12 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 12\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 12
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: string \"12.5\" rounds to the default 13 and removes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "12.5"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 13
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: string \"14.5\" stores 15",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "14.5"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 15\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 15
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: hex string \"0x10\" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "0x10"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 16\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 16
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: exponent string \"2e1\" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "2e1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 20
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: array [20] is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      [
+        20
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 20
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: array [\"20\"] is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      [
+        "20"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 20
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: two-item array is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      [
+        20,
+        21
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: empty array is 0",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      []
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: true is 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: null is 0",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: empty string is 0",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: word is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "big"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: object is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      {
+        "size": 20
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: string \"Infinity\" is not finite",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "Infinity"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: string \"1e400\" is not finite",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      "1e400"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: negative is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      -12
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: huge number is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      1e+300
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: missing argument is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 20\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setTerminalFontSize: 16 on an empty config",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setTerminalFontSize",
+    "args": [
+      16
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"terminalFontSize\": 16\n}",
+      "events": [
+        {
+          "type": "settings/terminalFontSizeChanged",
+          "payload": 16
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 60 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      60
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 60\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 60
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 30 removes the stored value",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      30
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 30
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 0 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      0
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 0\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 0
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 1440 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      1440
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 1440\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 1440
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 1440.5 is above the range",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      1440.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 1441 is above the range",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      1441
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: negative is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      -1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: -0.5 is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      -0.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: string \"-0\" floors to zero",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      "-0"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 0\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 0
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: fraction floors down",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      45.9
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 45\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 45
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 30.7 floors to the default",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      30.7
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 30
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: 0.5 floors to zero",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      0.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 0\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 0
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: string \"90\" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      "90"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 90\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 90
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: padded string \" 90 \" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      " 90 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 90\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 90
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: array [20] is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      [
+        20
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 20\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 20
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: true is 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 1\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: false is 0",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 0\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 0
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: null is 0",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 0\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 0
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: empty string is 0",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 0\n}",
+      "events": [
+        {
+          "type": "settings/autoSleepMinutesChanged",
+          "payload": 0
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: word is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      "soon"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: object is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      {}
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: string \"Infinity\" is not finite",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      "Infinity"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: huge number is rejected",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [
+      1e+300
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setAutoSleepMinutes: missing argument is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setAutoSleepMinutes",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"autoSleepMinutes\": 120\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: 3 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      3
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 3\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 3
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: 7 removes the stored value",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      7
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 7
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: fraction floors down",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      3.9
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 3\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 3
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: 7.9 floors to the default",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      7.9
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 7
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: 0 clamps to 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      0
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: 0.5 clamps to 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      0.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: negative clamps to 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      -5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: string \"-0\" clamps to 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      "-0"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: string \"10\" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      "10"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 10\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 10
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: padded string \" 10 \" is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      " 10 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 10\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 10
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: array [20] is converted",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      [
+        20
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 20\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 20
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: true is 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: null clamps to 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: empty string clamps to 1",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: word is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      "week"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: object is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      {
+        "days": 3
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: string \"Infinity\" is not finite",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      "Infinity"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: string \"-Infinity\" is not finite",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      "-Infinity"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: huge number is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      1e+300
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 1e+300\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 1e+300
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: huge fraction-free float is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [
+      123456789012.7
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 123456789012\n}",
+      "events": [
+        {
+          "type": "settings/snoozeDefaultDaysChanged",
+          "payload": 123456789012
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setSnoozeDefaultDays: missing argument is NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setSnoozeDefaultDays",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snoozeDefaultDays\": 14\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  }
+]
