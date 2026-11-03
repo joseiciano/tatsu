@@ -1,4 +1,6 @@
-import { GitPullRequest, RotateCw, Trash2, Loader2, Moon, TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { GitPullRequest, RotateCw, Trash2, Loader2, Moon, TriangleAlert, Workflow } from 'lucide-react'
 import type { Worktree, PtyStatus, PendingTool, PRStatus } from '../../types'
 import { isPRMerged } from '../../../shared/state/prs'
 import { formatWakeAt } from '../../../shared/state/snooze'
@@ -11,6 +13,7 @@ import { formatPendingTool } from '../../pending-tool'
 import { HotkeyBadge } from '../HotkeyBadge'
 import { useMetaHeld } from '../../hooks/useMetaHeld'
 import type { Action } from '../../hotkeys'
+import { showRunWorkflowItem } from '../Workflows/launch-sheet-helpers'
 
 interface WorktreeTabProps {
   worktree: Worktree
@@ -41,6 +44,7 @@ interface WorktreeTabProps {
    *  caller can decide based on altKey. */
   onSnooze?: (e: React.MouseEvent) => void
   onUnsnooze?: () => void
+  onRunWorkflow?: () => void
 }
 
 const STATUS_COLORS: Record<PtyStatus | 'merged', string> = {
@@ -85,8 +89,39 @@ const PR_STATE_COLOR: Record<string, string> = {
   closed: 'text-danger'
 }
 
-export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActive, prStatus, isMerged, repoLabel, cmdOrdinal, deleting, isSnoozed, snoozeWakeAt, onClick, onDelete, onContinue, onSnooze, onUnsnooze }: WorktreeTabProps): JSX.Element {
+export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActive, prStatus, isMerged, repoLabel, cmdOrdinal, deleting, isSnoozed, snoozeWakeAt, onClick, onDelete, onContinue, onSnooze, onUnsnooze, onRunWorkflow }: WorktreeTabProps): JSX.Element {
   const metaHeld = useMetaHeld()
+  const runWorkflowVisible = useAppState((s) =>
+    showRunWorkflowItem({ labsWorkflows: s.settings.labs.workflows, worktreePath: worktree.path, runs: s.workflows.runs })
+  )
+  const canRunWorkflow = !!onRunWorkflow && runWorkflowVisible
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!menu) return
+    menuRef.current?.querySelector('button')?.focus()
+    const close = (): void => setMenu(null)
+    const onMouseDown = (e: MouseEvent): void => {
+      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return
+      close()
+    }
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      close()
+    }
+    window.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('blur', close)
+    }
+  }, [menu])
+  useEffect(() => {
+    if (!canRunWorkflow) setMenu(null)
+  }, [canRunWorkflow])
   const configuredWorktreeDetail = useAppState((s) => s.settings.worktreeDetail)
   const worktreeDetailOverride = useWorktreeDetailOverride()
   const worktreeDetail = worktreeDetailOverride ?? configuredWorktreeDetail
@@ -113,6 +148,11 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
   return (
     <div
       onClick={onClick}
+      onContextMenu={(e) => {
+        if (!canRunWorkflow) return
+        e.preventDefault()
+        setMenu({ x: e.clientX, y: e.clientY })
+      }}
       className={`group w-full text-left px-3 py-2 flex items-center gap-2 transition-colors cursor-pointer ${
         deleting ? 'opacity-60 italic' : ''
       } ${
@@ -281,6 +321,34 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
           variant="strong"
           className="shrink-0"
         />
+      )}
+      {menu && onRunWorkflow && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-50 bg-panel-raised border border-border-strong rounded shadow-lg text-xs py-1 min-w-[12rem]"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        >
+          <button
+            role="menuitem"
+            className="flex items-center gap-2 w-full text-left px-3 py-1.5 hover:bg-panel focus:bg-panel focus:outline-none text-fg-bright cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              setMenu(null)
+              onRunWorkflow()
+            }}
+          >
+            <Workflow className="icon-xs text-dim" />
+            Run workflow here…
+          </button>
+        </div>,
+        document.body
       )}
     </div>
   )

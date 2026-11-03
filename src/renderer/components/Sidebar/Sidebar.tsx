@@ -48,6 +48,7 @@ interface SidebarProps {
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
+  onRunWorkflow?: (worktreePath: string) => void
   width: number
   collapsedGroups: Record<string, boolean>
   onToggleGroup: (scope: string, key: GroupKey) => void
@@ -91,6 +92,7 @@ export function Sidebar({
   onOpenCleanup,
   onOpenCommandCenter,
   onOpenNewProject,
+  onRunWorkflow,
   width,
   collapsedGroups: _collapsedGroups,
   onToggleGroup,
@@ -433,6 +435,7 @@ export function Sidebar({
                   onContinue={wt.isMain || deletingPaths.has(wt.path) ? undefined : () => beginContinue(wt.path, wt.branch)}
                   onSnooze={wt.isMain || deletingPaths.has(wt.path) ? undefined : (e) => onSnoozeRow(wt.path, e)}
                   onUnsnooze={wt.isMain || deletingPaths.has(wt.path) ? undefined : () => onUnsnoozeRow(wt.path)}
+                  onRunWorkflow={onRunWorkflow && !deletingPaths.has(wt.path) ? () => onRunWorkflow(wt.path) : undefined}
                 />
                 {continueTarget?.path === wt.path && (
                   <div className="border-y-2 border-accent bg-panel-raised p-2.5 shadow-inner">
