@@ -79,7 +79,8 @@ import {
   DEFAULT_DARK_THEME,
   DEFAULT_PR_REVIEW_PROMPT
 } from '../shared/state/settings'
-import { watchStatusDir } from './hooks'
+import { onStopEvent, watchStatusDir } from './hooks'
+import { checkClaudeFolderTrust } from './folder-trust'
 import { getAgent, codexHomeDir, codexHookTrustReport, codexHookEvents, type AgentKind } from './agents'
 import { startCodexHookTrustMonitor, summarizeCodexHookTrust } from './codex-hook-trust'
 import { AGENT_REGISTRY } from '../shared/agent-registry'
@@ -90,7 +91,14 @@ import { getAllSessionCosts } from './cost-aggregator'
 import { getClaudeAuthStatus } from './claude-auth'
 import { listDir as fsListDir, resolveHome as fsResolveHome } from './fs-listing'
 import { startControlServer } from './control-server'
-import { writeMcpConfigForTerminal, pruneMcpConfigs, harnessMcpServerSpec, removeStaleStepMarkers } from './mcp-config'
+import {
+  writeMcpConfigForTerminal,
+  pruneMcpConfigs,
+  harnessMcpServerSpec,
+  removeStaleStepMarkers,
+  removeStepMarker,
+  writeStepMarker
+} from './mcp-config'
 import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorktree, sealAllActive, touchActivityMeta, finalizeActivity, type ActivityState, type PRState } from './activity'
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
@@ -98,9 +106,10 @@ import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowsRequestHandlers } from './workflows-transport'
 import {
   WorkflowRunner,
+  createClaudeStepDriver,
   createGitRunArtifacts,
   createShellStepDriver,
-  type StepDriver
+  writeStepPromptFile
 } from './workflow-runner'
 import {
   createWorkflowRunLookup,
@@ -778,12 +787,6 @@ const panesFSM = new PanesFSM(store, {
   }
 })
 
-const unavailableStepDriver = (): StepDriver => ({
-  start: () => Promise.reject(new Error('step driver unavailable')),
-  continue: () => {},
-  cancel: () => {},
-  onEvent: () => () => {}
-})
 const shellStepDriver = createShellStepDriver({
   addTab: (wtPath, tab, spawn) => panesFSM.addTab(wtPath, tab, undefined, { fromMain: true, spawn }),
   hasTerminal: (id) => ptyManager.hasTerminal(id),
@@ -792,10 +795,27 @@ const shellStepDriver = createShellStepDriver({
   kill: (id, signal) => ptyManager.kill(id, signal),
   newTabId: () => `shell-${randomUUID()}`
 })
+const claudeStepDriver = createClaudeStepDriver({
+  addTab: (wtPath, tab, spawn) => panesFSM.addTab(wtPath, tab, undefined, { fromMain: true, spawn }),
+  hasTerminal: (id) => ptyManager.hasTerminal(id),
+  onExit: (listener) => ptyManager.onExit(listener),
+  kill: (id, signal) => ptyManager.kill(id, signal),
+  onStopEvent,
+  store,
+  checkFolderTrust: (path) => checkClaudeFolderTrust(path),
+  writeMarker: (id, marker) => {
+    writeStepMarker(id, marker)
+  },
+  removeMarker: (id) => removeStepMarker(id),
+  writePromptFile: writeStepPromptFile,
+  newTabId: () => `agent-${randomUUID()}`,
+  newSessionId: () => randomUUID(),
+  log
+})
 const workflowRunner = new WorkflowRunner({
   store,
   loader: workflowDefsLoader,
-  drivers: { agent: unavailableStepDriver(), shell: shellStepDriver },
+  drivers: { agent: claudeStepDriver, shell: shellStepDriver },
   now: () => Date.now(),
   newId: () => randomUUID(),
   log,
@@ -3571,6 +3591,7 @@ if (desktopShellMod && desktopEarly) {
       codexHookTrustMonitor?.stop()
       workflowRunner.dispose()
       shellStepDriver.dispose()
+      claudeStepDriver.dispose()
       chatRuntimeRegistry.killAll()
     },
     flushBeforeQuit: flushWorkflowRunRecords
@@ -3593,6 +3614,7 @@ if (desktopShellMod && desktopEarly) {
     codexHookTrustMonitor?.stop()
     workflowRunner.dispose()
     shellStepDriver.dispose()
+    claudeStepDriver.dispose()
     stopWatchingStatus?.()
     stopWatchingStatus = null
     ptyManager.killAll('SIGKILL')

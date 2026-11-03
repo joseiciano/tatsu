@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { harnessMcpServerSpec, removeStaleStepMarkers, writeMcpConfigForTerminal } from '.'
+import {
+  harnessMcpServerSpec,
+  removeStaleStepMarkers,
+  removeStepMarker,
+  stepMarkerPath,
+  writeMcpConfigForTerminal,
+  writeStepMarker
+} from '.'
 import { log } from '../debug'
 
 const h = vi.hoisted(() => ({ dataDir: '', failChmod: false, failMkdir: false }))
@@ -133,5 +140,45 @@ describe('removeStaleStepMarkers', () => {
 
   it('does nothing when the directory does not exist', () => {
     expect(removeStaleStepMarkers(join(dir, 'missing'))).toBe(0)
+  })
+})
+
+describe('step markers', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mcp-step-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('writes an owner-only marker holding only the run, step and attempt ids', () => {
+    const marker = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+    const withPrompt = { ...marker, prompt: 'secret' }
+    const path = writeStepMarker('agent-1', withPrompt, dir)
+    expect(path).toBe(join(dir, 'agent-1.step'))
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(marker)
+  })
+
+  it('creates the directory owner-only when it is missing', () => {
+    const nested = join(dir, 'configs')
+    writeStepMarker('agent-1', { runId: 'r', stepId: 's', attemptId: 'a' }, nested)
+    expect(statSync(nested).mode & 0o777).toBe(0o700)
+  })
+
+  it('sanitizes the terminal id the same way as the json config', () => {
+    expect(stepMarkerPath('../x/y', dir)).toBe(join(dir, '.._x_y.step'))
+  })
+
+  it('removes the marker and tolerates a second removal without logging', () => {
+    writeStepMarker('agent-1', { runId: 'r', stepId: 's', attemptId: 'a' }, dir)
+    vi.mocked(log).mockClear()
+    removeStepMarker('agent-1', dir)
+    removeStepMarker('agent-1', dir)
+    expect(readdirSync(dir)).toEqual([])
+    expect(log).not.toHaveBeenCalled()
   })
 })

@@ -141,6 +141,24 @@ describe('loadRunRecordsSync', () => {
     expect(JSON.stringify(lines)).not.toContain('SECRET-CONTENT')
   })
 
+  it('keeps string execution and session ids on attempts and skips records with other types', () => {
+    const runsDir = join(dir, 'workflow-runs')
+    mkdirSync(runsDir)
+    const attempt = { attemptId: 'a', stepId: 's', status: 'running', n: 1, startedAt: 1, metrics: { continuations: 0, pauses: [] } }
+    const withIds = record('ids', { attempts: [{ ...attempt, status: 'running', executionId: 'claude-1', sessionId: 'sess-1' }] })
+    writeFileSync(join(runsDir, 'ids.json'), JSON.stringify(withIds))
+    writeFileSync(
+      join(runsDir, 'badsession.json'),
+      JSON.stringify({ ...record('badsession'), attempts: [{ ...attempt, sessionId: 7 }] })
+    )
+    writeFileSync(
+      join(runsDir, 'badexec.json'),
+      JSON.stringify({ ...record('badexec'), attempts: [{ ...attempt, executionId: ['x'] }] })
+    )
+
+    expect(loadRunRecordsSync(runsDir)).toEqual([withIds])
+  })
+
   it('returns no records when the directory does not exist yet', () => {
     expect(loadRunRecordsSync(join(dir, 'missing'))).toEqual([])
   })

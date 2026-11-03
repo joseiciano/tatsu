@@ -11,6 +11,7 @@ export type FakeStartBehavior = 'ok' | 'reject' | 'throw' | 'defer'
 export class FakeStepDriver implements StepDriver {
   readonly started: StepAttempt[] = []
   readonly cancelled: string[] = []
+  readonly released: string[] = []
   readonly continued: Array<{ executionId: string; prompt: string }> = []
   private readonly listeners = new Set<StepDriverListener>()
   private readonly executionsByAttempt = new Map<string, string>()
@@ -44,6 +45,10 @@ export class FakeStepDriver implements StepDriver {
 
   cancel(executionId: string): void {
     this.cancelled.push(executionId)
+  }
+
+  release(executionId: string): void {
+    this.released.push(executionId)
   }
 
   onEvent(listener: StepDriverListener): () => void {

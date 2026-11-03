@@ -312,7 +312,8 @@ function shellAttempt(run: string, inputs: Record<string, string> = {}): StepAtt
     worktreePath: '/wt',
     inputs,
     step: { kind: 'shell', id: 'test', run, needs: [] },
-    scope: scopeWith(inputs)
+    scope: scopeWith(inputs),
+    bind: () => true
   }
 }
 

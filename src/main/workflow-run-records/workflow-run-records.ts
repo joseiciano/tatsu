@@ -42,6 +42,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string'
+}
+
 function isAttemptRecord(value: unknown): boolean {
   return (
     isObject(value) &&
@@ -50,6 +54,8 @@ function isAttemptRecord(value: unknown): boolean {
     typeof value.status === 'string' &&
     typeof value.n === 'number' &&
     typeof value.startedAt === 'number' &&
+    isOptionalString(value.executionId) &&
+    isOptionalString(value.sessionId) &&
     isObject(value.metrics) &&
     Array.isArray(value.metrics.pauses)
   )
