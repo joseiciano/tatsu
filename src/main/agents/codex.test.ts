@@ -491,6 +491,19 @@ describe('CODEX_HOME (TEST-014)', () => {
     expect(fsState.readdirs).toContain(sessions)
     expect(fsState.readdirs).not.toContain(join(HOME_CODEX, 'sessions'))
   })
+
+  it('(e) sessionFileExists only matches a UUID session file under the given root', () => {
+    const root = '/scratch/codex-sessions'
+    const id = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'
+    fsState.dirs.set(root, [{ name: `rollout-2026-10-24T10-00-00-${id}.jsonl`, isDirectory: () => false }])
+
+    expect(sessionFileExists('/wt', id, 'codex', root)).toBe(true)
+    expect(sessionFileExists('/wt', '0199a1b2-c3d4-7e5f-8a9b-000000000000', 'codex', root)).toBe(false)
+    for (const bad of ['', 'rollout', '0199a1b2', `${id}; touch /tmp/p`, '$(id)']) {
+      expect(sessionFileExists('/wt', bad, 'codex', root)).toBe(false)
+    }
+    expect(fsState.readdirs).toEqual([root, root])
+  })
 })
 
 describe('tomlValue (TEST-005)', () => {
@@ -602,10 +615,27 @@ describe('codex buildSpawnArgs MCP overrides', () => {
   })
 
   describe('TEST-007: resume', () => {
+    it('quotes the id and resumes only when the injected check says the session exists', () => {
+      const seen: unknown[][] = []
+      const out = buildSpawnArgs({ command: '/scratch/codex', cwd: '/wt', sessionId: SESSION_ID, initialPrompt: 'go' }, (...args) => {
+        seen.push(args)
+        return true
+      })
+      expect(out).toBe(`/scratch/codex resume '${SESSION_ID}'`)
+      expect(seen).toEqual([['/wt', SESSION_ID, '/scratch/codex']])
+    })
+
+    it('treats a non-UUID session id as a fresh spawn without asking the check', () => {
+      const check = vi.fn(() => true)
+      const out = buildSpawnArgs({ command: 'codex', cwd: '/wt', sessionId: 'x; touch /tmp/p', initialPrompt: 'go' }, check)
+      expect(out).toBe("codex 'go'")
+      expect(check).not.toHaveBeenCalled()
+    })
+
     it('puts the overrides before resume <id>', () => {
       seedSession(SESSION_ID)
       const out = buildSpawnArgs({ command: 'codex', cwd: '/wt', sessionId: SESSION_ID, mcpServer: SPEC })
-      expect(out).toBe(`codex${OVERRIDES} resume ${SESSION_ID}`)
+      expect(out).toBe(`codex${OVERRIDES} resume '${SESSION_ID}'`)
     })
 
     it('puts the overrides before --model and resume <id>', () => {
@@ -618,7 +648,7 @@ describe('codex buildSpawnArgs MCP overrides', () => {
         initialPrompt: 'ignored on resume',
         mcpServer: SPEC
       })
-      expect(out).toBe(`codex${OVERRIDES} --model 'gpt-5' resume ${SESSION_ID}`)
+      expect(out).toBe(`codex${OVERRIDES} --model 'gpt-5' resume '${SESSION_ID}'`)
     })
 
     it('keeps the overrides when the session file is gone and it falls back to a fresh start', () => {
@@ -640,8 +670,8 @@ describe('codex buildSpawnArgs MCP overrides', () => {
       { name: 'model', opts: { model: 'm' }, expected: "codex --model 'm'" },
       { name: 'prompt', opts: { initialPrompt: 'prompt' }, expected: "codex 'prompt'" },
       { name: 'model and prompt', opts: { model: 'm', initialPrompt: 'prompt' }, expected: "codex --model 'm' 'prompt'" },
-      { name: 'resume', opts: { sessionId: SESSION_ID }, expected: `codex resume ${SESSION_ID}` },
-      { name: 'model and resume', opts: { model: 'm', sessionId: SESSION_ID }, expected: `codex --model 'm' resume ${SESSION_ID}` },
+      { name: 'resume', opts: { sessionId: SESSION_ID }, expected: `codex resume '${SESSION_ID}'` },
+      { name: 'model and resume', opts: { model: 'm', sessionId: SESSION_ID }, expected: `codex --model 'm' resume '${SESSION_ID}'` },
       {
         name: 'command already has a model flag',
         opts: { command: 'codex -m o3', model: 'm' },
@@ -707,7 +737,7 @@ describe('codex buildSpawnArgs MCP overrides', () => {
         mcpServer: SPEC,
         permissionLevel: 'edit'
       })
-      expect(out).toBe(`codex${OVERRIDES}${APPROVE}${EDIT_FLAGS} resume ${SESSION_ID}`)
+      expect(out).toBe(`codex${OVERRIDES}${APPROVE}${EDIT_FLAGS} resume '${SESSION_ID}'`)
     })
 
     it('without an MCP server there is no default_tools_approval_mode override', () => {
