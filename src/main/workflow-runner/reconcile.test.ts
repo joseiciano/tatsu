@@ -19,7 +19,7 @@ vi.mock('../perf-log', () => ({
 import { Store } from '../store'
 import { buildInitialAppState } from '../build-initial-state'
 import { loadRunRecordsSync } from '../workflow-run-records'
-import { WorkflowRunner, type WorkflowRunnerDeps } from '.'
+import { WorkflowRunner, createClaudeStepDriver, type StepDriver, type WorkflowRunnerDeps } from '.'
 import { FakeStepDriver } from './fake-step-driver'
 import type { Config } from '../persistence'
 import type {
@@ -100,6 +100,7 @@ interface BootOptions {
   alive?: ReadonlySet<string>
   loader?: WorkflowRunnerDeps['loader']
   labs?: boolean
+  agentDriver?: (store: Store) => StepDriver
 }
 
 function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, options: BootOptions = {}) {
@@ -129,7 +130,7 @@ function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, 
   const runner = new WorkflowRunner({
     store,
     loader: options.loader ?? { getDefinition: () => null },
-    drivers: { agent, shell },
+    drivers: { agent: options.agentDriver?.(store) ?? agent, shell },
     now: () => ++clock,
     newId: () => `id-${++ids}`,
     log,
@@ -276,6 +277,42 @@ describe('WorkflowRunner.reconcile', () => {
     await flush()
     expect(ctx.wf().attempts['att-1'].status).toBe('failed')
     expect(ctx.agent.started.map((started) => started.runId)).toEqual(['run-b'])
+  })
+
+  it('fails a reattached Claude attempt when its PTY exits, though this driver never started it', async () => {
+    const exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
+    const removedMarkers: string[] = []
+    const agentDriver = (store: Store): StepDriver =>
+      createClaudeStepDriver({
+        addTab: () => {},
+        hasTerminal: () => false,
+        onExit: (listener) => {
+          exitListeners.add(listener)
+          return () => exitListeners.delete(listener)
+        },
+        kill: () => {},
+        onStopEvent: () => () => {},
+        store,
+        checkFolderTrust: async () => ({ status: 'trusted' }),
+        writeMarker: () => {},
+        removeMarker: (id) => {
+          removedMarkers.push(id)
+        },
+        writePromptFile: async () => {},
+        newTabId: () => 'unused',
+        newSessionId: () => 'unused',
+        log: () => {}
+      })
+    const ctx = boot(
+      [record('run-a', { steps: { plan: 'running' }, attempts: [attempt('att-1', { executionId: 'claude-live' })] })],
+      { alive: new Set(['claude-live']), agentDriver }
+    )
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    for (const listener of [...exitListeners]) listener('claude-live', 2)
+    expect(ctx.wf().attempts['att-1']).toMatchObject({ status: 'failed', completedBy: 'exit' })
+    expect(ctx.lastPersisted('run-a')?.attempts[0].result).toMatchObject({ exitCode: 2 })
+    expect(removedMarkers).toEqual(['claude-live'])
   })
 
   it('reschedules waiting runs in run start order, not record order', async () => {

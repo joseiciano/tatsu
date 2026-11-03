@@ -66,7 +66,8 @@ describe.skipIf(!hasPty)('shell step cancel on a real PTY', () => {
       worktreePath: home,
       inputs: {},
       step: { kind: 'shell', id: 'test', run: 'echo STARTED; sleep 5; echo AFTER', needs: [] },
-      scope: { inputs: {}, steps: {}, run: { id: 'run-1', worktree: home, contextPath: join(home, 'ctx.md') } }
+      scope: { inputs: {}, steps: {}, run: { id: 'run-1', worktree: home, contextPath: join(home, 'ctx.md') } },
+      bind: () => true
     })
     const deadline = Date.now() + 3000
     while (!ptyManager.getHistory(executionId).includes('STARTED') && Date.now() < deadline) {

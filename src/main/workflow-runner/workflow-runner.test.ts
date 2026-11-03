@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
 import {
   WorkflowRunner,
+  createClaudeStepDriver,
   createShellStepDriver,
+  type ClaudeStopEvent,
   type RunArtifacts,
   type StepAttempt,
   type StepDriver,
@@ -12,14 +14,16 @@ import {
 } from '.'
 import { FakeStepDriver, type FakeStartBehavior } from './fake-step-driver'
 import { initialState, type StateEvent } from '../../shared/state'
-import type { TerminalTab } from '../../shared/state/terminals'
+import type { PtyStatus, TerminalTab } from '../../shared/state/terminals'
+import type { StepSpawnExtras } from '../agent-spawn'
+import type { TrustStatus } from '../folder-trust'
 import type {
   WorkflowAttemptStatus,
   WorkflowDefinitionDetail,
   WorkflowRun,
   WorkflowStepStatus
 } from '../../shared/state/workflows'
-import { renderTemplate, validateWorkflowDefinition } from '../../shared/workflow-def'
+import { STEP_SUMMARY_MAX_CHARS, renderTemplate, validateWorkflowDefinition } from '../../shared/workflow-def'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -115,6 +119,7 @@ interface SetupOptions {
   artifacts?: RunArtifacts
   runs?: Record<string, WorkflowRun>
   shellDriver?: StepDriver
+  agentDriver?: (store: Store) => StepDriver
 }
 
 function setup({
@@ -124,7 +129,8 @@ function setup({
   shellScript,
   artifacts,
   runs = {},
-  shellDriver
+  shellDriver,
+  agentDriver
 }: SetupOptions = {}) {
   const store = new Store({
     ...initialState,
@@ -152,7 +158,7 @@ function setup({
   const runner = new WorkflowRunner({
     store,
     loader,
-    drivers: { agent, shell: shellDriver ?? shell },
+    drivers: { agent: agentDriver?.(store) ?? agent, shell: shellDriver ?? shell },
     now: () => ++clock,
     newId: () => `id-${++ids}`,
     log: (category, message, data) => {
@@ -1085,5 +1091,295 @@ describe('WorkflowRunner step tool seam', () => {
     expect(ctx.runner.stepForExecution(execution)?.ended).toBe(false)
     expect(ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })).toEqual({ ok: true })
     expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+})
+
+function claudeHarness() {
+  const tabs: Array<{ tab: TerminalTab; spawn: StepSpawnExtras; markerPresent: boolean; registered: boolean }> = []
+  const markers = new Set<string>()
+  const killed: string[] = []
+  const exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
+  const stopListeners = new Set<(event: ClaudeStopEvent) => void>()
+  const alive = new Set<string>()
+  const state: { trust: TrustStatus; store?: Store; runner?: WorkflowRunner } = { trust: 'trusted' }
+  let ids = 0
+  const factory = (store: Store): StepDriver => {
+    state.store = store
+    store.dispatch({ type: 'hooks/consentChanged', payload: 'accepted' })
+    return createClaudeStepDriver({
+      addTab: (_worktreePath, tab, spawn) => {
+        tabs.push({
+          tab,
+          spawn,
+          markerPresent: markers.has(tab.id),
+          registered: state.runner?.stepForExecution(tab.id) != null
+        })
+        alive.add(tab.id)
+      },
+      hasTerminal: (id) => alive.has(id),
+      onExit: (listener) => {
+        exitListeners.add(listener)
+        return () => exitListeners.delete(listener)
+      },
+      kill: (id) => {
+        killed.push(id)
+      },
+      onStopEvent: (listener) => {
+        stopListeners.add(listener)
+        return () => stopListeners.delete(listener)
+      },
+      store,
+      checkFolderTrust: async () => ({ status: state.trust }),
+      writeMarker: (id) => {
+        markers.add(id)
+      },
+      removeMarker: (id) => {
+        markers.delete(id)
+      },
+      writePromptFile: async () => {},
+      newTabId: () => `claude-tab-${++ids}`,
+      newSessionId: () => `00000000-0000-4000-8000-00000000000${ids}`,
+      log: () => {}
+    })
+  }
+  return {
+    factory,
+    tabs,
+    markers,
+    killed,
+    state,
+    attach(runner: WorkflowRunner) {
+      state.runner = runner
+    },
+    setConsent(consent: 'pending' | 'accepted') {
+      state.store?.dispatch({ type: 'hooks/consentChanged', payload: consent })
+    },
+    status(id: string, status: PtyStatus) {
+      state.store?.dispatch({ type: 'terminals/statusChanged', payload: { id, status, pendingTool: null } })
+    },
+    stop(terminalId: string, lastAssistantMessage: string | null) {
+      for (const listener of [...stopListeners]) listener({ terminalId, lastAssistantMessage })
+    },
+    exit(id: string, code: number, signal?: number) {
+      alive.delete(id)
+      for (const listener of [...exitListeners]) listener(id, code, signal)
+    }
+  }
+}
+
+async function claudeRun(slug: DefSlug, configure: (claude: ReturnType<typeof claudeHarness>) => void = () => {}) {
+  const claude = claudeHarness()
+  const ctx = setup({ agentDriver: claude.factory })
+  claude.attach(ctx.runner)
+  configure(claude)
+  const runId = ctx.startRun(slug)
+  await flush()
+  await flush()
+  return { ctx, claude, runId }
+}
+
+describe('WorkflowRunner with the Claude driver', () => {
+  it('registers the tab id and session before spawning and removes the marker when the attempt ends', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    expect(claude.tabs).toHaveLength(1)
+    const { tab, spawn, markerPresent, registered } = claude.tabs[0]
+    expect(registered).toBe(true)
+    expect(markerPresent).toBe(true)
+    expect(spawn).toMatchObject({ permissionLevel: 'edit', bashAllow: [], initialPrompt: `${PROMPT_SECRET} plan` })
+    expect(ctx.records.at(-1)?.attempts[0]).toMatchObject({ executionId: tab.id, sessionId: spawn.sessionId })
+    expect(ctx.runner.completeExecution(tab.id, { status: 'done', summary: 'ok' })).toEqual({ ok: true })
+    expect(claude.markers.size).toBe(0)
+    expect(claude.killed).toEqual([])
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ status: 'done', completedBy: 'tool' })
+  })
+
+  it.each([
+    ['cancelRun', (ctx: Ctx, runId: string) => ctx.runner.cancelRun(runId)],
+    ['markDone', (ctx: Ctx, runId: string) => ctx.runner.markDone(runId)]
+  ] as const)('kills the tab and removes the marker on %s', async (_name, act) => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    act(ctx, runId)
+    expect(claude.killed).toEqual([claude.tabs[0].tab.id])
+    expect(claude.markers.size).toBe(0)
+  })
+
+  it('pauses trust with no tab, and retry spawns once the folder is trusted', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent', (c) => {
+      c.state.trust = 'untrusted'
+    })
+    expect(claude.tabs).toEqual([])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'trust' })
+    expect(ctx.records.at(-1)?.attempts[0].metrics.pauses.map((pause) => pause.reason)).toEqual(['trust'])
+    claude.state.trust = 'trusted'
+    expect(ctx.runner.retry(runId)).toBe(true)
+    await flush()
+    await flush()
+    expect(claude.tabs).toHaveLength(1)
+    expect(ctx.wf().attempts[ctx.attemptOf(runId, 'plan')]).toMatchObject({ status: 'running', n: 2 })
+    expect(ctx.wf().runs[runId].status).toBe('running')
+  })
+
+  it('pauses for hooks consent with no tab, and retry spawns once consent is accepted', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent', (c) => c.setConsent('pending'))
+    expect(claude.tabs).toEqual([])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-input' })
+    expect(ctx.records.at(-1)?.attempts[0].result?.summary).toBe('hooks consent required')
+    claude.setConsent('accepted')
+    expect(ctx.runner.retry(runId)).toBe(true)
+    await flush()
+    await flush()
+    expect(claude.tabs).toHaveLength(1)
+  })
+
+  it('pauses needs-approval once for three identical status events and resumes on completion', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    const types = ctx.eventsSince(() => {
+      claude.status(id, 'needs-approval')
+      claude.status(id, 'needs-approval')
+      claude.status(id, 'needs-approval')
+    })
+    expect(types.filter((type) => type === 'runPaused')).toHaveLength(1)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+    expect(ctx.records.at(-1)?.attempts[0].metrics.pauses.map((pause) => pause.reason)).toEqual(['needs-approval'])
+    expect(ctx.runner.completeExecution(id, { status: 'done', summary: 'ok' })).toEqual({ ok: true })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('completes as fallback with the last message when the step has no required outputs', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    claude.stop(claude.tabs[0].tab.id, 'final words')
+    expect(ctx.records.at(-1)?.attempts[0].result).toEqual({
+      status: 'done',
+      summary: 'final words',
+      completedBy: 'fallback'
+    })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(claude.markers.size).toBe(0)
+  })
+
+  it.each([
+    ['plain text', 'x'.repeat(STEP_SUMMARY_MAX_CHARS + 500), 'x'.repeat(STEP_SUMMARY_MAX_CHARS)],
+    [
+      'a surrogate pair across the limit',
+      `${'x'.repeat(STEP_SUMMARY_MAX_CHARS - 1)}😀tail`,
+      'x'.repeat(STEP_SUMMARY_MAX_CHARS - 1)
+    ]
+  ])('caps an oversized fallback summary with %s', async (_name, message, expected) => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    claude.stop(claude.tabs[0].tab.id, message)
+    expect(ctx.records.at(-1)?.attempts[0].result?.summary).toBe(expected)
+  })
+
+  it('pauses needs-input once when a step with required outputs ends its turn, and a later completion resumes', async () => {
+    const { ctx, claude, runId } = await claudeRun('reviewed')
+    const id = claude.tabs[0].tab.id
+    expect(ctx.eventsSince(() => claude.stop(id, 'done?'))).toEqual(['runPaused'])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-input' })
+    expect(ctx.eventsSince(() => claude.stop(id, 'still done?'))).toEqual([])
+    expect(ctx.records.at(-1)?.attempts[0].metrics.pauses).toHaveLength(1)
+    expect(ctx.runner.completeExecution(id, { status: 'done', summary: 'ok', data: { verdict: 'pass' } })).toEqual({
+      ok: true
+    })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('does not let a Stop override a needs-input completion from the tool', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    ctx.runner.completeExecution(id, { status: 'needs-input', summary: 'which branch?' })
+    expect(ctx.eventsSince(() => claude.stop(id, 'waiting'))).toEqual([])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-input' })
+  })
+
+  it('keeps waiting for the tool after a needs-input completion even if an approval pause came in between', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    ctx.runner.completeExecution(id, { status: 'needs-input', summary: 'which branch?' })
+    claude.status(id, 'needs-approval')
+    expect(ctx.eventsSince(() => claude.stop(id, 'waiting'))).toEqual([])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+  })
+
+  it('ignores a Stop that arrives after complete_step', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    ctx.runner.completeExecution(id, { status: 'done', summary: 'from tool' })
+    expect(ctx.eventsSince(() => claude.stop(id, 'from stop'))).toEqual([])
+    expect(ctx.records.at(-1)?.attempts[0].result).toMatchObject({ summary: 'from tool', completedBy: 'tool' })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('fails the step on an exit without completion', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    claude.exit(claude.tabs[0].tab.id, 3)
+    expect(ctx.records.at(-1)?.attempts[0].result).toEqual({
+      status: 'failed',
+      summary: '',
+      completedBy: 'exit',
+      exitCode: 3
+    })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+    expect(claude.markers.size).toBe(0)
+  })
+
+  it('keeps the shell summary when the Claude driver also forwards the shell tab exit', async () => {
+    const claude = claudeHarness()
+    const pty = exitingPty(0, 'shell output\r\n')
+    const ctx = setup({ agentDriver: claude.factory, shellDriver: pty.driver })
+    const runId = ctx.startRun('one-shell')
+    await flush()
+    expect(pty.tabs).toHaveLength(1)
+    claude.exit(pty.tabs[0].tab.id, 0)
+    await flush()
+    expect(ctx.records.at(-1)?.attempts[0].result).toMatchObject({ status: 'done', summary: 'shell output' })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+})
+
+describe('WorkflowRunner driver release', () => {
+  it.each([
+    ['a completion', (ctx: Ctx, attemptId: string) => ctx.runner.complete(attemptId, done())],
+    [
+      'an exit',
+      (ctx: Ctx, attemptId: string) =>
+        ctx.agent.emit({ type: 'exited', executionId: ctx.agent.executionFor(attemptId), code: 1 })
+    ],
+    ['cancelRun', (ctx: Ctx, attemptId: string) => ctx.runner.cancelRun(ctx.runner.runIdForAttempt(attemptId) ?? '')],
+    ['markDone', (ctx: Ctx, attemptId: string) => ctx.runner.markDone(ctx.runner.runIdForAttempt(attemptId) ?? '')]
+  ] as const)('releases the execution when the attempt ends by %s', async (_name, act) => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    act(ctx, attemptId)
+    expect(ctx.agent.released).toEqual([execution])
+  })
+
+  it('maps an execution bound before start resolves so its early events count', async () => {
+    const ctx = setup({ agentScript: () => 'defer' })
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const attempt = ctx.agent.started[0]
+    expect(attempt.bind({ executionId: 'agent-exec-1', sessionId: 'session-1' })).toBe(true)
+    ctx.agent.emit({ type: 'exited', executionId: 'agent-exec-1', code: 1 })
+    expect(ctx.wf().attempts[attemptId].status).toBe('failed')
+    expect(ctx.records.at(-1)?.attempts[0]).toMatchObject({ executionId: 'agent-exec-1', sessionId: 'session-1' })
+    ctx.agent.resolveDeferred(attemptId)
+    await flush()
+    expect(ctx.agent.cancelled).toEqual(['agent-exec-1'])
+  })
+
+  it('refuses to bind an attempt that already ended', async () => {
+    const ctx = setup({ agentScript: () => 'defer' })
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    const attempt = ctx.agent.started[0]
+    ctx.runner.cancelRun(runId)
+    expect(attempt.bind({ executionId: 'late' })).toBe(false)
+    expect(ctx.runner.stepForExecution('late')).toBeNull()
   })
 })

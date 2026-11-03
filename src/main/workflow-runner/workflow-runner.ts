@@ -9,13 +9,21 @@ import type {
   StartRunResult,
   StepResult
 } from './types'
-import { StepStartError, type RunnableStep, type StepDriverEvent, type StepDriverKind, type StepExecution } from './drivers'
+import {
+  StepPauseError,
+  StepStartError,
+  type RunnableStep,
+  type StepDriverEvent,
+  type StepDriverKind,
+  type StepExecution
+} from './drivers'
 import { runContextPath } from './run-artifacts'
-import type {
-  ResolvedWorkflowStep,
-  StepOutputValue,
-  TemplateScope,
-  TemplateStepScope
+import {
+  STEP_SUMMARY_MAX_CHARS,
+  type ResolvedWorkflowStep,
+  type StepOutputValue,
+  type TemplateScope,
+  type TemplateStepScope
 } from '../../shared/workflow-def'
 import type { StateEvent } from '../../shared/state'
 import {
@@ -56,6 +64,12 @@ interface QueueEntry {
   stepId: string
 }
 
+function capSummary(text: string): string {
+  if (text.length <= STEP_SUMMARY_MAX_CHARS) return text
+  const last = text.charCodeAt(STEP_SUMMARY_MAX_CHARS - 1)
+  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? STEP_SUMMARY_MAX_CHARS - 1 : STEP_SUMMARY_MAX_CHARS)
+}
+
 function isRunnable(step: ResolvedWorkflowStep): step is RunnableStep {
   return step.kind === 'agent' || step.kind === 'shell'
 }
@@ -72,8 +86,8 @@ export class WorkflowRunner {
 
   constructor(private readonly deps: WorkflowRunnerDeps) {
     this.persist = deps.persist ?? (() => {})
-    this.unsubscribers = [deps.drivers.agent, deps.drivers.shell].map((driver) =>
-      driver.onEvent((event) => this.onDriverEvent(event))
+    this.unsubscribers = (['agent', 'shell'] as const).map((kind) =>
+      deps.drivers[kind].onEvent((event) => this.onDriverEvent(kind, event))
     )
   }
 
@@ -575,8 +589,9 @@ export class WorkflowRunner {
     })
     this.log('attempt started', { runId, stepId: step.id, attemptId })
     const driver = drivers[step.kind]
+    const bind = (execution: StepExecution): boolean => this.bind(attemptId, execution)
     const startDriver = (): Promise<StepExecution> | StepExecution =>
-      driver.start({ runId, stepId: step.id, attemptId, n, worktreePath, inputs, step, scope })
+      driver.start({ runId, stepId: step.id, attemptId, n, worktreePath, inputs, step, scope, bind })
     const started: Promise<StepExecution | null> = this.deps.artifacts
       ? this.snapshotAttempt(state, record, 'baseSnapshot').then(() =>
           this.runForLiveAttempt(attemptId) ? startDriver() : null
@@ -585,45 +600,61 @@ export class WorkflowRunner {
     started
       .then(
         (execution) => {
-          if (execution) this.onStarted(attemptId, step.kind, execution.executionId)
+          if (execution) this.onStarted(attemptId, step.kind, execution)
         },
         (err: unknown) => this.onStartFailed(attemptId, err)
       )
       .catch(() => this.log('driver callback failed', { runId, stepId: step.id, attemptId }))
   }
 
-  private onStarted(attemptId: string, kind: StepDriverKind, executionId: string): void {
+  private bind(attemptId: string, execution: StepExecution): boolean {
     const state = this.runForLiveAttempt(attemptId)
-    if (!state?.live) {
-      this.deps.drivers[kind].cancel(executionId)
-      this.log('late execution cancelled', { attemptId })
-      return
+    const live = state?.live
+    if (!state || !live) return false
+    const { executionId, sessionId } = execution
+    if (live.executionId !== undefined) {
+      return live.executionId === executionId && (sessionId === undefined || live.record.sessionId === sessionId)
     }
-    state.live.executionId = executionId
-    state.live.record.executionId = executionId
+    live.executionId = executionId
+    live.record.executionId = executionId
+    if (sessionId !== undefined) live.record.sessionId = sessionId
     this.executions.set(executionId, attemptId)
     this.persist(state.record)
+    return true
+  }
+
+  private onStarted(attemptId: string, kind: StepDriverKind, execution: StepExecution): void {
+    if (this.bind(attemptId, execution)) return
+    this.deps.drivers[kind].cancel(execution.executionId)
+    this.deps.drivers[kind].release?.(execution.executionId)
+    this.log('late execution cancelled', { attemptId })
   }
 
   private onStartFailed(attemptId: string, err: unknown): void {
     const state = this.runForLiveAttempt(attemptId)
     if (!state?.live) return
     const { stepId } = state.live.record
-    this.log('attempt start failed', { runId: state.record.runId, stepId, attemptId })
+    const paused = err instanceof StepPauseError ? err : undefined
+    this.log(paused ? `attempt start paused ${paused.reason}` : 'attempt start failed', {
+      runId: state.record.runId,
+      stepId,
+      attemptId
+    })
+    const summary = err instanceof StepStartError || err instanceof StepPauseError ? err.summary : undefined
     const result: StepResult | undefined =
-      err instanceof StepStartError ? { status: 'failed', summary: err.summary, completedBy: 'exit' } : undefined
+      summary === undefined ? undefined : { status: 'failed', summary, completedBy: 'exit' }
     this.endAttempt(state, 'failed', result, false)
     this.setStep(state, stepId, 'failed')
-    this.pause(state, 'step-failed')
+    this.pause(state, paused?.reason ?? 'step-failed')
     this.settle(state)
   }
 
-  private onDriverEvent(event: StepDriverEvent): void {
+  private onDriverEvent(kind: StepDriverKind, event: StepDriverEvent): void {
     const attemptId = this.executions.get(event.executionId)
-    if (attemptId === undefined) return
+    const state = attemptId === undefined ? undefined : this.runForLiveAttempt(attemptId)
+    if (attemptId === undefined || !state?.live || state.live.kind !== kind) return
     switch (event.type) {
       case 'exited': {
-        const kind = this.runForLiveAttempt(attemptId)?.live?.kind
         this.complete(attemptId, {
           status: kind === 'shell' && event.code === 0 ? 'done' : 'failed',
           summary: event.summary ?? '',
@@ -633,12 +664,39 @@ export class WorkflowRunner {
         return
       }
       case 'turnEnded':
+        this.onTurnEnded(state, event.lastMessage)
+        return
+      case 'needsApproval':
+        this.pause(state, 'needs-approval')
+        this.persist(state.record)
         return
       default: {
         const _exhaustive: never = event
         void _exhaustive
       }
     }
+  }
+
+  private onTurnEnded(state: RunState, lastMessage: string | undefined): void {
+    const live = state.live
+    if (!live || live.kind !== 'agent') return
+    const { attemptId, stepId } = live.record
+    const ids = { runId: state.record.runId, stepId, attemptId }
+    const waiting = state.record.status === 'paused' && state.record.pausedReason === 'needs-input'
+    if (waiting || live.record.result?.status === 'needs-input') {
+      this.log('turn end ignored needs-input', ids)
+      return
+    }
+    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
+    const required = step?.kind === 'agent' ? (step.output?.required?.length ?? 0) : 0
+    if (required > 0) {
+      this.log('turn ended without required outputs', ids)
+      this.pause(state, 'needs-input')
+      this.persist(state.record)
+      return
+    }
+    this.log('step fallback completion', ids)
+    this.complete(attemptId, { status: 'done', summary: capSummary(lastMessage ?? ''), completedBy: 'fallback' })
   }
 
   private endAttempt(
@@ -668,7 +726,9 @@ export class WorkflowRunner {
     if (live.executionId !== undefined) {
       this.executions.delete(live.executionId)
       if (live.kind === 'agent') this.rememberEnded(live.executionId, attemptId, stepId)
-      if (cancelExecution) this.deps.drivers[live.kind].cancel(live.executionId)
+      const driver = this.deps.drivers[live.kind]
+      if (cancelExecution) driver.cancel(live.executionId)
+      driver.release?.(live.executionId)
     }
     this.deps.store.dispatch({
       type: 'workflows/attemptEnded',

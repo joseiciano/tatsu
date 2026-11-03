@@ -1,4 +1,5 @@
 import type { ResolvedAgentStep, ResolvedShellStep, TemplateScope } from '../../../shared/workflow-def'
+import type { WorkflowPausedReason } from '../../../shared/state/workflows'
 
 export type RunnableStep = ResolvedAgentStep | ResolvedShellStep
 
@@ -13,15 +14,18 @@ export interface StepAttempt {
   inputs: Record<string, string>
   step: RunnableStep
   scope: TemplateScope
+  bind(execution: StepExecution): boolean
 }
 
 export interface StepExecution {
   executionId: string
+  sessionId?: string
 }
 
 export type StepDriverEvent =
   | { type: 'turnEnded'; executionId: string; lastMessage?: string }
   | { type: 'exited'; executionId: string; code: number | null; summary?: string }
+  | { type: 'needsApproval'; executionId: string }
 
 export type StepDriverListener = (event: StepDriverEvent) => void
 
@@ -29,6 +33,7 @@ export interface StepDriver {
   start(attempt: StepAttempt): Promise<StepExecution> | StepExecution
   continue(executionId: string, prompt: string): void
   cancel(executionId: string): void
+  release?(executionId: string): void
   onEvent(listener: StepDriverListener): () => void
 }
 
@@ -36,5 +41,17 @@ export class StepStartError extends Error {
   constructor(readonly summary: string) {
     super(summary)
     this.name = 'StepStartError'
+  }
+}
+
+export type StepPauseReason = Extract<WorkflowPausedReason, 'needs-input' | 'trust'>
+
+export class StepPauseError extends Error {
+  constructor(
+    readonly reason: StepPauseReason,
+    readonly summary: string
+  ) {
+    super(summary)
+    this.name = 'StepPauseError'
   }
 }
