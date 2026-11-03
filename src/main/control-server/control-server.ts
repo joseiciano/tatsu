@@ -13,7 +13,7 @@ import {
   type ShellQueries,
   type WorkflowStepControl
 } from './types'
-import { CONTROL_WORKFLOW_MAX_BODY_BYTES, FULL_CONTROL_BROWSER_PATHS } from './constants'
+import { CONTROL_WORKFLOW_MAX_BODY_BYTES, FULL_CONTROL_BROWSER_PATHS, STOP_CHECK_BLOCK_REASON } from './constants'
 
 export function parseAgentKind(raw: unknown): { kind?: AgentKind; error?: string } {
   if (raw === undefined || raw === null || raw === '') return { kind: undefined }
@@ -457,6 +457,10 @@ async function handleRequest(
     return handleWorkflowRequest(req, res, path, deps)
   }
 
+  if (path === '/workflow/stop-check') {
+    return handleStopCheck(req, res, deps)
+  }
+
   // /scope — returns the caller's current scope. The MCP bridge calls this
   // once at startup so it can adapt tool descriptions (e.g. signalling
   // "create_worktree defaults to this repo" for feature callers) and filter
@@ -513,6 +517,21 @@ async function handleWorkflowRequest(
   return result.reason === 'already-completed'
     ? sendJson(res, 409, ALREADY_COMPLETED)
     : sendJson(res, 404, NOT_A_STEP)
+}
+
+async function handleStopCheck(req: IncomingMessage, res: ServerResponse, deps: ControlServerDeps): Promise<void> {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'use POST' })
+  const terminalId = String(req.headers['x-harness-terminal-id'] || '')
+  if (!terminalId) return sendJson(res, 400, { error: 'X-Harness-Terminal-Id header required' })
+  const body = await readBoundedJson(req, CONTROL_WORKFLOW_MAX_BODY_BYTES)
+  if (!body.ok) return sendJson(res, body.status, { error: body.error })
+  const workflow = activeWorkflow(deps)
+  if (!workflow) return sendJson(res, 200, {})
+  const payload = body.value
+  const stopHookActive =
+    typeof payload === 'object' && payload !== null && 'stop_hook_active' in payload && payload.stop_hook_active === true
+  if (workflow.stopCheck(terminalId, stopHookActive) !== 'block') return sendJson(res, 200, {})
+  return sendJson(res, 200, { decision: 'block', reason: STOP_CHECK_BLOCK_REASON })
 }
 
 function activeWorkflow(deps: ControlServerDeps): WorkflowStepControl | undefined {

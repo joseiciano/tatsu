@@ -23,7 +23,8 @@ export interface StepExecution {
 }
 
 export type StepDriverEvent =
-  | { type: 'turnEnded'; executionId: string; lastMessage?: string }
+  | { type: 'turnEnded'; executionId: string; lastMessage?: string; continued?: boolean }
+  | { type: 'promptSubmitted'; executionId: string }
   | { type: 'exited'; executionId: string; code: number | null; summary?: string }
   | { type: 'needsApproval'; executionId: string }
 

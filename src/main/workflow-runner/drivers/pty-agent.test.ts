@@ -94,6 +94,7 @@ class FakeClaude {
   failSpawn = false
   private readonly exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
   private readonly stopListeners = new Set<(event: ClaudeStopEvent) => void>()
+  private readonly promptListeners = new Set<(event: { terminalId: string }) => void>()
   private ids = 0
 
   readonly driver = createClaudeStepDriver({
@@ -115,6 +116,12 @@ class FakeClaude {
       this.stopListeners.add(listener)
       return () => {
         this.stopListeners.delete(listener)
+      }
+    },
+    onPromptSubmit: (listener) => {
+      this.promptListeners.add(listener)
+      return () => {
+        this.promptListeners.delete(listener)
       }
     },
     store: this.store,
@@ -165,8 +172,12 @@ class FakeClaude {
     this.store.dispatch({ type: 'terminals/statusChanged', payload: { id, status, pendingTool: null } })
   }
 
-  stop(terminalId: string, lastAssistantMessage: string | null): void {
-    for (const listener of [...this.stopListeners]) listener({ terminalId, lastAssistantMessage })
+  stop(terminalId: string, lastAssistantMessage: string | null, continued?: boolean): void {
+    for (const listener of [...this.stopListeners]) listener({ terminalId, lastAssistantMessage, continued })
+  }
+
+  promptSubmit(terminalId: string): void {
+    for (const listener of [...this.promptListeners]) listener({ terminalId })
   }
 
   exit(id: string, code: number, signal?: number): void {
@@ -175,7 +186,7 @@ class FakeClaude {
   }
 
   get listenerCount(): number {
-    return this.exitListeners.size + this.stopListeners.size
+    return this.exitListeners.size + this.stopListeners.size + this.promptListeners.size
   }
 
   markerExists(id: string): boolean {
@@ -401,6 +412,22 @@ describe('createClaudeStepDriver events', () => {
     ])
   })
 
+  it('forwards the continued flag of a Stop and prompt submits of its own tabs only', async () => {
+    const fake = new FakeClaude()
+    const { executionId } = await fake.driver.start(fake.attempt(resolvedStep(DEFAULTS_SOURCE, 'plan')))
+    fake.stop(executionId, 'nudged', true)
+    fake.stop(executionId, 'plain', false)
+    fake.promptSubmit('user-tab')
+    fake.promptSubmit(executionId)
+    fake.driver.release(executionId)
+    fake.promptSubmit(executionId)
+    expect(fake.events).toEqual([
+      { type: 'turnEnded', executionId, lastMessage: 'nudged', continued: true },
+      { type: 'turnEnded', executionId, lastMessage: 'plain' },
+      { type: 'promptSubmitted', executionId }
+    ])
+  })
+
   it('forwards every PTY exit so reattached executions are not lost, with a signal death as null', () => {
     const fake = new FakeClaude()
     fake.exit('reattached-tab', 1)
@@ -417,6 +444,7 @@ describe('createClaudeStepDriver events', () => {
     fake.driver.dispose()
     fake.status(executionId, 'needs-approval')
     fake.stop(executionId, 'late')
+    fake.promptSubmit(executionId)
     fake.exit(executionId, 0)
     expect(fake.events).toEqual([])
     expect(fake.listenerCount).toBe(0)

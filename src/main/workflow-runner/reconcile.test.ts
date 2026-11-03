@@ -292,6 +292,7 @@ describe('WorkflowRunner.reconcile', () => {
         },
         kill: () => {},
         onStopEvent: () => () => {},
+        onPromptSubmit: () => () => {},
         store,
         checkFolderTrust: async () => ({ status: 'trusted' }),
         writeMarker: () => {},

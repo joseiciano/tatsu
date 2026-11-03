@@ -7,7 +7,8 @@ import type {
   StartRefusal,
   StartRunRequest,
   StartRunResult,
-  StepResult
+  StepResult,
+  StopCheckDecision
 } from './types'
 import {
   StepPauseError,
@@ -47,6 +48,8 @@ interface LiveAttempt {
   record: WorkflowAttemptRecord
   kind: StepDriverKind
   executionId?: string
+  blockPending?: boolean
+  continuedThisTurn?: boolean
 }
 
 interface RunState {
@@ -129,6 +132,29 @@ export class WorkflowRunner {
     return this.complete(live.record.attemptId, { ...value, completedBy: 'tool' })
       ? { ok: true }
       : { ok: false, reason: 'already-completed' }
+  }
+
+  stopCheck(executionId: string, stopHookActive: boolean): StopCheckDecision {
+    if (!this.labsOn()) return 'none'
+    const step = this.liveAgentStep(executionId)
+    const live = step?.state.live
+    if (!step || !live || stopHookActive || live.continuedThisTurn || this.awaitingInput(step.state)) return 'none'
+    const { state, record } = step
+    live.continuedThisTurn = true
+    live.blockPending = true
+    record.metrics.continuations += 1
+    if (state.record.pausedReason === 'needs-approval') this.resume(state)
+    this.log(`step continued ${record.metrics.continuations}`, {
+      runId: state.record.runId,
+      stepId: record.stepId,
+      attemptId: record.attemptId
+    })
+    this.persist(state.record)
+    return 'block'
+  }
+
+  liveExecutionIds(): string[] {
+    return [...this.executions.keys()]
   }
 
   reconcile(records: readonly WorkflowRunRecord[]): void {
@@ -664,7 +690,14 @@ export class WorkflowRunner {
         return
       }
       case 'turnEnded':
-        this.onTurnEnded(state, event.lastMessage)
+        this.onTurnEnded(state, event.lastMessage, event.continued === true)
+        return
+      case 'promptSubmitted':
+        state.live.continuedThisTurn = false
+        if (state.record.pausedReason === 'needs-approval') {
+          this.resume(state)
+          this.persist(state.record)
+        }
         return
       case 'needsApproval':
         this.pause(state, 'needs-approval')
@@ -677,13 +710,24 @@ export class WorkflowRunner {
     }
   }
 
-  private onTurnEnded(state: RunState, lastMessage: string | undefined): void {
+  private awaitingInput(state: RunState): boolean {
+    const waiting = state.record.status === 'paused' && state.record.pausedReason === 'needs-input'
+    return waiting || state.live?.record.result?.status === 'needs-input'
+  }
+
+  private onTurnEnded(state: RunState, lastMessage: string | undefined, continued: boolean): void {
     const live = state.live
     if (!live || live.kind !== 'agent') return
     const { attemptId, stepId } = live.record
     const ids = { runId: state.record.runId, stepId, attemptId }
-    const waiting = state.record.status === 'paused' && state.record.pausedReason === 'needs-input'
-    if (waiting || live.record.result?.status === 'needs-input') {
+    const blockPending = live.blockPending === true
+    live.blockPending = false
+    if (blockPending && continued) {
+      this.log('turn end ignored continuation', ids)
+      return
+    }
+    if (blockPending) this.log('continuation not delivered', ids)
+    if (this.awaitingInput(state)) {
       this.log('turn end ignored needs-input', ids)
       return
     }
