@@ -137,3 +137,33 @@ async fn boot_with_injected_secrets_and_clock_uses_them() {
     );
     assert!(!dir.path().join(".secret-key").exists());
 }
+
+#[tokio::test]
+async fn reducers_that_read_time_see_the_injected_clock() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = CoreBuilder::new(Runtime::Headless, env(dir.path()))
+        .pre_runtime()
+        .unwrap()
+        .boot(
+            Vec::new(),
+            BootOptions {
+                clock: Arc::new(|| 1_700_000_000_123),
+                ..BootOptions::default()
+            },
+        )
+        .unwrap();
+    for event in [
+        json!({"type": "jsonClaude/sessionStarted", "payload": {"sessionId": "s", "worktreePath": "/tmp/wt", "agentKind": "claude", "runtimeId": "claude"}}),
+        json!({"type": "jsonClaude/toolResultAttached", "payload": {"sessionId": "s", "toolUseId": "tu", "content": "ok", "isError": false}}),
+    ] {
+        core.store()
+            .dispatch(serde_json::from_value(event).unwrap());
+    }
+    let last = core
+        .store()
+        .read(|state| serde_json::to_value(&state.json_claude.sessions["s"].entries).unwrap());
+    assert_eq!(
+        last.as_array().unwrap().last().unwrap()["timestamp"],
+        json!(1_700_000_000_123_i64)
+    );
+}

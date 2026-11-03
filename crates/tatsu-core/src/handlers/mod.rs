@@ -1,5 +1,15 @@
-use std::sync::Arc;
+mod onboarding;
+mod settings;
+
+use std::sync::{Arc, Weak};
 
 use crate::lifecycle::Core;
 
-pub fn register_core_handlers(_core: &Arc<Core>) {}
+pub fn register_core_handlers(core: &Arc<Core>) {
+    settings::register(core);
+    onboarding::register(core);
+}
+
+fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {
+    core.upgrade().ok_or_else(|| "core shut down".to_owned())
+}

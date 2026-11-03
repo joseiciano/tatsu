@@ -19,7 +19,7 @@ use crate::initial_state::{SeedHook, build_initial_state};
 use crate::logs;
 use crate::router::Router;
 use crate::secrets::{self, OsRandom, RandomSource, Secrets};
-use crate::store::Store;
+use crate::store::{Store, StoreOptions};
 
 #[cfg(test)]
 mod tests;
@@ -27,6 +27,8 @@ mod tests;
 pub const SHUTDOWN_STEP_TIMEOUT: Duration = Duration::from_secs(5);
 const CATEGORY: &str = "lifecycle";
 const GITHUB_TOKEN_KEY: &str = "githubToken";
+const APP_CATEGORY: &str = "app";
+const DEBUG_LOG_FILE: &str = "debug.log";
 
 pub trait HooksInstaller: Send + Sync {
     fn install(&self) -> Result<(), String>;
@@ -34,6 +36,18 @@ pub trait HooksInstaller: Send + Sync {
 }
 
 pub type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
+
+pub trait IdSource: Send + Sync {
+    fn next_id(&self) -> String;
+}
+
+pub struct UuidV4Ids;
+
+impl IdSource for UuidV4Ids {
+    fn next_id(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WsBound {
@@ -44,6 +58,7 @@ pub struct WsBound {
 pub struct BootOptions {
     pub secrets: Option<Arc<dyn Secrets>>,
     pub random: Arc<dyn RandomSource>,
+    pub ids: Arc<dyn IdSource>,
     pub clock: Clock,
 }
 
@@ -52,6 +67,7 @@ impl Default for BootOptions {
         Self {
             secrets: None,
             random: Arc::new(OsRandom),
+            ids: Arc::new(UuidV4Ids),
             clock: Arc::new(system_now_ms),
         }
     }
@@ -137,7 +153,14 @@ impl PreRuntime {
         };
         let initial =
             build_initial_state(&config.view(), secrets.has(GITHUB_TOKEN_KEY), &seed_hooks);
-        let store = Arc::new(Store::new(initial));
+        let clock = options.clock.clone();
+        let store = Arc::new(Store::with_options(
+            initial,
+            StoreOptions {
+                now_ms: Box::new(move || clock()),
+                ..StoreOptions::default()
+            },
+        ));
         let router = Arc::new(Router::new());
         let hub = Hub::new(store.clone(), router.clone(), handle.clone());
         let core = Arc::new(Core {
@@ -150,6 +173,7 @@ impl PreRuntime {
             config,
             secrets,
             random: options.random,
+            ids: options.ids,
             clock: options.clock,
             hooks_installer: RwLock::new(None),
             resources_dir: RwLock::new(None),
@@ -158,6 +182,13 @@ impl PreRuntime {
             core_steps: Mutex::new(Vec::new()),
             shutdown_done: Mutex::new(None),
         });
+        logs::log(
+            APP_CATEGORY,
+            &format!(
+                "started, log file: {}",
+                core.data_dir.path().join(DEBUG_LOG_FILE).display()
+            ),
+        );
         for slot in BOOT_SLOTS {
             match slot {
                 BootSlot::ThemeScan | BootSlot::RepoConfigsLoaded => {}
@@ -198,6 +229,7 @@ pub struct Core {
     config: ConfigHandle,
     secrets: Arc<dyn Secrets>,
     random: Arc<dyn RandomSource>,
+    ids: Arc<dyn IdSource>,
     clock: Clock,
     hooks_installer: RwLock<Option<Arc<dyn HooksInstaller>>>,
     resources_dir: RwLock<Option<PathBuf>>,
@@ -242,6 +274,10 @@ impl Core {
 
     pub fn random(&self) -> &Arc<dyn RandomSource> {
         &self.random
+    }
+
+    pub fn new_id(&self) -> String {
+        self.ids.next_id()
     }
 
     pub fn now_ms(&self) -> i64 {

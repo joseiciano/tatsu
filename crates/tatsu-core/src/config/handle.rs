@@ -62,6 +62,11 @@ impl ConfigHandle {
         ConfigView::new(self.inner.state.lock().doc.clone())
     }
 
+    pub fn pending_save(&self) -> Option<String> {
+        let state = self.inner.state.lock();
+        state.dirty.then(|| state.doc.to_json())
+    }
+
     pub fn set(&self, key: impl Into<String>, value: Value) {
         self.update(|doc| doc.set(key, value));
     }

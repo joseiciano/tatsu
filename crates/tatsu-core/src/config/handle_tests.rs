@@ -187,3 +187,15 @@ async fn concurrent_updates_and_flushes_end_with_the_final_document_on_disk() {
         assert_eq!(config.get::<i64>(&format!("t{t}")), Some(49));
     }
 }
+
+#[tokio::test(start_paused = true)]
+async fn pending_save_is_the_unwritten_document_until_the_debounced_write_lands() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = handle_in(dir.path(), r#"{"a":1}"#);
+    assert_eq!(config.pending_save(), None);
+    config.remove("missing");
+    assert_eq!(config.pending_save().as_deref(), Some("{\n  \"a\": 1\n}"));
+    advance(SAVE_DEBOUNCE.as_millis() as u64).await;
+    assert_eq!(config.pending_save(), None);
+    assert_eq!(read(dir.path()).as_deref(), Some("{\n  \"a\": 1\n}"));
+}
