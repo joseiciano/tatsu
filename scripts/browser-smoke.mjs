@@ -20,6 +20,7 @@ import { WebSocket } from 'ws'
 
 const NO_BROWSER_EXIT = 77
 const SCENARIO_TIMEOUT_MS = 60_000
+const MARK_DONE_SUMMARY = 'Marked done from the browser smoke'
 
 const [token, portArg, worktreePath, evidenceDir, curlArg] = process.argv.slice(2)
 if (!token || !portArg || !worktreePath || !evidenceDir || !['yes', 'no'].includes(curlArg)) {
@@ -324,9 +325,9 @@ async function flowExitMarkDone(page, backend) {
     const form = overlay.getByRole('form', { name: 'Mark step done' })
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const summaryBox = form.getByLabel(/^Summary/)
-    await summaryBox.fill('Marked done from the browser smoke')
+    await summaryBox.fill(MARK_DONE_SUMMARY)
     const typed = await summaryBox.inputValue()
-    if (typed !== 'Marked done from the browser smoke') throw new Error(`Summary field lost the typed text: ${JSON.stringify(typed)}`)
+    if (typed !== MARK_DONE_SUMMARY) throw new Error(`Summary field lost the typed text: ${JSON.stringify(typed)}`)
     await shot('mark-done-form')
     await form.getByRole('button', { name: 'Mark done' }).click()
 
@@ -334,7 +335,7 @@ async function flowExitMarkDone(page, backend) {
     await overlay.locator('dd', { hasText: 'you (Mark done)' }).waitFor()
     const doneStatus = await definitionText(overlay, 'Status')
     const doneSummary = await definitionText(overlay, 'Summary')
-    if (doneStatus !== 'done' || doneSummary !== 'Marked done from the browser smoke') {
+    if (doneStatus !== 'done' || doneSummary !== MARK_DONE_SUMMARY) {
       throw new Error(`overlay after Mark done shows status=${doneStatus} summary=${doneSummary}`)
     }
     await row.waitFor({ state: 'detached' })
@@ -342,9 +343,58 @@ async function flowExitMarkDone(page, backend) {
     await shot('run-done')
     const record = await waitForRunStatus(backend, runId, 'done')
     const last = record.attempts.filter((a) => a.stepId === 'exit').at(-1)
-    if (last?.result?.completedBy !== 'user' || last.result.summary !== 'Marked done from the browser smoke') {
+    if (last?.result?.completedBy !== 'user' || last.result.summary !== MARK_DONE_SUMMARY) {
       throw new Error(`exit step result ${JSON.stringify(last?.result)}, expected completedBy user with the typed summary`)
     }
+  })
+}
+
+async function flowRunDetail(page) {
+  await scenario(page, 'run-detail', async (shot) => {
+    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    const section = page.getByRole('region', { name: 'Workflows', exact: true })
+    await section.waitFor()
+    const card = section.getByRole('region', { name: 'Recent runs' }).getByRole('article', { name: 'browser-exit on repo', exact: true }).first()
+    await card.getByRole('button', { name: 'Open run: browser-exit on repo', exact: true }).click()
+
+    const detail = section.getByRole('region', { name: 'browser-exit', exact: true })
+    await detail.waitFor()
+    const graph = detail.getByRole('group', { name: 'Workflow graph', exact: true })
+    await graph.getByRole('listitem', { name: 'exit: done', exact: true }).waitFor()
+
+    const rows = detail.getByRole('list', { name: 'Attempt timeline', exact: true }).getByRole('button')
+    const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+    while ((await rows.count()) !== 2) {
+      if (Date.now() > deadline) throw new Error(`timeline shows ${await rows.count()} attempts, expected 2`)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    const labels = await rows.evaluateAll((buttons) => buttons.map((b) => b.getAttribute('aria-label') ?? ''))
+    const [first, second] = labels
+    if (!first.startsWith('exit #1:') || !first.includes(': failed') || !first.includes('completed by process exit')) {
+      throw new Error(`first timeline row ${JSON.stringify(first)}, expected the failed process-exit attempt`)
+    }
+    if (!second.startsWith('exit #2:') || !second.includes(': done') || !second.includes('completed by you (Mark done)')) {
+      throw new Error(`second timeline row ${JSON.stringify(second)}, expected the attempt completed by you (Mark done)`)
+    }
+    log(`run-detail: timeline ${JSON.stringify(labels)}`)
+    await shot('detail-timeline')
+
+    await rows.nth(0).click()
+    const result = detail.getByRole('region', { name: 'Attempt result', exact: true })
+    await result.locator('dd', { hasText: 'process exit' }).waitFor()
+    await rows.nth(1).click()
+    const summary = result.getByLabel('Attempt summary', { exact: true })
+    await summary.filter({ hasText: MARK_DONE_SUMMARY }).waitFor()
+    const text = await summary.textContent()
+    if (text !== MARK_DONE_SUMMARY) throw new Error(`attempt summary ${JSON.stringify(text)}, expected ${JSON.stringify(MARK_DONE_SUMMARY)}`)
+    if ((await rows.nth(1).getAttribute('aria-pressed')) !== 'true') throw new Error('the selected timeline row is not pressed')
+    await shot('detail-summary')
+
+    await detail.getByRole('button', { name: 'All runs', exact: true }).click()
+    await detail.waitFor({ state: 'detached' })
+    await card.waitFor()
+    await section.getByRole('button', { name: 'Back', exact: true }).click()
+    await section.waitFor({ state: 'detached' })
   })
 }
 
@@ -430,6 +480,7 @@ async function main() {
     await flowHangCancel(page, backend)
     await flowWorkflowsSection(page, backend)
     await flowExitMarkDone(page, backend)
+    await flowRunDetail(page)
     await flowRepoTrust(page, backend)
   } catch {
     failed = true
