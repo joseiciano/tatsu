@@ -22,7 +22,7 @@ export type WorkflowActionsRunner = Pick<
 
 export interface RegisterWorkflowsRequestHandlersDeps {
   transport: WorkflowsTransportLike
-  loader: WorkflowDefsLoader
+  loader: Pick<WorkflowDefsLoader, 'reload' | 'getDefinition'>
   runs: WorkflowRunLookup
   runner: WorkflowActionsRunner
   log: WorkflowLog
@@ -39,6 +39,7 @@ const INVALID_REQUEST = { error: 'invalid request' } as const
 const START_ERRORS: Record<StartRefusal, string> = {
   'labs-off': 'Workflows are turned off in Labs',
   'unknown-definition': 'Unknown workflow definition',
+  'untrusted-definition': 'Repo workflows are not trusted yet',
   'invalid-definition': 'The workflow definition is invalid',
   'unsupported-step': 'The workflow uses a step kind this version cannot run',
   'full-permission-unconfirmed': 'This workflow has a full-access step; confirm full access to start it',

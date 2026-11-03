@@ -23,6 +23,7 @@ export interface StartRunRequest {
 export type StartRefusal =
   | 'labs-off'
   | 'unknown-definition'
+  | 'untrusted-definition'
   | 'invalid-definition'
   | 'unsupported-step'
   | 'full-permission-unconfirmed'

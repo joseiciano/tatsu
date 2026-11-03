@@ -42,7 +42,10 @@ function applyEvent(event) {
   else if (event.type === 'hooks/codexTrustChanged') state.hooks.codexTrust = event.payload
   else if (event.type === 'workflows/attemptSessionRecorded') sessionRecorded.push(event.payload.attemptId)
   else if (event.type === 'workflows/definitionsLoaded') {
-    state.workflows.definitions = Object.fromEntries(event.payload.definitions.map((d) => [d.id, d]))
+    const { scope, repoRoot, definitions } = event.payload
+    const inGroup = (d) => d.scope === scope && (scope !== 'repo' || d.repoRoot === repoRoot)
+    const kept = Object.values(state.workflows.definitions).filter((d) => !inGroup(d))
+    state.workflows.definitions = Object.fromEntries([...kept, ...definitions.filter(inGroup)].map((d) => [d.id, d]))
   }
 }
 

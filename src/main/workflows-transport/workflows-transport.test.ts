@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,7 @@ import {
 } from '../workflow-runner'
 import { initialState } from '../../shared/state'
 import type { CodexHookTrustSummary } from '../../shared/state/hooks'
-import { createWorkflowDefsLoader } from '../workflow-defs-loader'
+import { createWorkflowDefsLoader, repoKeyOf, type WorkflowDefsLoader, type WorkflowWatchFn } from '../workflow-defs-loader'
 import { createWorkflowRunLookup, createWorkflowRunRecords, type WorkflowRunRecords } from '../workflow-run-records'
 import type {
   WorkflowAttemptRecord,
@@ -29,6 +29,8 @@ vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
   getPerfLogFilePath: vi.fn(() => '/tmp/perf.log')
 }))
+
+const noWatch: WorkflowWatchFn = () => ({ close: () => {}, on: () => undefined })
 
 const VALID_YAML = `name: Valid flow
 steps:
@@ -170,7 +172,7 @@ beforeEach(() => {
   transport = new FakeTransport()
   liveRuns = new Map()
   attemptRuns = new Map()
-  const loader = createWorkflowDefsLoader({ dir, dispatch: (event) => dispatched.push(event), log: () => {} })
+  const loader = createWorkflowDefsLoader({ dir, dispatch: (event) => dispatched.push(event), log: () => {}, watch: noWatch })
   records = createWorkflowRunRecords({ dir: join(dir, 'workflow-runs'), log: () => {} })
   const runs = createWorkflowRunLookup({
     live: (runId) => liveRuns.get(runId) ?? null,
@@ -489,7 +491,13 @@ describe('workflows:startRun against the runner', () => {
     onEvent: () => () => {}
   })
   function realRunner(
-    options: { labs?: boolean; consent?: 'accepted' | 'pending'; yaml?: string; codexTrust?: CodexHookTrustSummary } = {}
+    options: {
+      labs?: boolean
+      consent?: 'accepted' | 'pending'
+      yaml?: string
+      codexTrust?: CodexHookTrustSummary
+      loader?: Pick<WorkflowDefsLoader, 'getDefinition'>
+    } = {}
   ) {
     const store = new Store({
       ...initialState,
@@ -507,7 +515,7 @@ describe('workflows:startRun against the runner', () => {
     const detail = { ...validateWorkflowDefinition(yaml), source: yaml }
     const live = new WorkflowRunner({
       store,
-      loader: {
+      loader: options.loader ?? {
         getDefinition: (id) =>
           id === 'personal:plan'
             ? {
@@ -536,7 +544,7 @@ describe('workflows:startRun against the runner', () => {
     const own = new FakeTransport()
     registerWorkflowsRequestHandlers({
       transport: own,
-      loader: createWorkflowDefsLoader({ dir, dispatch: () => {}, log: () => {} }),
+      loader: createWorkflowDefsLoader({ dir, dispatch: () => {}, log: () => {}, watch: noWatch }),
       runs: createWorkflowRunLookup({
         live: () => null,
         liveAttemptRunId: () => undefined,
@@ -554,6 +562,29 @@ describe('workflows:startRun against the runner', () => {
     expect(await realRunner({ labs: false }).call('workflows:startRun', payload)).toEqual({
       error: 'Workflows are turned off in Labs'
     })
+  })
+
+  it('refuses a repo definition as untrusted before any run starts', async () => {
+    const repo = join(dir, 'repo')
+    mkdirSync(join(repo, '.git'), { recursive: true })
+    mkdirSync(join(repo, '.harness', 'workflows'), { recursive: true })
+    writeFileSync(join(repo, '.harness', 'workflows', 'shared.yaml'), VALID_YAML)
+    const repoLoader = createWorkflowDefsLoader({
+      dir: join(dir, 'personal'),
+      dispatch: () => {},
+      log: () => {},
+      watch: noWatch,
+      repoRoots: [repo]
+    })
+    repoLoader.reload()
+    const defId = `repo:${repoKeyOf(repo)}:shared`
+    expect(repoLoader.getDefinition(defId)?.summary.scope).toBe('repo')
+
+    const own = realRunner({ loader: repoLoader })
+    expect(await own.call('workflows:startRun', { ...payload, defId })).toEqual({
+      error: 'Repo workflows are not trusted yet'
+    })
+    expect(await own.call('workflows:startRun', payload)).toEqual({ error: 'Unknown workflow definition' })
   })
 
   it('returns the hooks consent error while consent is pending', async () => {

@@ -13,7 +13,6 @@ import {
   type WorkflowDefinitionSummary,
   type WorkflowRun,
   type WorkflowRunRecord,
-  type WorkflowScope,
   type WorkflowsEvent,
   type WorkflowsState
 } from './index'
@@ -34,21 +33,36 @@ function summary(
   }
 }
 
-function load(
-  state: WorkflowsState,
-  definitions: WorkflowDefinitionSummary[],
-  scope: WorkflowScope = 'personal'
-): WorkflowsState {
+function load(state: WorkflowsState, definitions: WorkflowDefinitionSummary[]): WorkflowsState {
   return workflowsReducer(state, {
     type: 'workflows/definitionsLoaded',
-    payload: { scope, definitions }
+    payload: { scope: 'personal', definitions }
   })
 }
 
-const REPO_SCOPE = 'repo' as WorkflowScope
+function loadRepo(state: WorkflowsState, repoRoot: string, definitions: WorkflowDefinitionSummary[]): WorkflowsState {
+  return workflowsReducer(state, {
+    type: 'workflows/definitionsLoaded',
+    payload: { scope: 'repo', repoRoot, definitions }
+  })
+}
 
-function repoSummary(slug: string): WorkflowDefinitionSummary {
-  return summary(slug, { id: `repo:${slug}`, scope: REPO_SCOPE })
+const REPO_A = '/repos/a'
+const REPO_B = '/repos/b'
+
+function repoSummary(slug: string, repoRoot = REPO_A): WorkflowDefinitionSummary {
+  return summary(slug, {
+    id: `repo:${repoRoot === REPO_A ? 'aaaaaaaaaaaa' : 'bbbbbbbbbbbb'}:${slug}`,
+    scope: 'repo',
+    repoRoot,
+    path: `${repoRoot}/.harness/workflows/${slug}.yaml`
+  })
+}
+
+function threeGroups(): WorkflowsState {
+  let state = load(initialWorkflows, [summary('mine')])
+  state = loadRepo(state, REPO_A, [repoSummary('shared', REPO_A)])
+  return loadRepo(state, REPO_B, [repoSummary('shared', REPO_B)])
 }
 
 describe('workflowsReducer', () => {
@@ -100,15 +114,66 @@ describe('workflowsReducer', () => {
     expect(load(initialWorkflows, [])).toBe(initialWorkflows)
   })
 
-  it('definitionsLoaded leaves entries of other scopes untouched', () => {
-    const repo = repoSummary('shared')
-    const start: WorkflowsState = {
-      ...initialWorkflows,
-      definitions: { 'repo:shared': repo, 'personal:a': summary('a') }
-    }
+  it('a personal load leaves both repo groups untouched', () => {
+    const start = threeGroups()
     const next = load(start, [summary('b')])
-    expect(next.definitions['repo:shared']).toBe(repo)
-    expect(Object.keys(next.definitions).sort()).toEqual(['personal:b', 'repo:shared'])
+    expect(next.definitions['repo:aaaaaaaaaaaa:shared']).toBe(start.definitions['repo:aaaaaaaaaaaa:shared'])
+    expect(next.definitions['repo:bbbbbbbbbbbb:shared']).toBe(start.definitions['repo:bbbbbbbbbbbb:shared'])
+    expect(Object.keys(next.definitions).sort()).toEqual([
+      'personal:b',
+      'repo:aaaaaaaaaaaa:shared',
+      'repo:bbbbbbbbbbbb:shared'
+    ])
+  })
+
+  it('a repo A load replaces only repo A and leaves personal and repo B untouched', () => {
+    const start = threeGroups()
+    const next = loadRepo(start, REPO_A, [repoSummary('other', REPO_A)])
+    expect(next.definitions['personal:mine']).toBe(start.definitions['personal:mine'])
+    expect(next.definitions['repo:bbbbbbbbbbbb:shared']).toBe(start.definitions['repo:bbbbbbbbbbbb:shared'])
+    expect(Object.keys(next.definitions).sort()).toEqual([
+      'personal:mine',
+      'repo:aaaaaaaaaaaa:other',
+      'repo:bbbbbbbbbbbb:shared'
+    ])
+  })
+
+  it('a repo B load replaces only repo B and leaves personal and repo A untouched', () => {
+    const start = threeGroups()
+    const changed = { ...repoSummary('shared', REPO_B), hash: 'hash-b2' }
+    const next = loadRepo(start, REPO_B, [changed])
+    expect(next.definitions['personal:mine']).toBe(start.definitions['personal:mine'])
+    expect(next.definitions['repo:aaaaaaaaaaaa:shared']).toBe(start.definitions['repo:aaaaaaaaaaaa:shared'])
+    expect(next.definitions['repo:bbbbbbbbbbbb:shared']).toBe(changed)
+  })
+
+  it('an empty repo load drops that repo group only', () => {
+    const start = threeGroups()
+    const next = loadRepo(start, REPO_A, [])
+    expect(Object.keys(next.definitions).sort()).toEqual(['personal:mine', 'repo:bbbbbbbbbbbb:shared'])
+  })
+
+  it('an unchanged repo load returns the same state', () => {
+    const start = threeGroups()
+    expect(loadRepo(start, REPO_A, [repoSummary('shared', REPO_A)])).toBe(start)
+  })
+
+  it('drops incoming summaries that do not belong to the payload group', () => {
+    const next = loadRepo(initialWorkflows, REPO_A, [
+      repoSummary('ok', REPO_A),
+      repoSummary('stray', REPO_B),
+      summary('personal-stray')
+    ])
+    expect(Object.keys(next.definitions)).toEqual(['repo:aaaaaaaaaaaa:ok'])
+    const personal = load(initialWorkflows, [summary('a'), repoSummary('stray', REPO_A)])
+    expect(Object.keys(personal.definitions)).toEqual(['personal:a'])
+  })
+
+  it('treats a changed repoRoot as a change', () => {
+    const start = loadRepo(initialWorkflows, REPO_A, [repoSummary('x', REPO_A)])
+    const moved = { ...repoSummary('x', REPO_A), repoRoot: REPO_B }
+    const next = loadRepo(start, REPO_B, [moved])
+    expect(next.definitions['repo:aaaaaaaaaaaa:x']).toBe(moved)
   })
 })
 

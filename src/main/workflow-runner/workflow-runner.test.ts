@@ -483,6 +483,32 @@ describe('WorkflowRunner.start', () => {
     expect(ctx.agent.started).toEqual([])
   })
 
+  it('refuses a repo-scoped definition as untrusted and dispatches nothing', () => {
+    const ctx = setup()
+    const repoDetail = detail('one-shell')
+    const runner = new WorkflowRunner({
+      store: ctx.store,
+      loader: {
+        getDefinition: () => ({
+          ...repoDetail,
+          summary: { ...repoDetail.summary, id: 'repo:0123456789ab:one-shell', scope: 'repo', repoRoot: '/repo' }
+        })
+      },
+      drivers: { agent: ctx.agent, shell: ctx.shell },
+      now: () => 1,
+      newId: () => 'repo-run',
+      log: () => {}
+    })
+    runner.reconcile([])
+    const types = ctx.eventsSince(() => {
+      expect(
+        runner.start({ defId: 'repo:0123456789ab:one-shell', worktreePath: '/wt/a', inputs: {} })
+      ).toEqual({ ok: false, reason: 'untrusted-definition' })
+    })
+    expect(types).toEqual([])
+    expect(ctx.shell.started).toEqual([])
+  })
+
   it('refuses a worktree that already has a non-terminal run', () => {
     const ctx = setup()
     ctx.startRun('one-agent', '/wt/a')

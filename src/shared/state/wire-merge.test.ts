@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   initialState,
   mergeWireSnapshot,
+  rootReducer,
   type AppState,
   type WireSnapshotState
 } from './index'
@@ -87,6 +88,25 @@ describe('mergeWireSnapshot', () => {
     expect(merged.workflows.definitions).toBe(definitions)
     expect(merged.workflows.runs).toEqual({})
     expect(merged.workflows.attempts).toEqual({})
+  })
+
+  it('applies a new-renderer personal load over an old-server snapshot whose summaries lack repoRoot', () => {
+    const old = {
+      id: 'personal:a',
+      name: 'a',
+      scope: 'personal' as const,
+      path: '/home/u/.tatsu/workflows/a.yaml',
+      hash: 'hash-a',
+      stepIds: ['plan'],
+      issues: []
+    }
+    const merged = mergeWireSnapshot({ workflows: { definitions: { 'personal:a': old } } })
+    expect(merged.workflows.definitions['personal:a']).not.toHaveProperty('repoRoot')
+    const next = rootReducer(merged, {
+      type: 'workflows/definitionsLoaded',
+      payload: { scope: 'personal', definitions: [old] }
+    })
+    expect(next).toBe(merged)
   })
 
   it('leaves step kind, cursor and resumability absent in an old-server workflow run', () => {
