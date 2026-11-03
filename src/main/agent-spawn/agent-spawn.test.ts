@@ -867,6 +867,23 @@ describe('buildAgentLaunch with real agent modules per permission level (TEST-01
       expect(config(env).agent['harness-step'].permission).toEqual({ '*': 'allow' })
     })
 
+    it('a workflow step launches harness-step with its model and keeps the control token out of argv and config', () => {
+      const { command, env } = build({ realAgents, writeMcpConfig: MCP_PATH }).spawner.buildAgentLaunch({
+        terminalId: 't1',
+        cwd: '/wt',
+        agentKind: 'opencode',
+        permissionLevel: 'read-only',
+        bashAllow: [],
+        modelOverride: 'anthropic/claude-test',
+        initialPrompt: 'plan'
+      })
+
+      expect(command).toContain("opencode --agent harness-step --model 'anthropic/claude-test' --prompt 'plan'")
+      expect(config(env).agent['harness-step']).toMatchObject({ model: 'anthropic/claude-test', permission: { bash: 'deny' } })
+      expect(env.HARNESS_MCP_CONFIG).toBe('/c.json')
+      expect(`${command}${env.OPENCODE_CONFIG_CONTENT}`).not.toMatch(/HARNESS_TOKEN|HARNESS_PORT/)
+    })
+
     it('no level launches no step agent', () => {
       const { command, env } = launch(undefined)
 

@@ -14,7 +14,7 @@ import type {
   StopCheckDecision
 } from './types'
 import {
-  SESSION_ID_PATTERN,
+  isAgentSessionId,
   StepPauseError,
   StepStartError,
   type RunnableStep,
@@ -444,7 +444,7 @@ export class WorkflowRunner {
     if (state.live) return this.refuseAction('live-attempt', ids)
     const last = this.lastAttempt(state, stepId)
     if (last?.status !== 'interrupted') return this.refuseAction('not-interrupted', ids)
-    if (last.sessionId === undefined || !SESSION_ID_PATTERN.test(last.sessionId)) {
+    if (last.sessionId === undefined || !isAgentSessionId(step.agent, last.sessionId)) {
       return this.refuseAction('no-session', ids)
     }
     this.resume(state)
@@ -935,7 +935,8 @@ export class WorkflowRunner {
     if (!live || live.kind !== 'agent') return
     const { attemptId, stepId } = live.record
     const ids = { runId: state.record.runId, stepId, attemptId }
-    if (!SESSION_ID_PATTERN.test(sessionId)) {
+    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
+    if (step?.kind !== 'agent' || !isAgentSessionId(step.agent, sessionId)) {
       this.log('discovered session id rejected', ids)
       return
     }

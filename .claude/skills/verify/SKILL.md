@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch Tatsu's headless server in a scratch sandbox (fake HOME, fake-agent `claude` and `codex` shims), drive its web client in headless system Chrome with playwright-core, and capture screenshot and on-disk evidence that a workflow feature works the way a user sees it. Reach for it to prove a change to the Labs workflow UI (Run workflow here…, launch sheet, step strip, Needs you, step tabs) or the workflow runner it drives. Never runs a real agent, the user's login shell rc files, or touches the user's ~/.claude or ~/.codex.
+description: Launch Tatsu's headless server in a scratch sandbox (fake HOME, fake-agent `claude`, `codex` and `opencode` shims), drive its web client in headless system Chrome with playwright-core, and capture screenshot and on-disk evidence that a workflow feature works the way a user sees it. Reach for it to prove a change to the Labs workflow UI (Run workflow here…, launch sheet, step strip, Needs you, step tabs) or the workflow runner it drives. Never runs a real agent, the user's login shell rc files, or touches the user's ~/.claude, ~/.codex or ~/.config/opencode.
 ---
 
 # Verify Tatsu by driving the real app
@@ -22,10 +22,15 @@ this matters:
 
 - `HOME`, `ZDOTDIR`, `XDG_CONFIG_HOME` and `CODEX_HOME` point into
   `$TMPDIR/tatsu-verify/<run>/home`. `SHELL=/bin/bash`, so no zsh rc runs.
-  `CLAUDE_CONFIG_DIR` and `OPENCODE_CONFIG_DIR` are unset.
-- `config.json` sets `claudeCommand` and `codexCommand` to shims that exec
-  `scripts/fake-agent.mjs` (the `codex` shim adds `FAKE_AGENT_KIND=codex`), so
-  no real `claude` or `codex` runs. `scripts/codex-trust-fixture.mjs` seeds the
+  `CLAUDE_CONFIG_DIR`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG` and
+  `OPENCODE_CONFIG_CONTENT` are unset.
+- `config.json` sets `claudeCommand`, `codexCommand` and `opencodeCommand` to
+  shims that exec `scripts/fake-agent.mjs` (the `codex` shim adds
+  `FAKE_AGENT_KIND=codex`, the `opencode` shim `FAKE_AGENT_KIND=opencode`), so
+  no real `claude`, `codex` or `opencode` runs. Consent `accepted` makes the
+  server install Tatsu's opencode plugin into the scratch
+  `$XDG_CONFIG_HOME/opencode/plugins/harness-status.js`; the fake opencode
+  imports that file with a fake client. `scripts/codex-trust-fixture.mjs` seeds the
   scratch `CODEX_HOME/config.toml` with `trusted_hash` entries for Tatsu's
   hooks and `trust_level` for the repo, as if `/hooks` had been run; it
   refuses a `CODEX_HOME` outside the scratch dir. The fake agent reads a
@@ -57,6 +62,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 |---|---|---|
 | `smoke` | `plan` (claude) then `echo` (shell) | default: calls `complete_step` |
 | `smoke-codex` | `plan` (codex, `read-only`, `model: fake-codex-model`) then `echo` (shell) | codex mode: SessionStart + Stop through `$CODEX_HOME/harness-hook.sh`, calls `complete_step` |
+| `smoke-opencode` | `plan` (opencode, `read-only`, `model: fake/opencode-model`) then `echo` (shell) | opencode mode: needs `--agent harness-step`, loads the installed plugin, root `session.idle` -> `promptAsync` to `harness-step`, calls `complete_step` through the bridge in `OPENCODE_CONFIG_CONTENT` |
 | `smoke-retry` | `check` (shell `test -f flag`) | none |
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
@@ -78,7 +84,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 
 Read-only. Checks: PID alive; server env has the sandbox `HOME`, `ZDOTDIR`,
 `XDG_CONFIG_HOME`, `CODEX_HOME`, `HARNESS_DATA_DIR` and `SHELL=/bin/bash`;
-`CLAUDE_CONFIG_DIR` unset; `claudeCommand` and `codexCommand` are the shims; the port belongs to
+`CLAUDE_CONFIG_DIR` unset; `claudeCommand`, `codexCommand` and `opencodeCommand` are the shims; the port belongs to
 the PID; the tokenized URL answers 200; `scripts/ws-smoke.mjs` round-trips a
 snapshot; `dist-headless` is newer than `src/`; launch commit is HEAD. Any
 `FAIL` line: do not drive; clean up and relaunch.
@@ -86,7 +92,7 @@ snapshot; `dist-headless` is newer than `src/`; launch commit is HEAD. Any
 ## Drive
 
 ```bash
-node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke|smoke-codex]
+node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke|smoke-codex|smoke-opencode]
 .claude/skills/verify/scripts/journeys/workflow-flows.sh "$STATE"
 ```
 
@@ -117,7 +123,7 @@ Stable handles (no `data-testid` convention in this repo):
   `Cancelled by user`, …); action buttons are named
   `<Action>: <workflow> on <worktree>` (`Jump to tab: browser-exit on repo`).
 - Step tab: label `⚙ <stepId> · Claude` (`⚙ <stepId> · Codex` for a codex
-  step); close button
+  step, `⚙ <stepId> · opencode` for an opencode step); close button
   `getByRole('button', { name: 'Close tab ⚙ hang · Claude' })`. Closing a
   running step opens `getByRole('alertdialog', { name: 'Cancel step “hang”?' })`
   with `Cancel step and close tab`.

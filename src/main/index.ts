@@ -111,6 +111,7 @@ import {
   createAgentStepDriver,
   createGitRunArtifacts,
   createShellStepDriver,
+  opencodeProfile,
   writeStepPromptFile
 } from './workflow-runner'
 import {
@@ -790,7 +791,8 @@ const shellStepDriver = createShellStepDriver({
 const agentStepDriver = createAgentStepDriver({
   profiles: [
     claudeProfile((path) => checkClaudeFolderTrust(path)),
-    codexProfile((path) => checkCodexFolderTrust(path))
+    codexProfile((path) => checkCodexFolderTrust(path)),
+    opencodeProfile()
   ],
   addTab: (wtPath, tab, spawn) => panesFSM.addTab(wtPath, tab, undefined, { fromMain: true, spawn }),
   hasTerminal: (id) => ptyManager.hasTerminal(id),
