@@ -82,7 +82,14 @@ snapshot; `dist-headless` is newer than `src/`; launch commit is HEAD. Any
 
 ```bash
 node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke]
+.claude/skills/verify/scripts/journeys/workflow-flows.sh "$STATE"
 ```
+
+`workflow-flows.sh` runs `scripts/browser-smoke.mjs`, the smoke's browser leg,
+against this instance, so the verify drive and CI share one flow file. Both
+flows leave the worktree free (cancelled / done runs), but `workflow-run.mjs`
+and `workflow-flows.sh` each need the worktree without a live run when they
+start.
 
 Journeys sit on `scripts/browser.mjs`: `withApp(stateFile, name, fn)` runs
 `fn({ page, state, shot, log })` in a fresh headless Chrome page
@@ -100,12 +107,18 @@ Stable handles (no `data-testid` convention in this repo):
   `getByLabel('Workflow')` select, `getByRole('button', { name: 'Start' })`.
 - Step strip: `getByRole('img', { name: /^Workflow steps:/ })`; its
   `aria-label` reads `Workflow steps: plan running, echo pending`.
-- Needs you: `getByRole('region', { name: /NEEDS YOU/ })`; action buttons are
-  named `<Action>: <workflow> on <worktree>`.
-- Step tab: tab label `<stepId> · Claude`; closing a running step opens
-  `getByRole('alertdialog')` with `Cancel step and close tab`.
-- Step result overlay: heading `Claude exited.`; Mark done form
-  `getByRole('form', { name: 'Mark step done' })`.
+- Needs you: `getByRole('region', { name: /^NEEDS YOU/ })`, rows are
+  `listitem`s reading `<worktree> · <reason> · <stepId>` (`Step failed`,
+  `Cancelled by user`, …); action buttons are named
+  `<Action>: <workflow> on <worktree>` (`Jump to tab: browser-exit on repo`).
+- Step tab: label `⚙ <stepId> · Claude`; close button
+  `getByRole('button', { name: 'Close tab ⚙ hang · Claude' })`. Closing a
+  running step opens `getByRole('alertdialog', { name: 'Cancel step “hang”?' })`
+  with `Cancel step and close tab`.
+- Step result overlay: `getByRole('region', { name: 'Claude Code exited.' })`
+  with `Step`, `Status`, `Completed by`, `Summary` rows (`dt`/`dd`); Mark done
+  form `getByRole('form', { name: 'Mark step done' })`, `Summary` textarea,
+  `Mark done` button.
 
 ## Evidence
 
@@ -147,7 +160,8 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/home-guard.sh` | `home-guard.sh snapshot > f` / `home-guard.sh check f` | Fingerprint of the real agent config files |
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
-| `scripts/journeys/*.mjs` | `node <journey> <state.env> [args]` | One journey each; exit 0 on PASS |
+| `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record; exit 0 on PASS |
+| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Cancel-via-close-tab and Mark-done flows; exit 0 on PASS |
 
 ## Not covered
 

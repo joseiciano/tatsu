@@ -35,9 +35,17 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
 - `journeys/workflow-run.mjs <state> smoke`: launch sheet -> Start ->
   strip shows `plan running, echo pending` -> strip disappears -> run record
   `status: done`.
-- Hang and exit-no-complete flows (cancel via close-tab confirm; Mark done on
-  an exited step) are driven by `scripts/browser-smoke.mjs` once it exists:
-  `node scripts/browser-smoke.mjs <token> <port> <worktree> <evidenceDir>`.
+- `journeys/workflow-flows.sh <state>` (runs `scripts/browser-smoke.mjs`):
+  - `hang-cancel`: start `browser-hang` -> strip `hang running` -> close tab
+    `⚙ hang · Claude` -> `Cancel step and close tab` -> Needs-you row
+    `repo · Cancelled by user · hang`, strip `hang paused` -> run record paused
+    step-failed with a cancelled attempt -> `cancelRun` over WS -> row and strip
+    gone.
+  - `exit-mark-done`: start `browser-exit` -> Needs-you row
+    `repo · Step failed · exit` -> `Jump to tab` -> overlay `Claude Code
+    exited.` with Status `failed`, Completed by `process exit` -> Mark step done
+    with a summary -> form, row and strip gone -> run record `done`, last
+    `exit` attempt completed by `user`.
 
 End state that proves it: the screenshots in order, the strip `aria-label`
 lines in `journal.log`, and the run record in `workflow-runs/`.
@@ -50,5 +58,9 @@ lines in `journal.log`, and the run record in `workflow-runs/`.
   scroll the row into view, then wait for `role="menu"`.
 - Right after boot the runner answers start with "Tatsu is still starting";
   the launch sheet shows it as an error. Retry Start rather than sleeping.
-- A done run has no strip; prove the done state from the run record or the
-  step tab overlay, not from the strip.
+- A done run has no strip; prove the done state from the strip and Needs-you
+  row going away plus the run record.
+- Mark done records a new attempt, so the step tab (bound to the exited
+  attempt) keeps showing `failed` / `process exit` after the run is done.
+- `exit-mark-done` needs curl: without it the Stop hook fails open and the
+  step completes by fallback instead of failing.
