@@ -1,5 +1,6 @@
-import type { AppState } from '../../shared/state'
+import type { TatsuClient } from '../client'
 import type { Output } from '../output'
+import { statusCommand } from './status'
 
 export interface CommandOption {
   type: 'string' | 'boolean'
@@ -14,13 +15,6 @@ export interface GlobalOptions {
   url?: string
   token?: string
   timeoutMs?: number
-}
-
-export interface TatsuClient {
-  readonly endpoint: { url: string; source: string }
-  snapshot(): Promise<AppState>
-  request<T = unknown>(name: string, ...args: unknown[]): Promise<T>
-  close(): void
 }
 
 export interface CommandContext {
@@ -40,7 +34,7 @@ export interface Command {
   run(ctx: CommandContext): Promise<void> | void
 }
 
-export const commands: readonly Command[] = []
+export const commands: readonly Command[] = [statusCommand]
 
 export interface CommandMatch {
   command: Command

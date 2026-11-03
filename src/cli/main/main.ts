@@ -1,5 +1,7 @@
 import { parseArgs, type ParseArgsConfig } from 'node:util'
+import { connect as connectWs, type TatsuClient } from '../client'
 import { commands, findCommand, type Command, type CommandOption, type GlobalOptions } from '../commands'
+import { resolveEndpoint } from '../endpoint'
 import { CliError, exitCodeFor, toCliError } from '../errors'
 import { createOutput, formatTable, printError, type Write } from '../output'
 
@@ -11,6 +13,7 @@ export interface CliIO {
   stdout: Write
   stderr: Write
   env: Readonly<Record<string, string | undefined>>
+  connect?: typeof connectWs
 }
 
 const HELP_HINT = "Run 'tatsu --help' for usage."
@@ -105,10 +108,6 @@ function commandHelp(command: Command): string {
   ].join('\n\n')
 }
 
-function notImplementedClient(): never {
-  throw new CliError('command-failed', 'not implemented')
-}
-
 async function dispatch(argv: string[], io: CliIO, registry: readonly Command[]): Promise<number> {
   const match = findCommand(registry, loosePositionals(argv))
 
@@ -140,14 +139,24 @@ async function dispatch(argv: string[], io: CliIO, registry: readonly Command[])
   }
 
   const output = createOutput({ json: globals.json, stdout: io.stdout })
-  await command.run({
-    values,
-    positionals: positionals.slice(words.length),
-    globals,
-    env: io.env,
-    client: async () => notImplementedClient(),
-    output
-  })
+  const connect = io.connect ?? connectWs
+  let client: Promise<TatsuClient> | undefined
+  try {
+    await command.run({
+      values,
+      positionals: positionals.slice(words.length),
+      globals,
+      env: io.env,
+      client: () =>
+        (client ??= resolveEndpoint(globals, { env: io.env }).then((endpoint) =>
+          connect(endpoint, { timeoutMs: globals.timeoutMs })
+        )),
+      output
+    })
+  } finally {
+    const opened = await client?.catch(() => undefined)
+    opened?.close()
+  }
   output.flush()
   return 0
 }

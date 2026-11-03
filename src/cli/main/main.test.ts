@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import type { connect as connectWs, TatsuClient } from '../client'
+import type { ResolvedEndpoint } from '../endpoint'
 import { CliError } from '../errors'
+import { initialState } from '../../shared/state'
 import type { Command, CommandContext } from '../commands'
 import { CLI_VERSION, main } from '.'
 
@@ -137,12 +140,81 @@ describe('main: dispatch', () => {
     expect(r.stderr).toBe('tatsu: kaboom\n')
   })
 
-  it('fails with command-failed when a command asks for the client before it exists', async () => {
+  it('exits 3 with not-running when a command needs the client and no endpoint is configured', async () => {
     const { command } = recorder('status', async (ctx) => {
       await ctx.client()
     })
     const r = await run(['status', '--json'], [command])
+    expect(r.code).toBe(3)
+    expect(JSON.parse(r.stderr)).toMatchObject({ error: { code: 'not-running' } })
+  })
+})
+
+describe('main: client lifecycle', () => {
+  function fakeConnect() {
+    const calls: { endpoint: ResolvedEndpoint; timeoutMs?: number }[] = []
+    let closed = 0
+    const client: TatsuClient = {
+      endpoint: { url: 'ws://127.0.0.1:1', source: 'flag' },
+      snapshot: async () => initialState,
+      request: async <T,>() => undefined as T,
+      close: () => {
+        closed++
+      }
+    }
+    const connect: typeof connectWs = async (endpoint, opts) => {
+      calls.push({ endpoint, timeoutMs: opts?.timeoutMs })
+      return client
+    }
+    return { connect, calls, closed: () => closed }
+  }
+
+  async function runWith(argv: string[], command: Command, connect: typeof connectWs, env = {}) {
+    let stdout = ''
+    let stderr = ''
+    const code = await main(argv, { stdout: (t) => (stdout += t), stderr: (t) => (stderr += t), env, connect }, [command])
+    return { code, stdout, stderr }
+  }
+
+  it('connects once with the flag endpoint and --timeout, then closes the client', async () => {
+    const fake = fakeConnect()
+    const { command } = recorder('status', async (ctx) => {
+      await ctx.client()
+      await ctx.client()
+    })
+    const r = await runWith(['status', '--url', 'ws://127.0.0.1:9', '--token', 't', '--timeout', '250'], command, fake.connect)
+    expect(r.code).toBe(0)
+    expect(fake.calls).toEqual([{ endpoint: { url: 'ws://127.0.0.1:9', token: 't', source: 'flag' }, timeoutMs: 250 }])
+    expect(fake.closed()).toBe(1)
+  })
+
+  it('reads TATSU_URL and TATSU_TOKEN from the env', async () => {
+    const fake = fakeConnect()
+    const { command } = recorder('status', async (ctx) => {
+      await ctx.client()
+    })
+    await runWith(['status'], command, fake.connect, { TATSU_URL: 'ws://127.0.0.1:8', TATSU_TOKEN: 'e' })
+    expect(fake.calls[0].endpoint.source).toBe('env')
+  })
+
+  it('closes the client when the command throws', async () => {
+    const fake = fakeConnect()
+    const { command } = recorder('status', async (ctx) => {
+      await ctx.client()
+      throw new CliError('request-failed', 'nope')
+    })
+    const r = await runWith(['status', '--url', 'ws://127.0.0.1:9', '--token', 't'], command, fake.connect)
     expect(r.code).toBe(1)
-    expect(JSON.parse(r.stderr)).toMatchObject({ error: { code: 'command-failed' } })
+    expect(fake.closed()).toBe(1)
+  })
+
+  it('exits 2 for --url without --token and never connects', async () => {
+    const fake = fakeConnect()
+    const { command } = recorder('status', async (ctx) => {
+      await ctx.client()
+    })
+    const r = await runWith(['status', '--url', 'ws://127.0.0.1:9'], command, fake.connect)
+    expect(r.code).toBe(2)
+    expect(fake.calls).toHaveLength(0)
   })
 })
