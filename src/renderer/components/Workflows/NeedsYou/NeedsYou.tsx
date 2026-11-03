@@ -70,9 +70,9 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
   const fetched = useRecordStepContext(
     runId,
     `${run?.pausedReason}|${lastAttemptId}|${lastAttempt?.status ?? null}`,
-    run !== null && sliceContext === null
+    run !== null && (sliceContext === null || run.pausedReason === 'step-failed')
   )
-  const context = sliceContext ?? fetched
+  const context = fetched ?? sliceContext
   const stepId = context?.stepId ?? sliceStepId
   const tabRef = { runId, stepId: stepId ?? '', attemptId: lastAttemptId }
   const leaf = useWorkflowStepTabLeaf(run && stepId ? run.worktreePath : null, tabRef)

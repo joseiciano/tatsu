@@ -31,6 +31,7 @@ export interface NeedsYouStepInfo {
 export interface NeedsYouAttemptInfo {
   status: WorkflowAttemptStatus
   resumable: boolean
+  hasBaseSnapshot?: boolean
 }
 
 export interface NeedsYouActionsArgs {
@@ -143,9 +144,10 @@ function canResume(step: NeedsYouStepInfo | null, attempt: NeedsYouAttemptInfo |
 
 export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouActionsArgs): NeedsYouActionKind[] {
   const jump: NeedsYouActionKind[] = tabExists ? ['jump'] : []
+  const fromClean: NeedsYouActionKind[] = attempt?.hasBaseSnapshot === true ? ['retry-from-clean'] : []
   switch (reason) {
     case 'step-failed':
-      return ['retry', 'retry-from-clean', 'skip', 'cancel', ...jump]
+      return ['retry', ...fromClean, 'skip', 'cancel', ...jump]
     case 'needs-input':
       return [...jump, 'retry', 'skip', 'cancel']
     case 'needs-approval':
@@ -174,7 +176,9 @@ export function recordStepContext(record: WorkflowRunRecord): RecordStepContext 
   return {
     stepId: step.id,
     step: step.kind === 'agent' ? { kind: step.kind, agent: step.agent } : { kind: step.kind },
-    attempt: last ? { status: last.status, resumable: last.sessionId !== undefined } : null
+    attempt: last
+      ? { status: last.status, resumable: last.sessionId !== undefined, hasBaseSnapshot: last.baseSnapshot !== undefined }
+      : null
   }
 }
 

@@ -110,6 +110,13 @@ function attemptRecord(attemptId: string, stepId: string, status: WorkflowAttemp
   return { attemptId, stepId, n: 1, status, startedAt: 2, metrics: { continuations: 0, pauses: [] }, ...(sessionId ? { sessionId } : {}) }
 }
 
+const BASE_SNAPSHOT = { commit: 'c1', ref: 'refs/harness/base/a1' }
+
+function failedBuildRecord(withSnapshot: boolean): WorkflowRunRecord {
+  const failed = attemptRecord('a1', 'build', 'failed')
+  return record(BUILD_SHELL, [withSnapshot ? { ...failed, baseSnapshot: BASE_SNAPSHOT } : failed])
+}
+
 const STEP_TAB_PANE: PaneNode = {
   type: 'leaf',
   id: 'pane-1',
@@ -197,6 +204,7 @@ describe('NeedsYouGroup', () => {
   })
 
   it('lists a failed step with its workflow, worktree, reason and actions', async () => {
+    backendApi.getWorkflowRun.mockResolvedValue(failedBuildRecord(true))
     setState({ runs: { r1: pausedRun('step-failed', ['a1']) }, attempts: { a1: attempt('build', 'failed') }, panes: { '/wt/feature': STEP_TAB_PANE } })
     await render()
     expect(container.querySelector('h2')?.textContent).toContain('NEEDS YOU')
@@ -204,6 +212,28 @@ describe('NeedsYouGroup', () => {
     expect(container.textContent).toContain('feature · Step failed · build')
     expect(buttonLabels()).toEqual(['Retry', 'Retry from clean', 'Skip', 'Cancel run', 'Jump to tab'])
     expect(button('Retry').getAttribute('aria-label')).toBe('Retry: Ship it on feature')
+  })
+
+  it('hides Retry from clean when the failed attempt has no base snapshot', async () => {
+    backendApi.getWorkflowRun.mockResolvedValue(failedBuildRecord(false))
+    setState({ runs: { r1: pausedRun('step-failed', ['a1']) }, attempts: { a1: attempt('build', 'failed') } })
+    await render()
+    expect(backendApi.getWorkflowRun).toHaveBeenCalledWith('r1')
+    expect(buttonLabels()).toEqual(['Retry', 'Skip', 'Cancel run'])
+  })
+
+  it('fetches the run record for a failed step even when the slice names the step kind', async () => {
+    backendApi.getWorkflowRun.mockResolvedValue(failedBuildRecord(true))
+    setState({
+      runs: { r1: { ...pausedRun('step-failed', ['a1']), cursorStepId: 'build', steps: { plan: { status: 'done', attemptIds: ['a0'], kind: 'shell' }, build: { status: 'failed', attemptIds: ['a1'], kind: 'shell' } } } },
+      attempts: { a1: attempt('build', 'failed') }
+    })
+    act(() => {
+      root.render(<NeedsYouGroup onJumpToTab={onJumpToTab} />)
+    })
+    expect(buttonLabels()).toEqual(['Retry', 'Skip', 'Cancel run'])
+    await act(async () => {})
+    expect(buttonLabels()).toEqual(['Retry', 'Retry from clean', 'Skip', 'Cancel run'])
   })
 
   it('says a step the user cancelled was cancelled by the user, not that it failed', async () => {
@@ -233,6 +263,7 @@ describe('NeedsYouGroup', () => {
   })
 
   it('retries from clean only after the confirm dialog is confirmed', async () => {
+    backendApi.getWorkflowRun.mockResolvedValue(failedBuildRecord(true))
     setState({ runs: { r1: pausedRun('step-failed', ['a1']) }, attempts: { a1: attempt('build', 'failed') } })
     await render()
     await click(button('Retry from clean'))
