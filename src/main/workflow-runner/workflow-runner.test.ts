@@ -122,6 +122,24 @@ steps:
     agent: claude
     prompt: "fix"
 `,
+  'full-agent': `name: full-agent
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+  - id: fix
+    agent: claude
+    permissions: full
+    prompt: "fix"
+`,
+  'full-default': `name: full-default
+defaults:
+  permissions: full
+steps:
+  - id: fix
+    agent: claude
+    prompt: "fix"
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -1598,6 +1616,35 @@ describe('WorkflowRunner start refusals', () => {
     ctx.store.dispatch({ type: 'hooks/consentChanged', payload: 'pending' })
     expect(start(ctx, 'one-agent', '/wt/a', {})).toEqual({ ok: false, reason: 'hooks-consent' })
     expect(start(ctx, 'one-shell', '/wt/a', {}).ok).toBe(true)
+  })
+
+  it.each<DefSlug>(['full-agent', 'full-default'])('refuses %s without an explicit allowFull', (slug) => {
+    const ctx = setup()
+    expect(start(ctx, slug, '/wt/a', {})).toEqual({ ok: false, reason: 'full-permission-unconfirmed' })
+    expect(ctx.runner.start({ defId: `personal:${slug}`, worktreePath: '/wt/a', inputs: {}, allowFull: false })).toEqual({
+      ok: false,
+      reason: 'full-permission-unconfirmed'
+    })
+    expect(Object.keys(ctx.wf().runs)).toEqual([])
+  })
+
+  it.each<[string, unknown]>([
+    ['the string true', 'true'],
+    ['the number 1', 1],
+    ['an object', { allowFull: true }]
+  ])('does not count %s as allowFull', (_name, allowFull) => {
+    const ctx = setup()
+    const request = { defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, allowFull }
+    expect(ctx.runner.start(request as unknown as Parameters<typeof ctx.runner.start>[0])).toEqual({
+      ok: false,
+      reason: 'full-permission-unconfirmed'
+    })
+  })
+
+  it('starts a full-access workflow when allowFull is true, and ignores allowFull without a full step', () => {
+    const ctx = setup()
+    expect(ctx.runner.start({ defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, allowFull: true }).ok).toBe(true)
+    expect(ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/b', inputs: {} }).ok).toBe(true)
   })
 })
 

@@ -41,6 +41,7 @@ import { ResolveRepoModal } from '../components/ResolveRepoModal'
 import { RepoAddErrorModal } from '../components/RepoAddErrorModal'
 import { ReportIssueScreen, onOpenReportIssue, type OpenReportIssueDetail } from '../components/ReportIssueScreen'
 import { AddBackendModal } from '../components/AddBackendModal'
+import { LaunchSheet } from '../components/Workflows/LaunchSheet'
 import { MonacoWorkerFailedBanner } from '../components/MonacoWorkerFailedBanner'
 import iconUrl from '../../../resources/icon.png'
 import { PerfMonitorHUD } from '../components/PerfMonitorHUD'
@@ -246,6 +247,8 @@ function DesktopApp(): JSX.Element {
   const [showNewProject, setShowNewProject] = useState(false)
   const [reportIssueState, setReportIssueState] = useState<OpenReportIssueDetail | null>(null)
   const [showAddBackend, setShowAddBackend] = useState(false)
+  const [runWorkflowPath, setRunWorkflowPath] = useState<string | null>(null)
+  const closeRunWorkflow = useCallback(() => setRunWorkflowPath(null), [])
   // Dev-only: forces the welcome / onboarding form to render even when
   // the user already has repos added, so the layout can be inspected
   // without wiping `userData/config.json`. Toggled from Help → Debug:
@@ -1374,6 +1377,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             snoozeDefaultDays={settings.snoozeDefaultDays}
             prLoading={prLoading}
             agentCount={agentWorktreeCount}
+            onRunWorkflow={setRunWorkflowPath}
             onSelectWorktree={(path) => {
               setShowNewWorktree(false)
               setShowActivity(false)
@@ -1720,6 +1724,9 @@ const setQuestStep = useCallback((next: QuestStep) => {
       isOpen={showAddBackend}
       onClose={() => setShowAddBackend(false)}
     />
+    {runWorkflowPath !== null && (
+      <LaunchSheet worktreePath={runWorkflowPath} onClose={closeRunWorkflow} />
+    )}
     </HotkeysProvider>
   )
 }

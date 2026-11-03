@@ -266,6 +266,8 @@ export class WorkflowRunner {
     const definition = detail.definition
     if (!definition) return this.refuse('invalid-definition')
     if (!definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
+    const needsFull = definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
+    if (needsFull && request.allowFull !== true) return this.refuse('full-permission-unconfirmed')
     if (!this.knownWorktree(request.worktreePath)) return this.refuse('unknown-worktree')
     const badInputs = inputsRefusal(definition, request.inputs)
     if (badInputs) return this.refuse(badInputs)

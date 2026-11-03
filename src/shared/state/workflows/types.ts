@@ -185,6 +185,7 @@ export interface WorkflowStartRunPayload {
   defId: string
   worktreePath: string
   inputs: Record<string, string>
+  allowFull?: boolean
 }
 
 export interface WorkflowMarkDonePayload {

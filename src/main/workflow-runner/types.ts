@@ -17,6 +17,7 @@ export interface StartRunRequest {
   defId: string
   worktreePath: string
   inputs: Record<string, string>
+  allowFull?: boolean
 }
 
 export type StartRefusal =
@@ -24,6 +25,7 @@ export type StartRefusal =
   | 'unknown-definition'
   | 'invalid-definition'
   | 'unsupported-step'
+  | 'full-permission-unconfirmed'
   | 'worktree-busy'
   | 'unknown-worktree'
   | 'invalid-inputs'
