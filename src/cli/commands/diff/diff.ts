@@ -1,4 +1,4 @@
-import type { CodeDiffFile, CodeDiffFileList, CodeDiffStatus } from '../../../shared/code-diff'
+import type { CodeDiffFile, CodeDiffFileList, CodeDiffSides, CodeDiffStatus } from '../../../shared/code-diff'
 import type { AppState } from '../../../shared/state'
 import type { Worktree } from '../../../shared/state/worktrees'
 import type { TatsuClient } from '../../client'
@@ -6,6 +6,7 @@ import { CliError } from '../../errors'
 import { formatTable } from '../../output'
 import { findWorktree } from '../../repo-match'
 import type { Command, CommandContext } from '..'
+import { renderPatch } from './patch'
 
 const HELP_HINT = "Run 'tatsu diff --help' for usage."
 
@@ -18,6 +19,10 @@ export interface DiffResult {
   totals: { files: number; additions: number; deletions: number }
   files: CodeDiffFile[]
 }
+
+export type PatchedFile = CodeDiffFile & { patch: string | null; patchError?: string }
+
+export type PatchedDiffResult = Omit<DiffResult, 'files'> & { files: PatchedFile[] }
 
 const STATUS_LETTERS = {
   added: 'A',
@@ -39,6 +44,21 @@ function isCodeDiffFileList(value: unknown): value is CodeDiffFileList {
     Array.isArray(value.files) &&
     'baseRef' in value &&
     typeof value.baseRef === 'string'
+  )
+}
+
+function isCodeDiffSides(value: unknown): value is CodeDiffSides {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'original' in value &&
+    typeof value.original === 'string' &&
+    'modified' in value &&
+    typeof value.modified === 'string' &&
+    'originalBinary' in value &&
+    typeof value.originalBinary === 'boolean' &&
+    'modifiedBinary' in value &&
+    typeof value.modifiedBinary === 'boolean'
   )
 }
 
@@ -86,6 +106,33 @@ export async function fetchFileList(client: TatsuClient, worktree: Worktree, bas
   }
 }
 
+export async function fetchPatches(client: TatsuClient, worktree: Worktree, baseRef: string, files: CodeDiffFile[]): Promise<PatchedFile[]> {
+  const patched: PatchedFile[] = []
+  for (const file of files) {
+    const reply = await client.request('worktree:codeDiffFileSides', worktree.path, baseRef, file.path, file.previousPath)
+    if (!isCodeDiffSides(reply)) {
+      throw new CliError('request-failed', "backend sent a malformed reply to 'worktree:codeDiffFileSides'")
+    }
+    patched.push(reply.error !== undefined ? { ...file, patch: null, patchError: reply.error } : { ...file, patch: renderPatch(file, reply) })
+  }
+  return patched
+}
+
+function selectFiles(files: CodeDiffFile[], selector: string | undefined): CodeDiffFile[] {
+  if (selector === undefined) return files
+  const match = files.find((file) => file.path === selector || file.previousPath === selector)
+  if (!match) throw new CliError('usage', `'${selector}' is not in the changed files. ${HELP_HINT}`)
+  return [match]
+}
+
+function failure(files: PatchedFile[]): CliError | undefined {
+  const failed = files.flatMap((file) => (file.patchError !== undefined ? [{ path: file.path, error: file.patchError }] : []))
+  if (failed.length === 0) return undefined
+  const lines = failed.map(({ path, error }) => `${path}: ${error}`)
+  const message = failed.length === 1 ? lines[0] : [`${failed.length} files failed to diff:`, ...lines].join('\n')
+  return new CliError('command-failed', message, { failed })
+}
+
 function counts(file: CodeDiffFile): string {
   if (file.additions === undefined && file.deletions === undefined) return '-'
   return `+${file.additions ?? 0} -${file.deletions ?? 0}`
@@ -117,24 +164,38 @@ function findCwdWorktree(state: AppState): Worktree {
   }
 }
 
-function parseArgs(ctx: CommandContext): { target?: string; base?: string } {
+interface DiffArgs {
+  target?: string
+  base?: string
+  file?: string
+  patch: boolean
+}
+
+function parseArgs(ctx: CommandContext): DiffArgs {
   if (ctx.positionals.length > 1) {
     throw new CliError('usage', `unexpected argument '${ctx.positionals[1]}'. ${HELP_HINT}`)
   }
-  const base = ctx.values.base
+  const { base, file } = ctx.values
+  const patch = ctx.values.patch === true
   if (base === '') throw new CliError('usage', `--base needs a ref. ${HELP_HINT}`)
+  if (file === '') throw new CliError('usage', `--file needs a path. ${HELP_HINT}`)
+  if (typeof file === 'string' && patch) throw new CliError('usage', `--file and --patch cannot be used together. ${HELP_HINT}`)
   return {
     ...(ctx.positionals[0] !== undefined ? { target: ctx.positionals[0] } : {}),
-    ...(typeof base === 'string' ? { base } : {})
+    ...(typeof base === 'string' ? { base } : {}),
+    ...(typeof file === 'string' ? { file } : {}),
+    patch
   }
 }
 
 export const diffCommand: Command = {
   name: 'diff',
-  summary: 'List files a worktree changed against a base ref',
-  usage: 'diff [<worktree>] [--base <ref>]',
+  summary: 'Show what a worktree changed against a base ref',
+  usage: 'diff [<worktree>] [--base <ref>] [--file <path> | --patch]',
   options: {
-    base: { type: 'string', valueName: 'ref', description: "Ref to compare against (default: the backend's default base)" }
+    base: { type: 'string', valueName: 'ref', description: "Ref to compare against (default: the backend's default base)" },
+    file: { type: 'string', valueName: 'path', description: "Print one changed file's unified diff" },
+    patch: { type: 'boolean', description: "Print every changed file's unified diff" }
   },
   async run(ctx) {
     const args = parseArgs(ctx)
@@ -142,6 +203,15 @@ export const diffCommand: Command = {
     const state = await client.snapshot()
     const worktree = args.target !== undefined ? findWorktree(state, args.target) : findCwdWorktree(state)
     const result = await fetchFileList(client, worktree, args.base)
-    ctx.output.result(result, (value) => renderFileList(value, worktree))
+    if (args.file === undefined && !args.patch) {
+      ctx.output.result(result, (value) => renderFileList(value, worktree))
+      return
+    }
+    const files = await fetchPatches(client, worktree, result.baseRef, selectFiles(result.files, args.file))
+    const patched: PatchedDiffResult = { ...result, files }
+    const text = files.map((file) => file.patch ?? '').join('')
+    if (ctx.globals.json || text !== '') ctx.output.result(patched, () => text, { keepOnError: true })
+    const err = failure(files)
+    if (err) throw err
   }
 }

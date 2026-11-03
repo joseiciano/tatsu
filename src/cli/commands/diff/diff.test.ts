@@ -1,11 +1,12 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import type { CodeDiffFile, CodeDiffFileList } from '../../../shared/code-diff'
+import type { CodeDiffFile, CodeDiffFileList, CodeDiffSides } from '../../../shared/code-diff'
 import { initialState, type AppState } from '../../../shared/state'
 import type { Worktree } from '../../../shared/state/worktrees'
 import type { TatsuClient } from '../../client'
 import { CliError } from '../../errors'
 import { createOutput } from '../../output'
 import type { CommandContext } from '..'
+import { main } from '../../main'
 import { diffCommand, renderFileList, type DiffResult } from '.'
 
 const MAIN: Worktree = { path: '/remote/repo', repoRoot: '/remote/repo', branch: 'main', head: 'a', isBare: false, isMain: true, createdAt: 0 }
@@ -40,7 +41,8 @@ function fakeClient(replies: Record<string, unknown>): { client: TatsuClient; re
     snapshot: async () => STATE,
     request: async <T,>(name: string, ...args: unknown[]) => {
       requests.push({ name, args })
-      return replies[name] as T
+      const reply = replies[name]
+      return (typeof reply === 'function' ? reply(...args) : reply) as T
     },
     close: () => {}
   }
@@ -201,5 +203,178 @@ describe('diffCommand', () => {
     const { client } = fakeClient({})
     expect((await rejection(runDiff(client, { positionals: ['feat', 'extra'] }))).code).toBe('usage')
     expect((await rejection(runDiff(client, { positionals: ['feat'], values: { base: '' } }))).code).toBe('usage')
+  })
+})
+
+function textSides(original: string, modified: string, overrides: Partial<CodeDiffSides> = {}): CodeDiffSides {
+  return {
+    original,
+    modified,
+    originalExists: original !== '',
+    modifiedExists: true,
+    originalBinary: false,
+    modifiedBinary: false,
+    originalSize: original.length,
+    modifiedSize: modified.length,
+    modifiedSymlink: false,
+    ...overrides
+  }
+}
+
+const SIDES: Record<string, CodeDiffSides> = {
+  'a.ts': textSides('', 'x\n'),
+  'blob.bin': textSides('', '', { modifiedBinary: true }),
+  'new.txt': textSides('o\n', 'n\n'),
+  'scratch.txt': textSides('', 's\n')
+}
+
+const PATCHES: Record<string, string> = {
+  'a.ts': '--- /dev/null\n+++ b/a.ts\n@@ -0,0 +1,1 @@\n+x\n',
+  'blob.bin': 'Binary files /dev/null and b/blob.bin differ\n',
+  'new.txt': '--- a/old.txt\n+++ b/new.txt\n@@ -1,1 +1,1 @@\n-o\n+n\n',
+  'scratch.txt': '--- /dev/null\n+++ b/scratch.txt\n@@ -0,0 +1,1 @@\n+s\n'
+}
+
+function patchClient(sides: Record<string, CodeDiffSides | unknown> = SIDES) {
+  return fakeClient({
+    'worktree:codeDiffFiles': list(),
+    'worktree:codeDiffFileSides': (_path: string, _base: string, filePath: string) => sides[filePath]
+  })
+}
+
+describe('diffCommand patches', () => {
+  it('--patch fetches sides one file at a time in list order and prints only the patches', async () => {
+    const { client, requests } = patchClient()
+    const out = await runDiff(client, { positionals: ['feat'], values: { base: 'main', patch: true } })
+    expect(requests.slice(1)).toEqual([
+      { name: 'worktree:codeDiffFileSides', args: [FEAT.path, 'refs/heads/main', 'a.ts', undefined] },
+      { name: 'worktree:codeDiffFileSides', args: [FEAT.path, 'refs/heads/main', 'blob.bin', undefined] },
+      { name: 'worktree:codeDiffFileSides', args: [FEAT.path, 'refs/heads/main', 'new.txt', 'old.txt'] },
+      { name: 'worktree:codeDiffFileSides', args: [FEAT.path, 'refs/heads/main', 'scratch.txt', undefined] }
+    ])
+    expect(out).toBe(FILES.map((f) => PATCHES[f.path]).join(''))
+  })
+
+  it('--file prints one file, matched by its path or its previous path', async () => {
+    const byPath = patchClient()
+    expect(await runDiff(byPath.client, { positionals: ['feat'], values: { base: 'main', file: 'a.ts' } })).toBe(PATCHES['a.ts'])
+    expect(byPath.requests.filter((r) => r.name === 'worktree:codeDiffFileSides')).toHaveLength(1)
+
+    const byPrevious = patchClient()
+    expect(await runDiff(byPrevious.client, { positionals: ['feat'], values: { base: 'main', file: 'old.txt' } })).toBe(PATCHES['new.txt'])
+  })
+
+  it('--file for a path not in the list is a usage error', async () => {
+    const { client, requests } = patchClient()
+    const err = await rejection(runDiff(client, { positionals: ['feat'], values: { base: 'main', file: 'nope.txt' } }))
+    expect(err.code).toBe('usage')
+    expect(err.message).toContain("'nope.txt'")
+    expect(requests.map((r) => r.name)).toEqual(['worktree:codeDiffFiles'])
+  })
+
+  it('rejects --file with --patch and an empty --file before any request', async () => {
+    const { client, requests } = patchClient()
+    expect((await rejection(runDiff(client, { positionals: ['feat'], values: { file: 'a.ts', patch: true } }))).code).toBe('usage')
+    expect((await rejection(runDiff(client, { positionals: ['feat'], values: { file: '' } }))).code).toBe('usage')
+    expect(requests).toEqual([])
+  })
+
+  it('--patch --json adds a patch to every file', async () => {
+    const { client } = patchClient()
+    const out = await runDiff(client, { positionals: ['feat'], values: { base: 'main', patch: true }, json: true })
+    const parsed = JSON.parse(out) as DiffResult
+    expect(parsed.totals).toEqual({ files: 4, additions: 6, deletions: 1 })
+    expect(parsed.files).toEqual(FILES.map((f) => ({ ...f, patch: PATCHES[f.path] })))
+  })
+
+  it('--file --json narrows files to the matched file', async () => {
+    const { client } = patchClient()
+    const out = await runDiff(client, { positionals: ['feat'], values: { base: 'main', file: 'a.ts' }, json: true })
+    expect((JSON.parse(out) as DiffResult).files).toEqual([{ ...FILES[0], patch: PATCHES['a.ts'] }])
+  })
+
+  it('prints the patches that succeeded, then fails with every sides error', async () => {
+    const { client } = patchClient({ ...SIDES, 'blob.bin': textSides('', '', { error: 'disk on fire' }) })
+    let stdout = ''
+    const output = createOutput({ json: false, stdout: (t) => (stdout += t) })
+    const err = await rejection(
+      Promise.resolve(
+        diffCommand.run({
+          values: { base: 'main', patch: true },
+          positionals: ['feat'],
+          globals: { json: false },
+          env: {},
+          client: async () => client,
+          output
+        })
+      )
+    )
+    output.flushKept()
+    expect(err.code).toBe('command-failed')
+    expect(err.message).toBe('blob.bin: disk on fire')
+    expect(err.details).toEqual({ failed: [{ path: 'blob.bin', error: 'disk on fire' }] })
+    expect(stdout).toBe(['a.ts', 'new.txt', 'scratch.txt'].map((p) => PATCHES[p]).join(''))
+  })
+
+  it('in json mode a failed file gets patch null and patchError, still in one document', async () => {
+    const { client } = patchClient({ ...SIDES, 'a.ts': textSides('', '', { error: 'boom' }), 'new.txt': textSides('', '', { error: 'bang' }) })
+    let stdout = ''
+    const output = createOutput({ json: true, stdout: (t) => (stdout += t) })
+    const err = await rejection(
+      Promise.resolve(
+        diffCommand.run({
+          values: { base: 'main', patch: true },
+          positionals: ['feat'],
+          globals: { json: true },
+          env: {},
+          client: async () => client,
+          output
+        })
+      )
+    )
+    output.flushKept()
+    expect(err.message).toBe('2 files failed to diff:\na.ts: boom\nnew.txt: bang')
+    expect(err.details).toEqual({ failed: [{ path: 'a.ts', error: 'boom' }, { path: 'new.txt', error: 'bang' }] })
+    const parsed = JSON.parse(stdout) as DiffResult
+    expect(parsed.files[0]).toEqual({ ...FILES[0], patch: null, patchError: 'boom' })
+    expect(parsed.files[1]).toEqual({ ...FILES[1], patch: PATCHES['blob.bin'] })
+    expect(parsed.files[2]).toEqual({ ...FILES[2], patch: null, patchError: 'bang' })
+  })
+
+  it('rejects a malformed codeDiffFileSides reply', async () => {
+    const { client } = patchClient({ ...SIDES, 'a.ts': { nope: true } })
+    expect((await rejection(runDiff(client, { positionals: ['feat'], values: { base: 'main', file: 'a.ts' } }))).code).toBe('request-failed')
+  })
+
+  it('prints nothing for --patch when nothing changed', async () => {
+    const { client } = fakeClient({ 'worktree:codeDiffFiles': list({ files: [], totalFiles: 0, totalAdditions: 0, totalDeletions: 0 }) })
+    expect(await runDiff(client, { positionals: ['feat'], values: { base: 'main', patch: true } })).toBe('')
+  })
+
+  it('through main: prints the other patches, then exits 1 with the failure on stderr', async () => {
+    const { client } = patchClient({ ...SIDES, 'blob.bin': textSides('', '', { error: 'disk on fire' }) })
+    let stdout = ''
+    let stderr = ''
+    const code = await main(
+      ['diff', 'feat', '--base', 'main', '--patch', '--url', 'ws://127.0.0.1:1', '--token', 't'],
+      {
+        stdout: (t) => (stdout += t),
+        stderr: (t) => (stderr += t),
+        env: {},
+        files: {
+          readFile: async () => {
+            throw new Error('unused')
+          },
+          homedir: () => '/nonexistent',
+          platform: 'linux',
+          isPidAlive: () => false
+        },
+        connect: async () => client
+      },
+      [diffCommand]
+    )
+    expect(code).toBe(1)
+    expect(stderr).toBe('tatsu: blob.bin: disk on fire\n')
+    expect(stdout).toBe(['a.ts', 'new.txt', 'scratch.txt'].map((p) => PATCHES[p]).join(''))
   })
 })

@@ -27,6 +27,20 @@ describe('createOutput', () => {
     expect(out.text().trimEnd().split('\n')).toHaveLength(1)
   })
 
+  it('flushKept writes only a result marked keepOnError', () => {
+    const kept = capture()
+    const keeper = createOutput({ json: false, stdout: kept.write })
+    keeper.result('partial', (v) => v, { keepOnError: true })
+    keeper.flushKept()
+    expect(kept.text()).toBe('partial\n')
+
+    const dropped = capture()
+    const plain = createOutput({ json: false, stdout: dropped.write })
+    plain.result('whole', (v) => v)
+    plain.flushKept()
+    expect(dropped.text()).toBe('')
+  })
+
   it('writes nothing until flushed', () => {
     const out = capture()
     const output = createOutput({ json: true, stdout: out.write })

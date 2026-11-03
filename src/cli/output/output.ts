@@ -2,12 +2,17 @@ import type { CliError } from '../errors'
 
 export type Write = (text: string) => void
 
+export interface ResultOptions {
+  keepOnError?: boolean
+}
+
 export interface Output {
-  result<T>(value: T, renderHuman: (value: T) => string): void
+  result<T>(value: T, renderHuman: (value: T) => string, options?: ResultOptions): void
 }
 
 export interface BufferedOutput extends Output {
   flush(): void
+  flushKept(): void
 }
 
 function withNewline(text: string): string {
@@ -16,13 +21,19 @@ function withNewline(text: string): string {
 
 export function createOutput({ json, stdout }: { json: boolean; stdout: Write }): BufferedOutput {
   let pending: string | undefined
+  let keepOnError = false
+  const flush = (): void => {
+    if (pending !== undefined) stdout(withNewline(pending))
+  }
   return {
-    result(value, renderHuman) {
+    result(value, renderHuman, options) {
       if (pending !== undefined) throw new Error('output.result called more than once')
       pending = json ? JSON.stringify(value) : renderHuman(value)
+      keepOnError = options?.keepOnError === true
     },
-    flush() {
-      if (pending !== undefined) stdout(withNewline(pending))
+    flush,
+    flushKept() {
+      if (keepOnError) flush()
     }
   }
 }
