@@ -1100,6 +1100,7 @@ function claudeHarness() {
   const killed: string[] = []
   const exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
   const stopListeners = new Set<(event: ClaudeStopEvent) => void>()
+  const promptListeners = new Set<(event: { terminalId: string }) => void>()
   const alive = new Set<string>()
   const state: { trust: TrustStatus; store?: Store; runner?: WorkflowRunner } = { trust: 'trusted' }
   let ids = 0
@@ -1127,6 +1128,10 @@ function claudeHarness() {
       onStopEvent: (listener) => {
         stopListeners.add(listener)
         return () => stopListeners.delete(listener)
+      },
+      onPromptSubmit: (listener) => {
+        promptListeners.add(listener)
+        return () => promptListeners.delete(listener)
       },
       store,
       checkFolderTrust: async () => ({ status: state.trust }),
@@ -1157,8 +1162,11 @@ function claudeHarness() {
     status(id: string, status: PtyStatus) {
       state.store?.dispatch({ type: 'terminals/statusChanged', payload: { id, status, pendingTool: null } })
     },
-    stop(terminalId: string, lastAssistantMessage: string | null) {
-      for (const listener of [...stopListeners]) listener({ terminalId, lastAssistantMessage })
+    stop(terminalId: string, lastAssistantMessage: string | null, continued?: boolean) {
+      for (const listener of [...stopListeners]) listener({ terminalId, lastAssistantMessage, continued })
+    },
+    promptSubmit(terminalId: string) {
+      for (const listener of [...promptListeners]) listener({ terminalId })
     },
     exit(id: string, code: number, signal?: number) {
       alive.delete(id)
@@ -1381,5 +1389,113 @@ describe('WorkflowRunner driver release', () => {
     ctx.runner.cancelRun(runId)
     expect(attempt.bind({ executionId: 'late' })).toBe(false)
     expect(ctx.runner.stepForExecution('late')).toBeNull()
+  })
+})
+
+describe('WorkflowRunner Stop-hook continuation', () => {
+  it('blocks the first Stop of a turn, ignores that Stop, then falls back on the next turn end', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    expect(ctx.runner.stopCheck(id, false)).toBe('block')
+    expect(ctx.records.at(-1)?.attempts[0].metrics.continuations).toBe(1)
+    expect(ctx.eventsSince(() => claude.stop(id, 'first try', true))).toEqual([])
+    expect(ctx.wf().attempts[attemptId].status).toBe('running')
+    expect(ctx.runner.stopCheck(id, true)).toBe('none')
+    claude.stop(id, 'second try')
+    expect(ctx.records.at(-1)?.attempts[0]).toMatchObject({
+      status: 'done',
+      result: { status: 'done', summary: 'second try', completedBy: 'fallback' },
+      metrics: { continuations: 1 }
+    })
+  })
+
+  it('continues at most once per turn even when stop_hook_active is false', async () => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    expect(ctx.runner.stopCheck(id, false)).toBe('block')
+    expect(ctx.runner.stopCheck(id, false)).toBe('none')
+    expect(ctx.records.at(-1)?.attempts[0].metrics.continuations).toBe(1)
+  })
+
+  it('never blocks when the hook payload says a stop hook is already active', async () => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    expect(ctx.runner.stopCheck(claude.tabs[0].tab.id, true)).toBe('none')
+    expect(ctx.records.at(-1)?.attempts[0].metrics.continuations).toBe(0)
+  })
+
+  it('lets a UserPromptSubmit reset the per-turn counter so the next turn can be continued again', async () => {
+    const { ctx, claude, runId } = await claudeRun('reviewed')
+    const id = claude.tabs[0].tab.id
+    expect(ctx.runner.stopCheck(id, false)).toBe('block')
+    claude.stop(id, 'nudged', true)
+    claude.promptSubmit(id)
+    expect(ctx.runner.stopCheck(id, false)).toBe('block')
+    expect(ctx.records.at(-1)?.attempts[0].metrics.continuations).toBe(2)
+    expect(ctx.wf().runs[runId].status).toBe('running')
+  })
+
+  it('answers none to a late stop-check after the attempt ended by fallback', async () => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    claude.stop(id, 'done')
+    expect(ctx.runner.stopCheck(id, false)).toBe('none')
+  })
+
+  it('answers none while labs is off', async () => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.stopCheck(claude.tabs[0].tab.id, false)).toBe('none')
+  })
+
+  it('answers none for unknown terminals', async () => {
+    const { ctx } = await claudeRun('one-agent')
+    expect(ctx.runner.stopCheck('user-tab', false)).toBe('none')
+  })
+
+  it('does not nudge an agent that asked for input', async () => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    ctx.runner.completeExecution(id, { status: 'needs-input', summary: 'which branch?' })
+    expect(ctx.runner.stopCheck(id, false)).toBe('none')
+  })
+
+  it('falls back when the block never reached Claude and its Stop is not marked continued', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    expect(ctx.runner.stopCheck(id, false)).toBe('block')
+    claude.stop(id, 'curl timed out')
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.records.at(-1)?.attempts[0].result).toMatchObject({ summary: 'curl timed out', completedBy: 'fallback' })
+    expect(ctx.logs.some((line) => line.includes('continuation not delivered'))).toBe(true)
+  })
+
+  it('resumes a needs-approval pause when the agent reaches a blocked Stop or a new prompt', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    claude.status(id, 'needs-approval')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+    expect(ctx.runner.stopCheck(id, false)).toBe('block')
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    claude.status(id, 'processing')
+    claude.status(id, 'needs-approval')
+    expect(ctx.wf().runs[runId].pausedReason).toBe('needs-approval')
+    claude.promptSubmit(id)
+    expect(ctx.wf().runs[runId].status).toBe('running')
+  })
+
+  it('logs one workflow line per continuation with ids only', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    const id = claude.tabs[0].tab.id
+    ctx.runner.stopCheck(id, false)
+    const lines = ctx.logs.filter((line) => line.includes('step continued'))
+    expect(lines).toEqual([
+      `[workflow] step continued 1 ${JSON.stringify({ runId, stepId: 'plan', attemptId: ctx.attemptOf(runId, 'plan') })}`
+    ])
+  })
+
+  it('lists the live executions so boot pruning can keep their configs and markers', async () => {
+    const { ctx, claude } = await claudeRun('one-agent')
+    expect(ctx.runner.liveExecutionIds()).toEqual([claude.tabs[0].tab.id])
   })
 })

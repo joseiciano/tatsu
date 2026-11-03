@@ -44,6 +44,7 @@ export interface PendingTool {
 // terminal, and the reader in tailLog holds a partial trailing line until
 // its newline arrives.
 export function makeHookCommand(event: string): string {
+  if (event === 'Stop') return `bash -c '${stopHookInner()}'`
   const inner =
     `h="${'$HARNESS_TERMINAL_ID'}"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; ` +
     `d=${STATUS_DIR}; mkdir -p "$d"; ` +
@@ -51,6 +52,30 @@ export function makeHookCommand(event: string): string {
     `printf "{\\"event\\":\\"${event}\\",\\"ts\\":%s,\\"payload\\":%s}\\n" ` +
     `"$(date +%s)" "$p" >> "$d/$h.ndjson"`
   return `bash -c '${inner}'`
+}
+
+// The stop-check runs before the NDJSON append so the runner knows about a block before the Stop arrives.
+function stopHookInner(): string {
+  const curl =
+    'curl -sf --connect-timeout 1 --max-time 2 -H "Content-Type: application/json" -H "X-Harness-Terminal-Id: $h" ' +
+    '-H @/dev/fd/3 --data-binary @- "http://127.0.0.1:$o/workflow/stop-check" 3<<<"Authorization: Bearer $t" 2>/dev/null'
+  return [
+    'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
+    `d=${STATUS_DIR}; mkdir -p "$d"`,
+    'p=$(cat); [ -z "$p" ] && p=null',
+    'r=; c=; m="$HARNESS_MCP_CONFIG"',
+    'if [ -n "$m" ] && [ -f "${m%.json}.step" ] && command -v curl >/dev/null 2>&1; then ' +
+      String.raw`o=$(sed -n "s/^ *\"HARNESS_PORT\": \"\([0-9][0-9]*\)\",\{0,1\} *$/\1/p" "$m" 2>/dev/null); ` +
+      String.raw`t=$(sed -n "s/^ *\"HARNESS_TOKEN\": \"\([0-9a-f][0-9a-f]*\)\",\{0,1\} *$/\1/p" "$m" 2>/dev/null); ` +
+      'case "$o" in ""|*[!0-9]*) o=;; esac; case "$t" in ""|*[!0-9a-f]*) t=;; esac; ' +
+      'case "$h" in *[!A-Za-z0-9._-]*) o=;; esac; ' +
+      `if [ -n "$o" ] && [ -n "$t" ] && r=$(printf "%s" "$p" | ${curl}); then ` +
+      String.raw`case "$r" in *\"decision\":\"block\"*) c=",\"continued\":true";; *) r=;; esac; ` +
+      'else r=; fi; fi',
+    String.raw`printf "{\"event\":\"Stop\",\"ts\":%s%s,\"payload\":%s}\n" "$(date +%s)" "$c" "$p" >> "$d/$h.ndjson"`,
+    String.raw`[ -n "$r" ] && printf "%s\n" "$r"`,
+    'exit 0'
+  ].join('; ')
 }
 
 // Same NDJSON writer as makeHookCommand, as a standalone script that takes
@@ -73,6 +98,7 @@ export function makeHookScript(): string {
 interface HookEvent {
   event: string
   ts: number
+  continued?: unknown
   payload: Record<string, unknown> | null
 }
 
@@ -140,17 +166,43 @@ export interface StopEvent {
   sessionId: string
   transcriptPath: string | null
   lastAssistantMessage: string | null
+  continued: boolean
   ts: number
 }
 
 type StopListener = (ev: StopEvent) => void
 const stopListeners = new Set<StopListener>()
 
+export interface PromptSubmitEvent {
+  terminalId: string
+}
+
+type PromptSubmitListener = (ev: PromptSubmitEvent) => void
+const promptSubmitListeners = new Set<PromptSubmitListener>()
+
 /** Subscribe to Stop hook events: session id, transcript_path when the agent has one, and the turn's final assistant message. Used by CostTracker to re-tail a session jsonl. Returns an unsubscribe fn. */
 export function onStopEvent(listener: StopListener): () => void {
   stopListeners.add(listener)
   return () => {
     stopListeners.delete(listener)
+  }
+}
+
+export function onPromptSubmit(listener: PromptSubmitListener): () => void {
+  promptSubmitListeners.add(listener)
+  return () => {
+    promptSubmitListeners.delete(listener)
+  }
+}
+
+function emitPromptSubmitIfRelevant(terminalId: string, ev: HookEvent): void {
+  if (ev.event !== 'UserPromptSubmit') return
+  for (const l of promptSubmitListeners) {
+    try {
+      l({ terminalId })
+    } catch (err) {
+      log('hooks', 'prompt submit listener error', err instanceof Error ? err.message : err)
+    }
   }
 }
 
@@ -167,7 +219,8 @@ function emitStopIfRelevant(terminalId: string, ev: HookEvent): void {
     'hooks',
     `stop terminal=${terminalId} transcript=${transcriptPath ? 'yes' : 'no'} lastMessageChars=${lastAssistantMessage?.length ?? 0}`
   )
-  const payload: StopEvent = { terminalId, sessionId, transcriptPath, lastAssistantMessage, ts: ev.ts }
+  const continued = ev.continued === true
+  const payload: StopEvent = { terminalId, sessionId, transcriptPath, lastAssistantMessage, continued, ts: ev.ts }
   for (const l of stopListeners) {
     try {
       l(payload)
@@ -245,6 +298,7 @@ export function tailLog(terminalId: string, store: Store): void {
         }
       }
       emitStopIfRelevant(terminalId, ev)
+      emitPromptSubmitIfRelevant(terminalId, ev)
       const update = deriveStatus(terminalId, ev)
       if (update) {
         store.dispatch({

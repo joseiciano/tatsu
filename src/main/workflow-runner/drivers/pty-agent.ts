@@ -37,6 +37,7 @@ export const CLAUDE_START_SUMMARIES = {
 export interface ClaudeStopEvent {
   terminalId: string
   lastAssistantMessage: string | null
+  continued?: boolean
 }
 
 export interface ClaudeStepDriverDeps {
@@ -45,6 +46,7 @@ export interface ClaudeStepDriverDeps {
   onExit(listener: (id: string, exitCode: number, signal?: number) => void): () => void
   kill(id: string, signal: typeof CLAUDE_CANCEL_SIGNAL): void
   onStopEvent(listener: (event: ClaudeStopEvent) => void): () => void
+  onPromptSubmit(listener: (event: { terminalId: string }) => void): () => void
   store: Pick<Store, 'getSnapshot' | 'subscribe'>
   checkFolderTrust(path: string): Promise<{ status: TrustStatus }>
   writeMarker(terminalId: string, marker: StepMarker): void
@@ -91,13 +93,17 @@ export function createClaudeStepDriver(deps: ClaudeStepDriverDeps): ClaudeStepDr
     deps.onExit((id, exitCode, signal) => {
       emit({ type: 'exited', executionId: id, code: signal ? null : exitCode })
     }),
-    deps.onStopEvent(({ terminalId, lastAssistantMessage }) => {
+    deps.onStopEvent(({ terminalId, lastAssistantMessage, continued }) => {
       if (!owned.has(terminalId)) return
       emit({
         type: 'turnEnded',
         executionId: terminalId,
-        ...(lastAssistantMessage === null ? {} : { lastMessage: lastAssistantMessage })
+        ...(lastAssistantMessage === null ? {} : { lastMessage: lastAssistantMessage }),
+        ...(continued === true ? { continued } : {})
       })
+    }),
+    deps.onPromptSubmit(({ terminalId }) => {
+      if (owned.has(terminalId)) emit({ type: 'promptSubmitted', executionId: terminalId })
     }),
     deps.store.subscribe((event) => {
       if (event.type !== 'terminals/statusChanged') return

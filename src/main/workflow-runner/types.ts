@@ -64,3 +64,5 @@ export interface WorkflowExecutionStep {
 }
 
 export type CompleteExecutionResult = { ok: true } | { ok: false; reason: 'not-a-step' | 'already-completed' }
+
+export type StopCheckDecision = 'block' | 'none'

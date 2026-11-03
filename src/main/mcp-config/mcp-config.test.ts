@@ -4,6 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   harnessMcpServerSpec,
+  pruneMcpConfigs,
   removeStaleStepMarkers,
   removeStepMarker,
   stepMarkerPath,
@@ -63,6 +64,28 @@ describe('writeMcpConfigForTerminal', () => {
   })
 
   const mode = (p: string): number => statSync(p).mode & 0o777
+
+  it('puts the step marker where the Stop hook looks for it, beside the config', () => {
+    for (const id of ['agent-1', 'a/b c']) {
+      const configPath = writeMcpConfigForTerminal(id, null)
+      expect(configPath).not.toBeNull()
+      expect(`${configPath?.replace(/\.json$/, '')}.step`).toBe(stepMarkerPath(id))
+    }
+  })
+
+  it('pruning keeps the config and step marker of kept terminals and removes the rest', () => {
+    for (const id of ['keep', 'live-step', 'gone']) {
+      writeMcpConfigForTerminal(id, null)
+      writeStepMarker(id, { runId: 'r', stepId: 's', attemptId: 'a' })
+    }
+    pruneMcpConfigs(new Set(['keep', 'live-step']))
+    expect(readdirSync(join(h.dataDir, 'mcp-configs')).sort()).toEqual([
+      'keep.json',
+      'keep.step',
+      'live-step.json',
+      'live-step.step'
+    ])
+  })
 
   it('writes the config file owner-only', () => {
     const p = writeMcpConfigForTerminal('term-1', null)

@@ -3,7 +3,7 @@ import type { Server } from 'http'
 import { getControlServerInfo, startControlServer, type ControlServerDeps, type WorkflowStepControl } from '.'
 import { CONTROL_WORKFLOW_MAX_BODY_BYTES } from './constants'
 import { outputJsonSchema, type StepOutputValue, type WorkflowOutputSchema } from '../../shared/workflow-def'
-import type { WorkflowExecutionStep } from '../workflow-runner'
+import type { StopCheckDecision, WorkflowExecutionStep } from '../workflow-runner'
 
 vi.mock('../debug', () => ({ log: vi.fn() }))
 
@@ -16,6 +16,8 @@ class FakeWorkflow implements WorkflowStepControl {
   labs = true
   readonly steps = new Map<string, WorkflowExecutionStep>()
   readonly completed: Array<{ terminalId: string; value: StepOutputValue }> = []
+  readonly stopChecks: Array<{ terminalId: string; stopHookActive: boolean }> = []
+  decision: StopCheckDecision = 'block'
 
   enabled(): boolean {
     return this.labs
@@ -32,6 +34,11 @@ class FakeWorkflow implements WorkflowStepControl {
     this.completed.push({ terminalId, value })
     this.steps.set(terminalId, { attemptId: step.attemptId, stepId: step.stepId, ended: true })
     return { ok: true }
+  }
+
+  stopCheck(terminalId: string, stopHookActive: boolean): StopCheckDecision {
+    this.stopChecks.push({ terminalId, stopHookActive })
+    return this.decision
   }
 }
 
@@ -77,6 +84,8 @@ beforeEach(() => {
   workflow.labs = true
   workflow.steps.clear()
   workflow.completed.length = 0
+  workflow.stopChecks.length = 0
+  workflow.decision = 'block'
   workflow.steps.set('term-a', { attemptId: 'att-a', stepId: 'review', output, ended: false })
   workflow.steps.set('term-b', { attemptId: 'att-b', stepId: 'review', output, ended: false })
 })
@@ -235,5 +244,68 @@ describe('POST /workflow/complete', () => {
     })
     expect(res.status).toBe(400)
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+})
+
+describe('POST /workflow/stop-check', () => {
+  const BLOCK = {
+    decision: 'block',
+    reason: 'Call complete_step with your result, or with status needs-input and what you need.'
+  }
+
+  it('returns the block reply, resolving the attempt from the header and reading only stop_hook_active', async () => {
+    const body = { session_id: 's', stop_hook_active: false, terminalId: 'term-b', attemptId: 'att-b' }
+    expect(await call('POST', '/workflow/stop-check', { terminalId: 'term-a', body })).toEqual({
+      status: 200,
+      json: BLOCK
+    })
+    expect(workflow.stopChecks).toEqual([{ terminalId: 'term-a', stopHookActive: false }])
+  })
+
+  it.each([
+    { name: 'true', value: true, expected: true },
+    { name: 'the string "true"', value: 'true', expected: false },
+    { name: 'missing', value: undefined, expected: false }
+  ])('passes stop_hook_active $name as $expected', async ({ value, expected }) => {
+    await call('POST', '/workflow/stop-check', { terminalId: 'term-a', body: { stop_hook_active: value } })
+    expect(workflow.stopChecks).toEqual([{ terminalId: 'term-a', stopHookActive: expected }])
+  })
+
+  it('returns {} when the runner declines to continue', async () => {
+    workflow.decision = 'none'
+    expect(await call('POST', '/workflow/stop-check', { terminalId: 'term-a', body: {} })).toEqual({
+      status: 200,
+      json: {}
+    })
+  })
+
+  it.each([
+    { name: 'labs off', prepare: () => (workflow.labs = false) },
+    { name: 'no workflow seam', prepare: () => (withWorkflow = false) }
+  ])('returns {} without asking the runner when $name', async ({ prepare }) => {
+    prepare()
+    expect(await call('POST', '/workflow/stop-check', { terminalId: 'term-a', body: {} })).toEqual({
+      status: 200,
+      json: {}
+    })
+    expect(workflow.stopChecks).toEqual([])
+  })
+
+  it('is 405 for GET, 400 without the terminal header, 413 for an oversize body', async () => {
+    expect((await call('GET', '/workflow/stop-check', { terminalId: 'term-a' })).status).toBe(405)
+    expect((await call('POST', '/workflow/stop-check', { body: {} })).status).toBe(400)
+    const big = JSON.stringify({ pad: 'x'.repeat(CONTROL_WORKFLOW_MAX_BODY_BYTES) })
+    expect((await call('POST', '/workflow/stop-check', { terminalId: 'term-a', body: big })).status).toBe(413)
+    expect(workflow.stopChecks).toEqual([])
+  })
+
+  it('needs the bearer token', async () => {
+    const res = await fetch(`${base}/workflow/stop-check`, {
+      method: 'POST',
+      headers: { 'X-Harness-Terminal-Id': 'term-a' },
+      body: '{}'
+    })
+    expect(res.status).toBe(401)
+    expect(workflow.stopChecks).toEqual([])
   })
 })

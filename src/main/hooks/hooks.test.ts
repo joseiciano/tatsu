@@ -15,6 +15,7 @@ import {
   cleanupTerminalLog,
   makeHookCommand,
   makeHookScript,
+  onPromptSubmit,
   onStopEvent,
   splitNdjson,
   tailLog,
@@ -40,14 +41,47 @@ vi.mock('../debug', () => ({
 function runHook(argv: string[], terminalId: string, payload: string): string {
   const file = `/tmp/harness-status/${terminalId}.ndjson`
   rmSync(file, { force: true })
-  execFileSync(argv[0], argv.slice(1), {
+  execFileSync(argv[0], ['--noprofile', '--norc', ...argv.slice(1)], {
     input: payload,
-    env: { PATH: process.env.PATH, HARNESS_TERMINAL_ID: terminalId }
+    env: { PATH: process.env.PATH, HOME: tmpdir(), HARNESS_TERMINAL_ID: terminalId }
   })
   const out = readFileSync(file, 'utf-8')
   rmSync(file, { force: true })
   return out.replace(/"ts":\d+/, '"ts":0')
 }
+
+const legacyHookCommand = (event: string): string =>
+  String.raw`bash -c 'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; d=/tmp/harness-status; mkdir -p "$d"; p=$(cat); [ -z "$p" ] && p=null; printf "{\"event\":\"${event}\",\"ts\":%s,\"payload\":%s}\n" "$(date +%s)" "$p" >> "$d/$h.ndjson"'`
+
+describe('hook command pins', () => {
+  it.each(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'SessionStart'])(
+    'keeps the %s command byte-identical',
+    (event) => {
+      expect(makeHookCommand(event)).toBe(legacyHookCommand(event))
+    }
+  )
+
+  it('changes only the Stop command and keeps the status-dir install signature in it', () => {
+    const stop = makeHookCommand('Stop')
+    expect(stop).not.toBe(legacyHookCommand('Stop'))
+    expect(stop).toContain('/tmp/harness-status')
+    expect(stop).toMatch(/^bash -c '[^']*'$/)
+  })
+
+  it('keeps the standalone hook script byte-identical', () => {
+    expect(makeHookScript()).toBe(
+      [
+        '#!/bin/bash',
+        '# Installed by Harness. Removed by Settings > Status hooks > Remove hooks.',
+        'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0',
+        'd=/tmp/harness-status; mkdir -p "$d"',
+        'p=$(cat); [ -z "$p" ] && p=null',
+        String.raw`printf '{"event":"%s","ts":%s,"payload":%s}\n' "$1" "$(date +%s)" "$p" >> "$d/$h.ndjson"`,
+        ''
+      ].join('\n')
+    )
+  })
+})
 
 describe('makeHookScript', () => {
   it('writes the same NDJSON line as the inline hook command', () => {
@@ -72,9 +106,9 @@ describe('makeHookScript', () => {
 
   it('exits without writing when no terminal id is set', () => {
     expect(() =>
-      execFileSync('bash', ['-c', makeHookScript(), 'hook', 'Stop'], {
+      execFileSync('bash', ['--noprofile', '--norc', '-c', makeHookScript(), 'hook', 'Stop'], {
         input: '{}',
-        env: { PATH: process.env.PATH }
+        env: { PATH: process.env.PATH, HOME: tmpdir() }
       })
     ).not.toThrow()
   })
@@ -185,7 +219,7 @@ describe('tailLog', () => {
   it('emits the Claude Stop shape with transcript path and final message', () => {
     append(claudeLine)
     expect(stops).toEqual([
-      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', ts: 1 }
+      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', continued: false, ts: 1 }
     ])
   })
 
@@ -210,13 +244,13 @@ describe('tailLog', () => {
     }
   ])('emits a Codex Stop: $name', ({ payload, transcriptPath, lastAssistantMessage }) => {
     append(stopLine(payload))
-    expect(stops).toEqual([{ terminalId: id, sessionId: 'x1', transcriptPath, lastAssistantMessage, ts: 1 }])
+    expect(stops).toEqual([{ terminalId: id, sessionId: 'x1', transcriptPath, lastAssistantMessage, continued: false, ts: 1 }])
   })
 
   it('emits the opencode Stop shape without a transcript path, message unchanged', () => {
     append(stopLine({ session_id: 'o1', last_assistant_message: 'line1\nline2' }))
     expect(stops).toEqual([
-      { terminalId: id, sessionId: 'o1', transcriptPath: null, lastAssistantMessage: 'line1\nline2', ts: 1 }
+      { terminalId: id, sessionId: 'o1', transcriptPath: null, lastAssistantMessage: 'line1\nline2', continued: false, ts: 1 }
     ])
   })
 
@@ -248,11 +282,31 @@ describe('tailLog', () => {
     expect(stops).toEqual([])
   })
 
+  it('marks a Stop continued only when the hook line carries continued: true', () => {
+    append(JSON.stringify({ event: 'Stop', ts: 1, continued: true, payload: { session_id: 'c1' } }) + '\n')
+    append(JSON.stringify({ event: 'Stop', ts: 2, continued: 'yes', payload: { session_id: 'c1' } }) + '\n')
+    expect(stops.map((stop) => stop.continued)).toEqual([true, false])
+  })
+
+  it('tells prompt-submit listeners about UserPromptSubmit for this terminal only', () => {
+    const prompts: string[] = []
+    const offPrompt = onPromptSubmit((e) => prompts.push(e.terminalId))
+    try {
+      append(
+        '{"event":"UserPromptSubmit","ts":1,"payload":{"session_id":"u1","prompt":"hi"}}\n' +
+          '{"event":"PostToolUse","ts":2,"payload":{"session_id":"u1"}}\n'
+      )
+    } finally {
+      offPrompt()
+    }
+    expect(prompts).toEqual([id])
+  })
+
   it('reads the whole appended line in one call even when readSync returns short reads', () => {
     fsCap.maxRead = 7
     append(claudeLine)
     expect(stops).toEqual([
-      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', ts: 1 }
+      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', continued: false, ts: 1 }
     ])
     expect(statusDispatches()).toEqual([
       { type: 'terminals/statusChanged', payload: { id, status: 'waiting', pendingTool: null } }
