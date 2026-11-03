@@ -44,8 +44,9 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   - `exit-mark-done`: start `browser-exit` -> Needs-you row
     `repo · Step failed · exit` -> `Jump to tab` -> overlay `Claude Code
     exited.` with Status `failed`, Completed by `process exit` -> Mark step done
-    with a summary -> form, row and strip gone -> run record `done`, last
-    `exit` attempt completed by `user`.
+    with a summary -> overlay shows Status `done`, Completed by
+    `you (Mark done)` and the summary; form, row and strip gone -> run record
+    `done`, last `exit` attempt completed by `user`.
 
 End state that proves it: the screenshots in order, the strip `aria-label`
 lines in `journal.log`, and the run record in `workflow-runs/`.
@@ -56,11 +57,12 @@ lines in `journal.log`, and the run record in `workflow-runs/`.
   the previous run before starting another on the same path.
 - The context menu is portalled and only opens when the row is visible:
   scroll the row into view, then wait for `role="menu"`.
-- Right after boot the runner answers start with "Tatsu is still starting";
-  the launch sheet shows it as an error. Retry Start rather than sleeping.
+- Right after boot the runner can answer start with "Tatsu is still starting"
+  (seen by `scripts/workflow-smoke.mjs`, not yet in a browser drive); the
+  launch sheet would show it as an error. Retry Start rather than sleeping.
 - A done run has no strip; prove the done state from the strip and Needs-you
   row going away plus the run record.
-- Mark done records a new attempt, so the step tab (bound to the exited
-  attempt) keeps showing `failed` / `process exit` after the run is done.
+- Mark done records a new attempt. The step tab's badge stays `failed` (it
+  tracks the exited attempt); the overlay switches to the Mark done result.
 - `exit-mark-done` needs curl: without it the Stop hook fails open and the
   step completes by fallback instead of failing.
