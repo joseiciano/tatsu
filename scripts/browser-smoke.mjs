@@ -144,6 +144,35 @@ async function startFromLaunchSheet(page, defName, shot) {
   await sheet.waitFor({ state: 'hidden' })
 }
 
+async function focusInside(sheet) {
+  return sheet.evaluate((el) => document.activeElement !== document.body && el.contains(document.activeElement))
+}
+
+async function flowLaunchSheetFocus(page) {
+  await scenario(page, 'launch-sheet-focus', async (shot) => {
+    const row = worktreeRow(page)
+    await row.scrollIntoViewIfNeeded()
+    await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Run workflow here…' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+    await sheet.waitFor()
+    if (!(await focusInside(sheet))) throw new Error('launch sheet opened without focus inside it')
+    const count = await sheet.evaluate(
+      (el) => el.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])').length
+    )
+    for (const key of ['Tab', 'Shift+Tab']) {
+      for (let i = 0; i < count + 3; i += 1) {
+        await page.keyboard.press(key)
+        if (!(await focusInside(sheet))) throw new Error(`${key} press ${i + 1} of ${count + 3} moved focus out of the launch sheet`)
+      }
+    }
+    log(`launch-sheet-focus: focus stayed inside the sheet across ${count + 3} Tab and Shift+Tab presses (${count} focusables)`)
+    await shot('focus-inside')
+    await page.keyboard.press('Escape')
+    await sheet.waitFor({ state: 'detached' })
+  })
+}
+
 async function liveRunId(backend, defName) {
   const { state } = await backend.snapshot()
   const live = Object.entries(state.workflows.runs).filter(
@@ -267,6 +296,7 @@ async function main() {
       await worktreeRow(page).waitFor()
       await shot('worktree-row')
     })
+    await flowLaunchSheetFocus(page)
     await flowHangCancel(page, backend)
     await flowExitMarkDone(page, backend)
   } catch {

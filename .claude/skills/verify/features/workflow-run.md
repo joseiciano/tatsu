@@ -36,6 +36,9 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   strip shows `plan running, echo pending` -> strip disappears -> run record
   `status: done`.
 - `journeys/workflow-flows.sh <state>` (runs `scripts/browser-smoke.mjs`):
+  - `launch-sheet-focus`: open the launch sheet -> focus starts inside ->
+    Tab, then Shift+Tab, pressed (focusables + 3) times each keeps
+    `document.activeElement` inside the dialog -> Escape closes it.
   - `hang-cancel`: start `browser-hang` -> strip `hang running` -> close tab
     `⚙ hang · Claude` -> `Cancel step and close tab` -> Needs-you row
     `repo · Cancelled by user · hang`, strip `hang paused` -> run record paused
