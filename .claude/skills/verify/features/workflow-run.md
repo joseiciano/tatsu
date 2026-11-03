@@ -39,6 +39,11 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   agent step then a shell step; step tab `⚙ plan · Codex`. The run record's
   `plan` attempt carries the session id the fake codex reported through its
   SessionStart hook, and `continuations: 1` when curl is present.
+- `journeys/workflow-run.mjs <state> smoke-opencode`: same path for an
+  opencode agent step then a shell step; step tab `⚙ plan · opencode`. The
+  run record's `plan` attempt carries the `ses_…` session id the plugin
+  reported on the first busy event, and `continuations: 1` (the plugin's
+  stop-check uses `fetch`, so it does not depend on curl).
 - `journeys/workflow-flows.sh <state>` (runs `scripts/browser-smoke.mjs`):
   - `launch-sheet-focus`: open the launch sheet -> focus starts inside ->
     Tab, then Shift+Tab, pressed (focusables + 3) times each keeps
