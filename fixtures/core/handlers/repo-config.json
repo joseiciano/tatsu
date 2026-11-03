@@ -1,0 +1,784 @@
+[
+  {
+    "name": "repoConfig:set: an empty repo root returns null and writes nothing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "",
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": null
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a null repo root returns null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      null,
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": null
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a new file gets version first, a trimmed command and a newline",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "setupCommand": "  pnpm i  "
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "pnpm i"
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "pnpm i"
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"pnpm i\"\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: null deletes a key and other keys merge over the file",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "teardownCommand": null,
+        "mergeStrategy": "fast-forward"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\",\n  \"mergeStrategy\": \"squash\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "make",
+              "mergeStrategy": "fast-forward"
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "make",
+          "mergeStrategy": "fast-forward"
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"mergeStrategy\": \"fast-forward\"\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: deleting the last key removes the file",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "setupCommand": null
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {}
+          }
+        }
+      ],
+      "reply": {
+        "value": {}
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a null next rewrites the current file in canonical form",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\"setupCommand\":\"make\",\"rightPanelOrder\":[\"pr\"]}"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "make",
+              "rightPanelOrder": [
+                "pr"
+              ]
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "make",
+          "rightPanelOrder": [
+            "pr"
+          ]
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"rightPanelOrder\": [\n    \"pr\"\n  ]\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: an absent next rewrites the current file in canonical form",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\"teardownCommand\":\"down\"}"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "teardownCommand": "down"
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "teardownCommand": "down"
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"teardownCommand\": \"down\"\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a string next adds only keys the save ignores",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      "ab"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\"setupCommand\":\"make\"}"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "make"
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "make"
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\"\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: legacy flags in the file migrate on the next set",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "mergeStrategy": "squash"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\n  \"hidePrPanel\": true,\n  \"hideMergePanel\": true,\n  \"hiddenRightPanels\": {\n    \"merge\": false,\n    \"todos\": true\n  },\n  \"setupCommand\": \"a\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "a",
+              "mergeStrategy": "squash",
+              "hiddenRightPanels": {
+                "todos": true,
+                "pr": true
+              }
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "a",
+          "mergeStrategy": "squash",
+          "hiddenRightPanels": {
+            "todos": true,
+            "pr": true
+          }
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"a\",\n  \"mergeStrategy\": \"squash\",\n  \"hiddenRightPanels\": {\n    \"todos\": true,\n    \"pr\": true\n  }\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: hidden panels merge as a whole value",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "hiddenRightPanels": {
+          "scratchpad": false,
+          "commits": false
+        }
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"hiddenRightPanels\": {\n    \"pr\": true\n  }\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "hiddenRightPanels": {
+                "scratchpad": false
+              }
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "hiddenRightPanels": {
+            "scratchpad": false
+          }
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"hiddenRightPanels\": {\n    \"scratchpad\": false\n  }\n}\n"
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a repo folder that does not exist logs the write error and replies empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/missing",
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/missing",
+            "config": {}
+          }
+        }
+      ],
+      "reply": {
+        "value": {}
+      },
+      "repoFilesAfter": {
+        "app": null
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [repo-config] failed to save $CASE/repos/missing/.harness.json: ENOENT: no such file or directory, open '$CASE/repos/missing/.harness.json'"
+        }
+      ]
+    }
+  },
+  {
+    "name": "repoConfig:set: a number repo root throws the Node path type error",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      5,
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "The \"path\" argument must be of type string. Received type number (5)"
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a true repo root throws the Node path type error",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      true,
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "The \"path\" argument must be of type string. Received type boolean (true)"
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: an object repo root throws the Node path type error",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      {
+        "a": 1
+      },
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "The \"path\" argument must be of type string. Received an instance of Object"
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: an array repo root throws the Node path type error",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      [
+        "app"
+      ],
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "The \"path\" argument must be of type string. Received an instance of Array"
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "name": "repoConfig:set: a fractional number repo root throws the Node path type error",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      1.5,
+      {
+        "setupCommand": "make"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "The \"path\" argument must be of type string. Received type number (1.5)"
+      },
+      "repoFilesAfter": {
+        "app": null
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: a number setupCommand throws and leaves the file alone",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "setupCommand": 5
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "next.setupCommand?.trim is not a function"
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: a boolean setupCommand throws and leaves the file alone",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "setupCommand": true
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "next.setupCommand?.trim is not a function"
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: an array teardownCommand throws and leaves the file alone",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "teardownCommand": [
+          "make"
+        ]
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "next.teardownCommand?.trim is not a function"
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: an object teardownCommand throws and leaves the file alone",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "teardownCommand": {}
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "next.teardownCommand?.trim is not a function"
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: with both commands wrong the setupCommand error wins",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "teardownCommand": 1,
+        "setupCommand": 2
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "next.setupCommand?.trim is not a function"
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: a truthy non-boolean hideMergePanel migrates into hiddenRightPanels",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "hideMergePanel": "yes"
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "make",
+              "teardownCommand": "make clean",
+              "hiddenRightPanels": {
+                "merge": true
+              }
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "make",
+          "teardownCommand": "make clean",
+          "hiddenRightPanels": {
+            "merge": true
+          }
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\",\n  \"hiddenRightPanels\": {\n    \"merge\": true\n  }\n}\n"
+      }
+    }
+  },
+  {
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "name": "repoConfig:set: a falsy non-boolean hidePrPanel adds nothing",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "hidePrPanel": 0
+      }
+    ],
+    "repoFiles": {
+      "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "make",
+              "teardownCommand": "make clean"
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "make",
+          "teardownCommand": "make clean"
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\",\n  \"teardownCommand\": \"make clean\"\n}\n"
+      }
+    }
+  }
+]

@@ -70,11 +70,20 @@ async fn boot_on_a_real_config_file_gives_the_recorded_initial_state() {
         let core = boot(dir.path());
 
         let actual = wire_state(&core);
-        if actual != case["expected"] {
+        let mut expected = case["expected"].clone();
+        // The recording is buildInitialAppState; boot then loads each repo root's .harness.json (none exist here).
+        for root in expected["worktrees"]["repoRoots"]
+            .as_array()
+            .unwrap()
+            .clone()
+        {
+            expected["repoConfigs"]["byRepo"][root.as_str().unwrap()] = json!({});
+        }
+        if actual != expected {
             failures.push(format!(
                 "{}:\n- {}\n+ {}",
                 case["name"],
-                tatsu_js::stringify(&case["expected"]),
+                tatsu_js::stringify(&expected),
                 tatsu_js::stringify(&actual)
             ));
         }
@@ -195,4 +204,49 @@ async fn boot_continues_when_the_themes_path_cannot_be_read() {
 
     assert_eq!(wire_state(&core)["settings"]["customThemes"], json!([]));
     assert!(core.router().has_request("config:reloadCustomThemes"));
+}
+
+#[tokio::test]
+async fn boot_loads_every_repo_root_config_in_one_dispatch() {
+    let empty = tempfile::tempdir().unwrap();
+    write_config(empty.path(), &json!({"schemaVersion": 9, "repoRoots": []}));
+    let baseline = boot(empty.path());
+
+    let dir = tempfile::tempdir().unwrap();
+    let with_file = dir.path().join("with-file");
+    let without_file = dir.path().join("without-file");
+    std::fs::create_dir(&with_file).unwrap();
+    std::fs::create_dir(&without_file).unwrap();
+    std::fs::write(
+        with_file.join(".harness.json"),
+        r#"{"version": 1, "setupCommand": "pnpm i", "mergeStrategy": "bogus"}"#,
+    )
+    .unwrap();
+    let roots = [
+        with_file.to_string_lossy().into_owned(),
+        without_file.to_string_lossy().into_owned(),
+    ];
+    let data = tempfile::tempdir().unwrap();
+    write_config(
+        data.path(),
+        &json!({"schemaVersion": 9, "repoRoots": roots}),
+    );
+
+    let core = boot(data.path());
+
+    let mut expected = Map::new();
+    expected.insert(
+        roots[0].clone(),
+        json!({"version": 1, "setupCommand": "pnpm i"}),
+    );
+    expected.insert(roots[1].clone(), json!({}));
+    assert_eq!(
+        wire_state(&core)["repoConfigs"]["byRepo"],
+        Value::Object(expected)
+    );
+    assert_eq!(core.store().seq(), baseline.store().seq());
+    assert_eq!(
+        core.repo_configs().load(&roots[0]).setup_command.as_deref(),
+        Some("pnpm i")
+    );
 }

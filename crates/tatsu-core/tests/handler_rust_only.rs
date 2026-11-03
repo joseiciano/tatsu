@@ -115,3 +115,22 @@ fn chat_promotion_dismissed_with_a_falsy_non_bool_acts_as_false() {
         );
     }
 }
+
+// Accepted difference: TS writes a truthy `mergeStrategy` or `hiddenRightPanels` value the strict RepoConfig type cannot hold into `.harness.json`; Rust drops it before saving.
+#[test]
+fn repo_config_set_drops_next_values_the_strict_type_cannot_hold() {
+    assert_matches_recording_with_args(
+        "repo-config.json",
+        "repoConfig:set: a new file gets version first, a trimmed command and a newline",
+        json!([
+            "$CASE/repos/app",
+            {
+                "setupCommand": "  pnpm i  ",
+                "mergeStrategy": "bogus",
+                "version": "1",
+                "hiddenRightPanels": {"sidebar": true},
+                "rightPanelOrder": "x"
+            }
+        ]),
+    );
+}

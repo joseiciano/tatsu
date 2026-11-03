@@ -8,6 +8,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, RwLock};
 use serde_json::json;
+use tatsu_state::StateEvent;
+use tatsu_state::slices::repo_configs::RepoConfigsEvent;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
@@ -17,6 +19,7 @@ use crate::handlers::{register_core_handlers, reload_custom_themes};
 use crate::hub::{Hub, SHUTDOWN_CODE, SHUTDOWN_REASON};
 use crate::initial_state::{SeedHook, build_initial_state};
 use crate::logs;
+use crate::repo_config::RepoConfigStore;
 use crate::router::Router;
 use crate::secrets::{self, OsRandom, RandomSource, Secrets};
 use crate::store::{Store, StoreOptions};
@@ -175,6 +178,7 @@ impl PreRuntime {
             random: options.random,
             ids: options.ids,
             clock: options.clock,
+            repo_configs: RepoConfigStore::new(),
             hooks_installer: RwLock::new(None),
             resources_dir: RwLock::new(None),
             ws_bound: RwLock::new(None),
@@ -196,12 +200,25 @@ impl PreRuntime {
                         logs::log("themes", &format!("initial scan failed: {message}"));
                     }
                 }
-                BootSlot::RepoConfigsLoaded => {}
+                BootSlot::RepoConfigsLoaded => load_repo_configs(&core),
                 BootSlot::CoreHandlers => register_core_handlers(&core),
             }
         }
         Ok(core)
     }
+}
+
+fn load_repo_configs(core: &Core) {
+    let roots = core.store.read(|state| state.worktrees.repo_roots.clone());
+    let by_repo = roots
+        .into_iter()
+        .map(|root| {
+            let config = core.repo_configs.load(&root);
+            (root, config)
+        })
+        .collect();
+    core.store
+        .dispatch(StateEvent::RepoConfigs(RepoConfigsEvent::Loaded(by_repo)));
 }
 
 type StepFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
@@ -236,6 +253,7 @@ pub struct Core {
     random: Arc<dyn RandomSource>,
     ids: Arc<dyn IdSource>,
     clock: Clock,
+    repo_configs: RepoConfigStore,
     hooks_installer: RwLock<Option<Arc<dyn HooksInstaller>>>,
     resources_dir: RwLock<Option<PathBuf>>,
     ws_bound: RwLock<Option<WsBound>>,
@@ -287,6 +305,10 @@ impl Core {
 
     pub fn now_ms(&self) -> i64 {
         (self.clock)()
+    }
+
+    pub fn repo_configs(&self) -> &RepoConfigStore {
+        &self.repo_configs
     }
 
     pub fn set_hooks_installer(&self, installer: Arc<dyn HooksInstaller>) {

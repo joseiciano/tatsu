@@ -1,0 +1,235 @@
+[
+  {
+    "name": "trim: setup and teardown are trimmed",
+    "fileBefore": null,
+    "next": {
+      "setupCommand": "  pnpm i  ",
+      "teardownCommand": "\tmake clean\n"
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"setupCommand\": \"pnpm i\",\n  \"teardownCommand\": \"make clean\"\n}\n",
+      "reply": {
+        "version": 1,
+        "setupCommand": "pnpm i",
+        "teardownCommand": "make clean"
+      }
+    }
+  },
+  {
+    "name": "trim: whitespace-only commands are dropped, merge strategy kept",
+    "fileBefore": null,
+    "next": {
+      "setupCommand": "   ",
+      "teardownCommand": "",
+      "mergeStrategy": "squash"
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"mergeStrategy\": \"squash\"\n}\n",
+      "reply": {
+        "version": 1,
+        "mergeStrategy": "squash"
+      }
+    }
+  },
+  {
+    "name": "keys: version comes first whatever the input order",
+    "fileBefore": "{\n  \"setupCommand\": \"old\"\n}\n",
+    "next": {
+      "rightPanelOrder": [
+        "commits",
+        "pr"
+      ],
+      "mergeStrategy": "merge-commit",
+      "version": 7,
+      "teardownCommand": "down",
+      "setupCommand": "up"
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"setupCommand\": \"up\",\n  \"teardownCommand\": \"down\",\n  \"mergeStrategy\": \"merge-commit\",\n  \"rightPanelOrder\": [\n    \"commits\",\n    \"pr\"\n  ]\n}\n",
+      "reply": {
+        "version": 1,
+        "setupCommand": "up",
+        "teardownCommand": "down",
+        "mergeStrategy": "merge-commit",
+        "rightPanelOrder": [
+          "commits",
+          "pr"
+        ]
+      }
+    }
+  },
+  {
+    "name": "legacy flags: hideMergePanel and hidePrPanel move into hiddenRightPanels",
+    "fileBefore": null,
+    "next": {
+      "hideMergePanel": true,
+      "hidePrPanel": true
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"hiddenRightPanels\": {\n    \"merge\": true,\n    \"pr\": true\n  }\n}\n",
+      "reply": {
+        "version": 1,
+        "hiddenRightPanels": {
+          "merge": true,
+          "pr": true
+        }
+      }
+    }
+  },
+  {
+    "name": "legacy flags: false legacy flags add nothing",
+    "fileBefore": null,
+    "next": {
+      "hideMergePanel": false,
+      "hidePrPanel": false,
+      "setupCommand": "x"
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"setupCommand\": \"x\"\n}\n",
+      "reply": {
+        "version": 1,
+        "setupCommand": "x"
+      }
+    }
+  },
+  {
+    "name": "legacy flags: an explicit hiddenRightPanels key wins over the legacy flag",
+    "fileBefore": null,
+    "next": {
+      "hideMergePanel": true,
+      "hiddenRightPanels": {
+        "merge": false,
+        "todos": true
+      }
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"hiddenRightPanels\": {\n    \"todos\": true\n  }\n}\n",
+      "reply": {
+        "version": 1,
+        "hiddenRightPanels": {
+          "todos": true
+        }
+      }
+    }
+  },
+  {
+    "name": "hidden panels: insertion order kept, legacy key appended",
+    "fileBefore": null,
+    "next": {
+      "hiddenRightPanels": {
+        "todos": true,
+        "merge": true
+      },
+      "hidePrPanel": true
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"hiddenRightPanels\": {\n    \"todos\": true,\n    \"merge\": true,\n    \"pr\": true\n  }\n}\n",
+      "reply": {
+        "version": 1,
+        "hiddenRightPanels": {
+          "todos": true,
+          "merge": true,
+          "pr": true
+        }
+      }
+    }
+  },
+  {
+    "name": "hidden panels: default-visible false dropped, default-hidden false kept",
+    "fileBefore": null,
+    "next": {
+      "hiddenRightPanels": {
+        "pr": false,
+        "scratchpad": false,
+        "cost": true,
+        "allFiles": false
+      }
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"hiddenRightPanels\": {\n    \"scratchpad\": false,\n    \"cost\": true\n  }\n}\n",
+      "reply": {
+        "version": 1,
+        "hiddenRightPanels": {
+          "scratchpad": false,
+          "cost": true
+        }
+      }
+    }
+  },
+  {
+    "name": "panel order: an empty order is dropped",
+    "fileBefore": null,
+    "next": {
+      "rightPanelOrder": [],
+      "setupCommand": "x"
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"setupCommand\": \"x\"\n}\n",
+      "reply": {
+        "version": 1,
+        "setupCommand": "x"
+      }
+    }
+  },
+  {
+    "name": "panel order: a non-empty order is kept as given",
+    "fileBefore": null,
+    "next": {
+      "rightPanelOrder": [
+        "scratchpad",
+        "changedFiles",
+        "merge"
+      ]
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"rightPanelOrder\": [\n    \"scratchpad\",\n    \"changedFiles\",\n    \"merge\"\n  ]\n}\n",
+      "reply": {
+        "version": 1,
+        "rightPanelOrder": [
+          "scratchpad",
+          "changedFiles",
+          "merge"
+        ]
+      }
+    }
+  },
+  {
+    "name": "empty: nothing but version deletes the existing file",
+    "fileBefore": "{\n  \"version\": 1,\n  \"setupCommand\": \"make\"\n}\n",
+    "next": {
+      "version": 1,
+      "setupCommand": "  ",
+      "hiddenRightPanels": {
+        "pr": false
+      },
+      "rightPanelOrder": []
+    },
+    "expected": {
+      "fileAfter": null,
+      "reply": {}
+    }
+  },
+  {
+    "name": "empty: nothing to write and no file stays absent",
+    "fileBefore": null,
+    "next": {},
+    "expected": {
+      "fileAfter": null,
+      "reply": {}
+    }
+  },
+  {
+    "name": "unicode: non-ASCII commands are written as-is",
+    "fileBefore": null,
+    "next": {
+      "setupCommand": " echo \"café 🚀\" \\\\ done "
+    },
+    "expected": {
+      "fileAfter": "{\n  \"version\": 1,\n  \"setupCommand\": \"echo \\\"café 🚀\\\" \\\\\\\\ done\"\n}\n",
+      "reply": {
+        "version": 1,
+        "setupCommand": "echo \"café 🚀\" \\\\ done"
+      }
+    }
+  }
+]

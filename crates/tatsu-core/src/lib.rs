@@ -6,6 +6,7 @@ pub mod hub;
 pub mod initial_state;
 pub mod lifecycle;
 pub mod logs;
+pub mod repo_config;
 pub mod router;
 pub mod secrets;
 pub mod store;

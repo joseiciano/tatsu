@@ -23,11 +23,6 @@ enum Pending {
 
 const PENDING: &[(&str, &str, Pending)] = &[
     (
-        "repoFiles: repoConfig:set merges and writes .harness.json",
-        "ticket 24",
-        Pending::Unregistered,
-    ),
-    (
         "activityBefore: activity:clear drops one worktree",
         "ticket 30",
         Pending::Unregistered,

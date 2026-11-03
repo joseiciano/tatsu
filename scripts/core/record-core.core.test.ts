@@ -5,6 +5,7 @@ import { configRecorder, migrationsRecorder } from './recorders/config'
 import { replyOf } from './recorders/handler-boot'
 import { agentKindRecorder, handlerRecorders } from './recorders/handlers'
 import { initialStateRecorder } from './recorders/initial-state'
+import { repoConfigSaveRecorder } from './recorders/repo-config'
 import { builtinThemesRecorder, themesRecorder } from './recorders/themes'
 import type { Recorder } from './recorders/types'
 
@@ -12,7 +13,7 @@ const update = process.env.CORE_UPDATE === '1'
 
 type AnyRecorder = Recorder<{ name: string }, unknown>
 
-const recorders = [configRecorder, migrationsRecorder, initialStateRecorder, agentKindRecorder, themesRecorder, builtinThemesRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
+const recorders = [configRecorder, migrationsRecorder, initialStateRecorder, agentKindRecorder, themesRecorder, builtinThemesRecorder, repoConfigSaveRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
 
 function diff(path: string, name: string, before: unknown, after: unknown): string {
   const text = (value: unknown): string =>

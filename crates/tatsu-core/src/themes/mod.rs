@@ -91,7 +91,7 @@ fn sorted_entries(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     Ok(entries)
 }
 
-fn node_message(err: &io::Error, syscall: &str, path: &Path) -> String {
+pub(crate) fn node_message(err: &io::Error, syscall: &str, path: &Path) -> String {
     let node = match err.raw_os_error() {
         Some(2) => Some(("ENOENT", "no such file or directory")),
         Some(13) => Some(("EACCES", "permission denied")),

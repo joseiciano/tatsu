@@ -2,6 +2,7 @@ mod agents;
 mod chat_ui;
 mod onboarding;
 mod prompts;
+mod repo_config;
 mod settings;
 mod tab_types;
 mod terminal_font;
@@ -30,6 +31,7 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     tab_types::register(core);
     chat_ui::register(core);
     themes::register(core);
+    repo_config::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {
