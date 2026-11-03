@@ -1,0 +1,157 @@
+import { describe, expect, it } from 'vitest'
+import { buildInputFields, canStart, needsFull, showRunWorkflowItem, startBlockReason, type CanStartArgs } from '.'
+import { validateWorkflowDefinition, type ResolvedDefinition } from '../../../../shared/workflow-def'
+import type { WorkflowRun, WorkflowRunStatus } from '../../../../shared/state/workflows'
+
+function resolve(yaml: string): ResolvedDefinition {
+  const definition = validateWorkflowDefinition(yaml).definition
+  if (!definition) throw new Error('fixture did not resolve')
+  return definition
+}
+
+const ALL_INPUTS = resolve(`name: all
+inputs:
+  task: { type: text }
+  issue: { type: issue }
+  pr: { type: pr }
+  file: { type: file }
+steps:
+  - id: plan
+    agent: claude
+    prompt: "{{inputs.task}} {{inputs.issue}} {{inputs.pr}} {{inputs.file}}"
+`)
+
+const SHELL_ONLY = resolve(`name: shell
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+`)
+
+const EDIT_AGENT = resolve(`name: edit
+steps:
+  - id: plan
+    agent: claude
+    permissions: edit
+    prompt: go
+`)
+
+const FULL_STEP = resolve(`name: full
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+  - id: fix
+    agent: claude
+    permissions: full
+    prompt: go
+`)
+
+const FULL_DEFAULT = resolve(`name: full-default
+defaults:
+  permissions: full
+steps:
+  - id: fix
+    agent: claude
+    prompt: go
+`)
+
+const FILLED = { task: 'ship it', issue: '#1', pr: '#2', file: 'a.ts' }
+
+function args(overrides: Partial<CanStartArgs> = {}): CanStartArgs {
+  return { consent: 'accepted', inputs: FILLED, needsFull: false, allowFull: false, definition: ALL_INPUTS, ...overrides }
+}
+
+describe('buildInputFields', () => {
+  it('maps text to a textarea and issue, pr and file to single-line fields, in declared order', () => {
+    expect(buildInputFields(ALL_INPUTS)).toEqual([
+      { name: 'task', type: 'text', control: 'textarea' },
+      { name: 'issue', type: 'issue', control: 'text' },
+      { name: 'pr', type: 'pr', control: 'text' },
+      { name: 'file', type: 'file', control: 'text' }
+    ])
+  })
+
+  it('returns no fields for a definition without inputs or a missing definition', () => {
+    expect(buildInputFields(SHELL_ONLY)).toEqual([])
+    expect(buildInputFields(null)).toEqual([])
+  })
+})
+
+describe('needsFull', () => {
+  it('is true for an agent step with full permissions, set on the step or by defaults', () => {
+    expect(needsFull(FULL_STEP)).toBe(true)
+    expect(needsFull(FULL_DEFAULT)).toBe(true)
+  })
+
+  it('is false for edit agents, shell-only and missing definitions', () => {
+    expect(needsFull(EDIT_AGENT)).toBe(false)
+    expect(needsFull(SHELL_ONLY)).toBe(false)
+    expect(needsFull(null)).toBe(false)
+  })
+})
+
+describe('canStart', () => {
+  it('is true with consent accepted, every input filled and no full step', () => {
+    expect(canStart(args())).toBe(true)
+    expect(startBlockReason(args())).toBeNull()
+  })
+
+  it.each(['pending', 'declined'] as const)('is false while hooks consent is %s, even for a shell-only workflow', (consent) => {
+    expect(canStart(args({ consent }))).toBe(false)
+    expect(canStart(args({ consent, definition: SHELL_ONLY, inputs: {} }))).toBe(false)
+    expect(startBlockReason(args({ consent }))).toBe('Install hooks to start a workflow')
+  })
+
+  it.each([
+    ['absent', { task: 'x', issue: '#1', pr: '#2' }],
+    ['empty', { ...FILLED, file: '' }],
+    ['whitespace only', { ...FILLED, file: ' \n\t ' }]
+  ])('is false when a declared input is %s', (_name, inputs) => {
+    expect(canStart(args({ inputs }))).toBe(false)
+    expect(startBlockReason(args({ inputs }))).toBe('Fill in file')
+  })
+
+  it('does not count an inherited key as a filled input', () => {
+    const inputs = Object.create({ file: 'a.ts' }) as Record<string, string>
+    Object.assign(inputs, { task: 'x', issue: '#1', pr: '#2' })
+    expect(canStart(args({ inputs }))).toBe(false)
+  })
+
+  it('is false for a full step until full access is confirmed', () => {
+    const full = args({ definition: FULL_STEP, inputs: {}, needsFull: true })
+    expect(canStart(full)).toBe(false)
+    expect(startBlockReason(full)).toBe('Confirm full access to start')
+    expect(canStart({ ...full, allowFull: true })).toBe(true)
+  })
+
+  it('is false when the definition is missing or broken', () => {
+    expect(canStart(args({ definition: null }))).toBe(false)
+    expect(startBlockReason(args({ definition: null }))).toBe('Pick a valid workflow')
+  })
+})
+
+describe('showRunWorkflowItem', () => {
+  function run(worktreePath: string, status: WorkflowRunStatus): WorkflowRun {
+    return { defId: 'personal:x', defHash: 'h', worktreePath, status, startedAt: 1, steps: {} }
+  }
+
+  it('is hidden when labs workflows are off', () => {
+    expect(showRunWorkflowItem({ labsWorkflows: false, worktreePath: '/wt/a', runs: {} })).toBe(false)
+  })
+
+  it('is shown with labs on and no runs, or only finished runs, in the worktree', () => {
+    expect(showRunWorkflowItem({ labsWorkflows: true, worktreePath: '/wt/a', runs: {} })).toBe(true)
+    const runs = { r1: run('/wt/a', 'done'), r2: run('/wt/a', 'failed'), r3: run('/wt/a', 'cancelled') }
+    expect(showRunWorkflowItem({ labsWorkflows: true, worktreePath: '/wt/a', runs })).toBe(true)
+  })
+
+  it.each(['queued', 'running', 'paused'] as const)('is hidden while a run in the worktree is %s', (status) => {
+    expect(showRunWorkflowItem({ labsWorkflows: true, worktreePath: '/wt/a', runs: { r: run('/wt/a', status) } })).toBe(false)
+  })
+
+  it('ignores busy runs in other worktrees, including path prefixes', () => {
+    const runs = { r1: run('/wt/ab', 'running'), r2: run('/wt/a/', 'paused'), r3: run('/wt', 'queued') }
+    expect(showRunWorkflowItem({ labsWorkflows: true, worktreePath: '/wt/a', runs })).toBe(true)
+  })
+})
