@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
-use tatsu_core::{BootOptions, CoreBuilder, Env, Hub, PreRuntime, Reply, Router, Runtime, Store};
+use tatsu_core::{BootOptions, Core, CoreBuilder, Env, PreRuntime, Reply, Runtime};
 use tatsu_state::StateEvent;
 
 const USAGE: &str = "usage: tatsu-core-testserver --data-dir <dir> [--token <token>] [--port <port>] [--host <host>] [--test-hooks]";
@@ -53,7 +53,25 @@ fn event(value: Value) -> Result<StateEvent, String> {
     serde_json::from_value(value).map_err(|e| e.to_string())
 }
 
-fn register_test_hooks(store: &Arc<Store>, router: &Arc<Router>, hub: &Arc<Hub>) {
+fn register_test_hooks(core: &Arc<Core>) {
+    let (store, router, hub) = (core.store(), core.router(), core.hub());
+    let merged_path = core.merged_path().to_owned();
+    router
+        .request("test:pathEnv", move |_ctx, _args| {
+            let merged_path = merged_path.clone();
+            async move {
+                let output = std::process::Command::new("/usr/bin/env")
+                    .output()
+                    .map_err(|e| e.to_string())?;
+                let child_path = String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .find_map(|line| line.strip_prefix("PATH=").map(str::to_owned));
+                Ok(Reply::Value(
+                    json!({"mergedPath": merged_path, "childPath": child_path}),
+                ))
+            }
+        })
+        .expect("test:pathEnv registers once");
     let dispatch_store = store.clone();
     router
         .request("test:dispatch", move |_ctx, args| {
@@ -134,7 +152,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let pre = match CoreBuilder::new(Runtime::Headless, env).pre_runtime() {
+    let pre = match CoreBuilder::new(Runtime::Headless, env)
+        .fix_path_from_login_shell()
+        .pre_runtime()
+    {
         Ok(pre) => pre,
         Err(err) => {
             eprintln!("data dir {}: {err}", args.data_dir.display());
@@ -163,7 +184,7 @@ async fn serve(pre: PreRuntime, args: Args) -> ExitCode {
         }
     };
     if args.test_hooks {
-        register_test_hooks(core.store(), core.router(), core.hub());
+        register_test_hooks(&core);
     }
     let token = match args.token {
         Some(token) => {

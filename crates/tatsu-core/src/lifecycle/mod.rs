@@ -113,11 +113,24 @@ pub const BOOT_SLOTS: &[BootSlot] = &[
 pub struct CoreBuilder {
     runtime: Runtime,
     env: Env,
+    path_fix: bool,
 }
 
 impl CoreBuilder {
     pub fn new(runtime: Runtime, env: Env) -> Self {
-        Self { runtime, env }
+        Self {
+            runtime,
+            env,
+            path_fix: false,
+        }
+    }
+
+    // Opt-in, like the TS host calling `fixPathFromLoginShell()` from its
+    // entrypoint: the fix calls `set_var`, which is only sound in a process
+    // that has no other thread yet, so in-process callers (tests) stay out.
+    pub fn fix_path_from_login_shell(mut self) -> Self {
+        self.path_fix = true;
+        self
     }
 
     pub fn pre_runtime(self) -> io::Result<PreRuntime> {
@@ -125,19 +138,53 @@ impl CoreBuilder {
         logs::init(&data_dir);
         for slot in PRE_RUNTIME_SLOTS {
             match slot {
-                PreRuntimeSlot::PathFix => {}
+                PreRuntimeSlot::PathFix => {
+                    if self.path_fix {
+                        run_path_fix();
+                    }
+                }
             }
         }
         Ok(PreRuntime {
             runtime: self.runtime,
             data_dir,
+            merged_path: std::env::var_os("PATH")
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default(),
         })
     }
 }
 
+#[cfg(target_os = "macos")]
+fn run_path_fix() {
+    debug_assert_eq!(
+        crate::path_fix::thread_count(),
+        Some(1),
+        "path fix must run before any other thread starts"
+    );
+    let existing = std::env::var_os("PATH")
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let merged = crate::path_fix::fix_with(
+        || crate::user_shell::resolve().to_path_buf(),
+        &existing,
+        |shell, log| crate::path_fix::capture_path(shell, crate::path_fix::DEFAULT_TIMEOUT, log),
+        &mut |line| logs::log(crate::path_fix::CATEGORY, line),
+    );
+    if let Some(merged) = merged {
+        // SAFETY: the debug assertion above checks this thread is the only
+        // one, and the probe's reader thread was joined on the success path.
+        unsafe { std::env::set_var("PATH", merged) };
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_path_fix() {}
+
 pub struct PreRuntime {
     runtime: Runtime,
     data_dir: DataDir,
+    merged_path: String,
 }
 
 impl PreRuntime {
@@ -187,6 +234,7 @@ impl PreRuntime {
         let core = Arc::new(Core {
             runtime: self.runtime,
             data_dir: self.data_dir,
+            merged_path: self.merged_path,
             handle,
             store,
             router,
@@ -267,6 +315,7 @@ impl ShutdownStep {
 pub struct Core {
     runtime: Runtime,
     data_dir: DataDir,
+    merged_path: String,
     handle: Handle,
     store: Arc<Store>,
     router: Arc<Router>,
@@ -298,6 +347,10 @@ impl Core {
 
     pub fn data_dir(&self) -> &DataDir {
         &self.data_dir
+    }
+
+    pub fn merged_path(&self) -> &str {
+        &self.merged_path
     }
 
     pub fn store(&self) -> &Arc<Store> {

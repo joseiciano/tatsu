@@ -1,5 +1,7 @@
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::time::Duration;
 
@@ -17,14 +19,37 @@ struct Running {
     url: String,
     seen: Vec<String>,
     dir: tempfile::TempDir,
+    home: tempfile::TempDir,
+}
+
+fn fake_shell(dir: &Path, body: &str) -> PathBuf {
+    let path = dir.join("fake-login-shell");
+    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
 }
 
 fn start(extra: &[&str]) -> Running {
     start_in(tempfile::tempdir().unwrap(), extra)
 }
 
+// The test server runs the login-shell PATH fix on macOS; a passthrough fake
+// shell and a temp HOME keep the user's real shell and rc files out of it.
 fn start_in(dir: tempfile::TempDir, extra: &[&str]) -> Running {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_tatsu-core-testserver"))
+    let home = tempfile::tempdir().unwrap();
+    let shell = fake_shell(home.path(), r#"exec /bin/sh -c "$2""#);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tatsu-core-testserver"));
+    command.env("HOME", home.path()).env("SHELL", shell);
+    start_with(dir, home, command, extra)
+}
+
+fn start_with(
+    dir: tempfile::TempDir,
+    home: tempfile::TempDir,
+    mut command: Command,
+    extra: &[&str],
+) -> Running {
+    let mut child = command
         .args([
             "--data-dir",
             dir.path().to_str().unwrap(),
@@ -58,6 +83,7 @@ fn start_in(dir: tempfile::TempDir, extra: &[&str]) -> Running {
         url,
         seen,
         dir,
+        home,
     }
 }
 
@@ -244,4 +270,74 @@ fn ws_transport_info_reports_the_bound_address_and_the_listener_token() {
         assert!(!line.contains(TOKEN), "token leaked: {line:?}");
         assert!(!line.contains(&rotated), "rotated token leaked: {line:?}");
     }
+}
+
+const STRIPPED_PATH: &str = "/launcher/bin:/usr/bin:/bin";
+const LOGIN_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+
+fn start_with_noisy_login_shell() -> Running {
+    let home = tempfile::tempdir().unwrap();
+    let shell = fake_shell(
+        home.path(),
+        &format!(
+            "touch \"$HOME/probed\"\necho 'starship init: ok'\nprintf '__HARNESS_PATH_BEGIN__\\n{LOGIN_PATH}\\n__HARNESS_PATH_END__\\n'\necho goodbye"
+        ),
+    );
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tatsu-core-testserver"));
+    command
+        .env_clear()
+        .env("PATH", STRIPPED_PATH)
+        .env("HOME", home.path())
+        .env("SHELL", shell);
+    start_with(
+        tempfile::tempdir().unwrap(),
+        home,
+        command,
+        &["--test-hooks"],
+    )
+}
+
+fn path_env(server: &Running) -> Value {
+    let mut client = server.connect();
+    let res = request(&mut client, "1", "test:pathEnv", json!([]));
+    assert_eq!(res["ok"], true, "{res}");
+    res["value"].clone()
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn path_fix_merges_the_login_shell_path_into_the_server_and_its_children() {
+    let server = start_with_noisy_login_shell();
+    let shell = server.home.path().join("fake-login-shell");
+    let merged = "/launcher/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+    assert_eq!(
+        path_env(&server),
+        json!({"mergedPath": merged, "childPath": merged})
+    );
+    assert!(server.home.path().join("probed").exists());
+    let (_, log) = server.stop();
+    let expected = format!(
+        "[path-fix] PATH merged from {} ({} \u{2192} {} chars)",
+        shell.display(),
+        STRIPPED_PATH.len(),
+        merged.len()
+    );
+    assert!(
+        log.lines()
+            .any(|line| line.get(15..) == Some(expected.as_str())),
+        "{log}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn path_fix_leaves_path_unchanged_and_runs_no_probe_on_linux() {
+    let server = start_with_noisy_login_shell();
+    assert_eq!(
+        path_env(&server),
+        json!({"mergedPath": STRIPPED_PATH, "childPath": STRIPPED_PATH})
+    );
+    assert!(!server.home.path().join("probed").exists());
+    let (_, log) = server.stop();
+    assert!(!log.contains("[path-fix]"), "{log}");
 }

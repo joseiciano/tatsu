@@ -9,6 +9,7 @@ pub mod initial_state;
 pub mod lifecycle;
 pub mod logs;
 pub mod net;
+pub mod path_fix;
 pub mod repo_config;
 pub mod resources;
 pub mod router;

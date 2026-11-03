@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -74,11 +74,23 @@ function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
   })
 }
 
+// The test server runs the login-shell PATH fix on macOS; a passthrough fake
+// shell and a temp HOME keep the user's real shell and rc files out of it.
+function passthroughShellHome(): string {
+  const home = mkdtempSync(join(tmpdir(), 'tatsu-core-home-'))
+  const shell = join(home, 'fake-login-shell')
+  writeFileSync(shell, '#!/bin/sh\nexec /bin/sh -c "$2"\n')
+  chmodSync(shell, 0o755)
+  return home
+}
+
 export async function startTestServer(): Promise<TestServer> {
   const dataDir = mkdtempSync(join(tmpdir(), 'tatsu-core-parity-'))
+  const home = passthroughShellHome()
   const token = randomBytes(24).toString('hex')
   const child = spawn(BINARY, ['--data-dir', dataDir, '--token', token, '--test-hooks', '--port', '0'], {
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, HOME: home, SHELL: join(home, 'fake-login-shell') }
   })
   const stop = async (): Promise<void> => {
     child.kill('SIGINT')
@@ -87,6 +99,7 @@ export async function startTestServer(): Promise<TestServer> {
       await waitForExit(child, STOP_TIMEOUT_MS)
     }
     rmSync(dataDir, { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true })
   }
   try {
     const url = await waitForUrl(child)
