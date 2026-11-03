@@ -10,6 +10,13 @@
 // otherwise only visible in the terminal history). Without curl the Stop hook
 // cannot reach the stop-check route and fails open, so a missing block only
 // warns; FAKE_AGENT_CURL=present|absent overrides the curl detection.
+//
+// A `FAKE_AGENT_MODE=<mode>` marker in the prompt picks another behaviour,
+// because one shim serves every scenario of a server launch:
+//   hang              stay alive, never run the Stop hook or complete_step;
+//                     SIGHUP (agent cancel) ends it, a 5 min cap bounds leaks
+//   exit-no-complete  run the Stop hook once (expects a block), then exit 1
+//                     without complete_step, so the step fails by exit
 
 import { spawn, spawnSync } from 'child_process'
 import { appendFileSync, readFileSync } from 'fs'
@@ -17,6 +24,8 @@ import { homedir } from 'os'
 import { join } from 'path'
 
 const TIMEOUT_MS = 30_000
+const HANG_LIFETIME_MS = 5 * 60_000
+const MODES = new Set(['default', 'hang', 'exit-no-complete'])
 const HOOK_SIGNATURE = 'harness-status'
 
 function log(message) {
@@ -49,6 +58,13 @@ function parseArgs(argv) {
     else if (arg === '--session-id') out.sessionId = argv[++i] ?? null
   }
   return out
+}
+
+function modeFrom(prompt) {
+  const match = /FAKE_AGENT_MODE=([a-z-]+)/.exec(prompt ?? '')
+  const mode = match ? match[1] : 'default'
+  if (!MODES.has(mode)) fail(`unknown FAKE_AGENT_MODE ${mode}`)
+  return mode
 }
 
 function stopHookCommand() {
@@ -154,7 +170,15 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (!args.mcpConfig) fail('missing --mcp-config')
   if (!args.sessionId) fail('missing --session-id')
-  log(`start session=${args.sessionId} terminal=${process.env.HARNESS_TERMINAL_ID ?? ''}`)
+  const mode = modeFrom(args.prompt)
+  log(`start session=${args.sessionId} terminal=${process.env.HARNESS_TERMINAL_ID ?? ''} mode=${mode}`)
+
+  if (mode === 'hang') {
+    clearTimeout(timer)
+    setTimeout(() => fail(`hang mode still alive after ${HANG_LIFETIME_MS} ms`), HANG_LIFETIME_MS)
+    log('hang: waiting for a signal')
+    return
+  }
 
   const hook = stopHookCommand()
   const summary = `PLAN-OK ${args.sessionId}`
@@ -169,6 +193,11 @@ async function main() {
     fail(`Stop hook did not return a block: ${JSON.stringify(reply)}`)
   } else {
     log('::warning::curl is missing, so the Stop hook could not ask for a continuation')
+  }
+
+  if (mode === 'exit-no-complete') {
+    log('exit-no-complete: exiting without complete_step')
+    process.exit(1)
   }
 
   const bridge = startBridge(args.mcpConfig)

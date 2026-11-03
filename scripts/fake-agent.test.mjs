@@ -54,20 +54,23 @@ function stopHook(dir, firstReply) {
   ].join('; ')
 }
 
-function runAgent({ home, mcpConfig, sessionId = 'sess-1', env = {} }) {
+function spawnAgent({ home, mcpConfig, sessionId = 'sess-1', env = {}, prompt = 'Plan the work' }) {
   const args = ['--allowedTools', 'Read,Grep', '--permission-mode', 'dontAsk', '--model', 'x', '--name', 'repo/main']
   if (mcpConfig) args.push('--mcp-config', mcpConfig)
   if (sessionId) args.push('--session-id', sessionId)
-  args.push('--append-system-prompt', 'sys', '--', 'Plan the work')
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [FAKE_AGENT, ...args], {
-      env: { PATH: process.env.PATH, HOME: home, HARNESS_TERMINAL_ID: 'term-1', ...env },
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    let stderr = ''
-    child.stderr.on('data', (c) => (stderr += c))
-    child.on('exit', (code) => resolve({ code, stderr }))
+  args.push('--append-system-prompt', 'sys', '--', prompt)
+  const child = spawn(process.execPath, [FAKE_AGENT, ...args], {
+    env: { PATH: process.env.PATH, HOME: home, HARNESS_TERMINAL_ID: 'term-1', ...env },
+    stdio: ['ignore', 'pipe', 'pipe']
   })
+  let stderr = ''
+  child.stderr.on('data', (c) => (stderr += c))
+  const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal, stderr })))
+  return { child, exited, stderr: () => stderr }
+}
+
+function runAgent(options) {
+  return spawnAgent(options).exited
 }
 
 describe('fake-agent', () => {
@@ -170,5 +173,48 @@ describe('fake-agent', () => {
     expect(code).not.toBe(0)
     expect(stderr).toContain('no Tatsu Stop hook')
     expect(existsSync(join(dir, 'payload-1.json'))).toBe(false)
+  })
+
+  it('hang mode stays alive without completing until SIGHUP ends it', async () => {
+    const mcpConfig = await setup()
+
+    const agent = spawnAgent({ home: dir, mcpConfig, prompt: 'FAKE_AGENT_MODE=hang Stay alive' })
+    const early = await Promise.race([agent.exited, new Promise((r) => setTimeout(() => r('alive'), 1000))])
+    expect(early).toBe('alive')
+    expect(agent.stderr()).toContain('mode=hang')
+    agent.child.kill('SIGHUP')
+    const { signal } = await agent.exited
+
+    expect(signal).toBe('SIGHUP')
+    expect(completions()).toEqual([])
+    expect(existsSync(join(dir, 'payload-1.json'))).toBe(false)
+  })
+
+  it('exit-no-complete mode runs the Stop hook once and exits non-zero without completing', async () => {
+    const mcpConfig = await setup()
+
+    const { code, stderr } = await runAgent({ home: dir, mcpConfig, prompt: 'FAKE_AGENT_MODE=exit-no-complete Leave' })
+
+    expect(code).not.toBe(0)
+    expect(stderr).toContain('stop hook: block')
+    expect(stderr).toContain('exit-no-complete: exiting without complete_step')
+    expect(existsSync(join(dir, 'payload-1.json'))).toBe(true)
+    expect(existsSync(join(dir, 'payload-2.json'))).toBe(false)
+    expect(completions()).toEqual([])
+  })
+
+  it('exit-no-complete mode reports a missing block when curl is present', async () => {
+    const mcpConfig = await setup({ firstReply: '' })
+
+    const { code, stderr } = await runAgent({
+      home: dir,
+      mcpConfig,
+      prompt: 'FAKE_AGENT_MODE=exit-no-complete Leave',
+      env: { FAKE_AGENT_CURL: 'present' }
+    })
+
+    expect(code).not.toBe(0)
+    expect(stderr).toContain('did not return a block')
+    expect(completions()).toEqual([])
   })
 })
