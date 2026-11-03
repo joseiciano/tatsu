@@ -1,4 +1,6 @@
 import type {
+  HarnessConfigAppliedOperation,
+  HarnessConfigApplyResult,
   HarnessConfigChangedRef,
   HarnessConfigComparison,
   HarnessConfigScope,
@@ -7,10 +9,12 @@ import type {
 import { CliError } from '../../errors'
 import { enumerateScopes, hcRequest, scopeFiltersFrom, scopeLabel, scopeOptions } from '../../harness-config'
 import { formatTable } from '../../output'
+import type { TatsuClient } from '../../client'
 import type { Command, CommandContext } from '..'
 
 const COMPARE = 'harnessConfig:compare'
 const PLAN = 'harnessConfig:planSyncToDisk'
+const APPLY = 'harnessConfig:syncToDisk'
 
 export type PlanClass = { kind: 'in-sync' } | { kind: 'issues-only'; issues: number } | { kind: 'writes'; issues: number }
 
@@ -113,6 +117,10 @@ function isSyncPlan(value: unknown): value is HarnessConfigSyncPlan {
   return isComparison(value) && 'planId' in value && typeof value.planId === 'string'
 }
 
+function isApplyResult(value: unknown): value is HarnessConfigApplyResult {
+  return isRecord(value) && typeof value.planId === 'string' && Array.isArray(value.applied)
+}
+
 function rejectPositionals(ctx: CommandContext, name: string): void {
   if (ctx.positionals.length > 0) {
     throw new CliError('usage', `unexpected argument '${ctx.positionals[0]}'. Run 'tatsu ${name} --help' for usage.`)
@@ -171,9 +179,102 @@ export const syncPlanCommand: Command = {
     const scope = singleScope(ctx.values, 'sync plan')
     const detach = detachIds(ctx.values)
     const client = await ctx.client()
-    const value =
-      detach.length > 0 ? await hcRequest(client, PLAN, { scope, detach }, { detach: true }) : await hcRequest(client, PLAN, { scope })
-    if (!isSyncPlan(value)) throw new CliError('request-failed', `backend sent a malformed reply to '${PLAN}'`)
-    ctx.output.result(value, renderPlan)
+    ctx.output.result(await requestPlan(client, scope, detach), renderPlan)
   }
 }
+
+async function requestPlan(client: TatsuClient, scope: HarnessConfigScope, detach: readonly string[]): Promise<HarnessConfigSyncPlan> {
+  const value =
+    detach.length > 0 ? await hcRequest(client, PLAN, { scope, detach }, { detach: true }) : await hcRequest(client, PLAN, { scope })
+  if (!isSyncPlan(value)) throw new CliError('request-failed', `backend sent a malformed reply to '${PLAN}'`)
+  return value
+}
+
+export interface SyncNotWritten {
+  plan: HarnessConfigSyncPlan
+  written: false
+  reason: 'already-in-sync' | 'not-confirmed' | 'issues'
+}
+
+function appliedLines(applied: readonly HarnessConfigAppliedOperation[]): string {
+  return formatTable(applied.map((op) => [op.type, op.relativePath ?? op.id ?? '?']))
+}
+
+export function renderApplied({ applied }: HarnessConfigApplyResult): string {
+  return applied.length > 0 ? appliedLines(applied) : 'Nothing was written.'
+}
+
+function appliedFrom(details: unknown): HarnessConfigAppliedOperation[] {
+  return isRecord(details) && Array.isArray(details.applied) ? details.applied : []
+}
+
+async function confirmedApply(client: TatsuClient, scope: HarnessConfigScope, planId: string): Promise<HarnessConfigApplyResult> {
+  let value: unknown
+  try {
+    value = await hcRequest(client, APPLY, { scope, planId, confirmed: true })
+  } catch (err) {
+    const applied = err instanceof CliError ? appliedFrom(err.details) : []
+    if (!(err instanceof CliError) || applied.length === 0) throw err
+    throw new CliError(err.code, `${err.message}\napplied before the failure:\n${indented(appliedLines(applied).split('\n'))}`, err.details)
+  }
+  if (!isApplyResult(value)) throw new CliError('request-failed', `backend sent a malformed reply to '${APPLY}'`)
+  return value
+}
+
+function planIdFlag(values: CommandContext['values']): string | undefined {
+  const raw = values.plan
+  if (raw === undefined) return undefined
+  if (typeof raw !== 'string' || raw.length === 0) throw new CliError('usage', '--plan needs a plan id')
+  return raw
+}
+
+const renderNotWritten = (value: SyncNotWritten): string => renderPlan(value.plan)
+
+export const syncApplyCommand: Command = {
+  name: 'sync apply',
+  summary: 'Write what a sync plan builds for one harness scope (requires --yes)',
+  usage: 'sync apply --agent <kind> --type <type> [--plan <id>] [--detach <id>...] [--yes]',
+  options: {
+    ...scopeOptions,
+    plan: { type: 'string', valueName: 'id', description: "Apply exactly this plan id from 'tatsu sync plan'" },
+    detach: { type: 'string', multiple: true, valueName: 'id', description: 'Keep this template-built file as it is on disk and detach it (repeatable)' },
+    yes: { type: 'boolean', description: 'Confirm the write; without it the plan is shown and nothing is written' }
+  },
+  async run(ctx) {
+    rejectPositionals(ctx, 'sync apply')
+    const scope = singleScope(ctx.values, 'sync apply')
+    const detach = detachIds(ctx.values)
+    const planId = planIdFlag(ctx.values)
+    const yes = ctx.values.yes === true
+    if (planId !== undefined) {
+      if (detach.length > 0) throw new CliError('usage', '--detach is fixed when the plan is made; pass it to sync plan, not with --plan')
+      if (!yes) throw new CliError('usage', 'refusing to write without --yes')
+      const client = await ctx.client()
+      ctx.output.result(await confirmedApply(client, scope, planId), renderApplied)
+      return
+    }
+    const client = await ctx.client()
+    const plan = await requestPlan(client, scope, detach)
+    const verdict = classifyPlan(plan)
+    switch (verdict.kind) {
+      case 'in-sync':
+        ctx.output.result<SyncNotWritten>({ plan, written: false, reason: 'already-in-sync' }, renderNotWritten)
+        return
+      case 'issues-only':
+        ctx.output.result<SyncNotWritten>({ plan, written: false, reason: 'issues' }, renderNotWritten, { keepOnError: true })
+        throw new CliError('command-failed', `nothing to write; ${verdict.issues === 1 ? '1 issue needs' : `${verdict.issues} issues need`} attention`)
+      case 'writes':
+        if (!yes) {
+          ctx.output.result<SyncNotWritten>({ plan, written: false, reason: 'not-confirmed' }, renderNotWritten, { keepOnError: true })
+          throw new CliError('usage', 'refusing to write without --yes')
+        }
+        ctx.output.result(await confirmedApply(client, scope, plan.planId), renderApplied)
+        return
+      default: {
+        const _exhaustive: never = verdict
+        return _exhaustive
+      }
+    }
+  }
+}
+

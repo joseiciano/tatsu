@@ -4,7 +4,7 @@ import { configLsCommand } from './config-ls'
 import { diffCommand } from './diff'
 import { newCommand } from './new'
 import { statusCommand } from './status'
-import { syncPlanCommand, syncStatusCommand } from './sync'
+import { syncApplyCommand, syncPlanCommand, syncStatusCommand } from './sync'
 import { worktreesCommand } from './worktrees'
 
 export interface CommandOption {
@@ -40,7 +40,7 @@ export interface Command {
   run(ctx: CommandContext): Promise<void> | void
 }
 
-export const commands: readonly Command[] = [statusCommand, worktreesCommand, newCommand, diffCommand, configLsCommand, syncStatusCommand, syncPlanCommand]
+export const commands: readonly Command[] = [statusCommand, worktreesCommand, newCommand, diffCommand, configLsCommand, syncStatusCommand, syncPlanCommand, syncApplyCommand]
 
 export interface CommandMatch {
   command: Command
