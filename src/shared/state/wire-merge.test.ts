@@ -88,6 +88,13 @@ describe('mergeWireSnapshot', () => {
     expect(merged.workflows.definitions).toBe(definitions)
     expect(merged.workflows.runs).toEqual({})
     expect(merged.workflows.attempts).toEqual({})
+    expect(merged.workflows.trust).toEqual({})
+  })
+
+  it('keeps the trust map of a new-server workflows snapshot', () => {
+    const trust = { 'repo:abcdefabcdef:ship': 'a'.repeat(64) }
+    const merged = mergeWireSnapshot({ workflows: { trust } })
+    expect(merged.workflows.trust).toBe(trust)
   })
 
   it('applies a new-renderer personal load over an old-server snapshot whose summaries lack repoRoot', () => {

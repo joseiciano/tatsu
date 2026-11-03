@@ -20,7 +20,7 @@ function attempt(runId: string, startedAt: number, endedAt?: number): WorkflowAt
 }
 
 function state(runs: Record<string, WorkflowRun>, attempts: Record<string, WorkflowAttempt> = {}): WorkflowsState {
-  return { definitions: {}, runs, attempts }
+  return { definitions: {}, runs, attempts, trust: {} }
 }
 
 describe('createPausedRunIdsSelector', () => {

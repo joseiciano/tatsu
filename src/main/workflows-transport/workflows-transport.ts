@@ -10,6 +10,8 @@ import {
   type WorkflowRunner
 } from '../workflow-runner'
 import type { WorkflowActionResponse, WorkflowStartRunResponse } from '../../shared/state/workflows'
+import type { PersistedWorkflowTrust } from '../persistence'
+import type { Store } from '../store'
 
 export interface WorkflowsTransportLike {
   onRequest(name: string, handler: (ctx: unknown, ...args: unknown[]) => unknown): void
@@ -25,6 +27,8 @@ export interface RegisterWorkflowsRequestHandlersDeps {
   loader: Pick<WorkflowDefsLoader, 'reload' | 'getDefinition'>
   runs: WorkflowRunLookup
   runner: WorkflowActionsRunner
+  store: Pick<Store, 'getSnapshot' | 'dispatch'>
+  persistTrust: (entry: PersistedWorkflowTrust) => void
   log: WorkflowLog
 }
 
@@ -35,11 +39,12 @@ const ERROR_MAX_CHARS = 1000
 
 const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
+const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
 
 const START_ERRORS: Record<StartRefusal, string> = {
   'labs-off': 'Workflows are turned off in Labs',
   'unknown-definition': 'Unknown workflow definition',
-  'untrusted-definition': 'Repo workflows are not trusted yet',
+  'untrusted-definition': 'Trust this definition before running it',
   'invalid-definition': 'The workflow definition is invalid',
   'unsupported-step': 'The workflow uses a step kind this version cannot run',
   'full-permission-unconfirmed': 'This workflow has a full-access step; confirm full access to start it',
@@ -135,6 +140,8 @@ export function registerWorkflowsRequestHandlers({
   loader,
   runs,
   runner,
+  store,
+  persistTrust,
   log
 }: RegisterWorkflowsRequestHandlersDeps): void {
   transport.onRequest('workflows:reloadDefinitions', () => loader.reload())
@@ -168,6 +175,25 @@ export function registerWorkflowsRequestHandlers({
     if (!request) return INVALID_REQUEST
     const result = runner.start(request)
     return result.ok ? { runId: result.runId } : { error: START_ERRORS[result.reason] }
+  })
+  guarded('workflows:trustDefinition', ([defId, hash]): WorkflowActionResponse => {
+    if (!store.getSnapshot().state.settings.labs.workflows) return { error: START_ERRORS['labs-off'] }
+    if (!boundedString(defId, DEF_ID_MAX_CHARS) || typeof hash !== 'string' || !DEFINITION_HASH_PATTERN.test(hash)) {
+      return INVALID_REQUEST
+    }
+    const detail = loader.getDefinition(defId)
+    if (!detail) return { error: START_ERRORS['unknown-definition'] }
+    const { summary } = detail
+    if (summary.scope !== 'repo' || summary.repoRoot === undefined) {
+      return { error: 'Only repo workflow definitions need trust' }
+    }
+    if (summary.hash !== hash) {
+      return { error: 'The workflow definition changed on disk; review it again before trusting it' }
+    }
+    persistTrust({ repoRoot: summary.repoRoot, path: summary.path, hash })
+    store.dispatch({ type: 'workflows/trustGranted', payload: { defId: summary.id, hash } })
+    log('workflow', 'definition trusted', { defId: summary.id })
+    return { ok: true }
   })
   guarded('workflows:cancelRun', ([runId]): WorkflowActionResponse => {
     if (!isRunId(runId)) return INVALID_REQUEST

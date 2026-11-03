@@ -60,6 +60,7 @@ import {
   LOCAL_BACKEND_ID,
   getPersistedHarnessConfigResources,
   replacePersistedHarnessConfigScope,
+  upsertWorkflowTrust,
   type BackendConnection,
   type PersistedPaneNode,
   type QuestStep
@@ -837,6 +838,11 @@ registerWorkflowsRequestHandlers({
     attemptRunId: (attemptId) => store.getSnapshot().state.workflows.attempts[attemptId]?.runId
   }),
   runner: workflowRunner,
+  store,
+  persistTrust: (entry) => {
+    config.workflowTrust = upsertWorkflowTrust(config.workflowTrust ?? [], entry)
+    saveConfig(config)
+  },
   log
 })
 store.subscribe((event) => {

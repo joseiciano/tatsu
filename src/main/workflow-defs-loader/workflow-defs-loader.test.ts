@@ -9,6 +9,7 @@ import {
   createWorkflowDefsLoader,
   MAX_WORKFLOW_FILE_BYTES,
   MAX_WORKFLOW_FILES,
+  repoDefinitionId,
   repoKeyOf,
   resolvePrimaryCheckout,
   WORKFLOW_WATCH_DEBOUNCE_MS,
@@ -414,6 +415,18 @@ function personalDir(): string {
 }
 
 describe('repo-scoped definitions', () => {
+  it('rebuilds the loaded id from the repo root and file path', () => {
+    const repo = makeRepo('ids')
+    writeRepoDef(repo, 'Ship It!.yml', VALID_YAML)
+    const loader = makeLoader(personalDir(), { repoRoots: [repo] })
+    loader.reload()
+
+    const [loaded] = lastRepoLoad(repo)
+    expect(repoDefinitionId(repo, loaded.path)).toBe(loaded.id)
+    expect(loaded.id).toBe(`repo:${repoKeyOf(repo)}:ship-it`)
+    expect(repoDefinitionId(repo, '/x/.harness/workflows/---.yaml')).toBeNull()
+  })
+
   it('loads two repos under distinct repo ids with their repoRoot', () => {
     const a = makeRepo('a')
     const b = makeRepo('b')

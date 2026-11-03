@@ -153,6 +153,15 @@ function slugOf(stem: string): string {
     .replace(/^-|-$/g, '')
 }
 
+function repoIdPrefix(key: string): string {
+  return `repo:${key}:`
+}
+
+export function repoDefinitionId(repoRoot: string, path: string): string | null {
+  const slug = slugOf(stemOf(basename(path)))
+  return slug ? `${repoIdPrefix(repoKeyOf(repoRoot))}${slug}` : null
+}
+
 function truncate(text: string): string {
   return text.length <= MAX_ISSUE_LENGTH ? text : `${text.slice(0, MAX_ISSUE_LENGTH - 1)}…`
 }
@@ -238,7 +247,7 @@ export function createWorkflowDefsLoader(deps: WorkflowDefsLoaderDeps): Workflow
   }
 
   function idPrefix(group: Group): string {
-    return group.repoRoot === null ? 'personal:' : `repo:${group.key}:`
+    return group.repoRoot === null ? 'personal:' : repoIdPrefix(group.key)
   }
 
   function locate(group: Group): GroupLocation {

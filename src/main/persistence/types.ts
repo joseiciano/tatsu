@@ -16,6 +16,12 @@ export type QuestStep = 'hidden' | 'spawn-second' | 'switch-between' | 'finale' 
  *  harness-config service (never independently restated here). */
 export type PersistedHarnessConfigResource = HarnessConfigDesiredResource
 
+export interface PersistedWorkflowTrust {
+  repoRoot: string
+  path: string
+  hash: string
+}
+
 export interface PersistedHarnessConfig {
   version: 1
   resources: PersistedHarnessConfigResource[]
@@ -107,6 +113,7 @@ export interface Config {
   announcementsMuted?: boolean
   labs?: { workflows?: boolean }
   workflowSettings?: { maxConcurrentAgents?: number }
+  workflowTrust?: PersistedWorkflowTrust[]
   scratchpadNotes?: Record<string, Record<string, string>>
   harnessConfig?: PersistedHarnessConfig
 }

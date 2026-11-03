@@ -6,8 +6,11 @@ import { afterEach, beforeEach, describe, it, expect } from 'vitest'
 import {
   applyConnectionDefaults,
   getPersistedHarnessConfigResources,
+  loadConfig,
   LOCAL_BACKEND_ID,
   replacePersistedHarnessConfigScope,
+  saveConfigSync,
+  upsertWorkflowTrust,
   type Config,
   type PersistedHarnessConfigResource
 } from '.'
@@ -378,5 +381,57 @@ describe('replacePersistedHarnessConfigScope — durable write', () => {
         expect(String(arg)).not.toContain(secretContent)
       }
     }
+  })
+})
+
+describe('workflowTrust', () => {
+  const originalDataDir = process.env.HARNESS_DATA_DIR
+  let dir: string
+  const hashA = 'a'.repeat(64)
+  const hashB = 'b'.repeat(64)
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'harness-trust-test-'))
+    process.env.HARNESS_DATA_DIR = dir
+    resetPathsForTests()
+  })
+
+  afterEach(() => {
+    if (originalDataDir === undefined) delete process.env.HARNESS_DATA_DIR
+    else process.env.HARNESS_DATA_DIR = originalDataDir
+    resetPathsForTests()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('replaces the entry for the same repo root and path instead of appending', () => {
+    const first = upsertWorkflowTrust([], { repoRoot: '/r', path: '/r/.harness/workflows/a.yaml', hash: hashA })
+    const other = upsertWorkflowTrust(first, { repoRoot: '/r', path: '/r/.harness/workflows/b.yaml', hash: hashA })
+    const next = upsertWorkflowTrust(other, { repoRoot: '/r', path: '/r/.harness/workflows/a.yaml', hash: hashB })
+    expect(next).toEqual([
+      { repoRoot: '/r', path: '/r/.harness/workflows/b.yaml', hash: hashA },
+      { repoRoot: '/r', path: '/r/.harness/workflows/a.yaml', hash: hashB }
+    ])
+  })
+
+  it('round-trips trusted entries through config.json and drops malformed ones on load', () => {
+    const valid = { repoRoot: '/repo', path: '/repo/.harness/workflows/ship.yaml', hash: hashA }
+    saveConfigSync({ ...bareConfig(), workflowTrust: [valid] })
+    expect(loadConfig().workflowTrust).toEqual([valid])
+
+    const raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf-8')) as Record<string, unknown>
+    raw.workflowTrust = [
+      valid,
+      { repoRoot: '/repo', path: '/repo/x.yaml', hash: 'not-a-hash' },
+      { repoRoot: 7, path: '/repo/y.yaml', hash: hashA },
+      { repoRoot: '/repo', hash: hashA },
+      null,
+      'junk',
+      { ...valid, hash: hashB }
+    ]
+    writeFileSync(join(dir, 'config.json'), JSON.stringify(raw))
+    expect(loadConfig().workflowTrust).toEqual([{ ...valid, hash: hashB }])
+
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ ...raw, workflowTrust: { nope: true } }))
+    expect(loadConfig().workflowTrust).toEqual([])
   })
 })

@@ -13,6 +13,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { buildInitialAppState } from '.'
 import { loadRunRecordsSync } from '../workflow-run-records'
+import { repoKeyOf } from '../workflow-defs-loader'
 import type { WorkflowRunRecord } from '../../shared/state/workflows'
 import type { Config } from '../persistence'
 import { initialPRs } from '../../shared/state/prs'
@@ -80,6 +81,22 @@ describe('buildInitialAppState', () => {
     expect(result.settings.themeLight).toBe('solarized-light')
     expect(result.settings.hasGithubToken).toBe(true)
     expect(result.worktrees.repoRoots).toEqual(['/a', '/b'])
+  })
+
+  it('seeds workflow trust keyed by the definition id the loader builds', () => {
+    const hash = 'c'.repeat(64)
+    const result = buildInitialAppState(
+      {
+        ...emptyConfig,
+        workflowTrust: [
+          { repoRoot: '/repo', path: '/repo/.harness/workflows/Ship.yaml', hash },
+          { repoRoot: '/repo', path: '/repo/.harness/workflows/---.yaml', hash }
+        ]
+      },
+      { hasGithubToken: false }
+    )
+    expect(result.workflows.trust).toEqual({ [`repo:${repoKeyOf('/repo')}:ship`]: hash })
+    expect(buildInitialAppState(emptyConfig, { hasGithubToken: false }).workflows.trust).toEqual({})
   })
 
   it('seeds labs and workflow settings defaults when config has none', () => {

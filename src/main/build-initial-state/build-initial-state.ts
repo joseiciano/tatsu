@@ -31,9 +31,11 @@ import {
   DEFAULT_WORKTREE_DETAIL,
   DEFAULT_HARNESS_SYSTEM_PROMPT,
   DEFAULT_HARNESS_SYSTEM_PROMPT_MAIN,
-  type Config
+  type Config,
+  type PersistedWorkflowTrust
 } from '../persistence'
 import { DEFAULT_EDITOR_ID } from '../editor'
+import { repoDefinitionId } from '../workflow-defs-loader'
 
 /** Flatten the nested `repoRoot → worktreePath → text` shape on disk
  *  into the flat `worktreePath → text` map the slice carries in memory.
@@ -51,6 +53,15 @@ function flattenScratchpadNotes(
     }
   }
   return out
+}
+
+export function hydrateWorkflowTrust(entries: readonly PersistedWorkflowTrust[] | undefined): Record<string, string> {
+  const trust: Record<string, string> = {}
+  for (const entry of entries ?? []) {
+    const defId = repoDefinitionId(entry.repoRoot, entry.path)
+    if (defId !== null) trust[defId] = entry.hash
+  }
+  return trust
 }
 
 export function buildInitialAppState(
@@ -75,7 +86,11 @@ export function buildInitialAppState(
     announcements: initialAnnouncements,
     scratchpad: { byWorktreePath: flattenScratchpadNotes(config.scratchpadNotes) },
     harnessConfig: initialHarnessConfig,
-    workflows: { ...initialWorkflows, ...hydrateWorkflowRuns(opts.workflowRuns ?? []) },
+    workflows: {
+      ...initialWorkflows,
+      ...hydrateWorkflowRuns(opts.workflowRuns ?? []),
+      trust: hydrateWorkflowTrust(config.workflowTrust)
+    },
     settings: {
       ...initialSettings,
       themeMode:

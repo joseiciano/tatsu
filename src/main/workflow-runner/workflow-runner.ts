@@ -265,7 +265,9 @@ export class WorkflowRunner {
     if (!this.ready) return this.refuse('starting')
     const detail = loader.getDefinition(request.defId)
     if (!detail) return this.refuse('unknown-definition')
-    if (detail.summary.scope === 'repo') return this.refuse('untrusted-definition')
+    if (detail.summary.scope === 'repo' && !this.trusted(detail.summary.id, detail.summary.hash)) {
+      return this.refuse('untrusted-definition')
+    }
     const definition = detail.definition
     if (!definition) return this.refuse('invalid-definition')
     if (!definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
@@ -635,6 +637,11 @@ export class WorkflowRunner {
     const runId = this.liveAttempts.get(attemptId)
     const state = runId === undefined ? undefined : this.runs.get(runId)
     return state?.live?.record.attemptId === attemptId ? state : undefined
+  }
+
+  private trusted(defId: string, hash: string): boolean {
+    const trust = this.deps.store.getSnapshot().state.workflows.trust
+    return Object.hasOwn(trust, defId) && trust[defId] === hash
   }
 
   private labsOn(): boolean {

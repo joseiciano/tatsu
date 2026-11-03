@@ -95,6 +95,7 @@ export interface WorkflowsState {
   definitions: Record<string, WorkflowDefinitionSummary>
   runs: Record<string, WorkflowRun>
   attempts: Record<string, WorkflowAttempt>
+  trust: Record<string, string>
 }
 
 export type WorkflowsEvent =
@@ -135,6 +136,7 @@ export type WorkflowsEvent =
   | { type: 'workflows/runsEvicted'; payload: { runIds: string[] } }
   | { type: 'workflows/cursorChanged'; payload: { runId: string; stepId: string } }
   | { type: 'workflows/attemptSessionRecorded'; payload: { attemptId: string } }
+  | { type: 'workflows/trustGranted'; payload: { defId: string; hash: string } }
 
 export interface StepResult {
   status: 'done' | 'failed' | 'needs-input'
