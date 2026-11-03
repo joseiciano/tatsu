@@ -1,5 +1,8 @@
 import type {
   CompleteExecutionResult,
+  MarkDoneRequest,
+  StepActionRefusal,
+  StepActionResult,
   WorkflowExecutionStep,
   WorkflowAttemptRecord,
   WorkflowRunRecord,
@@ -21,7 +24,10 @@ import {
 import { runContextPath } from './run-artifacts'
 import {
   STEP_SUMMARY_MAX_CHARS,
+  validateStepOutput,
+  type ResolvedDefinition,
   type ResolvedWorkflowStep,
+  type StepOutputValidation,
   type StepOutputValue,
   type TemplateScope,
   type TemplateStepScope
@@ -41,6 +47,11 @@ import {
 } from '../../shared/state/workflows'
 
 const ENDED_EXECUTIONS_MAX = 256
+export const RUN_INPUTS_MAX = 64
+export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
+
+const ACTION_OK: StepActionResult = { ok: true }
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
 
@@ -58,6 +69,12 @@ interface RunState {
   live: LiveAttempt | null
   io: Promise<boolean>
   lastSnapshot?: string
+  busy?: boolean
+}
+
+interface ActionTarget {
+  state: RunState
+  step: RunnableStep
 }
 
 type SnapshotSlot = 'baseSnapshot' | 'headSnapshot'
@@ -65,12 +82,39 @@ type SnapshotSlot = 'baseSnapshot' | 'headSnapshot'
 interface QueueEntry {
   runId: string
   stepId: string
+  resumeSessionId?: string
 }
 
 function capSummary(text: string): string {
   if (text.length <= STEP_SUMMARY_MAX_CHARS) return text
   const last = text.charCodeAt(STEP_SUMMARY_MAX_CHARS - 1)
   return text.slice(0, last >= 0xd800 && last <= 0xdbff ? STEP_SUMMARY_MAX_CHARS - 1 : STEP_SUMMARY_MAX_CHARS)
+}
+
+function inputsRefusal(definition: ResolvedDefinition, inputs: Record<string, unknown>): StartRefusal | null {
+  const keys = Object.keys(inputs)
+  if (keys.length > RUN_INPUTS_MAX) return 'invalid-inputs'
+  for (const key of keys) {
+    const value = inputs[key]
+    if (!Object.hasOwn(definition.inputs, key)) return 'invalid-inputs'
+    if (typeof value !== 'string' || value.length > RUN_INPUT_VALUE_MAX_CHARS) return 'invalid-inputs'
+  }
+  for (const name of Object.keys(definition.inputs)) {
+    const value = Object.hasOwn(inputs, name) ? inputs[name] : undefined
+    if (typeof value !== 'string' || value.trim() === '') return 'missing-input'
+  }
+  return null
+}
+
+function userOutput(step: RunnableStep, request: MarkDoneRequest): StepOutputValidation {
+  const schema = step.kind === 'agent' ? step.output : undefined
+  const declared = schema?.fields ?? {}
+  const undeclared = Object.keys(request.fields).some(
+    (key) => key === 'status' || key === 'summary' || !Object.hasOwn(declared, key)
+  )
+  if (undeclared) return { ok: false, errors: [{ field: '', message: 'Fields must be declared step outputs' }] }
+  if (typeof request.summary !== 'string') return { ok: false, errors: [{ field: 'summary', message: 'Expected a string' }] }
+  return validateStepOutput(schema, { ...request.fields, summary: capSummary(request.summary) })
 }
 
 function isRunnable(step: ResolvedWorkflowStep): step is RunnableStep {
@@ -84,6 +128,7 @@ export class WorkflowRunner {
   private readonly endedExecutions = new Map<string, { attemptId: string; stepId: string }>()
   private readonly agentSlots = new Set<string>()
   private queue: QueueEntry[] = []
+  private ready = false
   private readonly unsubscribers: Array<() => void>
   private readonly persist: (run: WorkflowRunRecord) => void
 
@@ -158,6 +203,14 @@ export class WorkflowRunner {
   }
 
   reconcile(records: readonly WorkflowRunRecord[]): void {
+    try {
+      this.reconcileRecords(records)
+    } finally {
+      this.ready = true
+    }
+  }
+
+  private reconcileRecords(records: readonly WorkflowRunRecord[]): void {
     const adopted = records
       .filter((record) => !TERMINAL_RUN_STATUSES.has(record.status) && !this.runs.has(record.runId))
       .map((record) => this.adopt(structuredClone(record)))
@@ -207,11 +260,17 @@ export class WorkflowRunner {
   start(request: StartRunRequest): StartRunResult {
     const { store, loader, now, newId } = this.deps
     if (!this.labsOn()) return this.refuse('labs-off')
+    if (!this.ready) return this.refuse('starting')
     const detail = loader.getDefinition(request.defId)
     if (!detail) return this.refuse('unknown-definition')
     const definition = detail.definition
     if (!definition) return this.refuse('invalid-definition')
     if (!definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
+    if (!this.knownWorktree(request.worktreePath)) return this.refuse('unknown-worktree')
+    const badInputs = inputsRefusal(definition, request.inputs)
+    if (badInputs) return this.refuse(badInputs)
+    const needsConsent = definition.steps.some((step) => step.kind === 'agent')
+    if (needsConsent && store.getSnapshot().state.hooks.consent !== 'accepted') return this.refuse('hooks-consent')
     if (this.worktreeBusy(request.worktreePath)) return this.refuse('worktree-busy')
 
     const runId = newId()
@@ -283,9 +342,10 @@ export class WorkflowRunner {
     return true
   }
 
-  cancelRun(runId: string): boolean {
+  cancelRun(runId: string): StepActionResult {
     const state = this.runs.get(runId)
-    if (!state) return false
+    if (!state) return this.refuseAction('unknown-run', { runId })
+    if (state.busy) return this.refuseAction('busy', { runId })
     const queuedStepId = this.dequeue(runId)
     if (queuedStepId) this.setStep(state, queuedStepId, 'cancelled')
     if (state.live) {
@@ -302,66 +362,185 @@ export class WorkflowRunner {
     this.runs.delete(runId)
     this.evictFinishedRuns()
     this.settle(state)
-    return true
+    return ACTION_OK
   }
 
-  cancelStep(runId: string): boolean {
-    const state = this.runs.get(runId)
-    if (!state) return false
+  cancelStep(runId: string, stepId: string): StepActionResult {
+    const target = this.actionTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
+    const { state } = target
     if (state.live) {
-      const { stepId } = state.live.record
       this.endAttempt(state, 'cancelled', undefined, true)
       this.setStep(state, stepId, 'cancelled')
     } else {
       const queuedStepId = this.dequeue(runId)
-      if (!queuedStepId) return false
+      if (!queuedStepId) return this.refuseAction('nothing-to-cancel', { runId, stepId })
       this.setStep(state, queuedStepId, 'cancelled')
     }
     this.pause(state, 'step-failed')
     this.settle(state)
-    return true
+    return ACTION_OK
   }
 
-  retry(runId: string): boolean {
-    const state = this.runs.get(runId)
-    if (!state || state.record.status !== 'paused' || !this.labsOn()) return false
+  retryStep(runId: string, stepId: string): StepActionResult {
+    const target = this.retryTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
+    const { state } = target
     this.resume(state)
     if (state.live) this.endAttempt(state, 'cancelled', undefined, true)
     this.enterStep(state)
     this.settle(state)
-    return true
+    return ACTION_OK
   }
 
-  skip(runId: string): boolean {
-    const state = this.runs.get(runId)
-    const step = state && this.currentStep(state)
-    if (!state || !step) return false
+  async retryFromClean(runId: string, stepId: string): Promise<StepActionResult> {
+    const ids = { runId, stepId }
+    const target = this.retryTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, ids)
+    const { state } = target
+    if (state.live) return this.refuseAction('live-attempt', ids)
+    const { artifacts } = this.deps
+    const commit = this.lastAttempt(state, stepId)?.baseSnapshot?.commit
+    if (!artifacts || commit === undefined) return this.refuseAction('no-snapshot', ids)
+    const { worktreePath } = state.record
+    state.busy = true
+    const restored = await new Promise<boolean>((resolve) => {
+      void this.queueIo(state, async () => {
+        try {
+          await artifacts.restore({ worktreePath, commit })
+          resolve(true)
+        } catch {
+          resolve(false)
+        }
+      })
+    })
+    state.busy = false
+    if (!restored) return this.refuseAction('restore-failed', ids)
+    this.log('step restored to base snapshot', ids)
+    const again = this.retryTarget(runId, stepId)
+    if (typeof again === 'string') return this.refuseAction(again, ids)
+    if (again.state.live) return this.refuseAction('live-attempt', ids)
+    this.resume(again.state)
+    this.enterStep(again.state)
+    this.settle(again.state)
+    return ACTION_OK
+  }
+
+  resumeStep(runId: string, stepId: string): StepActionResult {
+    const ids = { runId, stepId }
+    const target = this.retryTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, ids)
+    const { state, step } = target
+    if (step.kind !== 'agent' || step.agent !== 'claude') return this.refuseAction('not-claude-step', ids)
+    if (state.live) return this.refuseAction('live-attempt', ids)
+    const last = this.lastAttempt(state, stepId)
+    if (last?.status !== 'interrupted') return this.refuseAction('not-interrupted', ids)
+    if (last.sessionId === undefined || !SESSION_ID_PATTERN.test(last.sessionId)) {
+      return this.refuseAction('no-session', ids)
+    }
+    this.resume(state)
+    this.enterStep(state, last.sessionId)
+    this.settle(state)
+    return ACTION_OK
+  }
+
+  skipStep(runId: string, stepId: string): StepActionResult {
+    const target = this.launchTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
+    const { state } = target
     this.resume(state)
     if (state.live) this.endAttempt(state, 'cancelled', undefined, true)
     else this.dequeue(runId)
-    this.setStep(state, step.id, 'skipped')
+    this.setStep(state, stepId, 'skipped')
     this.advance(state)
     this.settle(state)
-    return true
+    return ACTION_OK
   }
 
-  markDone(runId: string): boolean {
-    const state = this.runs.get(runId)
-    const step = state && this.currentStep(state)
-    if (!state || !step) return false
-    const status = state.stepStatus[step.id]
+  markDone(runId: string, stepId: string, request: MarkDoneRequest): StepActionResult {
+    const ids = { runId, stepId }
+    const target = this.launchTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, ids)
+    const { state, step } = target
+    const status = state.stepStatus[stepId]
     const pausedEnded =
-      state.record.status === 'paused' && (status === 'failed' || status === 'cancelled')
-    if (!state.live && !pausedEnded) return false
-    this.resume(state)
-    if (state.live) {
-      this.endAttempt(state, 'done', { status: 'done', summary: '', completedBy: 'user' }, true)
+      state.record.status === 'paused' && (status === 'failed' || status === 'cancelled' || status === 'interrupted')
+    if (!state.live && !pausedEnded) return this.refuseAction('not-completable', ids)
+    const output = userOutput(step, request)
+    if (!output.ok) {
+      this.log('step action refused invalid-output', ids)
+      return { ok: false, reason: 'invalid-output', errors: output.errors }
     }
-    this.setStep(state, step.id, 'done')
-    this.log('step marked done', { runId, stepId: step.id })
+    const { summary, data } = output.value
+    const result: StepResult = { status: 'done', summary, completedBy: 'user', ...(data === undefined ? {} : { data }) }
+    this.resume(state)
+    if (state.live) this.endAttempt(state, 'done', result, true)
+    else this.recordUserCompletion(state, step, result)
+    this.setStep(state, stepId, 'done')
+    this.log('step marked done', ids)
     this.advance(state)
     this.settle(state)
-    return true
+    return ACTION_OK
+  }
+
+  reschedule(): void {
+    for (const state of this.drain()) this.persist(state.record)
+  }
+
+  private actionTarget(runId: string, stepId: string): ActionTarget | StepActionRefusal {
+    const state = this.runs.get(runId)
+    if (!state) return 'unknown-run'
+    const step = this.currentStep(state)
+    if (!step || step.id !== stepId) return 'wrong-step'
+    if (state.busy) return 'busy'
+    return { state, step }
+  }
+
+  private launchTarget(runId: string, stepId: string): ActionTarget | StepActionRefusal {
+    const target = this.actionTarget(runId, stepId)
+    if (typeof target === 'string') return target
+    return this.ready ? target : 'starting'
+  }
+
+  private retryTarget(runId: string, stepId: string): ActionTarget | StepActionRefusal {
+    const target = this.launchTarget(runId, stepId)
+    if (typeof target === 'string') return target
+    const { record } = target.state
+    if (record.status !== 'paused') return 'not-paused'
+    if (!this.labsOn()) return 'labs-off'
+    if (record.pausedReason === 'needs-approval' && target.state.live) return 'awaiting-approval'
+    return target
+  }
+
+  private refuseAction(reason: StepActionRefusal, ids: Record<string, string>): StepActionResult {
+    this.log(`step action refused ${reason}`, ids)
+    return { ok: false, reason }
+  }
+
+  private lastAttempt(state: RunState, stepId: string): WorkflowAttemptRecord | undefined {
+    return state.record.attempts.filter((attempt) => attempt.stepId === stepId).at(-1)
+  }
+
+  private recordUserCompletion(state: RunState, step: RunnableStep, result: StepResult): void {
+    const { runId } = state.record
+    const n = state.record.attempts.filter((attempt) => attempt.stepId === step.id).length + 1
+    const attemptId = this.deps.newId()
+    const startedAt = this.deps.now()
+    const record: WorkflowAttemptRecord = {
+      attemptId,
+      stepId: step.id,
+      n,
+      status: 'running',
+      startedAt,
+      metrics: { continuations: 0, pauses: [] }
+    }
+    state.record.attempts.push(record)
+    this.deps.store.dispatch({
+      type: 'workflows/attemptStarted',
+      payload: { attemptId, runId, stepId: step.id, n, startedAt }
+    })
+    state.live = { record, kind: step.kind }
+    this.endAttempt(state, 'done', result, false)
   }
 
   private adopt(record: WorkflowRunRecord): RunState {
@@ -411,6 +590,10 @@ export class WorkflowRunner {
     return { ok: false, reason }
   }
 
+  private knownWorktree(worktreePath: string): boolean {
+    return this.deps.store.getSnapshot().state.worktrees.list.some((worktree) => worktree.path === worktreePath)
+  }
+
   private worktreeBusy(worktreePath: string): boolean {
     for (const state of this.runs.values()) {
       if (state.record.worktreePath === worktreePath) return true
@@ -458,17 +641,21 @@ export class WorkflowRunner {
     return this.deps.store.getSnapshot().state.settings.workflows.maxConcurrentAgents
   }
 
-  private enterStep(state: RunState): void {
+  private enterStep(state: RunState, resumeSessionId?: string): void {
     const step = this.currentStep(state)
     if (!step) {
       this.finish(state)
       return
     }
     if (step.kind === 'shell' || (this.queue.length === 0 && this.agentSlots.size < this.agentCap())) {
-      this.launch(state, step)
+      this.launch(state, step, resumeSessionId)
       return
     }
-    this.queue.push({ runId: state.record.runId, stepId: step.id })
+    this.queue.push({
+      runId: state.record.runId,
+      stepId: step.id,
+      ...(resumeSessionId === undefined ? {} : { resumeSessionId })
+    })
     this.setStep(state, step.id, 'queued')
   }
 
@@ -585,7 +772,7 @@ export class WorkflowRunner {
     }
   }
 
-  private launch(state: RunState, step: RunnableStep): void {
+  private launch(state: RunState, step: RunnableStep, resumeSessionId?: string): void {
     if (!this.labsOn()) {
       this.hold(state, step)
       return
@@ -617,7 +804,18 @@ export class WorkflowRunner {
     const driver = drivers[step.kind]
     const bind = (execution: StepExecution): boolean => this.bind(attemptId, execution)
     const startDriver = (): Promise<StepExecution> | StepExecution =>
-      driver.start({ runId, stepId: step.id, attemptId, n, worktreePath, inputs, step, scope, bind })
+      driver.start({
+        runId,
+        stepId: step.id,
+        attemptId,
+        n,
+        worktreePath,
+        inputs,
+        step,
+        scope,
+        bind,
+        ...(resumeSessionId === undefined ? {} : { resumeSessionId })
+      })
     const started: Promise<StepExecution | null> = this.deps.artifacts
       ? this.snapshotAttempt(state, record, 'baseSnapshot').then(() =>
           this.runForLiveAttempt(attemptId) ? startDriver() : null
@@ -832,14 +1030,17 @@ export class WorkflowRunner {
     return entry.stepId
   }
 
-  private drain(): void {
+  private drain(): RunState[] {
+    const launched: RunState[] = []
     while (this.queue.length > 0 && this.agentSlots.size < this.agentCap()) {
       const entry = this.queue.shift()
       const state = entry && this.runs.get(entry.runId)
       const step = state && this.currentStep(state)
       if (!state || !step || state.live || step.id !== entry.stepId) continue
-      this.launch(state, step)
+      this.launch(state, step, entry.resumeSessionId)
+      launched.push(state)
     }
+    return launched
   }
 
   private settle(state: RunState): void {

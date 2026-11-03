@@ -6,9 +6,13 @@ export type { Worktree, PendingWorktree, PendingDeletion }
 
 import type { RepoConfig } from '../../shared/state/repo-configs'
 import type {
+  WorkflowActionResponse,
   WorkflowAttemptRecord,
   WorkflowDefinitionDetail,
-  WorkflowRunRecord
+  WorkflowMarkDonePayload,
+  WorkflowRunRecord,
+  WorkflowStartRunPayload,
+  WorkflowStartRunResponse
 } from '../../shared/state/workflows'
 import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
 export type { RepoConfig }
@@ -402,6 +406,18 @@ export interface ElectronAPI {
   getWorkflowDefinition(id: string): Promise<WorkflowDefinitionDetail | null>
   getWorkflowRun(runId: string): Promise<WorkflowRunRecord | null>
   getWorkflowAttemptResult(attemptId: string): Promise<WorkflowAttemptRecord | null>
+  startWorkflowRun(payload: WorkflowStartRunPayload): Promise<WorkflowStartRunResponse>
+  cancelWorkflowRun(runId: string): Promise<WorkflowActionResponse>
+  cancelWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
+  retryWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
+  retryWorkflowStepFromClean(
+    runId: string,
+    stepId: string,
+    confirmation: { confirmed: true }
+  ): Promise<WorkflowActionResponse>
+  skipWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
+  markWorkflowStepDone(runId: string, stepId: string, payload: WorkflowMarkDonePayload): Promise<WorkflowActionResponse>
+  resumeWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   /** Reveal the themes directory in the OS file browser (Electron only).
    *  Always returns the absolute directory path so the web client can
    *  surface it manually. */

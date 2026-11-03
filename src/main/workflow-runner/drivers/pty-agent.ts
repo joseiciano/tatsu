@@ -150,7 +150,7 @@ export function createClaudeStepDriver(deps: ClaudeStepDriverDeps): ClaudeStepDr
         log('prompt written to file', ids)
       }
       const executionId = deps.newTabId()
-      const sessionId = deps.newSessionId()
+      const sessionId = attempt.resumeSessionId ?? deps.newSessionId()
       if (!attempt.bind({ executionId, sessionId })) throw new StepStartError(CLAUDE_START_SUMMARIES.ended)
       owned.add(executionId)
       deps.writeMarker(executionId, ids)

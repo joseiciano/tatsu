@@ -41,6 +41,7 @@ import type {
 import type { ElectronAPI, TerminalSpawnSpec } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
 import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
+import type { WorkflowMarkDonePayload, WorkflowStartRunPayload } from '../../shared/state/workflows'
 import type {
   HarnessConfigApplyRequest,
   HarnessConfigConversionRequest,
@@ -293,6 +294,16 @@ export function buildBackend(
     getWorkflowDefinition: (id: string) => req('workflows:getDefinition', id),
     getWorkflowRun: (runId: string) => req('workflows:getRun', runId),
     getWorkflowAttemptResult: (attemptId: string) => req('workflows:getAttemptResult', attemptId),
+    startWorkflowRun: (payload: WorkflowStartRunPayload) => req('workflows:startRun', payload),
+    cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),
+    cancelWorkflowStep: (runId: string, stepId: string) => req('workflows:cancelStep', runId, stepId),
+    retryWorkflowStep: (runId: string, stepId: string) => req('workflows:retryStep', runId, stepId),
+    retryWorkflowStepFromClean: (runId: string, stepId: string, confirmation: { confirmed: true }) =>
+      req('workflows:retryFromClean', runId, stepId, confirmation),
+    skipWorkflowStep: (runId: string, stepId: string) => req('workflows:skipStep', runId, stepId),
+    markWorkflowStepDone: (runId: string, stepId: string, payload: WorkflowMarkDonePayload) =>
+      req('workflows:markDone', runId, stepId, payload),
+    resumeWorkflowStep: (runId: string, stepId: string) => req('workflows:resumeStep', runId, stepId),
     openThemesFolder: () => reqLocal('config:openThemesFolder'),
     setCostsInterest: (expanded: boolean) => req('costs:setInterest', expanded),
     getAllSessionCosts: (sinceMs?: number) => req('costs:getAllSessions', sinceMs),

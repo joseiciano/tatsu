@@ -12,7 +12,7 @@ import {
   type WorkflowRunnerDeps,
   type WorkflowRunRecord
 } from '.'
-import { FakeStepDriver, type FakeStartBehavior } from './fake-step-driver'
+import { currentStepId, FakeStepDriver, worktreeFixture, type FakeStartBehavior } from './fake-step-driver'
 import { initialState, type StateEvent } from '../../shared/state'
 import type { PtyStatus, TerminalTab } from '../../shared/state/terminals'
 import type { StepSpawnExtras } from '../agent-spawn'
@@ -58,6 +58,22 @@ steps:
     kind: shell
     run: "echo ${PROMPT_SECRET}"
 `,
+  'shell-big': `name: shell-big
+inputs:
+  a: { type: text }
+  b: { type: text }
+  c: { type: text }
+  d: { type: text }
+  e: { type: text }
+  f: { type: text }
+  g: { type: text }
+  h: { type: text }
+  i: { type: text }
+steps:
+  - id: test
+    kind: shell
+    run: "printf '%s' {{inputs.a}} {{inputs.b}} {{inputs.c}} {{inputs.d}} {{inputs.e}} {{inputs.f}} {{inputs.g}} {{inputs.h}} {{inputs.i}}"
+`,
   'shell-input': `name: shell-input
 inputs:
   task: { type: text }
@@ -83,6 +99,28 @@ steps:
     output:
       verdict: { enum: [pass, fail] }
       required: [verdict]
+`,
+  'review-then-act': `name: review-then-act
+steps:
+  - id: review
+    agent: claude
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+      notes: { type: array, items: { type: string } }
+      required: [verdict]
+  - id: act
+    agent: claude
+    prompt: "act on {{steps.review.data.verdict}}"
+`,
+  'shell-then-agent': `name: shell-then-agent
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+  - id: fix
+    agent: claude
+    prompt: "fix"
 `,
   broken: `name: broken
 steps:
@@ -120,7 +158,14 @@ interface SetupOptions {
   runs?: Record<string, WorkflowRun>
   shellDriver?: StepDriver
   agentDriver?: (store: Store) => StepDriver
+  worktrees?: string[]
 }
+
+const WORKTREES = [
+  ...Object.keys(SOURCES).map((slug) => `/wt/${slug}`),
+  ...['a', 'b', 'c', 'd', 'q', 'x', 'big', 'blocker', 'new'].map((name) => `/wt/${name}`)
+]
+
 
 function setup({
   labs = true,
@@ -130,10 +175,13 @@ function setup({
   artifacts,
   runs = {},
   shellDriver,
-  agentDriver
+  agentDriver,
+  worktrees = WORKTREES
 }: SetupOptions = {}) {
   const store = new Store({
     ...initialState,
+    hooks: { ...initialState.hooks, consent: 'accepted' },
+    worktrees: { ...initialState.worktrees, list: worktrees.map(worktreeFixture) },
     workflows: { ...initialState.workflows, runs },
     settings: {
       ...initialState.settings,
@@ -171,15 +219,17 @@ function setup({
     },
     artifacts
   })
+  runner.reconcile([])
   const events: StateEvent[] = []
   store.subscribe((event) => events.push(event))
   const wf = () => store.getSnapshot().state.workflows
 
   function startRun(slug: DefSlug, worktreePath = `/wt/${slug}`): string {
+    const declared = detail(slug).definition?.inputs ?? {}
     const result = runner.start({
       defId: `personal:${slug}`,
       worktreePath,
-      inputs: { task: INPUT_SECRET }
+      inputs: Object.hasOwn(declared, 'task') ? { task: INPUT_SECRET } : {}
     })
     if (!result.ok) throw new Error(`start refused: ${result.reason}`)
     return result.runId
@@ -224,6 +274,9 @@ type Ctx = ReturnType<typeof setup>
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
+const markDoneFor = (ctx: Ctx, runId: string, request = { summary: '', fields: {} }) =>
+  ctx.runner.markDone(runId, currentStepId(ctx.runner, runId), request)
+
 const done = (summary = 'ok'): StepResult => ({ status: 'done', summary, completedBy: 'tool' })
 const failed = (summary = 'nope'): StepResult => ({ status: 'failed', summary, completedBy: 'tool' })
 
@@ -255,7 +308,7 @@ const scenarios: Scenario[] = [
     act: async (ctx, runId) => {
       ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
       expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
-      expect(ctx.runner.retry(runId)).toBe(true)
+      expect(ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true })
       await flush()
       ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
       await flush()
@@ -275,7 +328,7 @@ const scenarios: Scenario[] = [
     name: 'skip marks the failed step skipped and advances',
     act: async (ctx, runId) => {
       ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
-      expect(ctx.runner.skip(runId)).toBe(true)
+      expect(ctx.runner.skipStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true })
     },
     run: { status: 'running' },
     steps: { plan: 'skipped', build: 'running' },
@@ -285,7 +338,7 @@ const scenarios: Scenario[] = [
     name: 'cancelStep pauses step-failed with the step cancelled',
     act: async (ctx, runId) => {
       const execution = ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))
-      expect(ctx.runner.cancelStep(runId)).toBe(true)
+      expect(ctx.runner.cancelStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true })
       expect(ctx.agent.cancelled).toEqual([execution])
     },
     run: { status: 'paused', pausedReason: 'step-failed' },
@@ -297,14 +350,14 @@ const scenarios: Scenario[] = [
     act: async (ctx, runId) => {
       const attemptId = ctx.attemptOf(runId, 'plan')
       const execution = ctx.agent.executionFor(attemptId)
-      expect(ctx.runner.cancelRun(runId)).toBe(true)
+      expect(ctx.runner.cancelRun(runId)).toEqual({ ok: true })
       expect(ctx.agent.cancelled).toEqual([execution])
       const late = ctx.eventsSince(() => {
         expect(ctx.runner.complete(attemptId, done())).toBe(false)
         ctx.agent.emit({ type: 'exited', executionId: execution, code: 0 })
         ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'late' })
-        expect(ctx.runner.skip(runId)).toBe(false)
-        expect(ctx.runner.retry(runId)).toBe(false)
+        expect(ctx.runner.skipStep(runId, currentStepId(ctx.runner, runId))).toMatchObject({ ok: false })
+        expect(ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))).toMatchObject({ ok: false })
       })
       expect(late).toEqual([])
       ctx.store.dispatch({
@@ -320,7 +373,7 @@ const scenarios: Scenario[] = [
     name: 'markDone ends the running attempt as done by the user and advances',
     act: async (ctx, runId) => {
       const execution = ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))
-      expect(ctx.runner.markDone(runId)).toBe(true)
+      expect(markDoneFor(ctx, runId)).toEqual({ ok: true })
       expect(ctx.agent.cancelled).toEqual([execution])
     },
     run: { status: 'running' },
@@ -331,15 +384,18 @@ const scenarios: Scenario[] = [
     }
   },
   {
-    name: 'markDone on a paused failed step marks it done without re-ending the attempt',
+    name: 'markDone on a paused failed step keeps the failed attempt and records a user attempt',
     act: async (ctx, runId) => {
       ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
-      expect(ctx.runner.markDone(runId)).toBe(true)
+      expect(markDoneFor(ctx, runId)).toEqual({ ok: true })
     },
     run: { status: 'running' },
     steps: { plan: 'done', build: 'running' },
     attempts: {
-      plan: [{ status: 'failed', n: 1, completedBy: 'tool' }],
+      plan: [
+        { status: 'failed', n: 1, completedBy: 'tool' },
+        { status: 'done', n: 2, completedBy: 'user' }
+      ],
       build: [{ status: 'running', n: 1 }]
     }
   }
@@ -466,14 +522,14 @@ describe('WorkflowRunner dispatch order and dedup', () => {
   })
 
   it.each([
-    ['retry', (ctx: Ctx, runId: string) => ctx.runner.retry(runId)],
-    ['skip', (ctx: Ctx, runId: string) => ctx.runner.skip(runId)],
-    ['markDone', (ctx: Ctx, runId: string) => ctx.runner.markDone(runId)]
+    ['retry', (ctx: Ctx, runId: string) => ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))],
+    ['skip', (ctx: Ctx, runId: string) => ctx.runner.skipStep(runId, currentStepId(ctx.runner, runId))],
+    ['markDone', (ctx: Ctx, runId: string) => markDoneFor(ctx, runId)]
   ] as const)('%s from a paused run dispatches runResumed first', (_name, action) => {
     const ctx = setup()
     const runId = ctx.startRun('two-agent')
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
-    const types = ctx.eventsSince(() => expect(action(ctx, runId)).toBe(true))
+    const types = ctx.eventsSince(() => expect(action(ctx, runId)).toEqual({ ok: true }))
     expect(types[0]).toBe('runResumed')
     expect(types.length).toBeGreaterThan(1)
   })
@@ -512,7 +568,7 @@ describe('WorkflowRunner dispatch order and dedup', () => {
     const first = ctx.attemptOf(runId, 'plan')
     const execution = ctx.agent.executionFor(first)
     ctx.runner.complete(first, { status: 'needs-input', summary: '', completedBy: 'fallback' })
-    const types = ctx.eventsSince(() => expect(ctx.runner.retry(runId)).toBe(true))
+    const types = ctx.eventsSince(() => expect(ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true }))
     expect(types).toEqual(['runResumed', 'attemptEnded', 'attemptStarted'])
     expect(ctx.agent.cancelled).toEqual([execution])
     expect(ctx.wf().attempts[first].status).toBe('cancelled')
@@ -663,8 +719,9 @@ describe('WorkflowRunner with the shell driver', () => {
   it('fails an oversize value before opening a tab, with a value-free summary', async () => {
     const pty = exitingPty(0, '')
     const ctx = setup({ shellDriver: pty.driver })
-    const big = `${INPUT_SECRET} `.repeat(20000)
-    const started = ctx.runner.start({ defId: 'personal:shell-input', worktreePath: '/wt/big', inputs: { task: big } })
+    const big = `${INPUT_SECRET} `.repeat(2800)
+    const inputs = Object.fromEntries([...'abcdefghi'].map((name) => [name, big]))
+    const started = ctx.runner.start({ defId: 'personal:shell-big', worktreePath: '/wt/big', inputs })
     if (!started.ok) throw new Error(started.reason)
     await flush()
     const attemptId = ctx.attemptOf(started.runId, 'test')
@@ -728,10 +785,10 @@ describe('WorkflowRunner concurrency cap', () => {
   const releases: Array<[string, (ctx: Ctx, runId: string) => void, SetupOptions?]> = [
     ['complete done', (ctx, runId) => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())],
     ['complete failed', (ctx, runId) => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())],
-    ['cancelStep', (ctx, runId) => ctx.runner.cancelStep(runId)],
+    ['cancelStep', (ctx, runId) => ctx.runner.cancelStep(runId, currentStepId(ctx.runner, runId))],
     ['cancelRun', (ctx, runId) => ctx.runner.cancelRun(runId)],
-    ['skip', (ctx, runId) => ctx.runner.skip(runId)],
-    ['markDone', (ctx, runId) => ctx.runner.markDone(runId)],
+    ['skip', (ctx, runId) => ctx.runner.skipStep(runId, currentStepId(ctx.runner, runId))],
+    ['markDone', (ctx, runId) => markDoneFor(ctx, runId)],
     [
       'cancelRun from needs-input',
       (ctx, runId) => {
@@ -779,7 +836,7 @@ describe('WorkflowRunner logging', () => {
     ctx.runner.cancelRun(runQ)
     await flush()
     ctx.runner.complete(ctx.attemptOf(runA, 'plan'), failed(SUMMARY_SECRET))
-    ctx.runner.retry(runA)
+    ctx.runner.retryStep(runA, currentStepId(ctx.runner, runA))
     await flush()
     ctx.runner.complete(ctx.attemptOf(runA, 'plan'), {
       status: 'needs-input',
@@ -791,13 +848,13 @@ describe('WorkflowRunner logging', () => {
       data: { note: SUMMARY_SECRET }
     })
     await flush()
-    ctx.runner.retry(runA)
+    ctx.runner.retryStep(runA, currentStepId(ctx.runner, runA))
     await flush()
-    ctx.runner.markDone(runA)
+    markDoneFor(ctx, runA)
     const runB = ctx.startRun('one-shell', '/wt/b')
     await flush()
-    ctx.runner.cancelStep(runB)
-    ctx.runner.skip(runB)
+    ctx.runner.cancelStep(runB, currentStepId(ctx.runner, runB))
+    ctx.runner.skipStep(runB, currentStepId(ctx.runner, runB))
     const runC = ctx.startRun('one-agent', '/wt/c')
     ctx.runner.cancelRun(runC)
     ctx.runner.start({ defId: 'personal:broken', worktreePath: '/wt/d', inputs: {} })
@@ -859,7 +916,7 @@ describe('WorkflowRunner run records', () => {
     await flush()
     const plan = ctx.attemptOf(runId, 'plan')
     ctx.runner.complete(plan, failed('first try'))
-    ctx.runner.retry(runId)
+    ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))
     await flush()
     const planRetry = ctx.attemptOf(runId, 'plan')
     ctx.runner.complete(planRetry, { ...done('plan ok'), data: { files: 3 }, costUsd: 0.5 })
@@ -938,7 +995,7 @@ describe('WorkflowRunner run records', () => {
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
     expect(ctx.stepStatus(blocker, 'plan')).toBe('running')
     expect(ctx.stepStatus(runId, 'build')).toBe('queued')
-    expect(ctx.runner.cancelStep(runId)).toBe(true)
+    expect(ctx.runner.cancelStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true })
 
     const record = lastRecord(ctx, runId)
     expect(record.steps).toEqual({ plan: 'done', build: 'cancelled' })
@@ -958,7 +1015,7 @@ describe('WorkflowRunner run records', () => {
     const two = ctx.agent.started[1]
     expect(two.stepId).toBe('two')
     expect(two.scope).toEqual({
-      inputs: { task: INPUT_SECRET },
+      inputs: {},
       steps: { one: { status: 'done', summary } },
       run: { id: runId, worktree: '/wt/a', contextPath: `/wt/a/.harness/runs/${runId}/context.md` }
     })
@@ -1204,7 +1261,7 @@ describe('WorkflowRunner with the Claude driver', () => {
 
   it.each([
     ['cancelRun', (ctx: Ctx, runId: string) => ctx.runner.cancelRun(runId)],
-    ['markDone', (ctx: Ctx, runId: string) => ctx.runner.markDone(runId)]
+    ['markDone', (ctx: Ctx, runId: string) => markDoneFor(ctx, runId)]
   ] as const)('kills the tab and removes the marker on %s', async (_name, act) => {
     const { ctx, claude, runId } = await claudeRun('one-agent')
     act(ctx, runId)
@@ -1220,7 +1277,7 @@ describe('WorkflowRunner with the Claude driver', () => {
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'trust' })
     expect(ctx.records.at(-1)?.attempts[0].metrics.pauses.map((pause) => pause.reason)).toEqual(['trust'])
     claude.state.trust = 'trusted'
-    expect(ctx.runner.retry(runId)).toBe(true)
+    expect(ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true })
     await flush()
     await flush()
     expect(claude.tabs).toHaveLength(1)
@@ -1229,12 +1286,18 @@ describe('WorkflowRunner with the Claude driver', () => {
   })
 
   it('pauses for hooks consent with no tab, and retry spawns once consent is accepted', async () => {
-    const { ctx, claude, runId } = await claudeRun('one-agent', (c) => c.setConsent('pending'))
+    const claude = claudeHarness()
+    const ctx = setup({ agentDriver: claude.factory })
+    claude.attach(ctx.runner)
+    const runId = ctx.startRun('one-agent')
+    claude.setConsent('pending')
+    await flush()
+    await flush()
     expect(claude.tabs).toEqual([])
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-input' })
     expect(ctx.records.at(-1)?.attempts[0].result?.summary).toBe('hooks consent required')
     claude.setConsent('accepted')
-    expect(ctx.runner.retry(runId)).toBe(true)
+    expect(ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))).toEqual({ ok: true })
     await flush()
     await flush()
     expect(claude.tabs).toHaveLength(1)
@@ -1355,7 +1418,7 @@ describe('WorkflowRunner driver release', () => {
         ctx.agent.emit({ type: 'exited', executionId: ctx.agent.executionFor(attemptId), code: 1 })
     ],
     ['cancelRun', (ctx: Ctx, attemptId: string) => ctx.runner.cancelRun(ctx.runner.runIdForAttempt(attemptId) ?? '')],
-    ['markDone', (ctx: Ctx, attemptId: string) => ctx.runner.markDone(ctx.runner.runIdForAttempt(attemptId) ?? '')]
+    ['markDone', (ctx: Ctx, attemptId: string) => markDoneFor(ctx, ctx.runner.runIdForAttempt(attemptId) ?? '')]
   ] as const)('releases the execution when the attempt ends by %s', async (_name, act) => {
     const ctx = setup()
     const runId = ctx.startRun('one-agent')
@@ -1497,5 +1560,290 @@ describe('WorkflowRunner Stop-hook continuation', () => {
   it('lists the live executions so boot pruning can keep their configs and markers', async () => {
     const { ctx, claude } = await claudeRun('one-agent')
     expect(ctx.runner.liveExecutionIds()).toEqual([claude.tabs[0].tab.id])
+  })
+})
+
+describe('WorkflowRunner start refusals', () => {
+  const start = (ctx: Ctx, slug: DefSlug, worktreePath: string, inputs: Record<string, string>) =>
+    ctx.runner.start({ defId: `personal:${slug}`, worktreePath, inputs })
+
+  it('refuses a worktree that is not in the worktree list', () => {
+    const ctx = setup()
+    expect(start(ctx, 'one-shell', '/elsewhere', {})).toEqual({ ok: false, reason: 'unknown-worktree' })
+    expect(start(ctx, 'one-shell', '/wt/a/', {})).toEqual({ ok: false, reason: 'unknown-worktree' })
+    expect(ctx.shell.started).toEqual([])
+  })
+
+  it.each([
+    ['an undeclared key', { task: 'x', extra: 'y' }],
+    ['a prototype key', JSON.parse('{"task":"x","__proto__":"y"}') as Record<string, string>],
+    ['a non-string value', { task: 7 as unknown as string }],
+    ['an oversize value', { task: 'x'.repeat(64 * 1024 + 1) }],
+    ['too many keys', Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`k${i}`, 'v']))]
+  ])('refuses inputs with %s', (_name, inputs) => {
+    const ctx = setup()
+    expect(start(ctx, 'shell-input', '/wt/a', inputs)).toEqual({ ok: false, reason: 'invalid-inputs' })
+  })
+
+  it.each([
+    ['absent', {}],
+    ['blank', { task: '  ' }]
+  ])('refuses a declared input that is %s', (_name, inputs) => {
+    const ctx = setup()
+    expect(start(ctx, 'shell-input', '/wt/a', inputs)).toEqual({ ok: false, reason: 'missing-input' })
+  })
+
+  it('refuses an agent workflow until hooks consent is accepted, but not a shell-only one', () => {
+    const ctx = setup()
+    ctx.store.dispatch({ type: 'hooks/consentChanged', payload: 'pending' })
+    expect(start(ctx, 'one-agent', '/wt/a', {})).toEqual({ ok: false, reason: 'hooks-consent' })
+    expect(start(ctx, 'one-shell', '/wt/a', {}).ok).toBe(true)
+  })
+})
+
+describe('WorkflowRunner step actions', () => {
+  it('refuses an action for a step that is not the current one, and retry on a running run', () => {
+    const ctx = setup()
+    const runId = ctx.startRun('two-agent')
+    expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: false, reason: 'not-paused' })
+    expect(ctx.runner.skipStep(runId, 'build')).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(ctx.runner.cancelStep(runId, 'build')).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(ctx.runner.cancelStep('missing', 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+    expect(ctx.runner.cancelRun('missing')).toEqual({ ok: false, reason: 'unknown-run' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+  })
+
+  it('refuses retry while a Claude step waits for approval, without killing the agent', async () => {
+    const { ctx, claude, runId } = await claudeRun('one-agent')
+    claude.status(claude.tabs[0].tab.id, 'needs-approval')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+    expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: false, reason: 'awaiting-approval' })
+    expect(ctx.runner.resumeStep(runId, 'plan')).toEqual({ ok: false, reason: 'awaiting-approval' })
+    expect(claude.killed).toEqual([])
+    expect(ctx.runner.cancelStep(runId, 'plan')).toEqual({ ok: true })
+    expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: true })
+  })
+
+  it('refuses retry from clean without run artifacts', () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent')
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
+    return expect(ctx.runner.retryFromClean(runId, 'plan')).resolves.toEqual({ ok: false, reason: 'no-snapshot' })
+  })
+
+  it('keeps the run paused and logs when the restore fails', async () => {
+    const artifacts: RunArtifacts = {
+      prepare: async () => {},
+      snapshot: async ({ n }) => ({ commit: String(n).repeat(40), ref: `refs/test/${n}` }),
+      appendContext: async () => {},
+      restore: async () => {
+        throw new Error(`restore failed ${PROMPT_SECRET}`)
+      }
+    }
+    const ctx = setup({ artifacts })
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
+    expect(await ctx.runner.retryFromClean(runId, 'plan')).toEqual({ ok: false, reason: 'restore-failed' })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.logs.some((line) => line.includes('step action refused restore-failed'))).toBe(true)
+    expect(ctx.logs.join('\n')).not.toContain(PROMPT_SECRET)
+    expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: true })
+  })
+
+  it('launches a queued agent step when reschedule runs after the cap is raised', async () => {
+    const ctx = setup({ cap: 1 })
+    const runA = ctx.startRun('one-agent', '/wt/a')
+    const runB = ctx.startRun('one-agent', '/wt/b')
+    await flush()
+    expect(ctx.stepStatus(runB, 'plan')).toBe('queued')
+    ctx.runner.reschedule()
+    expect(ctx.stepStatus(runB, 'plan')).toBe('queued')
+    ctx.store.dispatch({ type: 'settings/workflowSettingsChanged', payload: { maxConcurrentAgents: 2 } })
+    ctx.runner.reschedule()
+    await flush()
+    expect(ctx.stepStatus(runA, 'plan')).toBe('running')
+    expect(ctx.stepStatus(runB, 'plan')).toBe('running')
+    expect(ctx.agent.started.map((attempt) => attempt.runId)).toEqual([runA, runB])
+    expect(ctx.records.filter((record) => record.runId === runB).at(-1)?.steps.plan).toBe('running')
+  })
+})
+
+describe('WorkflowRunner markDone', () => {
+  it('refuses invalid, undeclared and status fields without touching the step', () => {
+    const ctx = setup()
+    const runId = ctx.startRun('review-then-act')
+    ctx.runner.complete(ctx.attemptOf(runId, 'review'), failed())
+    const refusals = [
+      { summary: 's', fields: { verdict: 'maybe' } },
+      { summary: 's', fields: {} },
+      { summary: 's', fields: { verdict: 'pass', status: 'failed' } },
+      { summary: 's', fields: { verdict: 'pass', [PROMPT_SECRET]: 1 } }
+    ].map((request) => ctx.runner.markDone(runId, 'review', request))
+    expect(refusals).toEqual([
+      { ok: false, reason: 'invalid-output', errors: [{ field: 'verdict', message: 'Expected one of: "pass", "fail"' }] },
+      { ok: false, reason: 'invalid-output', errors: [{ field: 'verdict', message: 'Required' }] },
+      { ok: false, reason: 'invalid-output', errors: [{ field: '', message: 'Fields must be declared step outputs' }] },
+      { ok: false, reason: 'invalid-output', errors: [{ field: '', message: 'Fields must be declared step outputs' }] }
+    ])
+    expect(ctx.stepStatus(runId, 'review')).toBe('failed')
+    expect(ctx.wf().runs[runId].status).toBe('paused')
+  })
+
+  it('completes a paused failed step as the user and hands its summary and data to the next step', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('review-then-act')
+    ctx.runner.complete(ctx.attemptOf(runId, 'review'), failed('tool failed'))
+    const summary = `${'s'.repeat(STEP_SUMMARY_MAX_CHARS)}-CUT`
+    expect(
+      ctx.runner.markDone(runId, 'review', { summary, fields: { verdict: 'pass', notes: ['looks fine'] } })
+    ).toEqual({ ok: true })
+    await flush()
+
+    const reviewAttempts = ctx.wf().runs[runId].steps.review.attemptIds.map((id) => ctx.wf().attempts[id])
+    expect(reviewAttempts).toMatchObject([
+      { status: 'failed', n: 1, completedBy: 'tool' },
+      { status: 'done', n: 2, completedBy: 'user' }
+    ])
+    const act = ctx.agent.started.find((attempt) => attempt.stepId === 'act')
+    expect(act?.scope.steps?.review).toEqual({
+      status: 'done',
+      summary: summary.slice(0, STEP_SUMMARY_MAX_CHARS),
+      data: { verdict: 'pass', notes: ['looks fine'] }
+    })
+    if (act?.step.kind !== 'agent') throw new Error('expected an agent step')
+    expect(renderTemplate(act.step.prompt, act.scope).text).toBe('act on pass')
+    const stored = ctx.records.at(-1)?.attempts.find((attempt) => attempt.stepId === 'review' && attempt.n === 2)
+    expect(stored?.result).toEqual({
+      status: 'done',
+      summary: summary.slice(0, STEP_SUMMARY_MAX_CHARS),
+      completedBy: 'user',
+      data: { verdict: 'pass', notes: ['looks fine'] }
+    })
+  })
+
+  it('completes a live attempt with the user result', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('review-then-act')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'review')
+    expect(ctx.runner.markDone(runId, 'review', { summary: 'by hand', fields: { verdict: 'fail' } })).toEqual({
+      ok: true
+    })
+    expect(ctx.records.at(-1)?.attempts.find((attempt) => attempt.attemptId === attemptId)?.result).toEqual({
+      status: 'done',
+      summary: 'by hand',
+      completedBy: 'user',
+      data: { verdict: 'fail' }
+    })
+    expect(ctx.wf().runs[runId].steps.review.attemptIds).toEqual([attemptId])
+  })
+
+  it('accepts only a summary for a shell step', () => {
+    const ctx = setup()
+    const runId = ctx.startRun('shell-then-agent')
+    ctx.runner.complete(ctx.attemptOf(runId, 'test'), failed())
+    expect(ctx.runner.markDone(runId, 'test', { summary: 's', fields: { verdict: 'pass' } })).toMatchObject({
+      ok: false,
+      reason: 'invalid-output'
+    })
+    expect(ctx.runner.markDone(runId, 'test', { summary: 'fixed by hand', fields: {} })).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'test')).toBe('done')
+  })
+})
+
+describe('WorkflowRunner restore in flight', () => {
+  it('refuses cancelRun while a clean restore runs, then the retry proceeds', async () => {
+    let finishRestore = (): void => {}
+    const artifacts: RunArtifacts = {
+      prepare: async () => {},
+      snapshot: async ({ n }) => ({ commit: String(n).repeat(40), ref: `refs/test/${n}` }),
+      appendContext: async () => {},
+      restore: () =>
+        new Promise<void>((resolve) => {
+          finishRestore = resolve
+        })
+    }
+    const ctx = setup({ artifacts })
+    const runId = ctx.startRun('one-shell')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'test'), failed())
+
+    const pending = ctx.runner.retryFromClean(runId, 'test')
+    await flush()
+    expect(ctx.runner.cancelRun(runId)).toEqual({ ok: false, reason: 'busy' })
+    expect(ctx.runner.start({ defId: 'personal:one-shell', worktreePath: '/wt/one-shell', inputs: {} })).toEqual({
+      ok: false,
+      reason: 'worktree-busy'
+    })
+    finishRestore()
+    expect(await pending).toEqual({ ok: true })
+    await flush()
+    expect(ctx.shell.started.map((attempt) => attempt.n)).toEqual([1, 2])
+    expect(ctx.wf().runs[runId].status).toBe('running')
+  })
+})
+
+describe('WorkflowRunner before boot reconcile', () => {
+  function unready(runs: Record<string, WorkflowRun> = {}) {
+    const store = new Store({
+      ...initialState,
+      hooks: { ...initialState.hooks, consent: 'accepted' },
+      worktrees: { ...initialState.worktrees, list: WORKTREES.map(worktreeFixture) },
+      workflows: { ...initialState.workflows, runs },
+      settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: true } }
+    })
+    const agent = new FakeStepDriver('agent')
+    const runner = new WorkflowRunner({
+      store,
+      loader: { getDefinition: (id) => (id === 'personal:one-agent' ? detail('one-agent') : null) },
+      drivers: { agent, shell: new FakeStepDriver('shell') },
+      now: () => 1,
+      newId: () => 'run-new',
+      log: () => {}
+    })
+    return { runner, agent }
+  }
+  const request = { defId: 'personal:one-agent', worktreePath: '/wt/a', inputs: {} }
+
+  it('refuses start until reconcile ran, then accepts it', async () => {
+    const { runner, agent } = unready()
+    expect(runner.start(request)).toEqual({ ok: false, reason: 'starting' })
+    runner.reconcile([])
+    expect(runner.start(request)).toEqual({ ok: true, runId: 'run-new' })
+    await flush()
+    expect(agent.started).toHaveLength(1)
+  })
+
+  it('becomes ready even when reconcile throws on a malformed record', async () => {
+    const { runner, agent } = unready()
+    const malformed = {
+      version: 1,
+      runId: 'run-bad',
+      status: 'running',
+      worktreePath: '/wt/b',
+      attempts: null
+    } as unknown as WorkflowRunRecord
+    expect(() => runner.reconcile([malformed])).toThrow()
+    expect(runner.start(request)).toEqual({ ok: true, runId: 'run-new' })
+    await flush()
+    expect(agent.started).toHaveLength(1)
+  })
+
+  it('refuses start on a worktree whose hydrated run is not reconciled yet', () => {
+    const { runner } = unready({
+      'run-old': {
+        defId: 'personal:one-agent',
+        defHash: 'h',
+        worktreePath: '/wt/a',
+        status: 'running',
+        startedAt: 1,
+        steps: { plan: { status: 'pending', attemptIds: [] } }
+      }
+    })
+    expect(runner.start(request)).toMatchObject({ ok: false })
+    runner.reconcile([])
+    expect(runner.start(request)).toEqual({ ok: false, reason: 'worktree-busy' })
   })
 })

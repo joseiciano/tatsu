@@ -180,3 +180,18 @@ export interface WorkflowRunRecord {
   timeToFirstDoneMs?: number
   attempts: WorkflowAttemptRecord[]
 }
+
+export interface WorkflowStartRunPayload {
+  defId: string
+  worktreePath: string
+  inputs: Record<string, string>
+}
+
+export interface WorkflowMarkDonePayload {
+  summary: string
+  fields: Record<string, unknown>
+}
+
+export type WorkflowStartRunResponse = { runId: string } | { error: string }
+
+export type WorkflowActionResponse = { ok: true } | { error: string }

@@ -4,8 +4,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { WorkflowRunner, createGitRunArtifacts, type WorkflowRunnerDeps } from '.'
-import { FakeStepDriver } from './fake-step-driver'
+import { WorkflowRunner, createGitRunArtifacts, type StepAttempt, type WorkflowRunnerDeps } from '.'
+import { FakeStepDriver, worktreeFixture, type FakeStartBehavior } from './fake-step-driver'
 import { Store } from '../store'
 import { createWorkflowRunLookup, createWorkflowRunRecords, type WorkflowRunRecords } from '../workflow-run-records'
 import { registerWorkflowsRequestHandlers } from '../workflows-transport'
@@ -66,16 +66,28 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-function setup(worktree: string) {
+function initRepo(repo: string): void {
+  execFileSync('git', ['init', '-q', repo])
+  git(repo, 'config', 'user.email', 't@t')
+  git(repo, 'config', 'user.name', 't')
+  git(repo, 'config', 'commit.gpgsign', 'false')
+  writeFileSync(join(repo, 'README.md'), 'hello\n')
+  git(repo, 'add', '.')
+  git(repo, 'commit', '-q', '-m', 'init')
+}
+
+function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeStartBehavior) {
   const store = new Store({
     ...initialState,
+    hooks: { ...initialState.hooks, consent: 'accepted' },
+    worktrees: { ...initialState.worktrees, list: [worktreeFixture(worktree)] },
     settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: true } }
   })
   const loader: WorkflowRunnerDeps['loader'] = {
     getDefinition: (id) => (id === 'personal:handoff' ? definitionDetail() : null)
   }
   records = createWorkflowRunRecords({ dir: join(root, 'user-data', 'workflow-runs') })
-  const agent = new FakeStepDriver('agent')
+  const agent = new FakeStepDriver('agent', agentScript)
   const shell = new FakeStepDriver('shell')
   const logs: string[] = []
   let ids = 0
@@ -89,6 +101,7 @@ function setup(worktree: string) {
     persist: (run) => records.persist(run),
     artifacts: createGitRunArtifacts()
   })
+  runner.reconcile([])
   const handlers = new Map<string, Handler>()
   registerWorkflowsRequestHandlers({
     transport: { onRequest: (name, handler) => handlers.set(name, handler) },
@@ -98,7 +111,9 @@ function setup(worktree: string) {
       liveAttemptRunId: (attemptId) => runner.runIdForAttempt(attemptId),
       records,
       attemptRunId: (attemptId) => store.getSnapshot().state.workflows.attempts[attemptId]?.runId
-    })
+    }),
+    runner,
+    log: () => {}
   })
   const call = async (name: string, payload: unknown): Promise<unknown> => {
     const handler = handlers.get(name)
@@ -222,5 +237,68 @@ describe('runner artifacts against a real git repo', () => {
     expect(ctx.logs).toContain('[workflow] run artifacts unavailable')
     expect(ctx.logs.filter((l) => l === '[workflow] base snapshot skipped')).toHaveLength(2)
     expect(existsSync(join(plain, '.harness'))).toBe(false)
+  })
+})
+
+describe('retry from clean against a real git repo', () => {
+  async function failedFirstAttempt() {
+    const repo = join(root, 'repo')
+    initRepo(repo)
+    const seen: string[] = []
+    const ctx = setup(repo, () => {
+      seen.push(readFileSync(join(repo, 'README.md'), 'utf8'))
+      return 'ok'
+    })
+    const runId = ctx.start()
+    await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
+    writeFileSync(join(repo, 'README.md'), 'edited by the step\n')
+    writeFileSync(join(repo, 'extra.txt'), 'new file\n')
+    ctx.runner.complete(ctx.attemptOf(runId, 'one') ?? '', { status: 'failed', summary: 'no', completedBy: 'tool' })
+    return { repo, seen, ctx, runId }
+  }
+
+  it('restores the base snapshot before the new attempt starts and keeps the failed head ref', async () => {
+    const { repo, seen, ctx, runId } = await failedFirstAttempt()
+
+    expect(await ctx.runner.retryFromClean(runId, 'one')).toEqual({ ok: true })
+    await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(2), WAIT)
+
+    expect(seen).toEqual(['hello\n', 'hello\n'])
+    expect(existsSync(join(repo, 'extra.txt'))).toBe(false)
+    const record = ctx.runner.getRunRecord(runId)
+    expect(record?.attempts.map((attempt) => [attempt.n, attempt.status])).toEqual([
+      [1, 'failed'],
+      [2, 'running']
+    ])
+    const head = record?.attempts[0].headSnapshot
+    if (!head) throw new Error('missing head snapshot')
+    expect(git(repo, 'rev-parse', head.ref)).toBe(head.commit)
+    expect(git(repo, 'show', `${head.commit}:extra.txt`)).toBe('new file')
+    expect(ctx.agent.started[1]).toMatchObject({ stepId: 'one', n: 2 })
+  })
+
+  it('refuses every other action, cancel included, while the restore runs', async () => {
+    const { repo, ctx, runId } = await failedFirstAttempt()
+
+    const pending = ctx.runner.retryFromClean(runId, 'one')
+    expect(ctx.runner.retryStep(runId, 'one')).toEqual({ ok: false, reason: 'busy' })
+    expect(await ctx.runner.retryFromClean(runId, 'one')).toEqual({ ok: false, reason: 'busy' })
+    expect(ctx.runner.cancelRun(runId)).toEqual({ ok: false, reason: 'busy' })
+    expect(await pending).toEqual({ ok: true })
+
+    await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(2), WAIT)
+    expect(readFileSync(join(repo, 'README.md'), 'utf8')).toBe('hello\n')
+    expect(ctx.runner.cancelRun(runId)).toEqual({ ok: true })
+  })
+
+  it('refuses when the last attempt has no base snapshot', async () => {
+    const plain = join(root, 'plain')
+    execFileSync('mkdir', ['-p', plain])
+    const ctx = setup(plain)
+    const runId = ctx.start()
+    await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
+    ctx.runner.complete(ctx.attemptOf(runId, 'one') ?? '', { status: 'failed', summary: 'no', completedBy: 'tool' })
+    expect(await ctx.runner.retryFromClean(runId, 'one')).toEqual({ ok: false, reason: 'no-snapshot' })
+    expect(ctx.agent.started).toHaveLength(1)
   })
 })

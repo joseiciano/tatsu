@@ -14,6 +14,7 @@ export interface StepAttempt {
   inputs: Record<string, string>
   step: RunnableStep
   scope: TemplateScope
+  resumeSessionId?: string
   bind(execution: StepExecution): boolean
 }
 
