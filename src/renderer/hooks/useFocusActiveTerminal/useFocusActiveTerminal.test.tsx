@@ -78,6 +78,19 @@ describe('useFocusActiveTerminal', () => {
     expect(focusTerminalById.mock.calls.map(([id]) => id)).toEqual(['tab-1', 'tab-2', 'tab-9'])
   })
 
+  it('does not pull focus out of an active focus trap', () => {
+    const trap = document.createElement('div')
+    trap.setAttribute('data-focus-trap', '')
+    const field = document.createElement('textarea')
+    trap.appendChild(field)
+    document.body.appendChild(trap)
+    field.focus()
+    render('/wt/a', { '/wt/a': 'tab-1' })
+    flushFrames()
+    expect(focusTerminalById).not.toHaveBeenCalled()
+    trap.remove()
+  })
+
   it('skips diff tabs and an empty selection', () => {
     render('/wt/a', { '/wt/a': 'diff-1' })
     render(null, { '/wt/a': 'tab-1' })

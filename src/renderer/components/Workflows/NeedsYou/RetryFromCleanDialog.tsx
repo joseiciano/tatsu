@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef } from 'react'
+import { useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useFocusTrap } from '../../../hooks/useFocusTrap'
 
 interface RetryFromCleanDialogProps {
   stepId: string
@@ -10,36 +11,22 @@ interface RetryFromCleanDialogProps {
 export function RetryFromCleanDialog({ stepId, onConfirm, onCancel }: RetryFromCleanDialogProps): JSX.Element {
   const titleId = useId()
   const descId = useId()
+  const dialogRef = useRef<HTMLDivElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    cancelRef.current?.focus()
-    return () => {
-      if (previous && document.contains(previous)) previous.focus()
-    }
-  }, [])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      onCancel()
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [onCancel])
+  useFocusTrap(dialogRef, { active: true, onEscape: onCancel, initialFocus: cancelRef })
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-start justify-center pt-[15vh] px-4 bg-black/40" onClick={onCancel}>
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-surface rounded-xl shadow-2xl border border-border flex flex-col"
+        className="w-full max-w-md bg-surface rounded-xl shadow-2xl border border-border flex flex-col outline-none"
       >
         <h2 id={titleId} className="px-4 pt-4 text-sm font-semibold text-fg-bright break-words">
           Retry “{stepId}” from clean?

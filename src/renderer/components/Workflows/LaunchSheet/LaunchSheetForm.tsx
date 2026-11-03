@@ -1,6 +1,7 @@
-import { useEffect, useId } from 'react'
+import { useId, useRef } from 'react'
 import { Loader2, Play, ShieldAlert, X } from 'lucide-react'
 import type { HooksConsent } from '../../../../shared/state/hooks'
+import { useFocusTrap } from '../../../hooks/useFocusTrap'
 import type { LaunchInputField } from '../launch-sheet-helpers'
 
 export interface LaunchSheetOption {
@@ -62,23 +63,20 @@ export function LaunchSheetForm({
   const titleId = `${baseId}-title`
   const reasonId = `${baseId}-reason`
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const selectRef = useRef<HTMLSelectElement | null>(null)
+
+  useFocusTrap(dialogRef, { active: true, onEscape: onClose, initialFocus: selectRef })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-app/80 backdrop-blur-sm" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="bg-panel border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col max-h-[85vh]"
+        tabIndex={-1}
+        className="bg-panel border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col max-h-[85vh] outline-none"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -115,11 +113,11 @@ export function LaunchSheetForm({
                 Workflow
               </label>
               <select
+                ref={selectRef}
                 id={`${baseId}-def`}
                 value={selectedId}
                 onChange={(e) => onSelect(e.target.value)}
                 disabled={submitting}
-                autoFocus
                 className={`${FIELD_CLASS} cursor-pointer`}
               >
                 {selectedId === '' && <option value="">Choose a workflow</option>}

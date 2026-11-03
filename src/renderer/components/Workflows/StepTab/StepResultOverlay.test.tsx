@@ -82,7 +82,7 @@ afterEach(() => {
 
 async function render(): Promise<void> {
   await act(async () => {
-    root.render(<StepResultOverlay workflow={WORKFLOW} title="Claude exited." />)
+    root.render(<StepResultOverlay workflow={WORKFLOW} title="Claude exited." active />)
   })
 }
 

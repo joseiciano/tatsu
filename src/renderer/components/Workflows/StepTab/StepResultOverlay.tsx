@@ -14,6 +14,7 @@ import { MarkDoneForm } from './MarkDoneForm'
 interface StepResultOverlayProps {
   workflow: TerminalTabWorkflow
   title: string
+  active: boolean
 }
 
 interface Records {
@@ -21,7 +22,7 @@ interface Records {
   run: WorkflowRunRecord | null
 }
 
-export function StepResultOverlay({ workflow, title }: StepResultOverlayProps): JSX.Element {
+export function StepResultOverlay({ workflow, title, active }: StepResultOverlayProps): JSX.Element {
   const backend = useBackend()
   const titleId = useId()
   const { runId, stepId, attemptId } = workflow
@@ -82,7 +83,7 @@ export function StepResultOverlay({ workflow, title }: StepResultOverlayProps): 
             <dd className="text-fg whitespace-pre-wrap break-words max-h-40 overflow-auto">{summary || '—'}</dd>
           </dl>
         )}
-        {mode === 'result-with-mark-done' && <MarkDoneForm key={attemptId} step={step} onSubmit={markDone} />}
+        {mode === 'result-with-mark-done' && <MarkDoneForm key={attemptId} step={step} active={active} onSubmit={markDone} />}
       </section>
     </div>
   )

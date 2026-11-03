@@ -36,7 +36,7 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  act(() => root.render(<MarkDoneForm step={STEP} onSubmit={onSubmit} />))
+  act(() => root.render(<MarkDoneForm step={STEP} active onSubmit={onSubmit} />))
 })
 
 afterEach(() => {
@@ -114,5 +114,44 @@ describe('MarkDoneForm', () => {
     await type(byLabel('count'), '1')
     await submit()
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('This step cannot be marked done now')
+  })
+
+  it('keeps the form enabled after a server refusal', async () => {
+    onSubmit.mockResolvedValue({ error: 'This step cannot be marked done now' })
+    await type(byLabel('Summary'), 'done')
+    await type(byLabel('count'), '1')
+    await submit()
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false)
+  })
+
+  it('stays disabled after a successful submit and ignores a second submit', async () => {
+    await type(byLabel('Summary'), 'done')
+    await type(byLabel('count'), '1')
+    await submit()
+    const button = container.querySelector<HTMLButtonElement>('button[type="submit"]')
+    expect(button?.disabled).toBe(true)
+    expect(button?.textContent).toBe('Mark done')
+    await act(async () => {
+      container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts focus in the summary and wraps Shift+Tab to the submit button', () => {
+    const summary = byLabel('Summary')
+    expect(document.activeElement).toBe(summary)
+    act(() => {
+      summary.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(document.activeElement).toBe(container.querySelector('button[type="submit"]'))
+  })
+
+  it('leaves focus alone while inactive', () => {
+    const outside = document.createElement('input')
+    document.body.appendChild(outside)
+    outside.focus()
+    act(() => root.render(<MarkDoneForm key="inactive" step={STEP} active={false} onSubmit={onSubmit} />))
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
   })
 })
