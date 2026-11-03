@@ -66,7 +66,7 @@ it.runIf(process.env.CORE_RECORD === '1')('records core golden values from the T
     writeFileSync(path, `${JSON.stringify(cases, null, 2)}\n`)
   }
   if (writes.length === 0) process.stdout.write('core fixtures: no change\n')
-})
+}, 600_000)
 
 it('encodes handler replies as value, noValue or error', async () => {
   expect(await replyOf(() => undefined)).toEqual({ noValue: true })

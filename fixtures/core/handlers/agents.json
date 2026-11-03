@@ -1,0 +1,2265 @@
+[
+  {
+    "name": "setClaudeCommand: trims and stores a custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      "  claude-dev --flag \n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-dev --flag\"\n}",
+      "events": [
+        {
+          "type": "settings/claudeCommandChanged",
+          "payload": "claude-dev --flag"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: replaces an existing custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      "claude-next"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-next\"\n}",
+      "events": [
+        {
+          "type": "settings/claudeCommandChanged",
+          "payload": "claude-next"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: the default deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      " claude "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeCommandChanged",
+          "payload": "claude"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: empty deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeCommandChanged",
+          "payload": "claude"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: whitespace only deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      "\t  　"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeCommandChanged",
+          "payload": "claude"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: a number throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-old\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "command.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setCodexCommand: trims and stores a custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexCommand",
+    "args": [
+      "  codex-dev --flag \n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-dev --flag\"\n}",
+      "events": [
+        {
+          "type": "settings/codexCommandChanged",
+          "payload": "codex-dev --flag"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexCommand: replaces an existing custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexCommand",
+    "args": [
+      "codex-next"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-next\"\n}",
+      "events": [
+        {
+          "type": "settings/codexCommandChanged",
+          "payload": "codex-next"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexCommand: the default deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexCommand",
+    "args": [
+      " codex "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexCommandChanged",
+          "payload": "codex"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexCommand: empty deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexCommand",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexCommandChanged",
+          "payload": "codex"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexCommand: whitespace only deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexCommand",
+    "args": [
+      "\t  　"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexCommandChanged",
+          "payload": "codex"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexCommand: a number throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexCommand",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexCommand\": \"codex-old\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "command.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setOpencodeCommand: trims and stores a custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeCommand",
+    "args": [
+      "  opencode-dev --flag \n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-dev --flag\"\n}",
+      "events": [
+        {
+          "type": "settings/opencodeCommandChanged",
+          "payload": "opencode-dev --flag"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeCommand: replaces an existing custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeCommand",
+    "args": [
+      "opencode-next"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-next\"\n}",
+      "events": [
+        {
+          "type": "settings/opencodeCommandChanged",
+          "payload": "opencode-next"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeCommand: the default deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeCommand",
+    "args": [
+      " opencode "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeCommandChanged",
+          "payload": "opencode"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeCommand: empty deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeCommand",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeCommandChanged",
+          "payload": "opencode"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeCommand: whitespace only deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeCommand",
+    "args": [
+      "\t  　"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeCommandChanged",
+          "payload": "opencode"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeCommand: a number throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeCommand",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeCommand\": \"opencode-old\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "command.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setPiCommand: trims and stores a custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiCommand",
+    "args": [
+      "  pi-dev --flag \n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-dev --flag\"\n}",
+      "events": [
+        {
+          "type": "settings/piCommandChanged",
+          "payload": "pi-dev --flag"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiCommand: replaces an existing custom command",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiCommand",
+    "args": [
+      "pi-next"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-next\"\n}",
+      "events": [
+        {
+          "type": "settings/piCommandChanged",
+          "payload": "pi-next"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiCommand: the default deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiCommand",
+    "args": [
+      " pi "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piCommandChanged",
+          "payload": "pi"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiCommand: empty deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiCommand",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piCommandChanged",
+          "payload": "pi"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiCommand: whitespace only deletes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiCommand",
+    "args": [
+      "\t  　"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-old\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piCommandChanged",
+          "payload": "pi"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiCommand: a number throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiCommand",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piCommand\": \"pi-old\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "command.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: null throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of null (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: missing argument throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of undefined (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: an object throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      {
+        "trim": 1
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "command.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setClaudeCommand: a boolean throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeCommand",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "command.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "getDefaultClaudeCommand: returns claude",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:getDefaultClaudeCommand",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "claude"
+      }
+    }
+  },
+  {
+    "name": "setClaudeModel: a model name is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeModel",
+    "args": [
+      "claude-model-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeModel\": \"claude-model-1\"\n}",
+      "events": [
+        {
+          "type": "settings/claudeModelChanged",
+          "payload": "claude-model-1"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeModel: replaces the existing model",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeModel",
+    "args": [
+      "claude-model-2"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeModel\": \"claude-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeModel\": \"claude-model-2\"\n}",
+      "events": [
+        {
+          "type": "settings/claudeModelChanged",
+          "payload": "claude-model-2"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeModel: empty deletes and dispatches empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeModel",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeModel\": \"claude-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeModelChanged",
+          "payload": ""
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeModel: null deletes and dispatches null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeModel",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeModel\": \"claude-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeModelChanged",
+          "payload": null
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeModel: whitespace is truthy and stored as is",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeModel",
+    "args": [
+      "  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeModel\": \"  \"\n}",
+      "events": [
+        {
+          "type": "settings/claudeModelChanged",
+          "payload": "  "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexModel: a model name is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexModel",
+    "args": [
+      "codex-model-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexModel\": \"codex-model-1\"\n}",
+      "events": [
+        {
+          "type": "settings/codexModelChanged",
+          "payload": "codex-model-1"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexModel: replaces the existing model",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexModel",
+    "args": [
+      "codex-model-2"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexModel\": \"codex-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexModel\": \"codex-model-2\"\n}",
+      "events": [
+        {
+          "type": "settings/codexModelChanged",
+          "payload": "codex-model-2"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexModel: empty deletes and dispatches empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexModel",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexModel\": \"codex-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexModelChanged",
+          "payload": ""
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexModel: null deletes and dispatches null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexModel",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexModel\": \"codex-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexModelChanged",
+          "payload": null
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexModel: whitespace is truthy and stored as is",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexModel",
+    "args": [
+      "  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexModel\": \"  \"\n}",
+      "events": [
+        {
+          "type": "settings/codexModelChanged",
+          "payload": "  "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeModel: a model name is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeModel",
+    "args": [
+      "opencode-model-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeModel\": \"opencode-model-1\"\n}",
+      "events": [
+        {
+          "type": "settings/opencodeModelChanged",
+          "payload": "opencode-model-1"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeModel: replaces the existing model",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeModel",
+    "args": [
+      "opencode-model-2"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeModel\": \"opencode-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeModel\": \"opencode-model-2\"\n}",
+      "events": [
+        {
+          "type": "settings/opencodeModelChanged",
+          "payload": "opencode-model-2"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeModel: empty deletes and dispatches empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeModel",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeModel\": \"opencode-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeModelChanged",
+          "payload": ""
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeModel: null deletes and dispatches null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeModel",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeModel\": \"opencode-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeModelChanged",
+          "payload": null
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeModel: whitespace is truthy and stored as is",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeModel",
+    "args": [
+      "  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeModel\": \"  \"\n}",
+      "events": [
+        {
+          "type": "settings/opencodeModelChanged",
+          "payload": "  "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiModel: a model name is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiModel",
+    "args": [
+      "pi-model-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piModel\": \"pi-model-1\"\n}",
+      "events": [
+        {
+          "type": "settings/piModelChanged",
+          "payload": "pi-model-1"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiModel: replaces the existing model",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiModel",
+    "args": [
+      "pi-model-2"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piModel\": \"pi-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piModel\": \"pi-model-2\"\n}",
+      "events": [
+        {
+          "type": "settings/piModelChanged",
+          "payload": "pi-model-2"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiModel: empty deletes and dispatches empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiModel",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piModel\": \"pi-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piModelChanged",
+          "payload": ""
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiModel: null deletes and dispatches null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiModel",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piModel\": \"pi-model-1\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piModelChanged",
+          "payload": null
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiModel: whitespace is truthy and stored as is",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiModel",
+    "args": [
+      "  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piModel\": \"  \"\n}",
+      "events": [
+        {
+          "type": "settings/piModelChanged",
+          "payload": "  "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: stores the map as is",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      {
+        " SPACED ": " v ",
+        "bad-key": "y",
+        "B": "2",
+        "A": ""
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \" SPACED \": \" v \",\n    \"bad-key\": \"y\",\n    \"B\": \"2\",\n    \"A\": \"\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {
+            " SPACED ": " v ",
+            "bad-key": "y",
+            "B": "2",
+            "A": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: __proto__ is kept as an own key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      {
+        "__proto__": "x",
+        "B": "1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"__proto__\": \"x\",\n    \"B\": \"1\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {
+            "__proto__": "x",
+            "B": "1"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: integer-like keys come first",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      {
+        "2": "two",
+        "10": "ten",
+        "Z": "z"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"2\": \"two\",\n    \"10\": \"ten\",\n    \"Z\": \"z\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {
+            "2": "two",
+            "10": "ten",
+            "Z": "z"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: empty map deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      {}
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: null deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: missing argument deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: a number has no keys and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: true has no keys and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: empty array deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      []
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setCodexEnvVars: empty string deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setCodexEnvVars",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"codexEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/codexEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: stores the map as is",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      {
+        " SPACED ": " v ",
+        "bad-key": "y",
+        "B": "2",
+        "A": ""
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \" SPACED \": \" v \",\n    \"bad-key\": \"y\",\n    \"B\": \"2\",\n    \"A\": \"\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {
+            " SPACED ": " v ",
+            "bad-key": "y",
+            "B": "2",
+            "A": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: __proto__ is kept as an own key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      {
+        "__proto__": "x",
+        "B": "1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"__proto__\": \"x\",\n    \"B\": \"1\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {
+            "__proto__": "x",
+            "B": "1"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: integer-like keys come first",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      {
+        "2": "two",
+        "10": "ten",
+        "Z": "z"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"2\": \"two\",\n    \"10\": \"ten\",\n    \"Z\": \"z\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {
+            "2": "two",
+            "10": "ten",
+            "Z": "z"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: empty map deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      {}
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: null deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: missing argument deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: a number has no keys and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: true has no keys and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: empty array deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      []
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setOpencodeEnvVars: empty string deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setOpencodeEnvVars",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"opencodeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/opencodeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: cleans keys and converts values",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        " OK ": "v",
+        "1BAD": "x",
+        "bad-key": "y",
+        "_under": "u",
+        "N": null,
+        "NUM": 5,
+        "FLOAT": 1.5,
+        "OBJ": {
+          "a": 1
+        },
+        "ARR": [
+          1,
+          null,
+          "b"
+        ],
+        "BOOL": false,
+        "": "e",
+        "   ": "w",
+        "ÄNON": "n"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OK\": \"v\",\n    \"_under\": \"u\",\n    \"N\": \"\",\n    \"NUM\": \"5\",\n    \"FLOAT\": \"1.5\",\n    \"OBJ\": \"[object Object]\",\n    \"ARR\": \"1,,b\",\n    \"BOOL\": \"false\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {
+            "OK": "v",
+            "_under": "u",
+            "N": "",
+            "NUM": "5",
+            "FLOAT": "1.5",
+            "OBJ": "[object Object]",
+            "ARR": "1,,b",
+            "BOOL": "false"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: underscores and digits after the first character are kept",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "MY_VAR_2": "a",
+        "__X9": "b",
+        "A1B2": "c"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"MY_VAR_2\": \"a\",\n    \"__X9\": \"b\",\n    \"A1B2\": \"c\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {
+            "MY_VAR_2": "a",
+            "__X9": "b",
+            "A1B2": "c"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: __proto__ is dropped next to another key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "__proto__": "x",
+        " __proto__ ": "y",
+        "B": "1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"B\": \"1\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {
+            "B": "1"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: __proto__ alone deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "__proto__": "x"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: integer-like and digit keys are dropped",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "2": "two",
+        "10": "ten",
+        "Z": "z",
+        " 3 ": "three"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"Z\": \"z\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {
+            "Z": "z"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: a later key that trims to the same name keeps the first position",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "A": "1",
+        "B": "2",
+        " A": "3"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"A\": \"3\",\n    \"B\": \"2\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {
+            "A": "3",
+            "B": "2"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: replaces the existing map",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "NEW": "n"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"NEW\": \"n\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {
+            "NEW": "n"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: only invalid keys deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {
+        "1BAD": "x",
+        "a-b": "y"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: empty map deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      {}
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: null deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: missing argument deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: a string is not an object and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      "A=1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: an array has only index keys and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      [
+        "A"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setClaudeEnvVars: a number deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setClaudeEnvVars",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/claudeEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: cleans keys and converts values",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        " OK ": "v",
+        "1BAD": "x",
+        "bad-key": "y",
+        "_under": "u",
+        "N": null,
+        "NUM": 5,
+        "FLOAT": 1.5,
+        "OBJ": {
+          "a": 1
+        },
+        "ARR": [
+          1,
+          null,
+          "b"
+        ],
+        "BOOL": false,
+        "": "e",
+        "   ": "w",
+        "ÄNON": "n"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OK\": \"v\",\n    \"_under\": \"u\",\n    \"N\": \"\",\n    \"NUM\": \"5\",\n    \"FLOAT\": \"1.5\",\n    \"OBJ\": \"[object Object]\",\n    \"ARR\": \"1,,b\",\n    \"BOOL\": \"false\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {
+            "OK": "v",
+            "_under": "u",
+            "N": "",
+            "NUM": "5",
+            "FLOAT": "1.5",
+            "OBJ": "[object Object]",
+            "ARR": "1,,b",
+            "BOOL": "false"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: underscores and digits after the first character are kept",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "MY_VAR_2": "a",
+        "__X9": "b",
+        "A1B2": "c"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"MY_VAR_2\": \"a\",\n    \"__X9\": \"b\",\n    \"A1B2\": \"c\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {
+            "MY_VAR_2": "a",
+            "__X9": "b",
+            "A1B2": "c"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: __proto__ is dropped next to another key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "__proto__": "x",
+        " __proto__ ": "y",
+        "B": "1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"B\": \"1\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {
+            "B": "1"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: __proto__ alone deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "__proto__": "x"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: integer-like and digit keys are dropped",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "2": "two",
+        "10": "ten",
+        "Z": "z",
+        " 3 ": "three"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"Z\": \"z\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {
+            "Z": "z"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: a later key that trims to the same name keeps the first position",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "A": "1",
+        "B": "2",
+        " A": "3"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"A\": \"3\",\n    \"B\": \"2\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {
+            "A": "3",
+            "B": "2"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: replaces the existing map",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "NEW": "n"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"NEW\": \"n\"\n  }\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {
+            "NEW": "n"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: only invalid keys deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {
+        "1BAD": "x",
+        "a-b": "y"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: empty map deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      {}
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: null deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: missing argument deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: a string is not an object and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      "A=1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: an array has only index keys and deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      [
+        "A"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPiEnvVars: a number deletes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPiEnvVars",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"piEnvVars\": {\n    \"OLD\": \"1\"\n  }\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/piEnvVarsChanged",
+          "payload": {}
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  }
+]
