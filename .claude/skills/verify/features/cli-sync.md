@@ -1,8 +1,8 @@
-# CLI sync (`tatsu config ls`)
+# CLI sync (`tatsu config ls`, `tatsu sync status`, `tatsu sync plan`)
 
 `tatsu config ls` lists the agents, skills and commands Tatsu sees, one block per scope (harness × resource type). It calls `harnessConfig:scan({scope})` once per scope, one call after another. The scopes come from the shared agent registry: the supported capabilities of `claude`, `codex` and `opencode`, in registry order. The CLI never reads harness files itself.
 
-Later tickets (`sync status`, `sync plan`, `sync apply`) add their steps to this file. They reuse the preconditions and the `control.mjs` shim below.
+`tatsu sync status` calls `harnessConfig:compare({scope})` per scope in the same order, and `tatsu sync plan` calls `harnessConfig:planSyncToDisk({scope})` (or `{scope, detach}`) for exactly one scope. Neither writes anything. Ticket 03 (`sync apply`) adds its steps to this file. They reuse the preconditions and the `control.mjs` shim below.
 
 ## Sub-features
 
@@ -20,9 +20,18 @@ Later tickets (`sync status`, `sync plan`, `sync apply`) add their steps to this
 
   `details` is `{code, applied?}`. A malformed reply is `request-failed` (exit 1).
 
+- `status-human`: a table with the columns SCOPE, STATUS, NOT ON DISK (`configOnly.length`), CHANGED (`changed.length`) and NOTES (`N render errors, N fragment errors, N fragment edits`, empty when there are none). `--json` prints `HarnessConfigComparison[]`.
+- `status-check`: `sync status --check` exits 1 (`command-failed`, `N scopes out of sync`, singular for 1) after printing the table (or the JSON) when any scope is not `synced`; it exits 0 when all are. Without `--check` the command exits 0 whatever the status.
+- `plan`: `sync plan --agent <k> --type <t> [--detach <id>...]`. Both `--agent` and `--type` are required (exit 2 before connecting otherwise). The human output starts with `Plan <planId> · <scope>` and then takes one of three shapes (`classifyPlan` in `src/cli/commands/sync`):
+  - writes (`configOnly + changed + detach > 0`): `Not on disk:`, `Content changed:` (template-built rows add `[template <templateRef>]` and the id to pass to `--detach`; ids being detached are listed only under `Detach:`, since the backend keeps them in `changed` but never overwrites them), `Detach:`, any issue sections, and `Apply with: tatsu sync apply --agent <k> --type <t> --plan <planId> --yes`;
+  - no writes but issues: the issue sections (`Render errors:`, `Fragment errors:`, `Fragment edits:`) and `Nothing to write; N issues need attention.`;
+  - neither: `Already in sync.`
+
+  `sync plan` exits 0 whenever the request succeeds, issues or not. `--json` prints the `HarnessConfigSyncPlan`. A `--detach` id the backend rejects (`unknown-resource`) exits 2.
+
 ## How to get to it (user POV)
 
-- From a shell: `pnpm tatsu config ls [--agent claude|codex|opencode] [--type agents|skills|commands] [--json]`. This runs `node dist-headless/cli/index.js`.
+- From a shell: `pnpm tatsu config ls [--agent claude|codex|opencode] [--type agents|skills|commands] [--json]`. This runs `node dist-headless/cli/index.js`. Likewise `pnpm tatsu sync status [--agent] [--type] [--check] [--json]` and `pnpm tatsu sync plan --agent <k> --type <t> [--detach <id>...] [--json]`.
 - The CLI finds the backend the same way as `tatsu status` (see [cli-status.md](cli-status.md)).
 
 ## Driving it
@@ -83,9 +92,39 @@ node $C req harnessConfig:scan '{"scope":{"agentKind":"claude","resourceType":"s
 
 Last run: ticket sync-01 (tatsu-cli/sync-01-config-ls). Every `config ls` step above passed, the shim was included, and cleanup printed `real harness roots unchanged`.
 
+### `sync status` and `sync plan` steps
+
+Same preconditions and shim as above (`launch.sh --build clisync2`).
+
+- **Baseline.** `CLI sync status --check` exits 0, and every one of the 8 scopes is `synced` with `0` / `0`.
+- **Seed `greet`.** Send exactly:
+  ```bash
+  node $C req harnessConfig:saveTemplate '{"template":{"kind":"skill","name":"greet","description":"Greet the user.","fragments":[],"body":"Say hi.","harnesses":{"claude":{"frontmatter":{}}},"references":[]},"confirmed":true}'
+  ```
+  It returns `ok: true` with `relativePath: "skills/greet/TEMPLATE.md"`.
+- **Drift check.** `CLI sync status --check` prints the table and exits 1 with `tatsu: 2 scopes out of sync`. Both `Claude Code · skills` and `Claude Code · commands` are `config-only` with NOT ON DISK `1`, because Claude skills alias into commands (see Gotchas). Everything else stays `synced`.
+- **Human status.** `CLI sync status` prints the same table and exits 0.
+- **Plan JSON.** `CLI sync plan --agent claude --type skills --json` exits 0. `status` is `config-only`, `configOnly` holds one ref with `label: "greet"`, `relativePath: "greet/SKILL.md"`, and `planId` is a UUID.
+- **Plan human.** `CLI sync plan --agent claude --type skills` exits 0 and prints:
+  ```
+  Plan <uuid> · Claude Code · skills
+
+  Not on disk:
+    greet/SKILL.md
+
+  Apply with: tatsu sync apply --agent claude --type skills --plan <uuid> --yes
+  ```
+  Each call makes a fresh `planId`.
+- **Missing `--type`.** `CLI sync plan --agent claude` exits 2 with `tatsu: sync plan needs both --agent and --type. ...`.
+- **Bad detach id.** `CLI sync plan --agent claude --type skills --detach nope` exits 2 with `tatsu: Only template-built files that exist on disk can be detached`. With `--json`, `details` is `{"code":"unknown-resource"}`.
+- **Nothing applied.** Before cleanup, `test ! -e "$SANDBOX_HOME/.claude/skills/greet"` passes. Check it before the trap runs `cleanup.sh`, because cleanup removes the sandbox.
+- **Teardown.** `cleanup.sh` prints `real harness roots unchanged`.
+
+Last run: ticket sync-02 (tatsu-cli/sync-02-status-plan). Every step above passed; the baseline was all `synced`, so the risk mitigation (narrowing `--check` to `--agent claude`) was not needed.
+
 ## Gotchas
 
-- Claude skills also appear under `Claude Code · commands`, because the registry gives Claude skills `aliasResourceTypes: ['commands']`. This is expected. The ref's `resourceType` is `commands` and its `canonicalResourceType` is `skills`. The CLI does not flag aliases.
+- Claude skills also appear under `Claude Code · commands`, because the registry gives Claude skills `aliasResourceTypes: ['commands']`. This is expected, and it means a Claude skill template drifts two scopes in `sync status`: seeding `greet` makes `--check` report `2 scopes out of sync`, and `sync plan --agent claude --type commands` also lists `greet/SKILL.md`. The ref's `resourceType` is `commands` and its `canonicalResourceType` is `skills`. The CLI does not flag aliases.
 - `absolutePath` in the JSON uses the `/var/...` spelling of `$SANDBOX_HOME`, but `linkedFrom` is a realpath (`/private/var/...`).
 - Every `harnessConfig:scan` also dispatches `harnessConfig/resourcesLoaded`, so an open Config page refreshes after a `config ls`. A failing `harnessConfig:*` call sets `harnessConfig/errorChanged`, which shows the error in an open Config page.
 - Run the binary with `node`, not `pnpm -s tatsu`, because `pnpm -s` turns every non-zero exit into 1.
