@@ -333,6 +333,33 @@ describe('NeedsYouGroup from slice data', () => {
     expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
   })
 
+  it.each(['codex', 'opencode'] as const)(
+    'offers Resume for an interrupted, resumable %s attempt from slice data',
+    async (agent) => {
+      setState({
+        runs: { r1: slicedRun({ kind: 'agent', agent }, ['a1'], 'interrupted') },
+        attempts: { a1: { ...attempt('build', 'interrupted'), resumable: true } }
+      })
+      await render()
+      expect(buttonLabels()).toEqual(['Resume', 'Retry', 'Cancel run'])
+      await click(button('Resume'))
+      expect(backendApi.resumeWorkflowStep).toHaveBeenCalledWith('r1', 'build')
+      expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['codex', 'opencode'] as const)(
+    'offers no Resume for an interrupted %s attempt without a recorded session',
+    async (agent) => {
+      setState({
+        runs: { r1: slicedRun({ kind: 'agent', agent }, ['a1'], 'interrupted') },
+        attempts: { a1: attempt('build', 'interrupted') }
+      })
+      await render()
+      expect(buttonLabels()).toEqual(['Retry', 'Cancel run'])
+    }
+  )
+
   it('offers no Resume for an interrupted Claude attempt without a recorded session', async () => {
     setState({
       runs: { r1: slicedRun({ kind: 'agent', agent: 'claude' }, ['a1'], 'interrupted') },
