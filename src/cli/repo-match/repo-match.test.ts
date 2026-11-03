@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { initialState, type AppState } from '../../shared/state'
 import type { Worktree } from '../../shared/state/worktrees'
-import { findRepo } from '.'
+import { CliError } from '../errors'
+import { findRepo, findWorktree } from '.'
 
-function worktree(path: string, repoRoot: string): Worktree {
-  return { path, repoRoot, branch: 'b', head: 'abc', isBare: false, isMain: path === repoRoot, createdAt: 0 }
+function worktree(path: string, repoRoot: string, branch = 'b'): Worktree {
+  return { path, repoRoot, branch, head: 'abc', isBare: false, isMain: path === repoRoot, createdAt: 0 }
 }
 
 function stateWith(repoRoots: string[], list: Worktree[]): AppState {
@@ -69,5 +70,78 @@ describe('findRepo with local paths', () => {
   it('compares realpaths, so a symlinked spelling in state matches the realpath given', () => {
     const state = stateWith([join(real, 'link')], [])
     expect(findRepo(state, join(real, 'repo'))).toBe(join(real, 'link'))
+  })
+})
+
+function usageError(fn: () => unknown): CliError {
+  try {
+    fn()
+  } catch (err) {
+    if (err instanceof CliError) return err
+    throw err
+  }
+  throw new Error('expected a CliError')
+}
+
+describe('findWorktree with remote-style paths', () => {
+  const main = worktree('/remote/repo', '/remote/repo', 'main')
+  const nested = worktree('/remote/repo/.worktrees/feat', '/remote/repo', 'feat')
+  const sibling = worktree('/remote/wt/fix', '/remote/repo', 'fix')
+  const state = stateWith(['/remote/repo'], [main, nested, sibling])
+
+  it('matches a branch name', () => {
+    expect(findWorktree(state, 'fix')).toBe(sibling)
+  })
+
+  it('prefers a branch match over a path match', () => {
+    const tricky = stateWith(['/remote/repo'], [main, worktree('/remote/wt/x', '/remote/repo', 'src')])
+    expect(findWorktree(tricky, 'src').path).toBe('/remote/wt/x')
+  })
+
+  it('matches a path inside a worktree', () => {
+    expect(findWorktree(state, '/remote/wt/fix/src/deep')).toBe(sibling)
+  })
+
+  it('picks the deepest worktree when a nested one also contains the path', () => {
+    expect(findWorktree(state, '/remote/repo/.worktrees/feat/pkg')).toBe(nested)
+    expect(findWorktree(state, '/remote/repo/src')).toBe(main)
+  })
+
+  it('never matches an empty branch name', () => {
+    const detached = stateWith(['/remote/repo'], [worktree('/remote/wt/d', '/remote/repo', '')])
+    expect(usageError(() => findWorktree(detached, '')).code).toBe('usage')
+  })
+
+  it('gives a usage error listing every worktree when nothing matches', () => {
+    const err = usageError(() => findWorktree(state, '/elsewhere'))
+    expect(err.code).toBe('usage')
+    expect(err.message).toContain('/elsewhere')
+    expect(err.details).toEqual({
+      worktrees: [
+        { path: '/remote/repo', branch: 'main' },
+        { path: '/remote/repo/.worktrees/feat', branch: 'feat' },
+        { path: '/remote/wt/fix', branch: 'fix' }
+      ]
+    })
+  })
+})
+
+describe('findWorktree with local paths', () => {
+  let dir: string
+  let real: string
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'repo-match-wt-'))
+    real = realpathSync(dir)
+    mkdirSync(join(real, 'repo', 'src'), { recursive: true })
+    symlinkSync(join(real, 'repo'), join(real, 'link'))
+  })
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }))
+
+  it('returns the stored path unchanged when matched through another spelling', () => {
+    const stored = worktree(join(real, 'link'), join(real, 'link'), 'main')
+    const state = stateWith([stored.path], [stored])
+    expect(findWorktree(state, join(real, 'repo', 'src')).path).toBe(join(real, 'link'))
   })
 })
