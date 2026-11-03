@@ -43,16 +43,6 @@ const PENDING: &[(&str, &str, Pending)] = &[
         Pending::Unregistered,
     ),
     (
-        "hooksInstaller ok: hooks:accept saves consent",
-        "ticket 26",
-        Pending::Unregistered,
-    ),
-    (
-        "hooksInstaller throw: hooks:accept fails before saving",
-        "ticket 26",
-        Pending::Unregistered,
-    ),
-    (
         "wsBound: getWsTransportInfo reports host, port and token",
         "ticket 27",
         Pending::Unregistered,

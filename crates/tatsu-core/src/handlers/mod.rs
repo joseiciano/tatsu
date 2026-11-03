@@ -1,5 +1,6 @@
 mod agents;
 mod chat_ui;
+mod hooks;
 mod onboarding;
 mod prompts;
 mod repo_config;
@@ -34,6 +35,7 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     themes::register(core);
     repo_config::register(core);
     scratchpad::register(core);
+    hooks::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {
