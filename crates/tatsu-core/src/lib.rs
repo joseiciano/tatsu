@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod agent_kind;
+pub mod agent_registry;
 pub mod config;
 pub mod data_dir;
 pub mod handlers;

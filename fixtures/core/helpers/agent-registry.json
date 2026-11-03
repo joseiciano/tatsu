@@ -1,0 +1,1442 @@
+[
+  {
+    "name": "registry",
+    "fn": "registry",
+    "expected": {
+      "agentRegistry": [
+        {
+          "kind": "claude",
+          "displayName": "Claude Code",
+          "vendor": "Anthropic",
+          "assignsSessionId": true,
+          "configCapabilities": [
+            {
+              "resourceType": "agents",
+              "label": "Agents",
+              "status": "supported",
+              "templateOutput": {
+                "frontmatterName": true
+              }
+            },
+            {
+              "resourceType": "skills",
+              "label": "Skills",
+              "status": "supported",
+              "notes": "Claude skills also appear in the Commands view as the same physical resource.",
+              "aliasResourceTypes": [
+                "commands"
+              ],
+              "templateOutput": {
+                "frontmatterName": true
+              }
+            },
+            {
+              "resourceType": "commands",
+              "label": "Commands",
+              "status": "supported",
+              "notes": "Includes native Claude commands and aliases of Claude skills.",
+              "templateOutput": {
+                "frontmatterName": true
+              }
+            }
+          ]
+        },
+        {
+          "kind": "codex",
+          "displayName": "Codex",
+          "vendor": "OpenAI",
+          "assignsSessionId": false,
+          "configCapabilities": [
+            {
+              "resourceType": "agents",
+              "label": "Agents",
+              "status": "supported",
+              "notes": "Codex agents are one top-level AGENTS.md file, not a folder of agents.",
+              "layout": "single-file"
+            },
+            {
+              "resourceType": "skills",
+              "label": "Skills",
+              "status": "supported",
+              "templateOutput": {
+                "frontmatterName": true
+              }
+            },
+            {
+              "resourceType": "commands",
+              "label": "Commands",
+              "status": "unsupported",
+              "notes": "Tatsu has no verified first-version custom-command filesystem contract."
+            }
+          ]
+        },
+        {
+          "kind": "opencode",
+          "displayName": "Opencode",
+          "vendor": "Opencode",
+          "assignsSessionId": false,
+          "configCapabilities": [
+            {
+              "resourceType": "agents",
+              "label": "Agents",
+              "status": "supported",
+              "templateOutput": {
+                "frontmatterName": false
+              }
+            },
+            {
+              "resourceType": "skills",
+              "label": "Skills",
+              "status": "supported",
+              "templateOutput": {
+                "frontmatterName": true
+              }
+            },
+            {
+              "resourceType": "commands",
+              "label": "Commands",
+              "status": "supported",
+              "templateOutput": {
+                "frontmatterName": false
+              }
+            }
+          ]
+        },
+        {
+          "kind": "pi",
+          "displayName": "Pi",
+          "vendor": "Earendil",
+          "assignsSessionId": false,
+          "configCapabilities": [
+            {
+              "resourceType": "agents",
+              "label": "Agents",
+              "status": "unknown",
+              "notes": "Pi config management is deferred; its resource capabilities and layouts are not yet specified."
+            },
+            {
+              "resourceType": "skills",
+              "label": "Skills",
+              "status": "unknown",
+              "notes": "Pi config management is deferred; its resource capabilities and layouts are not yet specified."
+            },
+            {
+              "resourceType": "commands",
+              "label": "Commands",
+              "status": "unknown",
+              "notes": "Pi config management is deferred; its resource capabilities and layouts are not yet specified."
+            }
+          ]
+        }
+      ],
+      "claudeModels": [
+        {
+          "id": "claude-opus-4-7",
+          "displayName": "Claude Opus 4.7",
+          "tier": "current"
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "displayName": "Claude Sonnet 4.6",
+          "tier": "current"
+        },
+        {
+          "id": "claude-haiku-4-5",
+          "displayName": "Claude Haiku 4.5",
+          "tier": "current"
+        },
+        {
+          "id": "claude-opus-4-6",
+          "displayName": "Claude Opus 4.6",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "displayName": "Claude Sonnet 4.5",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-opus-4-5",
+          "displayName": "Claude Opus 4.5",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-opus-4-1",
+          "displayName": "Claude Opus 4.1",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-sonnet-4-0",
+          "displayName": "Claude Sonnet 4.0",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-opus-4-0",
+          "displayName": "Claude Opus 4.0",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-3-5-sonnet-latest",
+          "displayName": "Claude 3.5 Sonnet",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-3-5-haiku-latest",
+          "displayName": "Claude 3.5 Haiku",
+          "tier": "legacy"
+        },
+        {
+          "id": "claude-3-opus-latest",
+          "displayName": "Claude 3 Opus",
+          "tier": "legacy"
+        }
+      ],
+      "codexModels": [
+        {
+          "id": "gpt-5-codex",
+          "displayName": "GPT-5 Codex",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.3-codex",
+          "displayName": "GPT-5.3 Codex",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.2-codex",
+          "displayName": "GPT-5.2 Codex",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.1-codex",
+          "displayName": "GPT-5.1 Codex",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.1-codex-max",
+          "displayName": "GPT-5.1 Codex Max",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.1-codex-mini",
+          "displayName": "GPT-5.1 Codex Mini",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.4",
+          "displayName": "GPT-5.4",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "displayName": "GPT-5.4 Mini",
+          "tier": "current"
+        },
+        {
+          "id": "gpt-5.4-nano",
+          "displayName": "GPT-5.4 Nano",
+          "tier": "current"
+        },
+        {
+          "id": "o3",
+          "displayName": "o3",
+          "tier": "legacy"
+        },
+        {
+          "id": "o4-mini",
+          "displayName": "o4-mini",
+          "tier": "legacy"
+        },
+        {
+          "id": "gpt-4.1",
+          "displayName": "GPT-4.1",
+          "tier": "legacy"
+        },
+        {
+          "id": "gpt-4.1-mini",
+          "displayName": "GPT-4.1 Mini",
+          "tier": "legacy"
+        }
+      ]
+    }
+  },
+  {
+    "name": "getAgentInfo: claude",
+    "fn": "getAgentInfo",
+    "kind": "claude",
+    "expected": {
+      "kind": "claude",
+      "displayName": "Claude Code",
+      "vendor": "Anthropic",
+      "assignsSessionId": true,
+      "configCapabilities": [
+        {
+          "resourceType": "agents",
+          "label": "Agents",
+          "status": "supported",
+          "templateOutput": {
+            "frontmatterName": true
+          }
+        },
+        {
+          "resourceType": "skills",
+          "label": "Skills",
+          "status": "supported",
+          "notes": "Claude skills also appear in the Commands view as the same physical resource.",
+          "aliasResourceTypes": [
+            "commands"
+          ],
+          "templateOutput": {
+            "frontmatterName": true
+          }
+        },
+        {
+          "resourceType": "commands",
+          "label": "Commands",
+          "status": "supported",
+          "notes": "Includes native Claude commands and aliases of Claude skills.",
+          "templateOutput": {
+            "frontmatterName": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "getAgentInfo: codex",
+    "fn": "getAgentInfo",
+    "kind": "codex",
+    "expected": {
+      "kind": "codex",
+      "displayName": "Codex",
+      "vendor": "OpenAI",
+      "assignsSessionId": false,
+      "configCapabilities": [
+        {
+          "resourceType": "agents",
+          "label": "Agents",
+          "status": "supported",
+          "notes": "Codex agents are one top-level AGENTS.md file, not a folder of agents.",
+          "layout": "single-file"
+        },
+        {
+          "resourceType": "skills",
+          "label": "Skills",
+          "status": "supported",
+          "templateOutput": {
+            "frontmatterName": true
+          }
+        },
+        {
+          "resourceType": "commands",
+          "label": "Commands",
+          "status": "unsupported",
+          "notes": "Tatsu has no verified first-version custom-command filesystem contract."
+        }
+      ]
+    }
+  },
+  {
+    "name": "getAgentInfo: opencode",
+    "fn": "getAgentInfo",
+    "kind": "opencode",
+    "expected": {
+      "kind": "opencode",
+      "displayName": "Opencode",
+      "vendor": "Opencode",
+      "assignsSessionId": false,
+      "configCapabilities": [
+        {
+          "resourceType": "agents",
+          "label": "Agents",
+          "status": "supported",
+          "templateOutput": {
+            "frontmatterName": false
+          }
+        },
+        {
+          "resourceType": "skills",
+          "label": "Skills",
+          "status": "supported",
+          "templateOutput": {
+            "frontmatterName": true
+          }
+        },
+        {
+          "resourceType": "commands",
+          "label": "Commands",
+          "status": "supported",
+          "templateOutput": {
+            "frontmatterName": false
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "getAgentInfo: pi",
+    "fn": "getAgentInfo",
+    "kind": "pi",
+    "expected": {
+      "kind": "pi",
+      "displayName": "Pi",
+      "vendor": "Earendil",
+      "assignsSessionId": false,
+      "configCapabilities": [
+        {
+          "resourceType": "agents",
+          "label": "Agents",
+          "status": "unknown",
+          "notes": "Pi config management is deferred; its resource capabilities and layouts are not yet specified."
+        },
+        {
+          "resourceType": "skills",
+          "label": "Skills",
+          "status": "unknown",
+          "notes": "Pi config management is deferred; its resource capabilities and layouts are not yet specified."
+        },
+        {
+          "resourceType": "commands",
+          "label": "Commands",
+          "status": "unknown",
+          "notes": "Pi config management is deferred; its resource capabilities and layouts are not yet specified."
+        }
+      ]
+    }
+  },
+  {
+    "name": "agentDisplayName: undefined",
+    "fn": "agentDisplayName",
+    "expected": "Claude Code"
+  },
+  {
+    "name": "agentDisplayName: claude",
+    "fn": "agentDisplayName",
+    "kind": "claude",
+    "expected": "Claude Code"
+  },
+  {
+    "name": "agentDisplayName: codex",
+    "fn": "agentDisplayName",
+    "kind": "codex",
+    "expected": "Codex"
+  },
+  {
+    "name": "agentDisplayName: opencode",
+    "fn": "agentDisplayName",
+    "kind": "opencode",
+    "expected": "Opencode"
+  },
+  {
+    "name": "agentDisplayName: pi",
+    "fn": "agentDisplayName",
+    "kind": "pi",
+    "expected": "Pi"
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: claude agents",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "claude",
+    "resourceType": "agents",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: claude skills",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "claude",
+    "resourceType": "skills",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: claude commands",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "claude",
+    "resourceType": "commands",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: codex agents",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "codex",
+    "resourceType": "agents",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: codex skills",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "codex",
+    "resourceType": "skills",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: codex commands",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "codex",
+    "resourceType": "commands",
+    "expected": false
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: opencode agents",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: opencode skills",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: opencode commands",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "expected": true
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: pi agents",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "pi",
+    "resourceType": "agents",
+    "expected": false
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: pi skills",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "pi",
+    "resourceType": "skills",
+    "expected": false
+  },
+  {
+    "name": "isHarnessConfigCapabilityEnabled: pi commands",
+    "fn": "isHarnessConfigCapabilityEnabled",
+    "kind": "pi",
+    "resourceType": "commands",
+    "expected": false
+  },
+  {
+    "name": "templateOutputFor: claude agents",
+    "fn": "templateOutputFor",
+    "kind": "claude",
+    "resourceType": "agents",
+    "expected": {
+      "frontmatterName": true
+    }
+  },
+  {
+    "name": "templateOutputFor: claude skills",
+    "fn": "templateOutputFor",
+    "kind": "claude",
+    "resourceType": "skills",
+    "expected": {
+      "frontmatterName": true
+    }
+  },
+  {
+    "name": "templateOutputFor: claude commands",
+    "fn": "templateOutputFor",
+    "kind": "claude",
+    "resourceType": "commands",
+    "expected": {
+      "frontmatterName": true
+    }
+  },
+  {
+    "name": "templateOutputFor: codex agents",
+    "fn": "templateOutputFor",
+    "kind": "codex",
+    "resourceType": "agents",
+    "expected": null
+  },
+  {
+    "name": "templateOutputFor: codex skills",
+    "fn": "templateOutputFor",
+    "kind": "codex",
+    "resourceType": "skills",
+    "expected": {
+      "frontmatterName": true
+    }
+  },
+  {
+    "name": "templateOutputFor: codex commands",
+    "fn": "templateOutputFor",
+    "kind": "codex",
+    "resourceType": "commands",
+    "expected": null
+  },
+  {
+    "name": "templateOutputFor: opencode agents",
+    "fn": "templateOutputFor",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "expected": {
+      "frontmatterName": false
+    }
+  },
+  {
+    "name": "templateOutputFor: opencode skills",
+    "fn": "templateOutputFor",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "expected": {
+      "frontmatterName": true
+    }
+  },
+  {
+    "name": "templateOutputFor: opencode commands",
+    "fn": "templateOutputFor",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "expected": {
+      "frontmatterName": false
+    }
+  },
+  {
+    "name": "templateOutputFor: pi agents",
+    "fn": "templateOutputFor",
+    "kind": "pi",
+    "resourceType": "agents",
+    "expected": null
+  },
+  {
+    "name": "templateOutputFor: pi skills",
+    "fn": "templateOutputFor",
+    "kind": "pi",
+    "resourceType": "skills",
+    "expected": null
+  },
+  {
+    "name": "templateOutputFor: pi commands",
+    "fn": "templateOutputFor",
+    "kind": "pi",
+    "resourceType": "commands",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: claude agents \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "agents",
+    "resourceName": "reviewer",
+    "expected": "reviewer.md"
+  },
+  {
+    "name": "resourcePathForName: claude agents \"\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "agents",
+    "resourceName": "",
+    "expected": ".md"
+  },
+  {
+    "name": "resourcePathForName: claude agents \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "agents",
+    "resourceName": "a/b",
+    "expected": "a/b.md"
+  },
+  {
+    "name": "resourcePathForName: claude agents \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "agents",
+    "resourceName": "with space",
+    "expected": "with space.md"
+  },
+  {
+    "name": "resourcePathForName: claude agents \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "agents",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前.md"
+  },
+  {
+    "name": "resourcePathForName: claude agents \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "agents",
+    "resourceName": "..",
+    "expected": "...md"
+  },
+  {
+    "name": "resourcePathForName: claude skills \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "skills",
+    "resourceName": "reviewer",
+    "expected": "reviewer/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: claude skills \"\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "skills",
+    "resourceName": "",
+    "expected": "/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: claude skills \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "skills",
+    "resourceName": "a/b",
+    "expected": "a/b/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: claude skills \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "skills",
+    "resourceName": "with space",
+    "expected": "with space/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: claude skills \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "skills",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: claude skills \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "skills",
+    "resourceName": "..",
+    "expected": "../SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: claude commands \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "commands",
+    "resourceName": "reviewer",
+    "expected": "reviewer.md"
+  },
+  {
+    "name": "resourcePathForName: claude commands \"\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "commands",
+    "resourceName": "",
+    "expected": ".md"
+  },
+  {
+    "name": "resourcePathForName: claude commands \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "commands",
+    "resourceName": "a/b",
+    "expected": "a/b.md"
+  },
+  {
+    "name": "resourcePathForName: claude commands \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "commands",
+    "resourceName": "with space",
+    "expected": "with space.md"
+  },
+  {
+    "name": "resourcePathForName: claude commands \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "commands",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前.md"
+  },
+  {
+    "name": "resourcePathForName: claude commands \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "claude",
+    "resourceType": "commands",
+    "resourceName": "..",
+    "expected": "...md"
+  },
+  {
+    "name": "resourcePathForName: codex agents \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "agents",
+    "resourceName": "reviewer",
+    "expected": "reviewer.md"
+  },
+  {
+    "name": "resourcePathForName: codex agents \"\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "agents",
+    "resourceName": "",
+    "expected": ".md"
+  },
+  {
+    "name": "resourcePathForName: codex agents \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "agents",
+    "resourceName": "a/b",
+    "expected": "a/b.md"
+  },
+  {
+    "name": "resourcePathForName: codex agents \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "agents",
+    "resourceName": "with space",
+    "expected": "with space.md"
+  },
+  {
+    "name": "resourcePathForName: codex agents \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "agents",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前.md"
+  },
+  {
+    "name": "resourcePathForName: codex agents \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "agents",
+    "resourceName": "..",
+    "expected": "...md"
+  },
+  {
+    "name": "resourcePathForName: codex skills \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "skills",
+    "resourceName": "reviewer",
+    "expected": "reviewer/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: codex skills \"\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "skills",
+    "resourceName": "",
+    "expected": "/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: codex skills \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "skills",
+    "resourceName": "a/b",
+    "expected": "a/b/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: codex skills \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "skills",
+    "resourceName": "with space",
+    "expected": "with space/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: codex skills \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "skills",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: codex skills \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "skills",
+    "resourceName": "..",
+    "expected": "../SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: codex commands \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "commands",
+    "resourceName": "reviewer",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: codex commands \"\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "commands",
+    "resourceName": "",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: codex commands \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "commands",
+    "resourceName": "a/b",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: codex commands \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "commands",
+    "resourceName": "with space",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: codex commands \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "commands",
+    "resourceName": "naïve-名前",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: codex commands \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "codex",
+    "resourceType": "commands",
+    "resourceName": "..",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: opencode agents \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "resourceName": "reviewer",
+    "expected": "reviewer.md"
+  },
+  {
+    "name": "resourcePathForName: opencode agents \"\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "resourceName": "",
+    "expected": ".md"
+  },
+  {
+    "name": "resourcePathForName: opencode agents \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "resourceName": "a/b",
+    "expected": "a/b.md"
+  },
+  {
+    "name": "resourcePathForName: opencode agents \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "resourceName": "with space",
+    "expected": "with space.md"
+  },
+  {
+    "name": "resourcePathForName: opencode agents \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前.md"
+  },
+  {
+    "name": "resourcePathForName: opencode agents \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "agents",
+    "resourceName": "..",
+    "expected": "...md"
+  },
+  {
+    "name": "resourcePathForName: opencode skills \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "resourceName": "reviewer",
+    "expected": "reviewer/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: opencode skills \"\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "resourceName": "",
+    "expected": "/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: opencode skills \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "resourceName": "a/b",
+    "expected": "a/b/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: opencode skills \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "resourceName": "with space",
+    "expected": "with space/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: opencode skills \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前/SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: opencode skills \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "skills",
+    "resourceName": "..",
+    "expected": "../SKILL.md"
+  },
+  {
+    "name": "resourcePathForName: opencode commands \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "resourceName": "reviewer",
+    "expected": "reviewer.md"
+  },
+  {
+    "name": "resourcePathForName: opencode commands \"\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "resourceName": "",
+    "expected": ".md"
+  },
+  {
+    "name": "resourcePathForName: opencode commands \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "resourceName": "a/b",
+    "expected": "a/b.md"
+  },
+  {
+    "name": "resourcePathForName: opencode commands \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "resourceName": "with space",
+    "expected": "with space.md"
+  },
+  {
+    "name": "resourcePathForName: opencode commands \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "resourceName": "naïve-名前",
+    "expected": "naïve-名前.md"
+  },
+  {
+    "name": "resourcePathForName: opencode commands \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "opencode",
+    "resourceType": "commands",
+    "resourceName": "..",
+    "expected": "...md"
+  },
+  {
+    "name": "resourcePathForName: pi agents \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "agents",
+    "resourceName": "reviewer",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi agents \"\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "agents",
+    "resourceName": "",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi agents \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "agents",
+    "resourceName": "a/b",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi agents \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "agents",
+    "resourceName": "with space",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi agents \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "agents",
+    "resourceName": "naïve-名前",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi agents \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "agents",
+    "resourceName": "..",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi skills \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "skills",
+    "resourceName": "reviewer",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi skills \"\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "skills",
+    "resourceName": "",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi skills \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "skills",
+    "resourceName": "a/b",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi skills \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "skills",
+    "resourceName": "with space",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi skills \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "skills",
+    "resourceName": "naïve-名前",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi skills \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "skills",
+    "resourceName": "..",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi commands \"reviewer\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "commands",
+    "resourceName": "reviewer",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi commands \"\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "commands",
+    "resourceName": "",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi commands \"a/b\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "commands",
+    "resourceName": "a/b",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi commands \"with space\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "commands",
+    "resourceName": "with space",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi commands \"naïve-名前\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "commands",
+    "resourceName": "naïve-名前",
+    "expected": null
+  },
+  {
+    "name": "resourcePathForName: pi commands \"..\"",
+    "fn": "resourcePathForName",
+    "kind": "pi",
+    "resourceType": "commands",
+    "resourceName": "..",
+    "expected": null
+  },
+  {
+    "name": "getNextAgentKind: claude",
+    "fn": "getNextAgentKind",
+    "kind": "claude",
+    "expected": "codex"
+  },
+  {
+    "name": "getNextAgentKind: codex",
+    "fn": "getNextAgentKind",
+    "kind": "codex",
+    "expected": "opencode"
+  },
+  {
+    "name": "getNextAgentKind: opencode",
+    "fn": "getNextAgentKind",
+    "kind": "opencode",
+    "expected": "pi"
+  },
+  {
+    "name": "getNextAgentKind: pi",
+    "fn": "getNextAgentKind",
+    "kind": "pi",
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: claude 0",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 0,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: claude 1",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 1,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: claude 2",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 2,
+    "expected": "pi"
+  },
+  {
+    "name": "cycleAltAgent: claude 3",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 3,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: claude 4",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 4,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: claude 5",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 5,
+    "expected": "pi"
+  },
+  {
+    "name": "cycleAltAgent: claude 7",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 7,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: claude 100",
+    "fn": "cycleAltAgent",
+    "kind": "claude",
+    "clickCount": 100,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: codex 0",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 0,
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: codex 1",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 1,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: codex 2",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 2,
+    "expected": "pi"
+  },
+  {
+    "name": "cycleAltAgent: codex 3",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 3,
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: codex 4",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 4,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: codex 5",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 5,
+    "expected": "pi"
+  },
+  {
+    "name": "cycleAltAgent: codex 7",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 7,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: codex 100",
+    "fn": "cycleAltAgent",
+    "kind": "codex",
+    "clickCount": 100,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: opencode 0",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 0,
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: opencode 1",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 1,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: opencode 2",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 2,
+    "expected": "pi"
+  },
+  {
+    "name": "cycleAltAgent: opencode 3",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 3,
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: opencode 4",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 4,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: opencode 5",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 5,
+    "expected": "pi"
+  },
+  {
+    "name": "cycleAltAgent: opencode 7",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 7,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: opencode 100",
+    "fn": "cycleAltAgent",
+    "kind": "opencode",
+    "clickCount": 100,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: pi 0",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 0,
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: pi 1",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 1,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: pi 2",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 2,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: pi 3",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 3,
+    "expected": "claude"
+  },
+  {
+    "name": "cycleAltAgent: pi 4",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 4,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: pi 5",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 5,
+    "expected": "opencode"
+  },
+  {
+    "name": "cycleAltAgent: pi 7",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 7,
+    "expected": "codex"
+  },
+  {
+    "name": "cycleAltAgent: pi 100",
+    "fn": "cycleAltAgent",
+    "kind": "pi",
+    "clickCount": 100,
+    "expected": "codex"
+  }
+]
