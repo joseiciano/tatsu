@@ -99,7 +99,9 @@ export function writeMcpConfigForTerminal(
 export function pruneMcpConfigs(keepIds: Set<string>): void {
   try {
     const dir = getConfigDir()
-    const keep = new Set(Array.from(keepIds).map((id) => `${sanitize(id)}.json`))
+    const keep = new Set(
+      Array.from(keepIds).flatMap((id) => [`${sanitize(id)}.json`, `${sanitize(id)}${STEP_MARKER_EXTENSION}`])
+    )
     for (const file of readdirSync(dir)) {
       if (!keep.has(file)) {
         try {
