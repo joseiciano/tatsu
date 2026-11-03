@@ -15,7 +15,8 @@ They are macOS scripts (`ps eww`, `lsof`, `dscl`, `stat -f`).
 
 ## Isolation
 
-`launch.sh` uses the same isolation as `scripts/smoke-headless.sh`. Step tabs
+`launch.sh` sources `scripts/smoke-sandbox.sh`, the same isolation
+`scripts/smoke-headless.sh` uses. Step tabs
 are terminal tabs, and the PTY manager wraps every tab in `$SHELL -ilc`, so
 this matters:
 
@@ -43,13 +44,16 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 - `--build` runs `pnpm build:headless` first. Pass it whenever `src/` changed
   since the last build; `doctor.sh` reports a stale build. Run `pnpm install`
   once on a fresh worktree.
-- Seeds: a git repo `<scratch>/repo` on branch `main` (in `repoRoots`, so it is
-  the sidebar's only worktree), hooks consent `accepted`, Labs workflows on,
-  and three personal definitions in `<data>/workflows/`:
+- Seeds (from `smoke_sandbox`): a git repo `<scratch>/repo` on branch `main`
+  (in `repoRoots`, so it is the sidebar's only worktree), hooks consent
+  `accepted`, Labs workflows on, and the smoke's personal definitions in
+  `<data>/workflows/`:
 
 | Definition | Steps | Fake agent |
 |---|---|---|
-| `verify-done` | `plan` (claude) then `echo` (shell) | default: calls `complete_step` |
+| `smoke` | `plan` (claude) then `echo` (shell) | default: calls `complete_step` |
+| `smoke-retry` | `check` (shell `test -f flag`) | none |
+| `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
 | `browser-exit` | `exit` (claude) | `FAKE_AGENT_MODE=exit-no-complete`: exits non-zero |
 
@@ -77,7 +81,7 @@ snapshot; `dist-headless` is newer than `src/`; launch commit is HEAD. Any
 ## Drive
 
 ```bash
-node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [verify-done]
+node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke]
 ```
 
 Journeys sit on `scripts/browser.mjs`: `withApp(stateFile, name, fn)` runs

@@ -32,7 +32,7 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
 
 ## Driving it with Playwright
 
-- `journeys/workflow-run.mjs <state> verify-done`: launch sheet -> Start ->
+- `journeys/workflow-run.mjs <state> smoke`: launch sheet -> Start ->
   strip shows `plan running, echo pending` -> strip disappears -> run record
   `status: done`.
 - Hang and exit-no-complete flows (cancel via close-tab confirm; Mark done on

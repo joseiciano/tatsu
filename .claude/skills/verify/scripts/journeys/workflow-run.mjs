@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { withApp } from '../browser.mjs'
 
-const defName = process.argv[3] ?? 'verify-done'
+const defName = process.argv[3] ?? 'smoke'
 const TIMEOUT = 60_000
 
 await withApp(process.argv[2], `workflow-run-${defName}`, async ({ page, state, shot, log }) => {
