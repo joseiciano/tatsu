@@ -43,6 +43,12 @@ import {
   FALLBACK_ACTIVE_BACKEND,
   LOCAL_BACKEND_ID
 } from './constants'
+import {
+  createPausedRunIdsSelector,
+  findWorkflowStepTab,
+  selectWorkflowRunIdForWorktree,
+  type WorkflowStepTabRef
+} from '../workflow-selectors'
 
 /** Per-backend client-side mirror. One instance per configured backend.
  *  Owns the AppState mirror, the listener set, and the cached client
@@ -609,6 +615,25 @@ export function useWorkflowRun(id: string | null) {
 
 export function useWorkflowAttempt(id: string | null) {
   return useAppState((s) => (id ? s.workflows.attempts[id] ?? null : null))
+}
+
+const selectPausedWorkflowRunIds = createPausedRunIdsSelector()
+
+export function usePausedWorkflowRunIds(): readonly string[] {
+  return useAppState((s) => selectPausedWorkflowRunIds(s.workflows))
+}
+
+export function useWorkflowRunForWorktree(worktreePath: string): string | null {
+  return useAppState((s) => selectWorkflowRunIdForWorktree(s.workflows.runs, worktreePath))
+}
+
+export function useWorkflowStepTabLeaf(worktreePath: string | null, ref: WorkflowStepTabRef) {
+  const { runId, stepId, attemptId } = ref
+  return useAppState((s) =>
+    worktreePath
+      ? findWorkflowStepTab(s.terminals.panes[worktreePath], { runId, stepId, attemptId })?.leaf ?? null
+      : null
+  )
 }
 
 /** Session roster (controller + spectators) for a given terminal id.
