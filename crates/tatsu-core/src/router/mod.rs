@@ -192,6 +192,14 @@ impl Router {
         self.signals.read().contains_key(name)
     }
 
+    pub fn request_names(&self) -> Vec<String> {
+        sorted_keys(&self.requests)
+    }
+
+    pub fn signal_names(&self) -> Vec<String> {
+        sorted_keys(&self.signals)
+    }
+
     pub async fn dispatch_request(&self, ctx: ConnCtx, name: &str, args: Vec<Value>) -> Routed {
         let Some(handler) = self.requests.read().get(name).cloned() else {
             return Routed {
@@ -256,6 +264,12 @@ impl Router {
             );
         }
     }
+}
+
+fn sorted_keys<H>(map: &RwLock<HashMap<String, H>>) -> Vec<String> {
+    let mut names: Vec<String> = map.read().keys().cloned().collect();
+    names.sort();
+    names
 }
 
 fn insert<H>(

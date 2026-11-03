@@ -174,7 +174,7 @@
     },
     {
       "name": "config:setEditor",
-      "owner": "core-server"
+      "owner": "worktrees-git"
     },
     {
       "name": "config:setExpandedDiagnosticLoggingEnabled",

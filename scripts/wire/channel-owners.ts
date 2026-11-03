@@ -74,6 +74,7 @@ const NAME_OWNERS: Record<string, ModuleId> = {
   'browser:setBounds': 'browser',
   'claude:getAuthStatus': 'chat',
   'config:getAvailableEditors': 'worktrees-git',
+  'config:setEditor': 'worktrees-git',
   'costs:getAllSessions': 'aux-services',
   'costs:setInterest': 'chat',
   'editor:open': 'worktrees-git',

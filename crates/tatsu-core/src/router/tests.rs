@@ -159,6 +159,25 @@ fn has_queries_report_only_registered_names_of_their_kind() {
     assert!(!h.router.has_request("x:missing"));
 }
 
+#[test]
+fn name_lists_are_sorted_per_kind_and_a_fresh_router_lists_only_its_built_in() {
+    let h = harness();
+    assert_eq!(h.router.request_names(), vec!["transport:getClientId"]);
+    assert!(h.router.signal_names().is_empty());
+
+    h.router.signal("s:two", |_, _| Ok(())).unwrap();
+    h.router.signal("s:one", |_, _| Ok(())).unwrap();
+    h.router
+        .request("a:first", |_, _| async { Ok(Reply::NoValue) })
+        .unwrap();
+
+    assert_eq!(
+        h.router.request_names(),
+        vec!["a:first", "transport:getClientId"]
+    );
+    assert_eq!(h.router.signal_names(), vec!["s:one", "s:two"]);
+}
+
 #[tokio::test]
 async fn get_client_id_returns_the_callers_id() {
     let h = harness();
