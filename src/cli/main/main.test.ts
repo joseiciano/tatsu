@@ -140,6 +140,21 @@ describe('main: dispatch', () => {
     expect(JSON.parse(r.stderr)).toEqual({ error: { code: 'unauthorized', message: 'bad token', details: null } })
   })
 
+  it('still prints a result marked keepOnError when the command then throws', async () => {
+    const { command } = recorder('status', (ctx) => {
+      ctx.output.result({ partial: true }, () => 'partial', { keepOnError: true })
+      throw new CliError('command-failed', 'a.txt: boom', { failed: [{ path: 'a.txt', error: 'boom' }] })
+    })
+    const r = await run(['status', '--json'], [command])
+    expect(r.code).toBe(1)
+    expect(JSON.parse(r.stdout)).toEqual({ partial: true })
+    expect(JSON.parse(r.stderr)).toEqual({
+      error: { code: 'command-failed', message: 'a.txt: boom', details: { failed: [{ path: 'a.txt', error: 'boom' }] } }
+    })
+    const human = await run(['status'], [command])
+    expect(human).toEqual({ code: 1, stdout: 'partial\n', stderr: 'tatsu: a.txt: boom\n' })
+  })
+
   it('maps an unexpected exception to exit 1', async () => {
     const { command } = recorder('status', () => {
       throw new Error('kaboom')

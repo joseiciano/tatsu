@@ -154,6 +154,9 @@ async function dispatch(argv: string[], io: CliIO, registry: readonly Command[])
         )),
       output
     })
+  } catch (err) {
+    output.flushKept()
+    throw err
   } finally {
     const opened = await client?.catch(() => undefined)
     opened?.close()
