@@ -19,10 +19,27 @@
 //   - electron, electron-updater — externals; resolving them in
 //     headless mode would crash, but again the call sites never run.
 
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+import { copyFileSync, mkdirSync } from 'fs'
 import { resolve } from 'path'
 
+// resolveBundledMcpScript reads <dist>/mcp/<name> in node runtime; the
+// headless tarball stages the same layout under lib/mcp.
+function copyMcpScripts(): Plugin {
+  return {
+    name: 'copy-mcp-scripts',
+    closeBundle() {
+      const outDir = resolve(__dirname, 'dist-headless/mcp')
+      mkdirSync(outDir, { recursive: true })
+      for (const name of ['mcp-bridge.js', 'permission-prompt-mcp.js']) {
+        copyFileSync(resolve(__dirname, 'resources', name), resolve(outDir, name))
+      }
+    }
+  }
+}
+
 export default defineConfig({
+  plugins: [copyMcpScripts()],
   build: {
     target: 'node20',
     outDir: resolve(__dirname, 'dist-headless/main'),
