@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
@@ -12,6 +12,7 @@ const LOCAL_BACKEND_ID: &str = "local";
 
 pub type Migration = fn(&mut Map<String, Value>);
 
+// Empty until ticket 12 ports v0-v9: `load` stamps `schemaVersion: 9` without migrating.
 pub const MIGRATIONS: &[Migration] = &[];
 
 pub fn run_migrations(parsed: &mut Map<String, Value>) {
@@ -38,28 +39,6 @@ pub fn load(path: &Path, now_ms: i64) -> ConfigDoc {
     doc.set("schemaVersion", json!(SCHEMA_VERSION));
     apply_connection_defaults(&mut doc, now_ms);
     doc
-}
-
-pub fn save_sync(path: &Path, doc: &ConfigDoc) -> io::Result<()> {
-    let dir = path.parent().unwrap_or(Path::new("."));
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| CONFIG_FILE.to_owned());
-    let tmp = dir.join(format!(".{name}.tmp-{}", std::process::id()));
-    let result = (|| {
-        let mut file = std::fs::File::create(&tmp)?;
-        file.write_all(doc.to_json().as_bytes())?;
-        if let Ok(meta) = std::fs::metadata(path) {
-            file.set_permissions(meta.permissions())?;
-        }
-        file.sync_all()?;
-        std::fs::rename(&tmp, path)
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&tmp);
-    }
-    result
 }
 
 fn defaults() -> ConfigDoc {
