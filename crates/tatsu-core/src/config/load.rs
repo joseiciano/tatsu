@@ -4,40 +4,66 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value, json};
 
 use super::ConfigDoc;
+use super::migrations::{self, JsObject, MigrationCtx, MigrationError};
 use crate::logs;
 
 pub const CONFIG_FILE: &str = "config.json";
-pub const SCHEMA_VERSION: u64 = 9;
 const LOCAL_BACKEND_ID: &str = "local";
 
-pub type Migration = fn(&mut Map<String, Value>);
+pub(crate) type Migration = fn(&mut JsObject, &mut MigrationCtx) -> Result<(), MigrationError>;
 
-// Empty until ticket 12 ports v0-v9: `load` stamps `schemaVersion: 9` without migrating.
-pub const MIGRATIONS: &[Migration] = &[];
+pub(crate) const MIGRATIONS: &[Migration] = &[
+    migrations::repo_root_to_repo_roots,
+    migrations::terminal_tabs_to_flat_panes,
+    migrations::flat_panes_to_nested_panes,
+    migrations::claude_tab_type_to_agent,
+    migrations::pane_lists_to_trees,
+    migrations::snooze_fields,
+    migrations::legacy_theme_to_theme_mode,
+    migrations::seed_harness_config,
+    migrations::backfill_json_claude_agent_kind,
+];
 
-pub fn run_migrations(parsed: &mut Map<String, Value>) {
-    let from = parsed
-        .get("schemaVersion")
-        .and_then(Value::as_f64)
-        .unwrap_or(0.0);
-    for (version, migration) in MIGRATIONS.iter().enumerate() {
-        if (version as f64) >= from {
-            migration(parsed);
+pub const SCHEMA_VERSION: u64 = MIGRATIONS.len() as u64;
+
+pub fn run_migrations(
+    parsed: &mut Map<String, Value>,
+    ctx: &mut MigrationCtx,
+) -> Result<(), MigrationError> {
+    let from = match parsed.get("schemaVersion") {
+        Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+        _ => 0.0,
+    };
+    if from < MIGRATIONS.len() as f64 {
+        if from < 0.0 || from.fract() != 0.0 {
+            return Err(MigrationError("schemaVersion is not a migration index"));
         }
+        let mut config = JsObject::from_map(std::mem::take(parsed));
+        let ran = MIGRATIONS[from as usize..]
+            .iter()
+            .try_for_each(|migration| migration(&mut config, ctx));
+        *parsed = config.to_map();
+        ran?;
     }
     parsed.insert("schemaVersion".into(), json!(SCHEMA_VERSION));
+    Ok(())
 }
 
 pub fn load(path: &Path, now_ms: i64) -> ConfigDoc {
+    load_with(path, &mut MigrationCtx::new(now_ms))
+}
+
+pub fn load_with(path: &Path, ctx: &mut MigrationCtx) -> ConfigDoc {
     let mut doc = defaults();
-    if let Some(mut parsed) = read_parsed(path, now_ms) {
-        run_migrations(&mut parsed);
+    if let Some(mut parsed) = read_parsed(path, ctx.now_ms)
+        && run_migrations(&mut parsed, ctx).is_ok()
+    {
         for (key, value) in parsed {
             doc.set(key, value);
         }
     }
     doc.set("schemaVersion", json!(SCHEMA_VERSION));
-    apply_connection_defaults(&mut doc, now_ms);
+    apply_connection_defaults(&mut doc, ctx.now_ms);
     doc
 }
 

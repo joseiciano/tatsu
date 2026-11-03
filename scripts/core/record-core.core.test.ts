@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { isDeepStrictEqual } from 'node:util'
 import { expect, it } from 'vitest'
-import { configRecorder } from './recorders/config'
+import { configRecorder, migrationsRecorder } from './recorders/config'
 import { replyOf } from './recorders/handler-boot'
 import { agentKindRecorder, handlerRecorders } from './recorders/handlers'
 import type { Recorder } from './recorders/types'
@@ -10,7 +10,7 @@ const update = process.env.CORE_UPDATE === '1'
 
 type AnyRecorder = Recorder<{ name: string }, unknown>
 
-const recorders = [configRecorder, agentKindRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
+const recorders = [configRecorder, migrationsRecorder, agentKindRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
 
 function diff(path: string, name: string, before: unknown, after: unknown): string {
   const text = (value: unknown): string =>

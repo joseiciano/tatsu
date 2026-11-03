@@ -23,7 +23,15 @@ interface ConfigRecorded {
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
 
-export function loadAndSave({ name, now, input }: ConfigCase): ConfigRecorded {
+export interface MigrationCase extends ConfigCase {
+  randomSuffixes?: string[]
+}
+
+interface MigrationRecorded extends ConfigRecorded {
+  randomSuffixes: string[]
+}
+
+export function loadAndSave({ name, now, input }: ConfigCase, load = loadConfig): ConfigRecorded {
   if (input !== null && LONE_SURROGATE.test(input)) {
     throw new Error(`${name}: input must hold lone surrogates only as \\u escapes`)
   }
@@ -36,7 +44,7 @@ export function loadAndSave({ name, now, input }: ConfigCase): ConfigRecorded {
   try {
     const path = join(dir, 'config.json')
     if (input !== null) writeFileSync(path, input)
-    saveConfigSync(loadConfig())
+    saveConfigSync(load())
     return { expected: readFileSync(path, 'utf8'), schemaVersion: SCHEMA_VERSION }
   } finally {
     vi.useRealTimers()
@@ -52,5 +60,35 @@ export const configRecorder: Recorder<ConfigCase, ConfigRecorded> = {
   record: loadAndSave,
   recordedOf: ({ expected, schemaVersion }) =>
     expected === undefined || schemaVersion === undefined ? undefined : { expected, schemaVersion },
+  withRecorded: ({ name, now, input }, recorded) => ({ name, now, input, ...recorded })
+}
+
+function recordMigration(fixture: MigrationCase): MigrationRecorded {
+  const randomSuffixes: string[] = []
+  let seed = 0x2545f491
+  const random = (): number => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0
+    const value = seed / 2 ** 32
+    randomSuffixes.push(value.toString(36).slice(2, 8))
+    return value
+  }
+  const recorded = loadAndSave(fixture, () => {
+    const spy = vi.spyOn(Math, 'random').mockImplementation(random)
+    try {
+      return loadConfig()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+  return { ...recorded, randomSuffixes }
+}
+
+export const migrationsRecorder: Recorder<MigrationCase, MigrationRecorded> = {
+  path: fileURLToPath(new URL('../../../fixtures/core/config/migrations.json', import.meta.url)),
+  record: recordMigration,
+  recordedOf: ({ expected, schemaVersion, randomSuffixes }) =>
+    expected === undefined || schemaVersion === undefined || randomSuffixes === undefined
+      ? undefined
+      : { expected, schemaVersion, randomSuffixes },
   withRecorded: ({ name, now, input }, recorded) => ({ name, now, input, ...recorded })
 }

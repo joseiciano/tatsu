@@ -1,0 +1,236 @@
+[
+  {
+    "name": "pre-versioned config runs every migration",
+    "now": 1730000000000,
+    "input": "{\"repoRoot\":\"/repo/a\",\"terminalTabs\":{\"/repo/a\":[{\"id\":\"c1\",\"type\":\"claude\",\"label\":\"c1\"},{\"id\":\"s1\",\"type\":\"shell\",\"label\":\"s1\"}],\"/repo/a-worktrees/feat\":[{\"id\":\"s2\",\"type\":\"shell\",\"label\":\"s2\"}],\"/empty\":[]},\"activeTabId\":{\"/repo/a\":\"s1\"},\"theme\":\"solarized-light\",\"paneSplitDirections\":{\"/repo/a\":\"horizontal\"},\"windowBounds\":null}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a\"\n  ],\n  \"terminalTabs\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"c1\",\n        \"type\": \"agent\",\n        \"label\": \"c1\",\n        \"agentKind\": \"claude\"\n      },\n      {\n        \"id\": \"s1\",\n        \"type\": \"shell\",\n        \"label\": \"s1\"\n      }\n    ],\n    \"/repo/a-worktrees/feat\": [\n      {\n        \"id\": \"s2\",\n        \"type\": \"shell\",\n        \"label\": \"s2\"\n      }\n    ],\n    \"/empty\": []\n  },\n  \"activeTabId\": {\n    \"/repo/a\": \"s1\"\n  },\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-5os84u\",\n        \"tabs\": [\n          {\n            \"id\": \"c1\",\n            \"type\": \"agent\",\n            \"label\": \"c1\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"s1\",\n            \"type\": \"shell\",\n            \"label\": \"s1\"\n          }\n        ],\n        \"activeTabId\": \"s1\"\n      },\n      \"/repo/a-worktrees/feat\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-ufor6z\",\n        \"tabs\": [\n          {\n            \"id\": \"s2\",\n            \"type\": \"shell\",\n            \"label\": \"s2\"\n          }\n        ],\n        \"activeTabId\": \"s2\"\n      }\n    }\n  },\n  \"legacyPanes\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"pane-1730000000000-5os84u\",\n        \"tabs\": [\n          {\n            \"id\": \"c1\",\n            \"type\": \"agent\",\n            \"label\": \"c1\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"s1\",\n            \"type\": \"shell\",\n            \"label\": \"s1\"\n          }\n        ],\n        \"activeTabId\": \"s1\"\n      }\n    ],\n    \"/repo/a-worktrees/feat\": [\n      {\n        \"id\": \"pane-1730000000000-ufor6z\",\n        \"tabs\": [\n          {\n            \"id\": \"s2\",\n            \"type\": \"shell\",\n            \"label\": \"s2\"\n          }\n        ],\n        \"activeTabId\": \"s2\"\n      }\n    ]\n  },\n  \"themeMode\": \"light\",\n  \"themeLight\": \"solarized-light\",\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": [
+      "5os84u",
+      "ufor6z"
+    ]
+  },
+  {
+    "name": "v0 repoRoot string becomes repoRoots",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":0,\"zeta\":1,\"repoRoot\":\"/repo/a\",\"last\":true}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a\"\n  ],\n  \"zeta\": 1,\n  \"last\": true,\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v0 repoRoot is dropped when repoRoots is already an array",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":0,\"repoRoots\":[\"/repo/b\"],\"repoRoot\":\"/repo/a\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/b\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v0 non-string repoRoot is dropped",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":0,\"repoRoot\":42}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v1 terminalTabs become flat panes in JS key order",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":1,\"terminalTabs\":{\"7\":[{\"id\":\"n1\",\"type\":\"shell\",\"label\":\"n1\"}],\"/repo/a\":[{\"id\":\"a1\",\"type\":\"shell\",\"label\":\"a1\"},{\"id\":\"a2\",\"type\":\"shell\",\"label\":\"a2\"}],\"/repo/a-worktrees/x\":[{\"id\":\"x1\",\"type\":\"shell\",\"label\":\"x1\"}],\"/no-active\":[{\"label\":\"no id\"}],\"/skipped\":null},\"activeTabId\":{\"/repo/a\":\"a2\",\"/repo/a-worktrees/x\":\"\"}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"terminalTabs\": {\n    \"7\": [\n      {\n        \"id\": \"n1\",\n        \"type\": \"shell\",\n        \"label\": \"n1\"\n      }\n    ],\n    \"/repo/a\": [\n      {\n        \"id\": \"a1\",\n        \"type\": \"shell\",\n        \"label\": \"a1\"\n      },\n      {\n        \"id\": \"a2\",\n        \"type\": \"shell\",\n        \"label\": \"a2\"\n      }\n    ],\n    \"/repo/a-worktrees/x\": [\n      {\n        \"id\": \"x1\",\n        \"type\": \"shell\",\n        \"label\": \"x1\"\n      }\n    ],\n    \"/no-active\": [\n      {\n        \"label\": \"no id\"\n      }\n    ],\n    \"/skipped\": null\n  },\n  \"activeTabId\": {\n    \"/repo/a\": \"a2\",\n    \"/repo/a-worktrees/x\": \"\"\n  },\n  \"panes\": {\n    \"__orphan__\": {\n      \"7\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-5os84u\",\n        \"tabs\": [\n          {\n            \"id\": \"n1\",\n            \"type\": \"shell\",\n            \"label\": \"n1\"\n          }\n        ],\n        \"activeTabId\": \"n1\"\n      },\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-ufor6z\",\n        \"tabs\": [\n          {\n            \"id\": \"a1\",\n            \"type\": \"shell\",\n            \"label\": \"a1\"\n          },\n          {\n            \"id\": \"a2\",\n            \"type\": \"shell\",\n            \"label\": \"a2\"\n          }\n        ],\n        \"activeTabId\": \"a2\"\n      },\n      \"/repo/a-worktrees/x\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-ao5brb\",\n        \"tabs\": [\n          {\n            \"id\": \"x1\",\n            \"type\": \"shell\",\n            \"label\": \"x1\"\n          }\n        ],\n        \"activeTabId\": \"x1\"\n      },\n      \"/no-active\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-jxozjx\",\n        \"tabs\": [\n          {\n            \"label\": \"no id\"\n          }\n        ]\n      }\n    }\n  },\n  \"legacyPanes\": {\n    \"7\": [\n      {\n        \"id\": \"pane-1730000000000-5os84u\",\n        \"tabs\": [\n          {\n            \"id\": \"n1\",\n            \"type\": \"shell\",\n            \"label\": \"n1\"\n          }\n        ],\n        \"activeTabId\": \"n1\"\n      }\n    ],\n    \"/repo/a\": [\n      {\n        \"id\": \"pane-1730000000000-ufor6z\",\n        \"tabs\": [\n          {\n            \"id\": \"a1\",\n            \"type\": \"shell\",\n            \"label\": \"a1\"\n          },\n          {\n            \"id\": \"a2\",\n            \"type\": \"shell\",\n            \"label\": \"a2\"\n          }\n        ],\n        \"activeTabId\": \"a2\"\n      }\n    ],\n    \"/repo/a-worktrees/x\": [\n      {\n        \"id\": \"pane-1730000000000-ao5brb\",\n        \"tabs\": [\n          {\n            \"id\": \"x1\",\n            \"type\": \"shell\",\n            \"label\": \"x1\"\n          }\n        ],\n        \"activeTabId\": \"x1\"\n      }\n    ],\n    \"/no-active\": [\n      {\n        \"id\": \"pane-1730000000000-jxozjx\",\n        \"tabs\": [\n          {\n            \"label\": \"no id\"\n          }\n        ]\n      }\n    ]\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": [
+      "5os84u",
+      "ufor6z",
+      "ao5brb",
+      "jxozjx"
+    ]
+  },
+  {
+    "name": "v1 existing panes skip the terminalTabs conversion",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":1,\"repoRoots\":[\"/repo/a\"],\"terminalTabs\":{\"/repo/a\":[{\"id\":\"a1\",\"type\":\"shell\",\"label\":\"a1\"}]},\"panes\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[{\"id\":\"a1\",\"type\":\"shell\",\"label\":\"a1\"}],\"activeTabId\":\"a1\"}]}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a\"\n  ],\n  \"terminalTabs\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"a1\",\n        \"type\": \"shell\",\n        \"label\": \"a1\"\n      }\n    ]\n  },\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"a1\",\n            \"type\": \"shell\",\n            \"label\": \"a1\"\n          }\n        ],\n        \"activeTabId\": \"a1\"\n      }\n    }\n  },\n  \"legacyPanes\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"a1\",\n            \"type\": \"shell\",\n            \"label\": \"a1\"\n          }\n        ],\n        \"activeTabId\": \"a1\"\n      }\n    ]\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v2 flat panes are grouped by repo root",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":2,\"repoRoots\":[\"/repo/a/\",\"/repo/b\",\"relative\"],\"panes\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[{\"id\":\"t1\",\"type\":\"shell\",\"label\":\"t1\"}],\"activeTabId\":\"t1\"}],\"/repo/a-worktrees/x\":[{\"id\":\"p2\",\"tabs\":[{\"id\":\"t2\",\"type\":\"shell\",\"label\":\"t2\"}],\"activeTabId\":\"t2\"}],\"/repo/b/sub\":[{\"id\":\"p3\",\"tabs\":[{\"id\":\"t3\",\"type\":\"shell\",\"label\":\"t3\"}],\"activeTabId\":\"t3\"}],\"/repo/b\":[{\"id\":\"p4\",\"tabs\":[{\"id\":\"t4\",\"type\":\"shell\",\"label\":\"t4\"}],\"activeTabId\":\"t4\"}],\"/repo/bb\":[{\"id\":\"p5\",\"tabs\":[{\"id\":\"t5\",\"type\":\"shell\",\"label\":\"t5\"}],\"activeTabId\":\"t5\"}],\"relative-worktrees/y\":[{\"id\":\"p6\",\"tabs\":[{\"id\":\"t6\",\"type\":\"shell\",\"label\":\"t6\"}],\"activeTabId\":\"t6\"}],\"/elsewhere/z\":[{\"id\":\"p7\",\"tabs\":[{\"id\":\"t7\",\"type\":\"shell\",\"label\":\"t7\"}],\"activeTabId\":\"t7\"}]}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a/\",\n    \"/repo/b\",\n    \"relative\"\n  ],\n  \"panes\": {\n    \"/repo/a/\": {\n      \"/repo/a-worktrees/x\": {\n        \"type\": \"leaf\",\n        \"id\": \"p2\",\n        \"tabs\": [\n          {\n            \"id\": \"t2\",\n            \"type\": \"shell\",\n            \"label\": \"t2\"\n          }\n        ],\n        \"activeTabId\": \"t2\"\n      }\n    },\n    \"/repo/b\": {\n      \"/repo/b/sub\": {\n        \"type\": \"leaf\",\n        \"id\": \"p3\",\n        \"tabs\": [\n          {\n            \"id\": \"t3\",\n            \"type\": \"shell\",\n            \"label\": \"t3\"\n          }\n        ],\n        \"activeTabId\": \"t3\"\n      },\n      \"/repo/b\": {\n        \"type\": \"leaf\",\n        \"id\": \"p4\",\n        \"tabs\": [\n          {\n            \"id\": \"t4\",\n            \"type\": \"shell\",\n            \"label\": \"t4\"\n          }\n        ],\n        \"activeTabId\": \"t4\"\n      }\n    },\n    \"relative\": {\n      \"relative-worktrees/y\": {\n        \"type\": \"leaf\",\n        \"id\": \"p6\",\n        \"tabs\": [\n          {\n            \"id\": \"t6\",\n            \"type\": \"shell\",\n            \"label\": \"t6\"\n          }\n        ],\n        \"activeTabId\": \"t6\"\n      }\n    },\n    \"__orphan__\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"shell\",\n            \"label\": \"t1\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      },\n      \"/repo/bb\": {\n        \"type\": \"leaf\",\n        \"id\": \"p5\",\n        \"tabs\": [\n          {\n            \"id\": \"t5\",\n            \"type\": \"shell\",\n            \"label\": \"t5\"\n          }\n        ],\n        \"activeTabId\": \"t5\"\n      },\n      \"/elsewhere/z\": {\n        \"type\": \"leaf\",\n        \"id\": \"p7\",\n        \"tabs\": [\n          {\n            \"id\": \"t7\",\n            \"type\": \"shell\",\n            \"label\": \"t7\"\n          }\n        ],\n        \"activeTabId\": \"t7\"\n      }\n    }\n  },\n  \"legacyPanes\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"shell\",\n            \"label\": \"t1\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      }\n    ],\n    \"/repo/a-worktrees/x\": [\n      {\n        \"id\": \"p2\",\n        \"tabs\": [\n          {\n            \"id\": \"t2\",\n            \"type\": \"shell\",\n            \"label\": \"t2\"\n          }\n        ],\n        \"activeTabId\": \"t2\"\n      }\n    ],\n    \"/repo/b/sub\": [\n      {\n        \"id\": \"p3\",\n        \"tabs\": [\n          {\n            \"id\": \"t3\",\n            \"type\": \"shell\",\n            \"label\": \"t3\"\n          }\n        ],\n        \"activeTabId\": \"t3\"\n      }\n    ],\n    \"/repo/b\": [\n      {\n        \"id\": \"p4\",\n        \"tabs\": [\n          {\n            \"id\": \"t4\",\n            \"type\": \"shell\",\n            \"label\": \"t4\"\n          }\n        ],\n        \"activeTabId\": \"t4\"\n      }\n    ],\n    \"/repo/bb\": [\n      {\n        \"id\": \"p5\",\n        \"tabs\": [\n          {\n            \"id\": \"t5\",\n            \"type\": \"shell\",\n            \"label\": \"t5\"\n          }\n        ],\n        \"activeTabId\": \"t5\"\n      }\n    ],\n    \"relative-worktrees/y\": [\n      {\n        \"id\": \"p6\",\n        \"tabs\": [\n          {\n            \"id\": \"t6\",\n            \"type\": \"shell\",\n            \"label\": \"t6\"\n          }\n        ],\n        \"activeTabId\": \"t6\"\n      }\n    ],\n    \"/elsewhere/z\": [\n      {\n        \"id\": \"p7\",\n        \"tabs\": [\n          {\n            \"id\": \"t7\",\n            \"type\": \"shell\",\n            \"label\": \"t7\"\n          }\n        ],\n        \"activeTabId\": \"t7\"\n      }\n    ]\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v2 nested panes are left alone",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":2,\"repoRoots\":[\"/repo/a\"],\"panes\":{\"/repo/a\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[{\"id\":\"t1\",\"type\":\"shell\",\"label\":\"t1\"}],\"activeTabId\":\"t1\"}]}}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a\"\n  ],\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"shell\",\n            \"label\": \"t1\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      }\n    }\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v3 claude tabs become agent tabs",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":3,\"panes\":{\"/repo/a\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[{\"id\":\"c1\",\"type\":\"claude\",\"label\":\"c1\"},{\"id\":\"s1\",\"type\":\"shell\",\"label\":\"s1\"},{\"id\":\"c2\",\"type\":\"claude\",\"label\":\"c2\",\"agentKind\":\"codex\",\"model\":\"x\"}],\"activeTabId\":\"c1\"},null,{\"id\":\"p2\"}],\"/repo/a-worktrees/y\":\"not a list\"},\"/repo/b\":null}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v4 pane lists become trees",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":4,\"paneSplitDirections\":{\"/repo/a\":\"vertical\"},\"panes\":{\"/repo/a\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[{\"id\":\"t1\",\"type\":\"shell\",\"label\":\"t1\"}],\"activeTabId\":\"t1\"}],\"/repo/a-worktrees/x\":[{\"id\":\"p2\",\"tabs\":[{\"id\":\"t2\",\"type\":\"shell\",\"label\":\"t2\"}],\"activeTabId\":\"t2\"},{\"id\":\"p3\",\"tabs\":[{\"id\":\"t3\",\"type\":\"shell\",\"label\":\"t3\"}]},{\"id\":\"p4\",\"tabs\":[{\"id\":\"t4\",\"type\":\"shell\",\"label\":\"t4\"}],\"activeTabId\":\"t4\"}],\"/repo/a-worktrees/empty\":[]},\"/repo/b\":{}},\"after\":\"kept\"}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"shell\",\n            \"label\": \"t1\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      },\n      \"/repo/a-worktrees/x\": {\n        \"type\": \"split\",\n        \"id\": \"split-migrated-0\",\n        \"direction\": \"horizontal\",\n        \"children\": [\n          {\n            \"type\": \"leaf\",\n            \"id\": \"p2\",\n            \"tabs\": [\n              {\n                \"id\": \"t2\",\n                \"type\": \"shell\",\n                \"label\": \"t2\"\n              }\n            ],\n            \"activeTabId\": \"t2\"\n          },\n          {\n            \"type\": \"split\",\n            \"id\": \"split-migrated-1\",\n            \"direction\": \"horizontal\",\n            \"children\": [\n              {\n                \"type\": \"leaf\",\n                \"id\": \"p3\",\n                \"tabs\": [\n                  {\n                    \"id\": \"t3\",\n                    \"type\": \"shell\",\n                    \"label\": \"t3\"\n                  }\n                ]\n              },\n              {\n                \"type\": \"leaf\",\n                \"id\": \"p4\",\n                \"tabs\": [\n                  {\n                    \"id\": \"t4\",\n                    \"type\": \"shell\",\n                    \"label\": \"t4\"\n                  }\n                ],\n                \"activeTabId\": \"t4\"\n              }\n            ],\n            \"ratio\": 0.5\n          }\n        ],\n        \"ratio\": 0.3333333333333333\n      }\n    },\n    \"/repo/b\": {}\n  },\n  \"after\": \"kept\",\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v4 trees are left alone",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":4,\"paneSplitDirections\":{\"/repo/a\":\"vertical\"},\"panes\":{\"/repo/a\":{\"/repo/a\":{\"type\":\"leaf\",\"id\":\"p1\",\"tabs\":[{\"id\":\"t1\",\"type\":\"shell\",\"label\":\"t1\"}],\"activeTabId\":\"t1\"}}}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"paneSplitDirections\": {\n    \"/repo/a\": \"vertical\"\n  },\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"t1\",\n            \"type\": \"shell\",\n            \"label\": \"t1\"\n          }\n        ],\n        \"activeTabId\": \"t1\"\n      }\n    }\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v5 dark legacy theme becomes themeDark",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":5,\"theme\":\"dracula\",\"fontSize\":13}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"fontSize\": 13,\n  \"themeMode\": \"dark\",\n  \"themeDark\": \"dracula\",\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v6 solarized-light becomes themeLight",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":6,\"theme\":\"solarized-light\",\"themeMode\":\"system\",\"fontSize\":13}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"themeMode\": \"light\",\n  \"fontSize\": 13,\n  \"themeLight\": \"solarized-light\",\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v6 non-string theme is kept",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":6,\"theme\":{\"id\":\"x\"}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"theme\": {\n    \"id\": \"x\"\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v7 seeds an empty harnessConfig",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":7,\"repoRoots\":[]}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v7 keeps a null harnessConfig",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":7,\"harnessConfig\":null,\"repoRoots\":[]}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": null,\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v8 legacy harnessConfig is kept and json-claude tabs get agentKind",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":8,\"harnessConfig\":{\"files\":{\"CLAUDE.md\":\"# hi\\n\"},\"version\":0},\"panes\":{\"/repo/a\":{\"/repo/a\":{\"type\":\"leaf\",\"id\":\"p1\",\"activeTabId\":\"j1\",\"tabs\":[{\"id\":\"j1\",\"type\":\"json-claude\",\"label\":\"chat\",\"sessionId\":\"s1\"},{\"id\":\"j2\",\"type\":\"json-claude\",\"label\":\"chat\",\"agentKind\":\"\"},{\"id\":\"j3\",\"type\":\"json-claude\",\"agentKind\":\"codex\",\"label\":\"chat\"},{\"id\":\"a1\",\"type\":\"agent\",\"label\":\"agent\"}]},\"/repo/a-worktrees/x\":{\"type\":\"split\",\"id\":\"s1\",\"direction\":\"horizontal\",\"ratio\":0.5,\"children\":[{\"type\":\"leaf\",\"id\":\"p2\",\"tabs\":[{\"id\":\"j4\",\"type\":\"json-claude\",\"label\":\"chat\"}],\"activeTabId\":\"j4\"},{\"type\":\"leaf\",\"id\":\"p3\",\"tabs\":[{\"id\":\"sh\",\"type\":\"shell\",\"label\":\"sh\"}],\"activeTabId\":\"sh\"}]},\"/repo/a-worktrees/flat\":[{\"id\":\"p4\",\"tabs\":[{\"id\":\"j5\",\"type\":\"json-claude\",\"label\":\"chat\"}]}],\"/repo/a-worktrees/untyped\":{\"id\":\"p5\",\"tabs\":[{\"id\":\"j6\",\"type\":\"json-claude\",\"label\":\"chat\"}]}},\"/repo/b\":\"not a tree map\"}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"files\": {\n      \"CLAUDE.md\": \"# hi\\n\"\n    },\n    \"version\": 0\n  },\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"p1\",\n        \"activeTabId\": \"j1\",\n        \"tabs\": [\n          {\n            \"id\": \"j1\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\",\n            \"sessionId\": \"s1\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"j2\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"j3\",\n            \"type\": \"json-claude\",\n            \"agentKind\": \"codex\",\n            \"label\": \"chat\"\n          },\n          {\n            \"id\": \"a1\",\n            \"type\": \"agent\",\n            \"label\": \"agent\"\n          }\n        ]\n      },\n      \"/repo/a-worktrees/x\": {\n        \"type\": \"split\",\n        \"id\": \"s1\",\n        \"direction\": \"horizontal\",\n        \"ratio\": 0.5,\n        \"children\": [\n          {\n            \"type\": \"leaf\",\n            \"id\": \"p2\",\n            \"tabs\": [\n              {\n                \"id\": \"j4\",\n                \"type\": \"json-claude\",\n                \"label\": \"chat\",\n                \"agentKind\": \"claude\"\n              }\n            ],\n            \"activeTabId\": \"j4\"\n          },\n          {\n            \"type\": \"leaf\",\n            \"id\": \"p3\",\n            \"tabs\": [\n              {\n                \"id\": \"sh\",\n                \"type\": \"shell\",\n                \"label\": \"sh\"\n              }\n            ],\n            \"activeTabId\": \"sh\"\n          }\n        ]\n      },\n      \"/repo/a-worktrees/flat\": [\n        {\n          \"id\": \"p4\",\n          \"tabs\": [\n            {\n              \"id\": \"j5\",\n              \"type\": \"json-claude\",\n              \"label\": \"chat\"\n            }\n          ]\n        }\n      ],\n      \"/repo/a-worktrees/untyped\": {\n        \"id\": \"p5\",\n        \"tabs\": [\n          {\n            \"id\": \"j6\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\"\n          }\n        ]\n      }\n    },\n    \"/repo/b\": \"not a tree map\"\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "future schemaVersion runs nothing",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":12,\"repoRoot\":\"/repo/a\",\"theme\":\"dracula\",\"terminalTabs\":{\"/repo/a\":[{\"id\":\"a1\",\"type\":\"shell\",\"label\":\"a1\"}]}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"repoRoot\": \"/repo/a\",\n  \"theme\": \"dracula\",\n  \"terminalTabs\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"a1\",\n        \"type\": \"shell\",\n        \"label\": \"a1\"\n      }\n    ]\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "fractional schemaVersion fails migration and loads defaults",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":2.5,\"repoRoots\":[\"/repo/a\"]}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "negative schemaVersion fails migration and loads defaults",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":-1,\"repoRoots\":[\"/repo/a\"]}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v1 tabs without an index 0 fail migration",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":1,\"terminalTabs\":{\"/repo/a\":5}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v2 non-string repo root fails migration",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":2,\"repoRoots\":[7],\"panes\":{\"/repo/a\":[]}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v3 null tab fails migration",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":3,\"panes\":{\"/repo/a\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[null]}]}}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v4 null worktree map fails migration",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":4,\"panes\":{\"/repo/a\":null}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v8 split without children fails migration",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":8,\"panes\":{\"/repo/a\":{\"/repo/a\":{\"type\":\"split\",\"id\":\"s1\"}}}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v8 null tab fails migration",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":8,\"panes\":{\"/repo/a\":{\"/repo/a\":{\"type\":\"leaf\",\"id\":\"p1\",\"tabs\":[null]}}}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  },
+  {
+    "name": "v1 chain shares tab objects with terminalTabs and legacyPanes",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":1,\"repoRoots\":[\"/repo/a\"],\"terminalTabs\":{\"/repo/a\":[{\"id\":\"j1\",\"type\":\"json-claude\",\"label\":\"chat\"},{\"id\":\"c1\",\"type\":\"claude\",\"label\":\"c1\"}]},\"activeTabId\":{\"/repo/a\":\"j1\"}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a\"\n  ],\n  \"terminalTabs\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"j1\",\n        \"type\": \"json-claude\",\n        \"label\": \"chat\",\n        \"agentKind\": \"claude\"\n      },\n      {\n        \"id\": \"c1\",\n        \"type\": \"agent\",\n        \"label\": \"c1\",\n        \"agentKind\": \"claude\"\n      }\n    ]\n  },\n  \"activeTabId\": {\n    \"/repo/a\": \"j1\"\n  },\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"leaf\",\n        \"id\": \"pane-1730000000000-5os84u\",\n        \"tabs\": [\n          {\n            \"id\": \"j1\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"c1\",\n            \"type\": \"agent\",\n            \"label\": \"c1\",\n            \"agentKind\": \"claude\"\n          }\n        ],\n        \"activeTabId\": \"j1\"\n      }\n    }\n  },\n  \"legacyPanes\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"pane-1730000000000-5os84u\",\n        \"tabs\": [\n          {\n            \"id\": \"j1\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\",\n            \"agentKind\": \"claude\"\n          },\n          {\n            \"id\": \"c1\",\n            \"type\": \"agent\",\n            \"label\": \"c1\",\n            \"agentKind\": \"claude\"\n          }\n        ],\n        \"activeTabId\": \"j1\"\n      }\n    ]\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": [
+      "5os84u"
+    ]
+  },
+  {
+    "name": "v2 chain shares tab objects with legacyPanes through leaf tabs",
+    "now": 1730000000000,
+    "input": "{\"schemaVersion\":2,\"repoRoots\":[\"/repo/a\"],\"panes\":{\"/repo/a\":[{\"id\":\"p1\",\"tabs\":[{\"id\":\"j1\",\"type\":\"json-claude\",\"label\":\"chat\"}],\"activeTabId\":\"j1\"},{\"id\":\"p2\",\"tabs\":[{\"id\":\"j2\",\"type\":\"json-claude\",\"label\":\"chat\"}],\"activeTabId\":\"j2\"}]}}",
+    "expected": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"/repo/a\"\n  ],\n  \"panes\": {\n    \"/repo/a\": {\n      \"/repo/a\": {\n        \"type\": \"split\",\n        \"id\": \"split-migrated-0\",\n        \"direction\": \"horizontal\",\n        \"children\": [\n          {\n            \"type\": \"leaf\",\n            \"id\": \"p1\",\n            \"tabs\": [\n              {\n                \"id\": \"j1\",\n                \"type\": \"json-claude\",\n                \"label\": \"chat\",\n                \"agentKind\": \"claude\"\n              }\n            ],\n            \"activeTabId\": \"j1\"\n          },\n          {\n            \"type\": \"leaf\",\n            \"id\": \"p2\",\n            \"tabs\": [\n              {\n                \"id\": \"j2\",\n                \"type\": \"json-claude\",\n                \"label\": \"chat\",\n                \"agentKind\": \"claude\"\n              }\n            ],\n            \"activeTabId\": \"j2\"\n          }\n        ],\n        \"ratio\": 0.5\n      }\n    }\n  },\n  \"legacyPanes\": {\n    \"/repo/a\": [\n      {\n        \"id\": \"p1\",\n        \"tabs\": [\n          {\n            \"id\": \"j1\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\",\n            \"agentKind\": \"claude\"\n          }\n        ],\n        \"activeTabId\": \"j1\"\n      },\n      {\n        \"id\": \"p2\",\n        \"tabs\": [\n          {\n            \"id\": \"j2\",\n            \"type\": \"json-claude\",\n            \"label\": \"chat\",\n            \"agentKind\": \"claude\"\n          }\n        ],\n        \"activeTabId\": \"j2\"\n      }\n    ]\n  },\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1730000000000\n    }\n  ],\n  \"activeBackendId\": \"local\"\n}",
+    "schemaVersion": 9,
+    "randomSuffixes": []
+  }
+]
