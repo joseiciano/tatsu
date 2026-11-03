@@ -333,7 +333,12 @@ try {
 }
 const workflowDefsLoader = createWorkflowDefsLoader({
   dir: workflowsDir(),
-  dispatch: (event) => store.dispatch(event)
+  dispatch: (event) => store.dispatch(event),
+  repoRoots: store.getSnapshot().state.worktrees.repoRoots
+})
+store.subscribe((event) => {
+  if (event.type !== 'worktrees/reposChanged') return
+  queueMicrotask(() => workflowDefsLoader.setRepoRoots(store.getSnapshot().state.worktrees.repoRoots))
 })
 try {
   workflowDefsLoader.reload()
@@ -3642,6 +3647,7 @@ if (desktopShellMod && desktopEarly) {
     onBeforeQuit: () => {
       codexHookTrustMonitor?.stop()
       workflowRunner.dispose()
+      workflowDefsLoader.dispose()
       shellStepDriver.dispose()
       agentStepDriver.dispose()
       chatRuntimeRegistry.killAll()
@@ -3665,6 +3671,7 @@ if (desktopShellMod && desktopEarly) {
     shuttingDown = true
     codexHookTrustMonitor?.stop()
     workflowRunner.dispose()
+    workflowDefsLoader.dispose()
     shellStepDriver.dispose()
     agentStepDriver.dispose()
     stopWatchingStatus?.()

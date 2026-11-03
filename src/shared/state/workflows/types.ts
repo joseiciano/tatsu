@@ -1,12 +1,13 @@
 import type { ResolvedDefinition, WorkflowValidationResult } from '../../workflow-def'
 import type { AgentKind } from '../terminals'
 
-export type WorkflowScope = 'personal'
+export type WorkflowScope = 'personal' | 'repo'
 
 export interface WorkflowDefinitionSummary {
   id: string
   name: string
   scope: WorkflowScope
+  repoRoot?: string
   path: string
   hash: string
   stepIds: string[]
@@ -84,6 +85,12 @@ export interface WorkflowAttempt {
   resumable?: true
 }
 
+export type WorkflowDefinitionsGroup = { scope: 'personal' } | { scope: 'repo'; repoRoot: string }
+
+export type WorkflowDefinitionsGroupPayload = WorkflowDefinitionsGroup & {
+  definitions: WorkflowDefinitionSummary[]
+}
+
 export interface WorkflowsState {
   definitions: Record<string, WorkflowDefinitionSummary>
   runs: Record<string, WorkflowRun>
@@ -93,7 +100,7 @@ export interface WorkflowsState {
 export type WorkflowsEvent =
   | {
       type: 'workflows/definitionsLoaded'
-      payload: { scope: WorkflowScope; definitions: WorkflowDefinitionSummary[] }
+      payload: WorkflowDefinitionsGroupPayload
     }
   | { type: 'workflows/runStarted'; payload: { runId: string; run: WorkflowRun } }
   | { type: 'workflows/runPaused'; payload: { runId: string; reason: WorkflowPausedReason } }

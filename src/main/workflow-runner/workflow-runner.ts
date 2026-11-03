@@ -265,6 +265,7 @@ export class WorkflowRunner {
     if (!this.ready) return this.refuse('starting')
     const detail = loader.getDefinition(request.defId)
     if (!detail) return this.refuse('unknown-definition')
+    if (detail.summary.scope === 'repo') return this.refuse('untrusted-definition')
     const definition = detail.definition
     if (!definition) return this.refuse('invalid-definition')
     if (!definition.steps.every(isRunnable)) return this.refuse('unsupported-step')

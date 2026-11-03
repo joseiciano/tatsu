@@ -2,12 +2,13 @@ import type { ResolvedWorkflowStep } from '../../workflow-def'
 import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX } from './constants'
 import type {
   WorkflowAttempt,
+  WorkflowDefinitionsGroup,
+  WorkflowDefinitionsGroupPayload,
   WorkflowDefinitionSummary,
   WorkflowRun,
   WorkflowRunRecord,
   WorkflowRunStatus,
   WorkflowRunStep,
-  WorkflowScope,
   WorkflowStepStatus,
   WorkflowsEvent,
   WorkflowsState
@@ -30,6 +31,7 @@ function sameSummary(a: WorkflowDefinitionSummary, b: WorkflowDefinitionSummary)
     a.id === b.id &&
     a.name === b.name &&
     a.scope === b.scope &&
+    a.repoRoot === b.repoRoot &&
     a.path === b.path &&
     a.hash === b.hash &&
     sameStrings(a.stepIds, b.stepIds) &&
@@ -37,17 +39,19 @@ function sameSummary(a: WorkflowDefinitionSummary, b: WorkflowDefinitionSummary)
   )
 }
 
-function definitionsLoaded(
-  state: WorkflowsState,
-  scope: WorkflowScope,
-  incoming: WorkflowDefinitionSummary[]
-): WorkflowsState {
+function inGroup(summary: WorkflowDefinitionSummary, group: WorkflowDefinitionsGroup): boolean {
+  if (summary.scope !== group.scope) return false
+  return group.scope === 'personal' || summary.repoRoot === group.repoRoot
+}
+
+function definitionsLoaded(state: WorkflowsState, payload: WorkflowDefinitionsGroupPayload): WorkflowsState {
   const definitions: Record<string, WorkflowDefinitionSummary> = {}
   let changed = false
   for (const [id, existing] of Object.entries(state.definitions)) {
-    if (existing.scope !== scope) definitions[id] = existing
+    if (!inGroup(existing, payload)) definitions[id] = existing
   }
-  for (const next of incoming) {
+  for (const next of payload.definitions) {
+    if (!inGroup(next, payload)) continue
     const existing = state.definitions[next.id]
     if (existing && sameSummary(existing, next)) {
       definitions[next.id] = existing
@@ -192,7 +196,7 @@ function setStepStatus(
 export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): WorkflowsState {
   switch (event.type) {
     case 'workflows/definitionsLoaded':
-      return definitionsLoaded(state, event.payload.scope, event.payload.definitions)
+      return definitionsLoaded(state, event.payload)
     case 'workflows/runStarted': {
       const { runId, run } = event.payload
       if (state.runs[runId]) return state
