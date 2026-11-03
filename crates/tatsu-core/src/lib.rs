@@ -11,6 +11,7 @@ pub mod router;
 pub mod secrets;
 pub mod store;
 pub mod themes;
+pub mod ws_settings;
 
 pub use config::ConfigDoc;
 pub use data_dir::{DataDir, Env, Platform, Runtime};

@@ -116,6 +116,29 @@ fn chat_promotion_dismissed_with_a_falsy_non_bool_acts_as_false() {
     }
 }
 
+// Accepted difference: TS dispatches the raw argument (payload `1`, `"no"`, `0`, ...); the bool event carries its JS truthiness.
+#[test]
+fn ws_transport_enabled_with_a_truthy_non_bool_acts_as_true() {
+    for args in [json!([1]), json!(["no"]), json!([{}]), json!([[]])] {
+        assert_matches_recording_with_args(
+            "ws.json",
+            "setWsTransportEnabled: true stores the flag",
+            args,
+        );
+    }
+}
+
+#[test]
+fn ws_transport_enabled_with_a_falsy_non_bool_acts_as_false() {
+    for args in [json!([0]), json!([""]), json!([null]), json!([])] {
+        assert_matches_recording_with_args(
+            "ws.json",
+            "setWsTransportEnabled: false deletes the stored flag",
+            args,
+        );
+    }
+}
+
 // Accepted difference: TS writes a truthy `mergeStrategy` or `hiddenRightPanels` value the strict RepoConfig type cannot hold into `.harness.json`; Rust drops it before saving.
 #[test]
 fn repo_config_set_drops_next_values_the_strict_type_cannot_hold() {

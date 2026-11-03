@@ -241,3 +241,72 @@ fn boot_outside_a_runtime_is_an_error_not_a_panic() {
 
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn ws_token_is_read_once_so_a_rotation_takes_effect_on_next_launch() {
+    let dir = TempDir::new().unwrap();
+    let core = boot(&dir);
+    core.secrets().set(secrets::ws_token::SECRET_KEY, "stored");
+    core.set_ws_bound("127.0.0.1", 0);
+    assert_eq!(core.ws_token(), "stored");
+
+    let rotated = secrets::ws_token::rotate(core.secrets().as_ref(), core.random().as_ref());
+    assert_ne!(rotated, "stored");
+    assert_eq!(core.ws_token(), "stored");
+}
+
+#[tokio::test]
+async fn ws_bound_creates_and_stores_a_token_when_none_exists() {
+    let dir = TempDir::new().unwrap();
+    let core = boot(&dir);
+    assert_eq!(core.secrets().get(secrets::ws_token::SECRET_KEY), None);
+    core.set_ws_bound("127.0.0.1", 0);
+    let stored = core.secrets().get(secrets::ws_token::SECRET_KEY).unwrap();
+    assert_eq!(stored.len(), 64);
+    assert_eq!(core.ws_token(), stored);
+}
+
+#[tokio::test]
+async fn set_ws_token_replaces_the_token_the_listener_reports() {
+    let dir = TempDir::new().unwrap();
+    let core = boot(&dir);
+    core.set_ws_token("listener-token");
+    core.set_ws_bound("127.0.0.1", 0);
+    assert_eq!(core.ws_token(), "listener-token");
+    assert_eq!(core.secrets().get(secrets::ws_token::SECRET_KEY), None);
+}
+
+#[tokio::test]
+async fn an_injected_timer_drives_both_store_and_router_timing() {
+    let dir = TempDir::new().unwrap();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = calls.clone();
+    let core = CoreBuilder::new(Runtime::Headless, env(&dir))
+        .pre_runtime()
+        .unwrap()
+        .boot(
+            Vec::new(),
+            BootOptions {
+                timer_ms: Some(Arc::new(move || {
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    0.0
+                })),
+                ..BootOptions::default()
+            },
+        )
+        .unwrap();
+    let before = calls.load(std::sync::atomic::Ordering::SeqCst);
+    core.store().dispatch(
+        serde_json::from_value(json!({"type": "settings/themeDarkChanged", "payload": "x"}))
+            .unwrap(),
+    );
+    let after_dispatch = calls.load(std::sync::atomic::Ordering::SeqCst);
+    assert!(after_dispatch > before);
+    let ctx = crate::router::ConnCtx {
+        client_id: crate::router::ClientId("t".to_owned()),
+    };
+    core.router()
+        .dispatch_request(ctx, "config:getWsTransportInfo", Vec::new())
+        .await;
+    assert!(calls.load(std::sync::atomic::Ordering::SeqCst) > after_dispatch);
+}

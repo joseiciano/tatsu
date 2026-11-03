@@ -1,0 +1,412 @@
+[
+  {
+    "name": "setWsTransportEnabled: true stores the flag",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportEnabled",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportEnabled\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportEnabledChanged",
+          "payload": true
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWsTransportEnabled: false deletes the stored flag",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportEnabled",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportEnabled\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportEnabledChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: below range clamps to 1024",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      80
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 1024\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 1024
+        }
+      ],
+      "reply": {
+        "value": 1024
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: inside range is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      8080
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 8080\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 8080
+        }
+      ],
+      "reply": {
+        "value": 8080
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: above range clamps to 65535",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      70000
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 65535\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 65535
+        }
+      ],
+      "reply": {
+        "value": 65535
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: fractional port is floored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      8080.9
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 8080\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 8080
+        }
+      ],
+      "reply": {
+        "value": 8080
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: numeric string is coerced",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      "9000"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 9000\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 9000
+        }
+      ],
+      "reply": {
+        "value": 9000
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: non-numeric string stores NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      "abc"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": null\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": null
+        }
+      ],
+      "reply": {
+        "value": null
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: null floors to 0 and clamps to 1024",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 1024\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 1024
+        }
+      ],
+      "reply": {
+        "value": 1024
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: missing argument stores NaN",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": null\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": null
+        }
+      ],
+      "reply": {
+        "value": null
+      }
+    }
+  },
+  {
+    "name": "setWsTransportPort: default port deletes the stored port",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportPort",
+    "args": [
+      37291
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportPort\": 8080\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportPortChanged",
+          "payload": 37291
+        }
+      ],
+      "reply": {
+        "value": 37291
+      }
+    }
+  },
+  {
+    "name": "setWsTransportHost: 0.0.0.0 is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportHost",
+    "args": [
+      "0.0.0.0"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportHost\": \"0.0.0.0\"\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportHostChanged",
+          "payload": "0.0.0.0"
+        }
+      ],
+      "reply": {
+        "value": "0.0.0.0"
+      }
+    }
+  },
+  {
+    "name": "setWsTransportHost: loopback deletes the stored host",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportHost",
+    "args": [
+      "127.0.0.1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportHost\": \"0.0.0.0\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportHostChanged",
+          "payload": "127.0.0.1"
+        }
+      ],
+      "reply": {
+        "value": "127.0.0.1"
+      }
+    }
+  },
+  {
+    "name": "setWsTransportHost: any other host becomes loopback",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportHost",
+    "args": [
+      "192.168.1.5"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"wsTransportHost\": \"0.0.0.0\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportHostChanged",
+          "payload": "127.0.0.1"
+        }
+      ],
+      "reply": {
+        "value": "127.0.0.1"
+      }
+    }
+  },
+  {
+    "name": "setWsTransportHost: padded 0.0.0.0 becomes loopback",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportHost",
+    "args": [
+      " 0.0.0.0"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportHostChanged",
+          "payload": "127.0.0.1"
+        }
+      ],
+      "reply": {
+        "value": "127.0.0.1"
+      }
+    }
+  },
+  {
+    "name": "setWsTransportHost: non-string argument becomes loopback",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setWsTransportHost",
+    "args": [
+      0
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/wsTransportHostChanged",
+          "payload": "127.0.0.1"
+        }
+      ],
+      "reply": {
+        "value": "127.0.0.1"
+      }
+    }
+  },
+  {
+    "name": "getWsTransportInfo: boot creates the token when none is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:getWsTransportInfo",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "wsAuthToken": null
+    },
+    "wsBound": {
+      "host": "127.0.0.1",
+      "port": 37291
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": {
+          "port": 37291,
+          "token": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+          "host": "127.0.0.1"
+        }
+      },
+      "secretsAfter": {
+        "wsAuthToken": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+      }
+    }
+  },
+  {
+    "name": "rotateWsToken: creates a token when none is stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:rotateWsToken",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "wsAuthToken": null
+    },
+    "wsBound": null,
+    "randomBytes": [
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "secretsAfter": {
+        "wsAuthToken": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [ws-transport] auth token rotated — takes effect on next launch"
+        }
+      ]
+    }
+  }
+]

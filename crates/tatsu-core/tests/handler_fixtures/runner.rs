@@ -413,6 +413,7 @@ pub fn prepare(case: &Value) -> Result<Prepared, String> {
                     boot_count: AtomicU64::new(0),
                 }),
                 clock: Arc::new(move || now),
+                timer_ms: Some(Arc::new(|| 0.0)),
             },
         )
         .map_err(|e| e.to_string())?;

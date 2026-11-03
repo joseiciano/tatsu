@@ -38,21 +38,6 @@ const PENDING: &[(&str, &str, Pending)] = &[
         Pending::Unregistered,
     ),
     (
-        "randomBytes: rotateWsToken uses the injected bytes",
-        "ticket 27",
-        Pending::Unregistered,
-    ),
-    (
-        "wsBound: getWsTransportInfo reports host, port and token",
-        "ticket 27",
-        Pending::Unregistered,
-    ),
-    (
-        "wsBound null: getWsTransportInfo returns null",
-        "ticket 27",
-        Pending::Unregistered,
-    ),
-    (
         "worktrees: listChanged clears the removed worktree's snooze entry from config",
         "snooze prune (aux-services module) plus the boot worktree list (worktrees-git module)",
         Pending::Differs(&["configAfter", "events"]),
@@ -462,8 +447,16 @@ async fn smoke_now_and_setup_reach_the_core_before_the_handler() {
     assert!(snoozed(&p));
 }
 
+#[test]
+fn smoke_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled() {
+    run_isolated("isolated_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled");
+}
+
 #[tokio::test]
-async fn smoke_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled() {
+async fn isolated_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled() {
+    if !isolated("isolated_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled") {
+        return;
+    }
     let case = smoke_case("kind signal: setLastEffectiveAppBg saves the hex");
     let p = prepare(&case).unwrap();
     assert!(

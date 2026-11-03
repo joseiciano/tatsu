@@ -8,13 +8,13 @@ use serde_json::{Value, json};
 use tatsu_core::{BootOptions, CoreBuilder, Env, Hub, PreRuntime, Reply, Router, Runtime, Store};
 use tatsu_state::StateEvent;
 
-const USAGE: &str = "usage: tatsu-core-testserver --data-dir <dir> --token <token> [--port <port>] [--host <host>] [--test-hooks]";
+const USAGE: &str = "usage: tatsu-core-testserver --data-dir <dir> [--token <token>] [--port <port>] [--host <host>] [--test-hooks]";
 const NESTED_PREFIX: &str = "nested:";
 pub const FAIL_MESSAGE: &str = "test failure";
 
 struct Args {
     data_dir: PathBuf,
-    token: String,
+    token: Option<String>,
     host: IpAddr,
     port: u16,
     test_hooks: bool,
@@ -39,9 +39,10 @@ fn parse_args(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     }
     Ok(Args {
         data_dir: data_dir.ok_or("--data-dir is required")?,
-        token: token
-            .filter(|t| !t.is_empty())
-            .ok_or("--token is required")?,
+        token: match token {
+            Some(t) if t.is_empty() => return Err("--token must not be empty".to_owned()),
+            other => other,
+        },
         host,
         port,
         test_hooks,
@@ -164,11 +165,18 @@ async fn serve(pre: PreRuntime, args: Args) -> ExitCode {
     if args.test_hooks {
         register_test_hooks(core.store(), core.router(), core.hub());
     }
+    let token = match args.token {
+        Some(token) => {
+            core.set_ws_token(token.clone());
+            token
+        }
+        None => core.ws_token(),
+    };
 
     let server = match tatsu_ws::listen(
         SocketAddr::new(args.host, args.port),
         core.hub().clone(),
-        args.token,
+        token,
     )
     .await
     {

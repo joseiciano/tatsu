@@ -20,7 +20,7 @@ use crate::hub::{Hub, SHUTDOWN_CODE, SHUTDOWN_REASON};
 use crate::initial_state::{SeedHook, build_initial_state};
 use crate::logs;
 use crate::repo_config::RepoConfigStore;
-use crate::router::Router;
+use crate::router::{Router, RouterOptions};
 use crate::secrets::{self, OsRandom, RandomSource, Secrets};
 use crate::store::{Store, StoreOptions};
 
@@ -63,7 +63,10 @@ pub struct BootOptions {
     pub random: Arc<dyn RandomSource>,
     pub ids: Arc<dyn IdSource>,
     pub clock: Clock,
+    pub timer_ms: Option<SharedTimerMs>,
 }
+
+pub type SharedTimerMs = Arc<dyn Fn() -> f64 + Send + Sync>;
 
 impl Default for BootOptions {
     fn default() -> Self {
@@ -72,6 +75,7 @@ impl Default for BootOptions {
             random: Arc::new(OsRandom),
             ids: Arc::new(UuidV4Ids),
             clock: Arc::new(system_now_ms),
+            timer_ms: None,
         }
     }
 }
@@ -157,14 +161,18 @@ impl PreRuntime {
         let initial =
             build_initial_state(&config.view(), secrets.has(GITHUB_TOKEN_KEY), &seed_hooks);
         let clock = options.clock.clone();
-        let store = Arc::new(Store::with_options(
-            initial,
-            StoreOptions {
-                now_ms: Box::new(move || clock()),
-                ..StoreOptions::default()
-            },
-        ));
-        let router = Arc::new(Router::new());
+        let mut store_options = StoreOptions {
+            now_ms: Box::new(move || clock()),
+            ..StoreOptions::default()
+        };
+        let mut router_options = RouterOptions::default();
+        if let Some(timer) = &options.timer_ms {
+            let (store_timer, router_timer) = (timer.clone(), timer.clone());
+            store_options.timer_ms = Box::new(move || store_timer());
+            router_options.timer_ms = Box::new(move || router_timer());
+        }
+        let store = Arc::new(Store::with_options(initial, store_options));
+        let router = Arc::new(Router::with_options(router_options));
         let hub = Hub::new(store.clone(), router.clone(), handle.clone());
         let core = Arc::new(Core {
             runtime: self.runtime,
@@ -182,6 +190,7 @@ impl PreRuntime {
             hooks_installer: RwLock::new(None),
             resources_dir: RwLock::new(None),
             ws_bound: RwLock::new(None),
+            ws_token: Mutex::new(None),
             module_steps: Mutex::new(Vec::new()),
             core_steps: Mutex::new(Vec::new()),
             shutdown_done: Mutex::new(None),
@@ -257,6 +266,7 @@ pub struct Core {
     hooks_installer: RwLock<Option<Arc<dyn HooksInstaller>>>,
     resources_dir: RwLock<Option<PathBuf>>,
     ws_bound: RwLock<Option<WsBound>>,
+    ws_token: Mutex<Option<String>>,
     module_steps: Mutex<Vec<ShutdownStep>>,
     core_steps: Mutex<Vec<ShutdownStep>>,
     shutdown_done: Mutex<Option<watch::Receiver<bool>>>,
@@ -327,7 +337,21 @@ impl Core {
         self.resources_dir.read().clone()
     }
 
+    pub fn ws_token(&self) -> String {
+        self.ws_token
+            .lock()
+            .get_or_insert_with(|| {
+                secrets::ws_token::get_or_create(self.secrets.as_ref(), self.random.as_ref())
+            })
+            .clone()
+    }
+
+    pub fn set_ws_token(&self, token: impl Into<String>) {
+        *self.ws_token.lock() = Some(token.into());
+    }
+
     pub fn set_ws_bound(&self, host: impl Into<String>, port: u16) {
+        self.ws_token();
         *self.ws_bound.write() = Some(WsBound {
             host: host.into(),
             port,

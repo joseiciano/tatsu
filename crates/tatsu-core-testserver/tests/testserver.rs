@@ -220,3 +220,28 @@ fn serves_the_state_booted_from_the_data_dir_config() {
     assert_eq!(state["worktrees"]["repoRoots"], json!(["/repo"]));
     server.stop();
 }
+
+#[test]
+fn ws_transport_info_reports_the_bound_address_and_the_listener_token() {
+    let server = start(&[]);
+    let port: u64 = server.url.rsplit(':').next().unwrap().parse().unwrap();
+    let mut client = server.connect();
+    let info = request(&mut client, "1", "config:getWsTransportInfo", json!([]));
+    assert_eq!(info["ok"], true);
+    assert_eq!(
+        info["value"],
+        json!({"port": port, "token": TOKEN, "host": "127.0.0.1"})
+    );
+    let rotated = request(&mut client, "2", "config:rotateWsToken", json!([]));
+    let rotated = rotated["value"].as_str().unwrap().to_owned();
+    let again = request(&mut client, "3", "config:getWsTransportInfo", json!([]));
+    assert_eq!(again["value"]["token"], TOKEN);
+    drop(client);
+
+    let (stdout, log) = server.stop();
+    assert!(log.contains("[ws-transport] auth token rotated — takes effect on next launch"));
+    for line in stdout.iter().map(String::as_str).chain(log.lines()) {
+        assert!(!line.contains(TOKEN), "token leaked: {line:?}");
+        assert!(!line.contains(&rotated), "rotated token leaked: {line:?}");
+    }
+}

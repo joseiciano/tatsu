@@ -12,6 +12,7 @@ mod themes;
 mod timers;
 mod toggles;
 mod worktree_settings;
+mod ws;
 
 use std::sync::{Arc, Weak};
 
@@ -36,6 +37,7 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     repo_config::register(core);
     scratchpad::register(core);
     hooks::register(core);
+    ws::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {
