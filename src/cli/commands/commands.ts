@@ -1,5 +1,6 @@
 import type { TatsuClient } from '../client'
 import type { Output } from '../output'
+import { configLsCommand } from './config-ls'
 import { diffCommand } from './diff'
 import { newCommand } from './new'
 import { statusCommand } from './status'
@@ -38,7 +39,7 @@ export interface Command {
   run(ctx: CommandContext): Promise<void> | void
 }
 
-export const commands: readonly Command[] = [statusCommand, worktreesCommand, newCommand, diffCommand]
+export const commands: readonly Command[] = [statusCommand, worktreesCommand, newCommand, diffCommand, configLsCommand]
 
 export interface CommandMatch {
   command: Command
