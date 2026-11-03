@@ -42,6 +42,7 @@ import { RepoAddErrorModal } from '../components/RepoAddErrorModal'
 import { ReportIssueScreen, onOpenReportIssue, type OpenReportIssueDetail } from '../components/ReportIssueScreen'
 import { AddBackendModal } from '../components/AddBackendModal'
 import { LaunchSheet } from '../components/Workflows/LaunchSheet'
+import { CancelStepDialog } from '../components/Workflows/StepTab'
 import { MonacoWorkerFailedBanner } from '../components/MonacoWorkerFailedBanner'
 import iconUrl from '../../../resources/icon.png'
 import { PerfMonitorHUD } from '../components/PerfMonitorHUD'
@@ -664,6 +665,9 @@ const setQuestStep = useCallback((next: QuestStep) => {
   // Each handler dispatches an IPC method to main; per-client UI focus
   // updates happen here.
   const {
+    pendingStepClose,
+    confirmStepClose,
+    dismissStepClose,
     appendTabToPane,
     handleAddTerminalTab,
     handleAddAgentTab,
@@ -1739,6 +1743,15 @@ const setQuestStep = useCallback((next: QuestStep) => {
     />
     {runWorkflowPath !== null && (
       <LaunchSheet worktreePath={runWorkflowPath} onClose={closeRunWorkflow} />
+    )}
+    {pendingStepClose && (
+      <CancelStepDialog
+        stepId={pendingStepClose.stepId}
+        busy={pendingStepClose.busy}
+        error={pendingStepClose.error}
+        onConfirm={() => void confirmStepClose()}
+        onCancel={dismissStepClose}
+      />
     )}
     </HotkeysProvider>
   )
