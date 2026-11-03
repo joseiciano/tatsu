@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Browser leg of the headless smoke, run by smoke-headless.sh after
 // workflow-smoke.mjs: loads the web client in headless Chrome and drives the
-// Phase 2 workflow UI against the fake-agent server.
+// Phase 2 workflow UI and the repo definition trust panel against the
+// fake-agent server.
 //
 // Usage: node scripts/browser-smoke.mjs <token> <port> <worktreePath> <evidenceDir> <curl:yes|no>
 //
@@ -11,6 +12,7 @@
 // can skip locally and fail under CI; every later failure exits 1 and saves
 // a screenshot plus an ARIA snapshot to <evidenceDir>.
 
+import { execFileSync } from 'child_process'
 import { accessSync, appendFileSync, constants, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { chromium } from 'playwright-core'
@@ -281,6 +283,66 @@ async function flowExitMarkDone(page, backend) {
   })
 }
 
+const BROWSER_REPO_FILE = '.harness/workflows/browser-repo.yaml'
+
+async function newestRepoRunId(backend, name) {
+  const { state } = await backend.snapshot()
+  const defIds = new Set(
+    Object.values(state.workflows.definitions)
+      .filter((d) => d.scope === 'repo' && d.name === name)
+      .map((d) => d.id)
+  )
+  const [newest] = Object.entries(state.workflows.runs)
+    .filter(([, run]) => defIds.has(run.defId))
+    .sort(([, a], [, b]) => b.startedAt - a.startedAt)
+  if (!newest) throw new Error(`no run of the repo definition ${name}`)
+  return newest[0]
+}
+
+async function flowRepoTrust(page, backend) {
+  await scenario(page, 'repo-trust', async (shot) => {
+    const nonce = `# browser-smoke ${Date.now()}`
+    appendFileSync(join(worktreePath, BROWSER_REPO_FILE), `${nonce}\n`)
+    try {
+      const row = worktreeRow(page)
+      await row.scrollIntoViewIfNeeded()
+      await row.click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Run workflow here…' }).click()
+      const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+      await sheet.getByLabel('Workflow').selectOption({ label: 'browser-repo (repo)' })
+      const panel = sheet.getByRole('region', { name: 'Trust this repo workflow?' })
+      await panel.waitFor()
+      const source = sheet.getByLabel('Definition source')
+      await source.filter({ hasText: nonce }).waitFor()
+      const cells = await panel.locator('tbody td').allTextContents()
+      if (cells.join('|') !== 'check|shell|shell') throw new Error(`trust panel step rows ${JSON.stringify(cells)}`)
+      const start = sheet.getByRole('button', { name: 'Start' })
+      if (await start.isEnabled()) throw new Error('Start is enabled before the repo definition is trusted')
+      log('repo-trust: trust panel shows the edited source and check|shell|shell; Start disabled')
+      await shot('trust-panel')
+
+      await panel.getByRole('button', { name: 'Trust this definition' }).click()
+      await panel.waitFor({ state: 'detached' })
+      await page.waitForFunction(
+        (el) => el instanceof HTMLButtonElement && !el.disabled,
+        await start.elementHandle()
+      )
+      await shot('trusted')
+      await start.click()
+      await sheet.waitFor({ state: 'hidden' })
+      await stepStrip(page, 'check running').waitFor()
+      await shot('strip-running')
+      const runId = await newestRepoRunId(backend, 'browser-repo')
+      await waitForRunStatus(backend, runId, 'done')
+      await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+      log(`repo-trust: run ${runId} done after trusting through the UI`)
+      await shot('run-done')
+    } finally {
+      execFileSync('git', ['checkout', '--', BROWSER_REPO_FILE], { cwd: worktreePath })
+    }
+  })
+}
+
 async function main() {
   const backend = connect()
   await backend.opened
@@ -302,6 +364,7 @@ async function main() {
     await flowLaunchSheetFocus(page)
     await flowHangCancel(page, backend)
     await flowExitMarkDone(page, backend)
+    await flowRepoTrust(page, backend)
   } catch {
     failed = true
   } finally {

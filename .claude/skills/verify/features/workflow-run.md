@@ -1,6 +1,6 @@
 # Workflow run
 
-Labs workflows let a user run a personal definition on a worktree. Agent and
+Labs workflows let a user run a personal or repo definition on a worktree. Agent and
 shell steps run in step tabs; the worktree row shows a step strip while the
 run is live, and paused runs appear under NEEDS YOU in the sidebar.
 
@@ -18,6 +18,16 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
 - **Step tab close**: closing a step tab whose attempt is running asks
   `Cancel step “<id>”?` (`alertdialog`); `Cancel step and close tab` cancels
   the step (run pauses step-failed, step cancelled), then closes the tab.
+- **Repo definition trust**: a definition from
+  `<repo>/.harness/workflows/` shows as `<name> (repo)` in the launch sheet.
+  Until its current bytes are trusted, the sheet shows a region
+  `Trust this repo workflow?` with a step table (Step, Agent, resolved
+  Permission; shell steps read `shell`), the source in a scrollable `<pre>`
+  labelled `Definition source`, and a `Trust this definition` button; Start
+  stays disabled with `Trust this definition to start it`. Trusting records
+  `{ repoRoot, path, hash }` in `config.json` `workflowTrust` and the slice
+  `workflows.trust[defId]`. Any edit to the file asks again; the server
+  refuses Start with `Trust this definition before running it`.
 - **Step result overlay**: when a step tab's process exits, the tab shows
   `<Agent> exited.` with Step, Status, Completed by and Summary; for a paused
   run whose cursor is on that step, a `Mark step done` form completes it.
@@ -60,6 +70,18 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     with a summary -> overlay shows Status `done`, Completed by
     `you (Mark done)` and the summary; form, row and strip gone -> run record
     `done`, last `exit` attempt completed by `user`.
+  - `repo-trust`: append a nonce comment to the committed
+    `.harness/workflows/browser-repo.yaml` (fresh bytes, so it is untrusted on
+    every run) -> open the launch sheet -> pick `browser-repo (repo)` ->
+    region `Trust this repo workflow?` with the nonce in `Definition source`
+    and rows `check|shell|shell`, Start disabled -> click
+    `Trust this definition` in the UI -> panel gone, Start enabled -> Start ->
+    strip `check running` -> run record `done` -> strip gone. The file is
+    restored with `git checkout` afterwards.
+- `scripts/workflow-smoke.mjs` (WS only, smoke-headless): `smoke-repo` start
+  refused untrusted -> `trustDefinition` with a wrong hash refused -> trust
+  with the `getDefinition` hash -> run done with `defHash` equal to it ->
+  edit the file -> start refused again -> file restored.
 
 End state that proves it: the screenshots in order, the strip `aria-label`
 lines in `journal.log`, and the run record in `workflow-runs/`.
@@ -80,5 +102,11 @@ lines in `journal.log`, and the run record in `workflow-runs/`.
 - A Codex definition is refused at Start (`Open a Codex tab and run /hooks`)
   until Tatsu's Codex hooks are trusted in `CODEX_HOME/config.toml`; the seed
   trusts them in the scratch `CODEX_HOME` only.
+- The repo definitions are committed in the scratch repo; an uncommitted
+  edit there would show up in run snapshots. Restore any edit with
+  `git checkout -- .harness/workflows`.
+- Trust is per definition id and keeps only the latest hash. Trusting the
+  nonce bytes in `repo-trust` makes the committed bytes untrusted again,
+  so the scenario can run again on the same instance.
 - `exit-mark-done` needs curl: without it the Stop hook fails open and the
   step completes by fallback instead of failing.
