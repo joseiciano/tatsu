@@ -55,8 +55,9 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
   once on a fresh worktree.
 - Seeds (from `smoke_sandbox`): a git repo `<scratch>/repo` on branch `main`
   (in `repoRoots`, so it is the sidebar's only worktree), hooks consent
-  `accepted`, Labs workflows on, and the smoke's personal definitions in
-  `<data>/workflows/`:
+  `accepted`, Labs workflows on, the smoke's personal definitions in
+  `<data>/workflows/` and two untrusted repo definitions committed in
+  `<scratch>/repo/.harness/workflows/`:
 
 | Definition | Steps | Fake agent |
 |---|---|---|
@@ -67,6 +68,8 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
 | `browser-exit` | `exit` (claude) | `FAKE_AGENT_MODE=exit-no-complete`: exits non-zero |
+| `smoke-repo` (repo) | `check` (shell `echo REPO-TRUSTED`) | none; needs trust before Start |
+| `browser-repo` (repo) | `check` (shell `sleep 3`) | none; needs trust before Start (launch sheet label `browser-repo (repo)`) |
 
 - Ready means the `[web-client] open http://127.0.0.1:<port>/?token=<hex>`
   line printed and `doctor.sh` passes. The last stdout line is the state file

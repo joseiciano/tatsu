@@ -113,6 +113,8 @@ function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeSta
       attemptRunId: (attemptId) => store.getSnapshot().state.workflows.attempts[attemptId]?.runId
     }),
     runner,
+    store,
+    persistTrust: () => {},
     log: () => {}
   })
   const call = async (name: string, payload: unknown): Promise<unknown> => {

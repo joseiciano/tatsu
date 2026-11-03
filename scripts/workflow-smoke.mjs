@@ -9,12 +9,14 @@
 // hooks and the repo, and the personal definitions `smoke` (Claude step then
 // shell step), `smoke-codex` (Codex step then shell step), `smoke-opencode`
 // (opencode step then shell step), `smoke-retry` (one
-// `test -f flag` shell step) and `smoke-full`. Adds <repoPath> as a repo,
+// `test -f flag` shell step) and `smoke-full`, plus the committed repo
+// definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
 // on a 60 s timeout per scenario.
 
 import { WebSocket } from 'ws'
-import { writeFileSync } from 'fs'
+import { execFileSync } from 'child_process'
+import { appendFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 const [token, portArg, repoPath, curlArg] = process.argv.slice(2)
@@ -272,6 +274,49 @@ async function scenarioFailRetry(worktreePath) {
   console.log('scenario 2 OK: run=%s paused step-failed, retried, done with attempt n=%d', runId, last.n)
 }
 
+const UNTRUSTED_ERROR = 'Trust this definition before running it'
+const STALE_TRUST_ERROR = 'The workflow definition changed on disk; review it again before trusting it'
+
+function repoDefinition(name) {
+  return Object.values(state.workflows.definitions).find((d) => d.scope === 'repo' && d.name === name)
+}
+
+async function scenarioRepoTrust(worktreePath) {
+  const defId = repoDefinition('smoke-repo').id
+  const refused = await request('workflows:startRun', { defId, worktreePath, inputs: {} })
+  expectThat(refused?.error === UNTRUSTED_ERROR, 'untrusted repo definition was not refused', refused)
+
+  const detail = await request('workflows:getDefinition', defId)
+  expectThat(/^[0-9a-f]{64}$/.test(detail?.summary?.hash ?? ''), 'repo definition detail has no hash', detail)
+  const wrong = detail.summary.hash.replace(/^./, (c) => (c === '0' ? '1' : '0'))
+  const stale = await request('workflows:trustDefinition', defId, wrong)
+  expectThat(stale?.error === STALE_TRUST_ERROR, 'trustDefinition with a stale hash was not refused', stale)
+  const stillRefused = await request('workflows:startRun', { defId, worktreePath, inputs: {} })
+  expectThat(stillRefused?.error === UNTRUSTED_ERROR, 'a refused trust still let the run start', stillRefused)
+
+  const trusted = await request('workflows:trustDefinition', defId, detail.summary.hash)
+  expectThat(trusted?.ok === true, 'trustDefinition with the current hash was refused', trusted)
+  const runId = await startRun(defId, worktreePath)
+  const record = await runSettled(runId)
+  expectThat(record.status === 'done', `repo trust run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+  expectThat(record.defHash === detail.summary.hash, 'run defHash is not the trusted hash', record)
+  const [check] = attemptsFor(record, 'check')
+  expectThat(check?.result?.summary?.includes('REPO-TRUSTED'), 'repo shell step summary lacks REPO-TRUSTED', record)
+
+  const file = '.harness/workflows/smoke-repo.yaml'
+  appendFileSync(join(worktreePath, file), '# edited after trust\n')
+  try {
+    const edited = await request('workflows:startRun', { defId, worktreePath, inputs: {} })
+    expectThat(edited?.error === UNTRUSTED_ERROR, 'a repo definition edited after trust was not refused', edited)
+  } finally {
+    execFileSync('git', ['checkout', '--', file], { cwd: worktreePath })
+  }
+  console.log(
+    'scenario repo-trust OK: untrusted refused, stale hash refused, trusted run=%s done, edit after trust refused',
+    runId
+  )
+}
+
 async function main() {
   await new Promise((resolve, reject) => {
     ws.once('open', resolve)
@@ -300,7 +345,8 @@ async function main() {
       wt &&
       state.hooks.consent === 'accepted' &&
       state.hooks.codexTrust?.state === 'ok' &&
-      definitionIds.every((id) => state.workflows.definitions[id])
+      definitionIds.every((id) => state.workflows.definitions[id]) &&
+      repoDefinition('smoke-repo')
     return ready ? wt.path : undefined
   })
   for (const id of definitionIds) {
@@ -313,6 +359,7 @@ async function main() {
   await scenarioCodexThenShell(worktreePath)
   await scenarioOpencodeThenShell(worktreePath)
   await scenarioFailRetry(worktreePath)
+  await scenarioRepoTrust(worktreePath)
   ws.close()
   process.exit(0)
 }

@@ -609,6 +609,10 @@ export function useWorkflowDefinition(id: string | null) {
   return useAppState((s) => (id ? s.workflows.definitions[id] ?? null : null))
 }
 
+export function useWorkflowTrust(id: string | null): string | undefined {
+  return useAppState((s) => (id && Object.hasOwn(s.workflows.trust, id) ? s.workflows.trust[id] : undefined))
+}
+
 export function useWorkflowRun(id: string | null) {
   return useAppState((s) => (id ? s.workflows.runs[id] ?? null : null))
 }

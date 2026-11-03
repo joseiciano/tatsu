@@ -10,9 +10,11 @@
 # <scratch>/repo, config.json (shims as claudeCommand/codexCommand/
 # opencodeCommand, hooks accepted, Labs
 # workflows on; the repo in repoRoots when asked), a scratch CODEX_HOME that
-# already trusts Tatsu's hooks and the repo (scripts/codex-trust-fixture.mjs)
-# and the personal workflow definitions. Sets WORKTREE, CLAUDE_SHIM,
-# CODEX_SHIM and OPENCODE_SHIM.
+# already trusts Tatsu's hooks and the repo (scripts/codex-trust-fixture.mjs),
+# the personal workflow definitions and two untrusted repo definitions
+# (`smoke-repo`, `browser-repo`) committed in the repo so they never show up
+# as untracked files in run snapshots. Sets WORKTREE, CLAUDE_SHIM, CODEX_SHIM
+# and OPENCODE_SHIM.
 
 smoke_sandbox() {
   local scratch="$1" repo_dir="$2" add_root="$3"
@@ -51,10 +53,24 @@ smoke_sandbox() {
   printf '#!/bin/sh\nFAKE_AGENT_KIND=opencode exec "%s" "%s" "$@"\n' "$node_bin" "$repo_dir/scripts/fake-agent.mjs" > "$OPENCODE_SHIM"
   chmod +x "$OPENCODE_SHIM"
 
-  mkdir -p "$scratch/repo"
+  mkdir -p "$scratch/repo/.harness/workflows"
   git -C "$scratch/repo" init -q -b main
   printf 'smoke\n' > "$scratch/repo/README.md"
-  git -C "$scratch/repo" add README.md
+  cat > "$scratch/repo/.harness/workflows/smoke-repo.yaml" <<'YAML'
+name: smoke-repo
+steps:
+  - id: check
+    kind: shell
+    run: echo REPO-TRUSTED
+YAML
+  cat > "$scratch/repo/.harness/workflows/browser-repo.yaml" <<'YAML'
+name: browser-repo
+steps:
+  - id: check
+    kind: shell
+    run: sleep 3
+YAML
+  git -C "$scratch/repo" add README.md .harness/workflows
   git -C "$scratch/repo" commit -q -m init
   WORKTREE="$(git -C "$scratch/repo" rev-parse --show-toplevel)"
 

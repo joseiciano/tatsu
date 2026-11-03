@@ -407,6 +407,7 @@ export interface ElectronAPI {
   getWorkflowRun(runId: string): Promise<WorkflowRunRecord | null>
   getWorkflowAttemptResult(attemptId: string): Promise<WorkflowAttemptRecord | null>
   startWorkflowRun(payload: WorkflowStartRunPayload): Promise<WorkflowStartRunResponse>
+  trustWorkflowDefinition(defId: string, hash: string): Promise<WorkflowActionResponse>
   cancelWorkflowRun(runId: string): Promise<WorkflowActionResponse>
   cancelWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   retryWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>

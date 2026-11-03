@@ -1,5 +1,5 @@
 import type { CodexHookTrustSummary, HooksConsent } from '../../../../shared/state/hooks'
-import type { WorkflowRun, WorkflowRunStatus } from '../../../../shared/state/workflows'
+import type { WorkflowRun, WorkflowRunStatus, WorkflowScope } from '../../../../shared/state/workflows'
 import type { ResolvedDefinition, WorkflowInputType } from '../../../../shared/workflow-def'
 
 export type LaunchInputControl = 'textarea' | 'text'
@@ -16,7 +16,20 @@ export interface CanStartArgs {
   inputs: Record<string, string>
   needsFull: boolean
   allowFull: boolean
+  trustNeeded: boolean
   definition: ResolvedDefinition | null
+}
+
+export interface TrustNeededArgs {
+  scope: WorkflowScope
+  hash: string
+  trustedHash: string | undefined
+}
+
+export interface TrustStepRow {
+  id: string
+  agent: string
+  permission: string
 }
 
 export interface RunWorkflowItemArgs {
@@ -40,6 +53,27 @@ export function needsFull(definition: ResolvedDefinition | null): boolean {
   return !!definition?.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
 }
 
+export function trustNeeded({ scope, hash, trustedHash }: TrustNeededArgs): boolean {
+  return scope === 'repo' && trustedHash !== hash
+}
+
+export function trustStepRows(definition: ResolvedDefinition): TrustStepRow[] {
+  return definition.steps.map((step) => {
+    switch (step.kind) {
+      case 'agent':
+        return {
+          id: step.id,
+          agent: step.agent,
+          permission: step.allow.length === 0 ? step.permissions : `${step.permissions} + ${step.allow.join(', ')}`
+        }
+      case 'shell':
+        return { id: step.id, agent: 'shell', permission: 'shell' }
+      default:
+        return { id: step.id, agent: step.kind, permission: 'not supported' }
+    }
+  })
+}
+
 function isFilled(inputs: Record<string, string>, name: string): boolean {
   return Object.hasOwn(inputs, name) && inputs[name].trim() !== ''
 }
@@ -54,9 +88,11 @@ export function startBlockReason({
   inputs,
   needsFull,
   allowFull,
+  trustNeeded,
   definition
 }: CanStartArgs): string | null {
   if (!definition) return 'Pick a valid workflow'
+  if (trustNeeded) return 'Trust this definition to start it'
   if (consent !== 'accepted') return 'Install hooks to start a workflow'
   if (hasCodexStep(definition) && codexTrust?.state !== 'ok') return 'Open a Codex tab and run /hooks'
   const missing = Object.keys(definition.inputs).find((name) => !isFilled(inputs, name))

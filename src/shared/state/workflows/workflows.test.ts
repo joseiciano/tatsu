@@ -206,6 +206,7 @@ function attempt(overrides: Partial<WorkflowAttempt> = {}): WorkflowAttempt {
 
 function fixture(runA: Partial<WorkflowRun> = {}): WorkflowsState {
   return {
+    trust: {},
     definitions: { 'personal:a': summary('a') },
     runs: {
       'run-a': run(runA),
@@ -942,5 +943,27 @@ describe('projectRunRecord step facts, cursor and resumability', () => {
     )
     expect('resumable' in projected.attempts['att-2']).toBe(false)
     expect('cursorStepId' in projected.run).toBe(false)
+  })
+})
+
+describe('workflowsReducer trustGranted', () => {
+  const defId = 'repo:abcdefabcdef:ship'
+  const hashA = 'a'.repeat(64)
+  const hashB = 'b'.repeat(64)
+
+  it('records the trusted hash for a definition and replaces an older one', () => {
+    const first = workflowsReducer(initialWorkflows, {
+      type: 'workflows/trustGranted',
+      payload: { defId, hash: hashA }
+    })
+    expect(first.trust).toEqual({ [defId]: hashA })
+    const second = workflowsReducer(first, { type: 'workflows/trustGranted', payload: { defId, hash: hashB } })
+    expect(second.trust).toEqual({ [defId]: hashB })
+    expect(second.definitions).toBe(first.definitions)
+  })
+
+  it('returns the same state when the hash is already trusted', () => {
+    const start = { ...initialWorkflows, trust: { [defId]: hashA } }
+    expect(workflowsReducer(start, { type: 'workflows/trustGranted', payload: { defId, hash: hashA } })).toBe(start)
   })
 })

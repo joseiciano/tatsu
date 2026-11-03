@@ -17,7 +17,8 @@ import type {
 export const initialWorkflows: WorkflowsState = {
   definitions: {},
   runs: {},
-  attempts: {}
+  attempts: {},
+  trust: {}
 }
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
@@ -313,6 +314,11 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       const attempt = state.attempts[attemptId]
       if (!attempt || attempt.resumable || isTerminalRun(state, attempt.runId)) return state
       return { ...state, attempts: { ...state.attempts, [attemptId]: { ...attempt, resumable: true } } }
+    }
+    case 'workflows/trustGranted': {
+      const { defId, hash } = event.payload
+      if (state.trust[defId] === hash) return state
+      return { ...state, trust: { ...state.trust, [defId]: hash } }
     }
     default: {
       const _exhaustive: never = event

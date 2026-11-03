@@ -295,6 +295,7 @@ export function buildBackend(
     getWorkflowRun: (runId: string) => req('workflows:getRun', runId),
     getWorkflowAttemptResult: (attemptId: string) => req('workflows:getAttemptResult', attemptId),
     startWorkflowRun: (payload: WorkflowStartRunPayload) => req('workflows:startRun', payload),
+    trustWorkflowDefinition: (defId: string, hash: string) => req('workflows:trustDefinition', defId, hash),
     cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),
     cancelWorkflowStep: (runId: string, stepId: string) => req('workflows:cancelStep', runId, stepId),
     retryWorkflowStep: (runId: string, stepId: string) => req('workflows:retryStep', runId, stepId),

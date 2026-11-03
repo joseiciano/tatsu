@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useBackend } from '../../../backend'
-import { useHooks, useWorkflowDefinitions } from '../../../store'
+import { useHooks, useWorkflowDefinitions, useWorkflowTrust } from '../../../store'
+import type { WorkflowDefinitionDetail, WorkflowScope } from '../../../../shared/state/workflows'
 import type { ResolvedDefinition } from '../../../../shared/workflow-def'
-import { buildInputFields, needsFull as definitionNeedsFull, startBlockReason } from '../launch-sheet-helpers'
-import { LaunchSheetForm, type LaunchSheetOption } from './LaunchSheetForm'
+import {
+  buildInputFields,
+  needsFull as definitionNeedsFull,
+  startBlockReason,
+  trustNeeded,
+  trustStepRows
+} from '../launch-sheet-helpers'
+import { LaunchSheetForm, type LaunchSheetOption, type LaunchSheetTrust } from './LaunchSheetForm'
 
 interface LaunchSheetProps {
   worktreePath: string
@@ -14,6 +21,9 @@ interface LoadedDefinition {
   id: string
   hash: string
   definition: ResolvedDefinition | null
+  source: string
+  scope: WorkflowScope
+  detailHash: string
 }
 
 export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.Element {
@@ -26,12 +36,18 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
   const [allowFullFor, setAllowFullFor] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [installingHooks, setInstallingHooks] = useState(false)
+  const [trusting, setTrusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const options = useMemo<LaunchSheetOption[]>(
     () =>
       Object.values(definitions)
-        .map((summary) => ({ id: summary.id, name: summary.name, issue: summary.issues[0] ?? null }))
+        .map((summary) => ({
+          id: summary.id,
+          name: summary.name,
+          issue: summary.issues[0] ?? null,
+          repo: summary.scope === 'repo'
+        }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     [definitions]
   )
@@ -46,17 +62,23 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
   const summaryHash = summary?.hash
   const confirmKey = summaryId !== undefined && summaryHash !== undefined ? `${summaryId}@${summaryHash}` : null
   const allowFull = confirmKey !== null && allowFullFor === confirmKey
+  const trustedHash = useWorkflowTrust(summaryId ?? null)
 
   useEffect(() => {
     if (broken || summaryId === undefined || summaryHash === undefined) return
     let cancelled = false
-    const settle = (definition: ResolvedDefinition | null): void => {
-      if (!cancelled) setLoaded({ id: summaryId, hash: summaryHash, definition })
+    const settle = (detail: WorkflowDefinitionDetail | null): void => {
+      if (cancelled) return
+      setLoaded({
+        id: summaryId,
+        hash: summaryHash,
+        definition: detail?.definition ?? null,
+        source: detail?.source ?? '',
+        scope: detail?.summary.scope ?? 'repo',
+        detailHash: detail?.summary.hash ?? ''
+      })
     }
-    backend.getWorkflowDefinition(summaryId).then(
-      (detail) => settle(detail?.definition ?? null),
-      () => settle(null)
-    )
+    backend.getWorkflowDefinition(summaryId).then(settle, () => settle(null))
     return () => {
       cancelled = true
     }
@@ -66,12 +88,19 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
   const definition = !broken && !loading ? loaded?.definition ?? null : null
   const fields = useMemo(() => buildInputFields(definition), [definition])
   const needsFull = definitionNeedsFull(definition)
+  const needsTrust =
+    loaded !== null && definition !== null
+      ? trustNeeded({ scope: loaded.scope, hash: loaded.detailHash, trustedHash })
+      : false
+  const trustRows = useMemo(() => (definition ? trustStepRows(definition) : []), [definition])
+  const trust: LaunchSheetTrust | null =
+    needsTrust && loaded !== null ? { source: loaded.source, rows: trustRows, trusting } : null
 
   const blockReason = submitting
     ? 'Starting…'
     : loading
       ? 'Loading workflow…'
-      : startBlockReason({ consent, codexTrust, inputs, needsFull, allowFull, definition })
+      : startBlockReason({ consent, codexTrust, inputs, needsFull, allowFull, trustNeeded: needsTrust, definition })
 
   const handleSelect = useCallback((id: string) => {
     setChosenId(id)
@@ -95,6 +124,22 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
       setInstallingHooks(false)
     }
   }, [backend])
+
+  const trustId = loaded?.id
+  const trustHash = loaded?.detailHash
+  const handleTrust = useCallback(async () => {
+    if (trustId === undefined || trustHash === undefined || trustHash === '') return
+    setTrusting(true)
+    setError(null)
+    try {
+      const response = await backend.trustWorkflowDefinition(trustId, trustHash)
+      if ('error' in response) setError(response.error)
+    } catch {
+      setError('Could not trust the workflow definition')
+    } finally {
+      setTrusting(false)
+    }
+  }, [backend, trustId, trustHash])
 
   const handleStart = useCallback(async () => {
     if (blockReason !== null || summaryId === undefined) return
@@ -131,6 +176,7 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
       installingHooks={installingHooks}
       needsFull={needsFull}
       allowFull={allowFull}
+      trust={trust}
       blockReason={blockReason}
       submitting={submitting}
       error={error}
@@ -138,6 +184,7 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
       onInputChange={handleInputChange}
       onInstallHooks={() => void handleInstallHooks()}
       onAllowFullChange={(checked) => setAllowFullFor(checked ? confirmKey : null)}
+      onTrust={() => void handleTrust()}
       onStart={() => void handleStart()}
       onClose={onClose}
     />

@@ -9,7 +9,12 @@ import {
 } from '../persistence-migrations'
 import type { HarnessConfigResourceType } from '../../shared/agent-registry'
 import type { HarnessConfigScope, ManagedHarnessKind } from '../../shared/state/harness-config'
-import type { Config, PersistedHarnessConfig, PersistedHarnessConfigResource } from './types'
+import type {
+  Config,
+  PersistedHarnessConfig,
+  PersistedHarnessConfigResource,
+  PersistedWorkflowTrust
+} from './types'
 import {
   LOCAL_BACKEND_ID,
   DEFAULT_TERMINAL_FONT_FAMILY,
@@ -63,7 +68,43 @@ export function loadConfig(): Config {
   if (config.harnessConfig === undefined) {
     config = { ...config, harnessConfig: emptyPersistedHarnessConfig() }
   }
+  if (config.workflowTrust !== undefined) {
+    config = { ...config, workflowTrust: sanitizeWorkflowTrust(config.workflowTrust) }
+  }
   return applyConnectionDefaults(config)
+}
+
+function isWorkflowTrustEntry(value: unknown): value is PersistedWorkflowTrust {
+  if (typeof value !== 'object' || value === null) return false
+  const entry = value as Record<string, unknown>
+  return (
+    typeof entry.repoRoot === 'string' &&
+    entry.repoRoot.length > 0 &&
+    typeof entry.path === 'string' &&
+    entry.path.length > 0 &&
+    typeof entry.hash === 'string' &&
+    CONTENT_HASH_PATTERN.test(entry.hash)
+  )
+}
+
+export function sanitizeWorkflowTrust(value: unknown): PersistedWorkflowTrust[] {
+  if (!Array.isArray(value)) return []
+  let entries: PersistedWorkflowTrust[] = []
+  for (const raw of value) {
+    if (!isWorkflowTrustEntry(raw)) continue
+    entries = upsertWorkflowTrust(entries, { repoRoot: raw.repoRoot, path: raw.path, hash: raw.hash })
+  }
+  return entries
+}
+
+export function upsertWorkflowTrust(
+  entries: readonly PersistedWorkflowTrust[],
+  entry: PersistedWorkflowTrust
+): PersistedWorkflowTrust[] {
+  return [
+    ...entries.filter((existing) => existing.repoRoot !== entry.repoRoot || existing.path !== entry.path),
+    { repoRoot: entry.repoRoot, path: entry.path, hash: entry.hash }
+  ]
 }
 
 // ---------------------------------------------------------------------------

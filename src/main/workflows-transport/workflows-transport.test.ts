@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { createHash } from 'crypto'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,6 +25,7 @@ import type {
   WorkflowsEvent
 } from '../../shared/state/workflows'
 import { validateWorkflowDefinition } from '../../shared/workflow-def'
+import type { PersistedWorkflowTrust } from '../persistence'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -188,6 +190,8 @@ beforeEach(() => {
     loader,
     runs,
     runner,
+    store: new Store(initialState),
+    persistTrust: () => {},
     log: (category, message, data) => logs.push(`[${category}] ${message} ${JSON.stringify(data ?? {})}`)
   })
 })
@@ -552,6 +556,8 @@ describe('workflows:startRun against the runner', () => {
         attemptRunId: () => undefined
       }),
       runner: live,
+      store,
+      persistTrust: () => {},
       log: () => {}
     })
     return own
@@ -582,7 +588,7 @@ describe('workflows:startRun against the runner', () => {
 
     const own = realRunner({ loader: repoLoader })
     expect(await own.call('workflows:startRun', { ...payload, defId })).toEqual({
-      error: 'Repo workflows are not trusted yet'
+      error: 'Trust this definition before running it'
     })
     expect(await own.call('workflows:startRun', payload)).toEqual({ error: 'Unknown workflow definition' })
   })
@@ -631,5 +637,145 @@ describe('workflows:startRun against the runner', () => {
     expect(await own.call('workflows:startRun', { ...payload, inputs: { nope: 'secret-value' } })).toEqual({
       error: 'The workflow inputs are invalid'
     })
+  })
+})
+
+describe('workflows:trustDefinition', () => {
+  function sha256(text: string): string {
+    return createHash('sha256').update(text).digest('hex')
+  }
+
+  function trustHarness(options: { labs?: boolean } = {}) {
+    const repo = join(dir, 'trust-repo')
+    mkdirSync(join(repo, '.git'), { recursive: true })
+    mkdirSync(join(repo, '.harness', 'workflows'), { recursive: true })
+    const file = join(repo, '.harness', 'workflows', 'shared.yaml')
+    writeFileSync(file, VALID_YAML)
+    const personal = join(dir, 'trust-personal')
+    mkdirSync(personal, { recursive: true })
+    writeFileSync(join(personal, 'mine.yaml'), VALID_YAML)
+    const repoLoader = createWorkflowDefsLoader({
+      dir: personal,
+      dispatch: () => {},
+      log: () => {},
+      watch: noWatch,
+      repoRoots: [repo]
+    })
+    repoLoader.reload()
+    const store = new Store({
+      ...initialState,
+      settings: {
+        ...initialState.settings,
+        labs: { ...initialState.settings.labs, workflows: options.labs ?? true }
+      }
+    })
+    const persisted: PersistedWorkflowTrust[] = []
+    const order: string[] = []
+    store.subscribe((event) => order.push(event.type))
+    const own = new FakeTransport()
+    registerWorkflowsRequestHandlers({
+      transport: own,
+      loader: repoLoader,
+      runs: createWorkflowRunLookup({
+        live: () => null,
+        liveAttemptRunId: () => undefined,
+        records,
+        attemptRunId: () => undefined
+      }),
+      runner,
+      store,
+      persistTrust: (entry) => {
+        order.push('persist')
+        persisted.push(entry)
+      },
+      log: () => {}
+    })
+    const defId = `repo:${repoKeyOf(repo)}:shared`
+    return { own, store, persisted, order, repo, file, defId }
+  }
+
+  it('persists the entry, then dispatches trustGranted for the current hash', async () => {
+    const h = trustHarness()
+    const hash = sha256(VALID_YAML)
+
+    expect(await h.own.call('workflows:trustDefinition', h.defId, hash)).toEqual({ ok: true })
+
+    expect(h.persisted).toEqual([{ repoRoot: h.repo, path: realpathSync(h.file), hash }])
+    expect(h.order).toEqual(['persist', 'workflows/trustGranted'])
+    expect(h.store.getSnapshot().state.workflows.trust).toEqual({ [h.defId]: hash })
+  })
+
+  it('refuses a stale hash after the file changed and records nothing', async () => {
+    const h = trustHarness()
+    const seen = sha256(VALID_YAML)
+    writeFileSync(h.file, FULL_YAML)
+
+    expect(await h.own.call('workflows:trustDefinition', h.defId, seen)).toEqual({
+      error: 'The workflow definition changed on disk; review it again before trusting it'
+    })
+    expect(h.persisted).toEqual([])
+    expect(h.store.getSnapshot().state.workflows.trust).toEqual({})
+  })
+
+  it('refuses personal and unknown definitions, malformed arguments and Labs off', async () => {
+    const h = trustHarness()
+    const hash = sha256(VALID_YAML)
+    expect(await h.own.call('workflows:trustDefinition', 'personal:mine', hash)).toEqual({
+      error: 'Only repo workflow definitions need trust'
+    })
+    expect(await h.own.call('workflows:trustDefinition', 'repo:000000000000:nope', hash)).toEqual({
+      error: 'Unknown workflow definition'
+    })
+    expect(await h.own.call('workflows:trustDefinition', h.defId, hash.toUpperCase())).toEqual({
+      error: 'invalid request'
+    })
+    expect(await h.own.call('workflows:trustDefinition', h.defId, 'abc')).toEqual({ error: 'invalid request' })
+    expect(await h.own.call('workflows:trustDefinition', { defId: h.defId }, hash)).toEqual({
+      error: 'invalid request'
+    })
+    expect(h.persisted).toEqual([])
+
+    const off = trustHarness({ labs: false })
+    expect(await off.own.call('workflows:trustDefinition', off.defId, hash)).toEqual({
+      error: 'Workflows are turned off in Labs'
+    })
+    expect(off.persisted).toEqual([])
+  })
+
+  it('lets a trusted repo definition start through the real runner, and refuses it again after an edit', async () => {
+    const h = trustHarness()
+    const runnerLoader = createWorkflowDefsLoader({
+      dir: join(dir, 'trust-personal'),
+      dispatch: () => {},
+      log: () => {},
+      watch: noWatch,
+      repoRoots: [h.repo]
+    })
+    runnerLoader.reload()
+    const live = new WorkflowRunner({
+      store: h.store,
+      loader: runnerLoader,
+      drivers: {
+        agent: { start: (a) => ({ executionId: `exec-${a.attemptId}` }), continue: () => {}, cancel: () => {}, onEvent: () => () => {} },
+        shell: { start: (a) => ({ executionId: `exec-${a.attemptId}` }), continue: () => {}, cancel: () => {}, onEvent: () => () => {} }
+      },
+      now: () => 1,
+      newId: () => 'run-trusted',
+      log: () => {}
+    })
+    live.reconcile([])
+    h.store.dispatch({ type: 'hooks/consentChanged', payload: 'accepted' })
+    h.store.dispatch({
+      type: 'worktrees/listChanged',
+      payload: [{ path: '/wt/a', branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/wt/a' }]
+    })
+    const start = { defId: h.defId, worktreePath: '/wt/a', inputs: {} }
+    expect(live.start(start)).toEqual({ ok: false, reason: 'untrusted-definition' })
+
+    expect(await h.own.call('workflows:trustDefinition', h.defId, sha256(VALID_YAML))).toEqual({ ok: true })
+    writeFileSync(h.file, FULL_YAML)
+    expect(live.start({ ...start, allowFull: true })).toEqual({ ok: false, reason: 'untrusted-definition' })
+    writeFileSync(h.file, VALID_YAML)
+    expect(live.start(start)).toEqual({ ok: true, runId: 'run-trusted' })
   })
 })
