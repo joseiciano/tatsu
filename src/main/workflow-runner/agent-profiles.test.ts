@@ -14,6 +14,7 @@ import {
   claudeProfile,
   codexProfile,
   createAgentStepDriver,
+  opencodeProfile,
   type StepDriverEvent
 } from '.'
 import { FakeStepDriver, worktreeFixture } from './fake-step-driver'
@@ -55,20 +56,27 @@ steps:
 
 const CODEX_SESSION = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b'
 const OTHER_CODEX_SESSION = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c'
+const OPENCODE_SESSION = 'ses_f6ecc1676ffe3NQnC5CdfZLoop'
 const OK_TRUST: CodexHookTrustSummary = { state: 'ok', reviewEvents: [] }
 
 interface RunnerOptions {
   codexTrust?: CodexHookTrustSummary | null
   codexFolder?: TrustStatus
   records?: WorkflowRunRecord[]
+  opencode?: boolean
 }
 
-function twoProfileRunner({ codexTrust = OK_TRUST, codexFolder = 'trusted', records = [] }: RunnerOptions = {}) {
+function twoProfileRunner({
+  codexTrust = OK_TRUST,
+  codexFolder = 'trusted',
+  records = [],
+  opencode = true
+}: RunnerOptions = {}) {
   const store = new Store({
     ...initialState,
     hooks: { ...initialState.hooks, consent: 'accepted', codexTrust },
     workflows: { ...initialState.workflows, ...hydrateWorkflowRuns(records) },
-    worktrees: { ...initialState.worktrees, list: ['/wt/claude', '/wt/codex'].map(worktreeFixture) },
+    worktrees: { ...initialState.worktrees, list: ['/wt/claude', '/wt/codex', '/wt/opencode'].map(worktreeFixture) },
     settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: true } }
   })
   const tabs: Array<{ tab: TerminalTab; spawn: StepSpawnExtras }> = []
@@ -85,7 +93,8 @@ function twoProfileRunner({ codexTrust = OK_TRUST, codexFolder = 'trusted', reco
       codexProfile(async (path) => {
         codexTrustChecks.push(path)
         return { status: codexFolder }
-      })
+      }),
+      ...(opencode ? [opencodeProfile()] : [])
     ],
     addTab: (_worktreePath, tab, spawn) => {
       tabs.push({ tab, spawn })
@@ -118,7 +127,10 @@ function twoProfileRunner({ codexTrust = OK_TRUST, codexFolder = 'trusted', reco
   const runner = new WorkflowRunner({
     store,
     loader: {
-      getDefinition: (id) => (id === 'personal:claude' ? detail('claude') : id === 'personal:codex' ? detail('codex') : null)
+      getDefinition: (id: string) => {
+        const agent = id.replace(/^personal:/, '')
+        return agent === 'claude' || agent === 'codex' || agent === 'opencode' ? detail(agent) : null
+      }
     },
     drivers: { agent: driver, shell: new FakeStepDriver('shell') },
     now: () => ++next,
@@ -209,7 +221,7 @@ describe('agent step driver with two profiles', () => {
   })
 
   it('fails the start of an agent kind without a profile with the unsupported message and opens no tab', async () => {
-    const ctx = twoProfileRunner()
+    const ctx = twoProfileRunner({ opencode: false })
     const step = detail('opencode').definition?.steps[0]
     if (step?.kind !== 'agent') throw new Error('no agent step')
     const bind = vi.fn(() => true)
@@ -292,7 +304,8 @@ describe('codex profile', () => {
   it.each([
     ['a non-UUID id', 'not-a-uuid'],
     ['a shell payload', `${CODEX_SESSION}; touch /tmp/pwned`],
-    ['an empty id', '']
+    ['an empty id', ''],
+    ['an opencode id', OPENCODE_SESSION]
   ])('drops %s without persisting or dispatching', async (_name, sessionId) => {
     const ctx = twoProfileRunner()
     const runId = ctx.start('codex')
@@ -390,5 +403,94 @@ describe('codex hooks trust at start', () => {
     ctx.start('claude')
     await flush()
     expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['claude'])
+  })
+})
+
+describe('opencode profile', () => {
+  it('spawns an opencode tab with the step permission level and model, no preassigned session and no trust check', async () => {
+    const ctx = twoProfileRunner({ codexFolder: 'untrusted' })
+    const runId = ctx.start('opencode')
+    await flush()
+    const { tab, spawn } = ctx.tabFor('opencode')
+    expect(tab).toMatchObject({ type: 'agent', agentKind: 'opencode', label: '⚙ plan · opencode' })
+    expect(spawn).toMatchObject({ permissionLevel: 'edit', model: 'gpt-test', initialPrompt: 'plan' })
+    expect(spawn).not.toHaveProperty('sessionId')
+    expect(ctx.codexTrustChecks).toEqual([])
+    expect(ctx.wf().runs[runId].steps.plan.status).toBe('running')
+  })
+
+  it('starts an opencode definition while Codex hooks are untrusted', async () => {
+    const ctx = twoProfileRunner({ codexTrust: null })
+    ctx.start('opencode')
+    await flush()
+    expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['opencode'])
+  })
+
+  it('records a discovered opencode session id on the attempt and dispatches attemptSessionRecorded once', async () => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start('opencode')
+    await flush()
+    const executionId = ctx.tabFor('opencode').tab.id
+    const recorded = ctx.recorded()
+    const attemptId = ctx.wf().runs[runId].steps.plan.attemptIds[0]
+
+    ctx.discover(executionId, OPENCODE_SESSION)
+    ctx.discover(executionId, OPENCODE_SESSION)
+
+    expect(recorded).toEqual([{ type: 'workflows/attemptSessionRecorded', payload: { attemptId } }])
+    expect(ctx.runner.getRunRecord(runId)?.attempts[0].sessionId).toBe(OPENCODE_SESSION)
+    expect(ctx.persisted.at(-1)?.attempts[0].sessionId).toBe(OPENCODE_SESSION)
+  })
+
+  it.each([
+    ['a UUID', CODEX_SESSION],
+    ['a shell payload', `${OPENCODE_SESSION}; touch /tmp/pwned`],
+    ['a bare prefix', 'ses_'],
+    ['a quoted id', `'${OPENCODE_SESSION}'`]
+  ])('drops %s without persisting or dispatching', async (_name, sessionId) => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start('opencode')
+    await flush()
+    const recorded = ctx.recorded()
+    const persistedBefore = ctx.persisted.length
+    ctx.discover(ctx.tabFor('opencode').tab.id, sessionId)
+    expect(recorded).toEqual([])
+    expect(ctx.persisted).toHaveLength(persistedBefore)
+    expect(ctx.runner.getRunRecord(runId)?.attempts[0].sessionId).toBeUndefined()
+  })
+
+  it('refuses to resume an interrupted opencode attempt even with a recorded session', async () => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start('opencode')
+    await flush()
+    ctx.discover(ctx.tabFor('opencode').tab.id, OPENCODE_SESSION)
+    const record = ctx.runner.getRunRecord(runId)
+    if (!record) throw new Error('no record')
+    record.attempts[0].status = 'running'
+    ctx.runner.dispose()
+
+    const resumed = twoProfileRunner({ records: [record] })
+    expect(resumed.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+    expect(resumed.runner.resumeStep(runId, 'plan')).toEqual({ ok: false, reason: 'not-resumable-step' })
+    expect(resumed.tabs).toEqual([])
+  })
+
+  it('blocks an opencode idle once and not again while the plugin reports the continuation as active', async () => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start('opencode')
+    await flush()
+    const executionId = ctx.tabFor('opencode').tab.id
+    expect(ctx.runner.stopCheck(executionId, false)).toBe('block')
+    ctx.promptSubmit(executionId)
+    expect(ctx.runner.stopCheck(executionId, true)).toBe('none')
+    expect(ctx.runner.getRunRecord(runId)?.attempts[0].metrics.continuations).toBe(1)
+  })
+
+  it('cancels an opencode step with SIGHUP', async () => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start('opencode')
+    await flush()
+    expect(ctx.runner.cancelStep(runId, 'plan')).toEqual({ ok: true })
+    expect(ctx.killed).toEqual([{ id: ctx.tabFor('opencode').tab.id, signal: 'SIGHUP' }])
   })
 })

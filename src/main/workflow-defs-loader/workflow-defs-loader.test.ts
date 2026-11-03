@@ -116,7 +116,7 @@ describe('createWorkflowDefsLoader().reload', () => {
     expect(invalid.name).toBe('plan-build-review')
     expect(invalid.stepIds).toEqual(['plan', 'build', 'test', 'review'])
     expect(invalid.hash).toBe(sha256(PLAN_EXAMPLE_YAML))
-    expect(invalid.issues).toHaveLength(5)
+    expect(invalid.issues).toHaveLength(4)
     expect(invalid.issues[0]).toContain('item_input')
   })
 
@@ -205,7 +205,7 @@ describe('createWorkflowDefsLoader().reload', () => {
     expect(logs).toContainEqual({
       category: 'workflow',
       message: 'definition loaded',
-      data: { file: 'plan.yaml', id: 'personal:plan', errors: 5, warnings: 0, unsupported: 5 }
+      data: { file: 'plan.yaml', id: 'personal:plan', errors: 4, warnings: 0, unsupported: 4 }
     })
     expect(logs.every((line) => line.category === 'workflow')).toBe(true)
   })

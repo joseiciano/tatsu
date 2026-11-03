@@ -49,6 +49,11 @@ export const CODEX_START_SUMMARIES = {
   spawnFailed: 'codex failed to start'
 } as const
 
+export const OPENCODE_START_SUMMARIES = {
+  trust: 'opencode folder trust required',
+  spawnFailed: 'opencode failed to start'
+} as const
+
 export interface AgentProfile {
   kind: WorkflowAgent
   label: string
@@ -131,6 +136,17 @@ export function codexProfile(checkFolderTrust: FolderTrustCheck): AgentProfile {
     checkTrust: async (path) => (await checkFolderTrust(path)).status,
     hooksBlocked: (hooks) => (hooks.codexTrust?.state === 'ok' ? null : AGENT_START_SUMMARIES.codexHooks),
     startSummaries: CODEX_START_SUMMARIES
+  }
+}
+
+export function opencodeProfile(): AgentProfile {
+  return {
+    kind: 'opencode',
+    label: 'opencode',
+    session: 'discovered',
+    cancelSignal: AGENT_CANCEL_SIGNAL,
+    checkTrust: async () => 'trusted',
+    startSummaries: OPENCODE_START_SUMMARIES
   }
 }
 
