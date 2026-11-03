@@ -4,7 +4,7 @@ import { GitPullRequest, RotateCw, Trash2, Loader2, Moon, TriangleAlert, Workflo
 import type { Worktree, PtyStatus, PendingTool, PRStatus } from '../../types'
 import { isPRMerged } from '../../../shared/state/prs'
 import { formatWakeAt } from '../../../shared/state/snooze'
-import { useAppState } from '../../store'
+import { useAppState, useWorkflowRunForWorktree } from '../../store'
 import { Tooltip } from '../Tooltip'
 import { formatWorktreeAge } from '../worktree-detail'
 import { useWorktreeDetailOverride } from '../../worktree-detail-override'
@@ -14,6 +14,7 @@ import { HotkeyBadge } from '../HotkeyBadge'
 import { useMetaHeld } from '../../hooks/useMetaHeld'
 import type { Action } from '../../hotkeys'
 import { showRunWorkflowItem } from '../Workflows/launch-sheet-helpers'
+import { StepStrip } from '../Workflows/StepStrip'
 
 interface WorktreeTabProps {
   worktree: Worktree
@@ -95,6 +96,8 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
     showRunWorkflowItem({ labsWorkflows: s.settings.labs.workflows, worktreePath: worktree.path, runs: s.workflows.runs })
   )
   const canRunWorkflow = !!onRunWorkflow && runWorkflowVisible
+  const labsWorkflows = useAppState((s) => s.settings.labs.workflows)
+  const workflowRunId = useWorkflowRunForWorktree(worktree.path)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -202,6 +205,7 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
           })()}
           <span className="truncate">{worktree.branch}</span>
         </div>
+        {labsWorkflows && workflowRunId && <StepStrip runId={workflowRunId} />}
         {showPendingTool ? (
           <div className="text-xs text-danger truncate font-mono" title={formatPendingTool(pendingTool!)}>
             {formatPendingTool(pendingTool!)}

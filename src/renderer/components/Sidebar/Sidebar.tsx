@@ -12,6 +12,7 @@ import { SnoozeCalendar } from '../SnoozeCalendar'
 import { repoNameColor } from '../RepoIcon'
 import { BackendChipStrip } from '../BackendChipStrip'
 import { useBackend } from '../../backend'
+import { NeedsYouGroup, type JumpToTabHandler } from '../Workflows/NeedsYou'
 
 interface SidebarProps {
   worktrees: Worktree[]
@@ -49,6 +50,7 @@ interface SidebarProps {
   onOpenCommandCenter: () => void
   onOpenNewProject: () => void
   onRunWorkflow?: (worktreePath: string) => void
+  onJumpToWorkflowTab?: JumpToTabHandler
   width: number
   collapsedGroups: Record<string, boolean>
   onToggleGroup: (scope: string, key: GroupKey) => void
@@ -93,6 +95,7 @@ export function Sidebar({
   onOpenCommandCenter,
   onOpenNewProject,
   onRunWorkflow,
+  onJumpToWorkflowTab,
   width,
   collapsedGroups: _collapsedGroups,
   onToggleGroup,
@@ -317,6 +320,10 @@ export function Sidebar({
             <SettingsIcon className="icon-sm" />
           </button>
         </Tooltip>
+      </div>
+
+      <div className="shrink-0 max-h-[40%] overflow-y-auto">
+        <NeedsYouGroup onJumpToTab={onJumpToWorkflowTab} />
       </div>
 
       {/* Worktrees header */}

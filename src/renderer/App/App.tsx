@@ -688,6 +688,18 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setActiveWorktreeId
   })
 
+  const handleJumpToWorkflowTab = useCallback(
+    (worktreePath: string, paneId: string, tabId: string) => {
+      setShowNewWorktree(false)
+      setShowActivity(false)
+      setShowCleanup(false)
+      setShowCommandCenter(false)
+      setActiveWorktreeId(worktreePath)
+      handleSelectTab(worktreePath, paneId, tabId)
+    },
+    [handleSelectTab, setShowCommandCenter]
+  )
+
   // Sidebar-aware hotkey handlers + the resolved binding map for tooltips.
   // The hook also subscribes to keystrokes via useHotkeys internally.
   const { hotkeyActions, resolvedHotkeys } = useHotkeyHandlers({
@@ -1378,6 +1390,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             prLoading={prLoading}
             agentCount={agentWorktreeCount}
             onRunWorkflow={setRunWorkflowPath}
+            onJumpToWorkflowTab={handleJumpToWorkflowTab}
             onSelectWorktree={(path) => {
               setShowNewWorktree(false)
               setShowActivity(false)
