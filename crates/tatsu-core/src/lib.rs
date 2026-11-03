@@ -9,6 +9,7 @@ pub mod logs;
 pub mod router;
 pub mod secrets;
 pub mod store;
+pub mod themes;
 
 pub use config::ConfigDoc;
 pub use data_dir::{DataDir, Env, Platform, Runtime};

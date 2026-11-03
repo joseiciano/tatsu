@@ -88,7 +88,7 @@ fn newline(out: &mut String, depth: Option<usize>) {
     }
 }
 
-fn js_key_order(map: &Map<String, Value>) -> Vec<(&String, &Value)> {
+pub fn js_key_order(map: &Map<String, Value>) -> Vec<(&String, &Value)> {
     let mut indexed: Vec<(u32, &String, &Value)> = Vec::new();
     let mut named = Vec::with_capacity(map.len());
     for (key, value) in map {

@@ -1,0 +1,29 @@
+[
+  {
+    "name": "built-in themes",
+    "availableThemes": [
+      "dark",
+      "dracula",
+      "nord",
+      "gruvbox-dark",
+      "tokyo-night",
+      "catppuccin-mocha",
+      "one-dark",
+      "solarized-dark",
+      "solarized-light",
+      "cyberfunk"
+    ],
+    "themeAppBg": {
+      "dark": "#0a0a0a",
+      "dracula": "#282a36",
+      "nord": "#2e3440",
+      "gruvbox-dark": "#282828",
+      "tokyo-night": "#1a1b26",
+      "catppuccin-mocha": "#1e1e2e",
+      "one-dark": "#282c34",
+      "solarized-dark": "#002b36",
+      "solarized-light": "#fdf6e3",
+      "cyberfunk": "#000000"
+    }
+  }
+]

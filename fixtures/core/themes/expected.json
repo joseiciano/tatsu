@@ -1,0 +1,199 @@
+[
+  {
+    "name": "valid-light",
+    "customThemes": [
+      {
+        "id": "paper",
+        "name": "Paper",
+        "mode": "light",
+        "colors": {
+          "1": "#444444",
+          "2": "#222222",
+          "b": "#111111",
+          "a": "#333333",
+          "01": "#555555"
+        }
+      }
+    ],
+    "logLines": []
+  },
+  {
+    "name": "valid-dark",
+    "customThemes": [
+      {
+        "id": "array-colors",
+        "name": "Array Colors",
+        "mode": "dark",
+        "colors": {
+          "0": "#111111",
+          "3": "#222222"
+        }
+      },
+      {
+        "id": "midnight",
+        "name": "Midnight",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "string-colors",
+        "name": "String Colors",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "bad-bytes",
+        "name": "Bad �� Bytes",
+        "mode": "dark",
+        "colors": {
+          "bg": "#0�"
+        }
+      },
+      {
+        "id": "dupe-keys",
+        "name": "Second",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "surrogate",
+        "name": "Lone \ud800 surrogate",
+        "mode": "dark",
+        "colors": {
+          "\udc00": "#123456"
+        }
+      }
+    ],
+    "logLines": []
+  },
+  {
+    "name": "missing-name",
+    "customThemes": [],
+    "logLines": [
+      "[<ts>] [themes] skipping blank.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping nameless.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping numeric-name.json: missing required name/mode or invalid shape"
+    ]
+  },
+  {
+    "name": "bad-mode",
+    "customThemes": [],
+    "logLines": [
+      "[<ts>] [themes] skipping no-mode.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping sepia.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping upper-mode.json: missing required name/mode or invalid shape"
+    ]
+  },
+  {
+    "name": "malformed-json",
+    "customThemes": [],
+    "logLines": [
+      "[<ts>] [themes] skipping array.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping bom.json: parse error — <message>",
+      "[<ts>] [themes] skipping broken.json: parse error — <message>",
+      "[<ts>] [themes] skipping empty.json: parse error — <message>",
+      "[<ts>] [themes] skipping folder.json: parse error — <message>",
+      "[<ts>] [themes] skipping null.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping string.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping trailing.json: parse error — <message>"
+    ]
+  },
+  {
+    "name": "builtin-collision",
+    "customThemes": [
+      {
+        "id": "dark-mode",
+        "name": "Not Builtin",
+        "mode": "light",
+        "colors": {}
+      }
+    ],
+    "logLines": [
+      "[<ts>] [themes] skipping Dracula.json: id \"dracula\" collides with built-in theme",
+      "[<ts>] [themes] skipping cyberfunk.JSON: id \"cyberfunk\" collides with built-in theme",
+      "[<ts>] [themes] skipping solarized dark.json: id \"solarized-dark\" collides with built-in theme"
+    ]
+  },
+  {
+    "name": "duplicate-id",
+    "customThemes": [
+      {
+        "id": "my-theme",
+        "name": "Spaced",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "aaa",
+        "name": "Valid Second",
+        "mode": "dark",
+        "colors": {}
+      }
+    ],
+    "logLines": [
+      "[<ts>] [themes] skipping AAA!.json: missing required name/mode or invalid shape",
+      "[<ts>] [themes] skipping my-theme.json: duplicate id \"my-theme\" (first one wins)",
+      "[<ts>] [themes] skipping my_theme.json: duplicate id \"my-theme\" (first one wins)"
+    ]
+  },
+  {
+    "name": "file-names",
+    "customThemes": [
+      {
+        "id": "edge-dashes",
+        "name": "n--edge--dashes--",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "case",
+        "name": "nCase",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "hello-world-v2",
+        "name": "nHello, World! (v2)",
+        "mode": "dark",
+        "colors": {}
+      },
+      {
+        "id": "upper",
+        "name": "Upper Suffix",
+        "mode": "light",
+        "colors": {}
+      },
+      {
+        "id": "a-b",
+        "name": "na___b",
+        "mode": "dark",
+        "colors": {}
+      }
+    ],
+    "logLines": [
+      "[<ts>] [themes] skipping !!!.json: filename produces empty id",
+      "[<ts>] [themes] skipping .json: filename produces empty id"
+    ]
+  },
+  {
+    "name": "no-folder",
+    "customThemes": [],
+    "logLines": []
+  },
+  {
+    "name": "basic",
+    "customThemes": [
+      {
+        "id": "ocean",
+        "name": "Ocean",
+        "mode": "dark",
+        "colors": {
+          "background": "#001122"
+        }
+      }
+    ],
+    "logLines": [
+      "[<ts>] [themes] skipping broken.json: missing required name/mode or invalid shape"
+    ]
+  }
+]

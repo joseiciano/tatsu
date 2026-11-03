@@ -3,4 +3,4 @@ mod parse;
 mod write;
 
 pub use parse::{ParseError, parse_lenient};
-pub use write::{stringify, stringify_pretty};
+pub use write::{js_key_order, stringify, stringify_pretty};
