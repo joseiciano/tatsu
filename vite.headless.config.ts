@@ -59,6 +59,8 @@ export default defineConfig({
   },
   ssr: {
     // ssr: true tells vite to externalize Node built-ins automatically.
-    noExternal: []
+    // Pure-JS deps not staged by scripts/runtime-closure.mjs must be bundled,
+    // or the packaged server fails to resolve them at boot.
+    noExternal: ['tar', 'js-yaml']
   }
 })
