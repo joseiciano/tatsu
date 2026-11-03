@@ -107,3 +107,14 @@ export function findWorkflowStepTab(pane: PaneNode | undefined, ref: WorkflowSte
   }
   return (pane && visit(pane)) ?? fallback
 }
+
+export function workflowRunRecordKey({ runs, attempts }: WorkflowsState, runId: string): string | null {
+  const run = Object.hasOwn(runs, runId) ? runs[runId] : undefined
+  if (!run) return null
+  const parts: string[] = [run.status, run.pausedReason ?? '', run.cursorStepId ?? '']
+  for (const [stepId, step] of Object.entries(run.steps)) {
+    parts.push(stepId, step.status)
+    for (const attemptId of step.attemptIds) parts.push(attemptId, attempts[attemptId]?.status ?? '')
+  }
+  return JSON.stringify(parts)
+}

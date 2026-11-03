@@ -8,9 +8,17 @@ interface CancelStepDialogProps {
   error: string | null
   onConfirm: () => void
   onCancel: () => void
+  confirmLabel?: string
 }
 
-export function CancelStepDialog({ stepId, busy, error, onConfirm, onCancel }: CancelStepDialogProps): JSX.Element {
+export function CancelStepDialog({
+  stepId,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+  confirmLabel = 'Cancel step and close tab'
+}: CancelStepDialogProps): JSX.Element {
   const titleId = useId()
   const descId = useId()
   const dialogRef = useRef<HTMLDivElement | null>(null)
@@ -62,7 +70,7 @@ export function CancelStepDialog({ stepId, busy, error, onConfirm, onCancel }: C
             disabled={busy}
             className="text-xs px-3 py-1.5 rounded bg-danger text-white hover:opacity-90 cursor-pointer disabled:opacity-50 disabled:cursor-default"
           >
-            {busy ? 'Cancelling…' : 'Cancel step and close tab'}
+            {busy ? 'Cancelling…' : confirmLabel}
           </button>
         </div>
       </div>

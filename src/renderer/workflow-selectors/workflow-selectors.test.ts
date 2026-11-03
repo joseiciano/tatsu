@@ -3,7 +3,8 @@ import {
   createPausedRunIdsSelector,
   createRunAttemptsSelector,
   findWorkflowStepTab,
-  selectWorkflowRunIdForWorktree
+  selectWorkflowRunIdForWorktree,
+  workflowRunRecordKey
 } from '.'
 import type { WorkflowAttempt, WorkflowRun, WorkflowRunStatus, WorkflowsState } from '../../shared/state/workflows'
 import type { PaneLeaf, PaneNode, TerminalTab } from '../../shared/state/terminals'
@@ -160,5 +161,31 @@ describe('createRunAttemptsSelector', () => {
 
   it('is empty for an unknown run', () => {
     expect(createRunAttemptsSelector()(state({}), 'missing')).toEqual([])
+  })
+})
+
+describe('workflowRunRecordKey', () => {
+  const steps = { plan: { status: 'done' as const, attemptIds: ['a1'] }, build: { status: 'running' as const, attemptIds: ['a2'] } }
+  const attempts = { a1: attempt('r', 1, 2), a2: attempt('r', 3) }
+  const key = (runs: Record<string, WorkflowRun>, atts: Record<string, WorkflowAttempt> = attempts) =>
+    workflowRunRecordKey(state(runs, atts), 'r')
+
+  it('stays the same while only streamed attempt fields change', () => {
+    const base = key({ r: run('running', { steps }) })
+    const streamed = { ...attempts, a2: { ...attempts.a2, summaryPreview: 'more text', costUsd: 0.5 } }
+    expect(key({ r: run('running', { steps }) }, streamed)).toBe(base)
+    expect(key({ r: run('running', { steps }), other: run('done') })).toBe(base)
+  })
+
+  it('changes when the run status, an attempt status or the attempt id set changes', () => {
+    const base = key({ r: run('running', { steps }) })
+    expect(key({ r: run('paused', { steps, pausedReason: 'step-failed' }) })).not.toBe(base)
+    expect(key({ r: run('running', { steps }) }, { ...attempts, a2: attempt('r', 3, 4) })).not.toBe(base)
+    const retried = { ...steps, build: { status: 'running' as const, attemptIds: ['a2', 'a3'] } }
+    expect(key({ r: run('running', { steps: retried }) }, { ...attempts, a3: attempt('r', 5) })).not.toBe(base)
+  })
+
+  it('is null for an unknown run', () => {
+    expect(workflowRunRecordKey(state({}), 'missing')).toBeNull()
   })
 })
