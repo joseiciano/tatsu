@@ -79,7 +79,7 @@ import {
   DEFAULT_DARK_THEME,
   DEFAULT_PR_REVIEW_PROMPT
 } from '../shared/state/settings'
-import { onStopEvent, watchStatusDir } from './hooks'
+import { onPromptSubmit, onStopEvent, watchStatusDir } from './hooks'
 import { checkClaudeFolderTrust } from './folder-trust'
 import { getAgent, codexHomeDir, codexHookTrustReport, codexHookEvents, type AgentKind } from './agents'
 import { startCodexHookTrustMonitor, summarizeCodexHookTrust } from './codex-hook-trust'
@@ -801,6 +801,7 @@ const claudeStepDriver = createClaudeStepDriver({
   onExit: (listener) => ptyManager.onExit(listener),
   kill: (id, signal) => ptyManager.kill(id, signal),
   onStopEvent,
+  onPromptSubmit,
   store,
   checkFolderTrust: (path) => checkClaudeFolderTrust(path),
   writeMarker: (id, marker) => {
@@ -3343,7 +3344,7 @@ async function runBoot(): Promise<void> {
     }
   }
   pruneTerminalHistory(keepIds)
-  pruneMcpConfigs(keepIds)
+  pruneMcpConfigs(new Set([...keepIds, ...workflowRunner.liveExecutionIds()]))
 
   // Local HTTP control server for the bundled harness-control MCP bridge.
   startControlServer({
@@ -3490,7 +3491,8 @@ async function runBoot(): Promise<void> {
     workflow: {
       enabled: () => store.getSnapshot().state.settings.labs.workflows,
       stepFor: (terminalId) => workflowRunner.stepForExecution(terminalId),
-      complete: (terminalId, value) => workflowRunner.completeExecution(terminalId, value)
+      complete: (terminalId, value) => workflowRunner.completeExecution(terminalId, value),
+      stopCheck: (terminalId, stopHookActive) => workflowRunner.stopCheck(terminalId, stopHookActive)
     },
     runWorktreeSetup: (ctx) => worktreesFSM.runWorktreeSetup(ctx),
     runPendingPRWorktree: async (params) => {
