@@ -488,16 +488,6 @@ const harnessConfigService = createHarnessConfigService({
   replaceDesiredScope: (scope, resources) => replacePersistedHarnessConfigScope(config, scope, resources)
 })
 registerHarnessConfigRequestHandlers({ transport, store, service: harnessConfigService })
-registerWorkflowsRequestHandlers({
-  transport,
-  loader: workflowDefsLoader,
-  runs: createWorkflowRunLookup({
-    live: (runId) => workflowRunner.getRunRecord(runId),
-    liveAttemptRunId: (attemptId) => workflowRunner.runIdForAttempt(attemptId),
-    records: workflowRunRecords,
-    attemptRunId: (attemptId) => store.getSnapshot().state.workflows.attempts[attemptId]?.runId
-  })
-})
 registerWorkflowSettingsRequestHandlers({
   transport,
   config,
@@ -824,11 +814,50 @@ const workflowRunner = new WorkflowRunner({
   artifacts: createGitRunArtifacts(),
   hasExecution: (executionId) => ptyManager.hasTerminal(executionId)
 })
+registerWorkflowsRequestHandlers({
+  transport,
+  loader: workflowDefsLoader,
+  runs: createWorkflowRunLookup({
+    live: (runId) => workflowRunner.getRunRecord(runId),
+    liveAttemptRunId: (attemptId) => workflowRunner.runIdForAttempt(attemptId),
+    records: workflowRunRecords,
+    attemptRunId: (attemptId) => store.getSnapshot().state.workflows.attempts[attemptId]?.runId
+  }),
+  runner: workflowRunner,
+  log
+})
+store.subscribe((event) => {
+  if (event.type === 'settings/workflowSettingsChanged') queueMicrotask(() => workflowRunner.reschedule())
+})
 removeStaleStepMarkers()
-try {
-  workflowRunner.reconcile(bootRunRecords)
-} catch {
-  log('workflow', 'run reconcile failed')
+const RECONCILE_WAIT_MS = 10_000
+let workflowRunsReconciled = false
+function reconcileWorkflowRuns(): void {
+  if (workflowRunsReconciled) return
+  workflowRunsReconciled = true
+  try {
+    workflowRunner.reconcile(bootRunRecords)
+  } catch {
+    log('workflow', 'run reconcile failed')
+  }
+}
+function reconcileWorkflowRunsAfter(panesRestored: Promise<unknown>, controlServerStarted: Promise<unknown>): void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), RECONCILE_WAIT_MS)
+    timer.unref?.()
+  })
+  void Promise.race([Promise.allSettled([panesRestored, controlServerStarted]), timedOut]).then((outcome) => {
+    clearTimeout(timer)
+    if (outcome === 'timeout') {
+      log('workflow', 'reconcile after boot wait timed out')
+    } else {
+      const [panes, control] = outcome
+      if (panes.status === 'rejected') log('workflow', 'reconcile after failed pane restore')
+      if (control.status === 'rejected') log('workflow', 'reconcile without control server')
+    }
+    reconcileWorkflowRuns()
+  })
 }
 
 const QUIT_FLUSH_TIMEOUT_MS = 2000
@@ -3214,6 +3243,16 @@ const desktopHooks = {
 }
 
 async function runBoot(): Promise<void> {
+  try {
+    await bootApp()
+  } catch (err) {
+    log('workflow', 'reconcile after failed boot')
+    reconcileWorkflowRuns()
+    throw err
+  }
+}
+
+async function bootApp(): Promise<void> {
   log('app', `started, log file: ${getLogFilePath()}`)
 
   // Seed the store's flat worktree list before the renderer hydrates, so
@@ -3221,8 +3260,9 @@ async function runBoot(): Promise<void> {
   // discovered worktrees is handled by the sleep-on-boot subscriber above
   // — refreshList() dispatches `worktrees/listChanged`, which queues every
   // path for init pending the first PR-poller pass (or a 3s timeout).
+  const panesRestored = panesFSM.restoreFromConfig(config.panes)
   void (async () => {
-    await panesFSM.restoreFromConfig(config.panes)
+    await panesRestored
     await worktreesFSM.refreshList()
     migrateClaudeSettingsToSymlinks()
     reconcileBrowserViews()
@@ -3347,7 +3387,7 @@ async function runBoot(): Promise<void> {
   pruneMcpConfigs(new Set([...keepIds, ...workflowRunner.liveExecutionIds()]))
 
   // Local HTTP control server for the bundled harness-control MCP bridge.
-  startControlServer({
+  const controlServerStarted = startControlServer({
     getRepoRoots: () => config.repoRoots,
     getWorktreeBase: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,
     getPrReviewPrompt: () => config.prReviewPrompt || DEFAULT_PR_REVIEW_PROMPT,
@@ -3556,7 +3596,9 @@ async function runBoot(): Promise<void> {
       }
       broadcastToAllWindows(channel, payload)
     }
-  }).catch((err) => log('control', 'failed to start', err instanceof Error ? err.message : err))
+  })
+  controlServerStarted.catch((err) => log('control', 'failed to start', err instanceof Error ? err.message : err))
+  reconcileWorkflowRunsAfter(panesRestored, controlServerStarted)
 
   // Watch status dir globally — hook events become terminals/statusChanged
   // dispatches on the store, which the state transport fans out to all
