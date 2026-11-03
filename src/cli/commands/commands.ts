@@ -1,6 +1,7 @@
 import type { TatsuClient } from '../client'
 import type { Output } from '../output'
 import { statusCommand } from './status'
+import { worktreesCommand } from './worktrees'
 
 export interface CommandOption {
   type: 'string' | 'boolean'
@@ -34,7 +35,7 @@ export interface Command {
   run(ctx: CommandContext): Promise<void> | void
 }
 
-export const commands: readonly Command[] = [statusCommand]
+export const commands: readonly Command[] = [statusCommand, worktreesCommand]
 
 export interface CommandMatch {
   command: Command
