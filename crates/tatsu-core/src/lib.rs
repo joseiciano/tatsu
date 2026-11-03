@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod agent_kind;
 pub mod config;
 pub mod data_dir;
