@@ -6,6 +6,8 @@ import type { TerminalTab } from '../../shared/state/terminals'
 import { hydrateWorkflowRuns, type WorkflowDefinitionDetail, type WorkflowRunRecord } from '../../shared/state/workflows'
 import { validateWorkflowDefinition, type WorkflowAgent } from '../../shared/workflow-def'
 import type { StepSpawnExtras } from '../agent-spawn'
+import * as codexAgent from '../agents/codex'
+import * as opencodeAgent from '../agents/opencode'
 import type { TrustStatus } from '../folder-trust'
 import {
   WorkflowRunner,
@@ -459,22 +461,6 @@ describe('opencode profile', () => {
     expect(ctx.runner.getRunRecord(runId)?.attempts[0].sessionId).toBeUndefined()
   })
 
-  it('refuses to resume an interrupted opencode attempt even with a recorded session', async () => {
-    const ctx = twoProfileRunner()
-    const runId = ctx.start('opencode')
-    await flush()
-    ctx.discover(ctx.tabFor('opencode').tab.id, OPENCODE_SESSION)
-    const record = ctx.runner.getRunRecord(runId)
-    if (!record) throw new Error('no record')
-    record.attempts[0].status = 'running'
-    ctx.runner.dispose()
-
-    const resumed = twoProfileRunner({ records: [record] })
-    expect(resumed.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
-    expect(resumed.runner.resumeStep(runId, 'plan')).toEqual({ ok: false, reason: 'not-resumable-step' })
-    expect(resumed.tabs).toEqual([])
-  })
-
   it('blocks an opencode idle once and not again while the plugin reports the continuation as active', async () => {
     const ctx = twoProfileRunner()
     const runId = ctx.start('opencode')
@@ -492,5 +478,65 @@ describe('opencode profile', () => {
     await flush()
     expect(ctx.runner.cancelStep(runId, 'plan')).toEqual({ ok: true })
     expect(ctx.killed).toEqual([{ id: ctx.tabFor('opencode').tab.id, signal: 'SIGHUP' }])
+  })
+})
+
+describe('resume after a restart', () => {
+  const RESUMABLE: Array<{ agent: 'codex' | 'opencode'; session: string; command: string; expected: string }> = [
+    { agent: 'codex', session: CODEX_SESSION, command: '/scratch/codex', expected: `resume '${CODEX_SESSION}'` },
+    {
+      agent: 'opencode',
+      session: OPENCODE_SESSION,
+      command: '/scratch/opencode',
+      expected: `--session '${OPENCODE_SESSION}'`
+    }
+  ]
+
+  const spawnLine = (agent: 'codex' | 'opencode', command: string, spawn: StepSpawnExtras): string => {
+    const opts = { ...spawn, command, cwd: `/wt/${agent}` }
+    const exists = (_cwd: string, id: string, cmd: string) => id === spawn.sessionId && cmd === command
+    return agent === 'codex' ? codexAgent.buildSpawnArgs(opts, exists) : opencodeAgent.buildSpawnArgs(opts, exists)
+  }
+
+  const interruptedRecord = async (agent: 'codex' | 'opencode', session?: string): Promise<WorkflowRunRecord> => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start(agent)
+    await flush()
+    if (session) ctx.discover(ctx.tabFor(agent).tab.id, session)
+    const record = ctx.runner.getRunRecord(runId)
+    if (!record) throw new Error('no record')
+    record.attempts[0].status = 'running'
+    ctx.runner.dispose()
+    return record
+  }
+
+  it.each(RESUMABLE)(
+    'interrupts a dead running $agent attempt and resumes it in a new tab with its session',
+    async ({ agent, session, command, expected }) => {
+      const record = await interruptedRecord(agent, session)
+      const resumed = twoProfileRunner({ records: [record] })
+      expect(resumed.runner.getRunRecord(record.runId)?.attempts[0].status).toBe('interrupted')
+      expect(resumed.wf().runs[record.runId]).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+      expect(resumed.wf().attempts[record.attempts[0].attemptId]?.resumable).toBe(true)
+
+      expect(resumed.runner.resumeStep(record.runId, 'plan')).toEqual({ ok: true })
+      await flush()
+
+      const { spawn } = resumed.tabFor(agent)
+      expect(spawn.sessionId).toBe(session)
+      expect(spawnLine(agent, command, spawn)).toContain(expected)
+      expect(resumed.runner.getRunRecord(record.runId)?.attempts).toHaveLength(2)
+    }
+  )
+
+  it.each(RESUMABLE)('refuses to resume an interrupted $agent attempt with no session id', async ({ agent }) => {
+    const record = await interruptedRecord(agent)
+    expect(record.attempts[0].sessionId).toBeUndefined()
+    const resumed = twoProfileRunner({ records: [record] })
+    expect(resumed.runner.getRunRecord(record.runId)?.attempts[0].status).toBe('interrupted')
+    expect(resumed.wf().attempts[record.attempts[0].attemptId]?.resumable).toBeUndefined()
+
+    expect(resumed.runner.resumeStep(record.runId, 'plan')).toEqual({ ok: false, reason: 'no-session' })
+    expect(resumed.tabs).toEqual([])
   })
 })

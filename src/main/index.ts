@@ -128,6 +128,7 @@ import { toAgentKind } from './agent-kind'
 import {
   agentRequestForTab,
   agentSessionName,
+  agentCommand,
   createAgentSpawner,
   parseSpawnSpec,
   resolveSpawnSize,
@@ -737,7 +738,7 @@ const panesFSM = new PanesFSM(store, {
   },
   getLatestClaudeSessionId: async (wtPath) => {
     const kind = store.getSnapshot().state.settings.defaultAgent ?? 'claude'
-    return getAgent(kind).latestSessionId(wtPath)
+    return getAgent(kind).latestSessionId(wtPath, agentCommand(kind, config))
   },
   getDefaultAgentKind: () => toAgentKind(store.getSnapshot().state.settings.defaultAgent),
   getDefaultClaudeTabType: () => {
@@ -2392,12 +2393,12 @@ function registerIpcHandlers(): void {
 
   transport.onRequest('agent:sessionFileExists', (_ctx, cwd: string, sessionId: string, agentKind?: string): boolean => {
     const kind = toAgentKind(agentKind)
-    return getAgent(kind).sessionFileExists(cwd, sessionId)
+    return getAgent(kind).sessionFileExists(cwd, sessionId, agentCommand(kind, config))
   })
 
   transport.onRequest('agent:latestSessionId', (_ctx, cwd: string, agentKind?: string): string | null => {
     const kind = toAgentKind(agentKind)
-    return getAgent(kind).latestSessionId(cwd)
+    return getAgent(kind).latestSessionId(cwd, agentCommand(kind, config))
   })
 
   transport.onRequest(

@@ -1,10 +1,11 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import { log } from '../debug'
 import type { AgentSpawnOpts } from './index'
 import { RUN_FOLDER_GLOB, type PermissionLevel } from '../../shared/permission-level'
+import { isAgentSessionId } from '../../shared/agent-session-id'
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
@@ -238,22 +239,44 @@ export function stripHooksFromWorktree(_worktreePath: string): boolean {
   return false
 }
 
-export function sessionFileExists(_cwd: string, sessionId: string): boolean {
+export type CommandRunner = (file: string, args: readonly string[]) => string
+
+export const runCommand: CommandRunner = (file, args) =>
+  execFileSync(file, args, { stdio: 'pipe', timeout: 5000, encoding: 'utf-8' })
+
+const UNSAFE_COMMAND_TOKEN = /["'`$\\;|&<>(){}*?[\]!]|^~/
+
+export function commandArgv(command: string): string[] | null {
+  const argv = command.trim().split(/\s+/).filter(Boolean)
+  if (argv.length === 0 || argv[0].includes('=') || argv.some((t) => UNSAFE_COMMAND_TOKEN.test(t))) {
+    log('agent-spawn', 'opencode command not runnable without a shell; session lookup skipped')
+    return null
+  }
+  return argv
+}
+
+export function sessionFileExists(
+  _cwd: string,
+  sessionId: string,
+  command: string,
+  run: CommandRunner = runCommand
+): boolean {
+  if (!isAgentSessionId('opencode', sessionId)) return false
+  const argv = commandArgv(command)
+  if (!argv) return false
   try {
-    execSync(`opencode export ${sessionId}`, { stdio: 'pipe', timeout: 5000 })
+    run(argv[0], [...argv.slice(1), 'export', sessionId])
     return true
   } catch {
     return false
   }
 }
 
-export function latestSessionId(_cwd: string): string | null {
+export function latestSessionId(_cwd: string, command: string, run: CommandRunner = runCommand): string | null {
+  const argv = commandArgv(command)
+  if (!argv) return null
   try {
-    const output = execSync('opencode session list --format json --max-count 1', {
-      stdio: 'pipe',
-      timeout: 5000,
-      encoding: 'utf-8'
-    })
+    const output = run(argv[0], [...argv.slice(1), 'session', 'list', '--format', 'json', '--max-count', '1'])
     const parsed = JSON.parse(output) as Array<{ id?: string }>
     if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0].id === 'string') {
       return parsed[0].id
@@ -365,7 +388,10 @@ export function spawnEnv(
   return { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) }
 }
 
-export function buildSpawnArgs(opts: AgentSpawnOpts): string {
+export function buildSpawnArgs(
+  opts: AgentSpawnOpts,
+  sessionExists: (cwd: string, sessionId: string, command: string) => boolean = sessionFileExists
+): string {
   let cmd = opts.command
 
   if (opts.permissionLevel) {
@@ -378,7 +404,7 @@ export function buildSpawnArgs(opts: AgentSpawnOpts): string {
   }
 
   if (opts.sessionId) {
-    const exists = sessionFileExists(opts.cwd, opts.sessionId)
+    const exists = sessionExists(opts.cwd, opts.sessionId, opts.command)
     if (exists) {
       cmd += ` --session ${shellQuote(opts.sessionId)}`
       if (opts.initialPrompt) {

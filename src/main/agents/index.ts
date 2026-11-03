@@ -50,8 +50,8 @@ export interface AgentModule {
   /** Migration: strip legacy Harness entries from a single worktree's
    *  per-worktree settings file. Returns true if the file was modified. */
   stripHooksFromWorktree(worktreePath: string): boolean
-  sessionFileExists(cwd: string, sessionId: string): boolean
-  latestSessionId(cwd: string): string | null
+  sessionFileExists(cwd: string, sessionId: string, command: string): boolean
+  latestSessionId(cwd: string, command: string): string | null
   buildSpawnArgs(opts: AgentSpawnOpts): string
   /** Extra env for this agent's PTY, given the user's configured env vars. */
   spawnEnv?(

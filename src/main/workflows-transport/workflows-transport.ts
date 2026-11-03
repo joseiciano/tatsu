@@ -61,7 +61,7 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   'live-attempt': 'Cancel the running step first',
   'no-snapshot': 'This step has no clean snapshot to restore',
   'restore-failed': 'Could not restore the clean snapshot',
-  'not-resumable-step': 'Only Claude and Codex agent steps can be resumed',
+  'not-resumable-step': 'Only Claude, Codex and opencode agent steps can be resumed',
   'not-interrupted': 'Only an interrupted attempt can be resumed',
   'no-session': 'The attempt has no stored session to resume; use Retry instead',
   'nothing-to-cancel': 'The step is not running or queued',

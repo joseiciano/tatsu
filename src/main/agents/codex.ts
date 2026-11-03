@@ -14,6 +14,7 @@ import {
 } from '../codex-hook-trust'
 import type { AgentSpawnOpts, HarnessMcpServerSpec } from './index'
 import type { PermissionLevel } from '../../shared/permission-level'
+import { isAgentSessionId } from '../../shared/agent-session-id'
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'"
@@ -281,7 +282,13 @@ export function stripHooksFromWorktree(worktreePath: string): boolean {
   return true
 }
 
-export function sessionFileExists(_cwd: string, sessionId: string): boolean {
+export function sessionFileExists(
+  _cwd: string,
+  sessionId: string,
+  _command?: string,
+  root: string = sessionsDir()
+): boolean {
+  if (!isAgentSessionId('codex', sessionId)) return false
   try {
     const walkDir = (dir: string): boolean => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -293,13 +300,13 @@ export function sessionFileExists(_cwd: string, sessionId: string): boolean {
       }
       return false
     }
-    return walkDir(sessionsDir())
+    return walkDir(root)
   } catch {
     return false
   }
 }
 
-export function latestSessionId(_cwd: string): string | null {
+export function latestSessionId(_cwd: string, _command?: string): string | null {
   try {
     let bestId: string | null = null
     let bestMtime = -Infinity
@@ -352,7 +359,10 @@ export function codexPermissionFlags(level: PermissionLevel | undefined): string
 const CODEX_PERMISSION_FLAGS =
   /(^|\s)(--sandbox|-s|--ask-for-approval|-a|--full-auto|--dangerously-bypass-approvals-and-sandbox|--yolo|--approve-for-me|--not-so-yolo)(\s|=|$)/
 
-export function buildSpawnArgs(opts: AgentSpawnOpts): string {
+export function buildSpawnArgs(
+  opts: AgentSpawnOpts,
+  sessionExists: (cwd: string, sessionId: string, command: string) => boolean = sessionFileExists
+): string {
   // Token stays in the 0600 per-terminal file; argv only carries its path.
   let cmd = opts.command
   if (opts.mcpServer && !opts.command.includes('mcp_servers.harness-control')) {
@@ -376,8 +386,8 @@ export function buildSpawnArgs(opts: AgentSpawnOpts): string {
     return opts.initialPrompt ? `${cmd} ${shellQuote(opts.initialPrompt)}` : cmd
   }
 
-  const exists = sessionFileExists(opts.cwd, opts.sessionId)
-  if (exists) return `${cmd} resume ${opts.sessionId}`
+  const exists = isAgentSessionId('codex', opts.sessionId) && sessionExists(opts.cwd, opts.sessionId, opts.command)
+  if (exists) return `${cmd} resume ${shellQuote(opts.sessionId)}`
 
   return opts.initialPrompt ? `${cmd} ${shellQuote(opts.initialPrompt)}` : cmd
 }

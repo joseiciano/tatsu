@@ -23,19 +23,13 @@ vi.mock('../debug', () => ({
   log: vi.fn()
 }))
 
-vi.mock('child_process', () => ({
-  execSync: (cmd: string) => {
-    if (cmd.includes('opencode export')) {
-      // Simulate session exists for 'existing-session-id', missing for others
-      if (cmd.includes('existing-session-id')) return ''
-      throw new Error('exit 1')
-    }
-    if (cmd.includes('opencode session list')) {
-      return JSON.stringify([{ id: 'sess-123', directory: '/tmp/test', created: '2024-01-01', updated: '2024-01-02', title: 'Test', projectId: 'proj-1' }])
-    }
-    return ''
-  }
+const childProcess = vi.hoisted(() => ({
+  execFileSync: vi.fn(() => {
+    throw new Error('tests must inject a command runner')
+  })
 }))
+
+vi.mock('child_process', () => childProcess)
 
 import { homedir } from 'os'
 import { join } from 'path'
@@ -50,6 +44,8 @@ import {
   uninstallHooks,
   sessionFileExists,
   latestSessionId,
+  commandArgv,
+  type CommandRunner,
   stripHooksFromWorktree,
   makePluginContent,
   PLUGIN_PATH,
@@ -98,19 +94,29 @@ describe('buildSpawnArgs', () => {
     expect(result).toBe('opencode -m foo')
   })
 
+  const exists = () => true
+  const missing = () => false
+
   it('uses --session for resumable session', () => {
-    const result = buildSpawnArgs({ ...base, sessionId: 'existing-session-id' })
-    expect(result).toBe("opencode --session 'existing-session-id'")
+    const result = buildSpawnArgs({ ...base, sessionId: 'ses_abc123' }, exists)
+    expect(result).toBe("opencode --session 'ses_abc123'")
   })
 
   it('uses --prompt for new session when session not resumable', () => {
-    const result = buildSpawnArgs({ ...base, sessionId: 'new-session-id', initialPrompt: 'hello world' })
+    const result = buildSpawnArgs({ ...base, sessionId: 'ses_abc123', initialPrompt: 'hello world' }, missing)
     expect(result).toBe("opencode --prompt 'hello world'")
   })
 
   it('combines --session and --prompt when session is resumable and prompt provided', () => {
-    const result = buildSpawnArgs({ ...base, sessionId: 'existing-session-id', initialPrompt: 'continue' })
-    expect(result).toBe("opencode --session 'existing-session-id' --prompt 'continue'")
+    const result = buildSpawnArgs({ ...base, sessionId: 'ses_abc123', initialPrompt: 'continue' }, exists)
+    expect(result).toBe("opencode --session 'ses_abc123' --prompt 'continue'")
+  })
+
+  it('asks the session check with the configured command', () => {
+    const check = vi.fn(() => true)
+    const result = buildSpawnArgs({ command: '/scratch/bin/my-opencode', cwd: '/wt', sessionId: 'ses_abc' }, check)
+    expect(check).toHaveBeenCalledWith('/wt', 'ses_abc', '/scratch/bin/my-opencode')
+    expect(result).toBe("/scratch/bin/my-opencode --session 'ses_abc'")
   })
 
   it('combines --model and --prompt', () => {
@@ -351,8 +357,8 @@ describe('buildSpawnArgs with a permission level (TEST-007)', () => {
   })
 
   it('launches the step agent before --session on resume', () => {
-    const result = buildSpawnArgs({ ...base, permissionLevel: 'read-only', sessionId: 'existing-session-id' })
-    expect(result).toBe("opencode --agent harness-step --session 'existing-session-id'")
+    const result = buildSpawnArgs({ ...base, permissionLevel: 'read-only', sessionId: 'ses_abc123' }, () => true)
+    expect(result).toBe("opencode --agent harness-step --session 'ses_abc123'")
   })
 
   it('keeps a command-line --agent and logs that the level is not applied', () => {
@@ -364,19 +370,91 @@ describe('buildSpawnArgs with a permission level (TEST-007)', () => {
 })
 
 describe('sessionFileExists', () => {
-  it('returns true when opencode export succeeds', () => {
-    expect(sessionFileExists('/tmp/test', 'existing-session-id')).toBe(true)
+  const recorder = (impl: () => string = () => '') => {
+    const calls: Array<[string, readonly string[]]> = []
+    const run: CommandRunner = (file, args) => {
+      calls.push([file, args])
+      return impl()
+    }
+    return { calls, run }
+  }
+
+  it('runs the configured opencode command, never a literal opencode', () => {
+    const { calls, run } = recorder()
+    expect(sessionFileExists('/wt', 'ses_abc', '/scratch/bin/my-opencode --flag', run)).toBe(true)
+    expect(calls).toEqual([['/scratch/bin/my-opencode', ['--flag', 'export', 'ses_abc']]])
   })
 
-  it('returns false when opencode export fails', () => {
-    expect(sessionFileExists('/tmp/test', 'missing-session-id')).toBe(false)
+  it('returns false when the runner fails', () => {
+    const { calls, run } = recorder(() => {
+      throw new Error('exit 1')
+    })
+    expect(sessionFileExists('/wt', 'ses_missing', '/scratch/bin/my-opencode', run)).toBe(false)
+    expect(calls).toHaveLength(1)
+  })
+
+  it.each(['ses_x;touch /tmp/p', '$(id)', '', 'existing-session-id', 'ses_a b', '--help'])(
+    'refuses session id %j without running anything',
+    (id) => {
+      const { calls, run } = recorder()
+      expect(sessionFileExists('/wt', id, '/scratch/bin/my-opencode', run)).toBe(false)
+      expect(calls).toEqual([])
+    }
+  )
+
+  it.each([
+    'opencode; touch /tmp/p',
+    'opencode $(id)',
+    "'/path with space/opencode'",
+    'OPENCODE_X=1 opencode',
+    '~/bin/opencode',
+    'opencode | tee x',
+    'opencode `id`',
+    '   '
+  ])('refuses command %j without running anything', (command) => {
+    const { calls, run } = recorder()
+    expect(sessionFileExists('/wt', 'ses_abc', command, run)).toBe(false)
+    expect(calls).toEqual([])
+  })
+
+  it('never falls back to child_process when the runner is injected', () => {
+    sessionFileExists('/wt', 'ses_abc', '/scratch/bin/my-opencode', () => '')
+    expect(childProcess.execFileSync).not.toHaveBeenCalled()
+  })
+})
+
+describe('commandArgv', () => {
+  it('splits a plain command on whitespace', () => {
+    expect(commandArgv('  /scratch/bin/opencode   --flag x ')).toEqual(['/scratch/bin/opencode', '--flag', 'x'])
   })
 })
 
 describe('latestSessionId', () => {
-  it('returns the id from the first session list entry', () => {
-    const id = latestSessionId('/tmp/test')
-    expect(id).toBe('sess-123')
+  it('returns the id from the first session list entry using the configured command', () => {
+    const calls: Array<[string, readonly string[]]> = []
+    const id = latestSessionId('/wt', '/scratch/bin/my-opencode', (file, args) => {
+      calls.push([file, args])
+      return JSON.stringify([{ id: 'ses_123', title: 'Test' }])
+    })
+    expect(id).toBe('ses_123')
+    expect(calls).toEqual([
+      ['/scratch/bin/my-opencode', ['session', 'list', '--format', 'json', '--max-count', '1']]
+    ])
+  })
+
+  it('returns null for an unsafe command without running it', () => {
+    const run = vi.fn(() => '[]')
+    expect(latestSessionId('/wt', 'opencode && rm -rf ~', run)).toBeNull()
+    expect(run).not.toHaveBeenCalled()
+  })
+})
+
+describe('opencode.ts source', () => {
+  it('has no shell exec path and no hardcoded opencode CLI call', async () => {
+    const { readFileSync: realReadFileSync } = await vi.importActual<typeof import('fs')>('fs')
+    const source = realReadFileSync(new URL('./opencode.ts', import.meta.url), 'utf-8')
+    expect(source).not.toMatch(/\bexecSync\b/)
+    expect(source).not.toMatch(/['"`]opencode (export|session)/)
   })
 })
 

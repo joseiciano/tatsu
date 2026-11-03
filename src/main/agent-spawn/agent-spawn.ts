@@ -158,6 +158,24 @@ export function parseSpawnSpec(raw: unknown): TerminalSpawnSpec | null {
   return null
 }
 
+export function agentCommand(
+  kind: AgentKind,
+  config: AgentSpawnConfig,
+  agent: AgentModule = defaultGetAgent(kind)
+): string {
+  const configured =
+    kind === 'claude'
+      ? config.claudeCommand
+      : kind === 'codex'
+        ? config.codexCommand
+        : kind === 'opencode'
+          ? config.opencodeCommand
+          : kind === 'pi'
+            ? config.piCommand
+            : assertNeverAgentKind(kind)
+  return configured || agent.defaultCommand
+}
+
 export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
   const getAgent = deps.getAgent ?? defaultGetAgent
 
@@ -165,17 +183,7 @@ export function createAgentSpawner(deps: AgentSpawnerDeps): AgentSpawner {
     const config = deps.getConfig()
     const kind = req.agentKind
     const agent = getAgent(kind)
-    const command = req.command
-      ? req.command
-      : kind === 'claude'
-        ? config.claudeCommand || agent.defaultCommand
-        : kind === 'codex'
-          ? config.codexCommand || agent.defaultCommand
-          : kind === 'opencode'
-            ? config.opencodeCommand || agent.defaultCommand
-            : kind === 'pi'
-              ? config.piCommand || agent.defaultCommand
-              : assertNeverAgentKind(kind)
+    const command = req.command ? req.command : agentCommand(kind, config, agent)
     const mcpConfigPath = kind === 'pi' ? null : deps.writeMcpConfig(req.terminalId)
     const mcpServer = mcpConfigPath ? deps.mcpServerSpec(mcpConfigPath) : null
 
