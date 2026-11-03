@@ -36,6 +36,7 @@ import type { StateEvent } from '../../shared/state'
 import {
   RECENT_RUNS_MAX,
   WORKFLOW_RUN_RECORD_VERSION,
+  runStepFacts,
   runsToEvict,
   type WorkflowAttemptStatus,
   type WorkflowPausedReason,
@@ -279,15 +280,17 @@ export class WorkflowRunner {
     const steps: Record<string, WorkflowRunStep> = {}
     const stepStatus: Record<string, WorkflowStepStatus> = {}
     for (const step of definition.steps) {
-      steps[step.id] = { status: 'pending', attemptIds: [] }
+      steps[step.id] = { status: 'pending', attemptIds: [], ...runStepFacts(step) }
       stepStatus[step.id] = 'pending'
     }
+    const cursorStepId = definition.steps[0]?.id
     const run: WorkflowRun = {
       defId: detail.summary.id,
       defHash: detail.summary.hash,
       worktreePath: request.worktreePath,
       status: 'running',
       startedAt: now(),
+      ...(cursorStepId === undefined ? {} : { cursorStepId }),
       steps
     }
     const state: RunState = {
@@ -663,6 +666,13 @@ export class WorkflowRunner {
 
   private advance(state: RunState): void {
     state.record.cursor += 1
+    const next = state.record.definition.steps[state.record.cursor]
+    if (next) {
+      this.deps.store.dispatch({
+        type: 'workflows/cursorChanged',
+        payload: { runId: state.record.runId, stepId: next.id }
+      })
+    }
     this.enterStep(state)
   }
 
@@ -846,6 +856,9 @@ export class WorkflowRunner {
     if (sessionId !== undefined) live.record.sessionId = sessionId
     this.executions.set(executionId, attemptId)
     this.persist(state.record)
+    if (sessionId !== undefined) {
+      this.deps.store.dispatch({ type: 'workflows/attemptSessionRecorded', payload: { attemptId } })
+    }
     return true
   }
 
