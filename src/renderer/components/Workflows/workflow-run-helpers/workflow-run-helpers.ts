@@ -88,6 +88,11 @@ export const PAUSED_REASON_LABELS: Record<WorkflowPausedReason, string> = {
   'restack-conflict': 'Restack conflict'
 }
 
+export function pausedReasonLabel(reason: WorkflowPausedReason, stepStatus: WorkflowStepStatus | null): string {
+  if (reason === 'step-failed' && stepStatus === 'cancelled') return 'Cancelled by user'
+  return PAUSED_REASON_LABELS[reason]
+}
+
 const FINISHED_STEP_STATUSES: ReadonlySet<WorkflowStepStatus> = new Set(['done', 'skipped'])
 
 export function stepOrderFor(run: WorkflowRun, summary: WorkflowDefinitionSummary | null): string[] {
