@@ -24,9 +24,18 @@
 // approval and model flags, runs `$CODEX_HOME/harness-hook.sh` through the
 // hooks.json commands (SessionStart with a fresh session id, then Stop) and
 // calls complete_step. Only the default mode exists for Codex.
+//
+// FAKE_AGENT_KIND=opencode (set by the `opencode` shim) stands in for the
+// `opencode` TUI: it requires `--agent harness-step` and `--model`, checks
+// that OPENCODE_CONFIG_CONTENT defines that agent and the harness-control MCP
+// server without the control token, loads the installed Tatsu plugin from
+// $XDG_CONFIG_HOME/opencode/plugins with a fake client, fires a root
+// session.idle and expects one promptAsync to harness-step, then calls
+// complete_step through the bridge from OPENCODE_CONFIG_CONTENT. Only the
+// default mode exists for opencode.
 
 import { spawn, spawnSync } from 'child_process'
-import { randomUUID } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { appendFileSync, readFileSync, realpathSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -38,6 +47,9 @@ const MODES = new Set(['default', 'hang', 'exit-no-complete'])
 const HOOK_SIGNATURE = 'harness-status'
 const CODEX_SERVER_PREFIX = 'mcp_servers.harness-control.'
 const CODEX_DISCOVERY_SLACK_MS = 1500
+const OPENCODE_STEP_AGENT = 'harness-step'
+const OPENCODE_PLUGIN_SIGNATURE = '// harness-opencode-plugin'
+const OPENCODE_ID_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 
 function log(message) {
   const line = `[fake-agent] ${message}`
@@ -293,8 +305,105 @@ async function mainCodex() {
   process.exit(0)
 }
 
+function parseOpencodeArgs(argv) {
+  const out = { agent: null, model: null, prompt: null, session: null }
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === '--agent') out.agent = argv[++i] ?? null
+    else if (arg === '--model') out.model = argv[++i] ?? null
+    else if (arg === '--prompt') out.prompt = argv[++i] ?? null
+    else if (arg === '--session') out.session = argv[++i] ?? null
+    else fail(`unexpected opencode argument ${arg}`)
+  }
+  return out
+}
+
+function opencodeSessionId() {
+  const bytes = randomBytes(26)
+  return 'ses_' + Array.from(bytes, (b) => OPENCODE_ID_CHARS[b % OPENCODE_ID_CHARS.length]).join('')
+}
+
+function controlToken() {
+  const path = process.env.HARNESS_MCP_CONFIG
+  if (!path) fail('HARNESS_MCP_CONFIG is not set')
+  const token = serverFromConfig(path)?.env?.HARNESS_TOKEN
+  if (typeof token !== 'string' || !token) fail('no control token in the MCP config')
+  return token
+}
+
+async function loadOpencodePlugin() {
+  const configHome = process.env.XDG_CONFIG_HOME || join(process.env.HOME || homedir(), '.config')
+  const path = join(configHome, 'opencode', 'plugins', 'harness-status.js')
+  let content
+  try {
+    content = readFileSync(path, 'utf-8')
+  } catch (err) {
+    fail(`cannot read opencode plugin ${path}: ${err.message}`)
+  }
+  if (content.split('\n')[0] !== OPENCODE_PLUGIN_SIGNATURE) fail(`${path} is not the Tatsu plugin`)
+  const mod = await import('data:text/javascript;base64,' + Buffer.from(content).toString('base64'))
+  if (typeof mod.HarnessStatus !== 'function') fail('plugin does not export HarnessStatus')
+  return mod.HarnessStatus
+}
+
+async function mainOpencode() {
+  const args = parseOpencodeArgs(process.argv.slice(2))
+  const mode = modeFrom(args.prompt)
+  if (mode !== 'default') fail(`opencode supports only the default mode, got ${mode}`)
+  if (!args.prompt) fail('missing --prompt')
+  if (args.agent !== OPENCODE_STEP_AGENT) fail(`--agent ${args.agent}, expected ${OPENCODE_STEP_AGENT}`)
+  if (!args.model) fail('missing --model')
+  const raw = process.env.OPENCODE_CONFIG_CONTENT
+  if (!raw) fail('OPENCODE_CONFIG_CONTENT is not set')
+  const token = controlToken()
+  if (raw.includes(token) || process.argv.some((arg) => arg.includes(token))) {
+    fail('the control token leaked into OPENCODE_CONFIG_CONTENT or argv')
+  }
+  const config = JSON.parse(raw)
+  const stepAgent = config?.agent?.[OPENCODE_STEP_AGENT]
+  if (!stepAgent?.permission) fail(`OPENCODE_CONFIG_CONTENT has no ${OPENCODE_STEP_AGENT} agent permission map`)
+  if (stepAgent.model !== args.model) fail(`${OPENCODE_STEP_AGENT} model ${stepAgent.model}, expected ${args.model}`)
+  const mcp = config?.mcp?.['harness-control']
+  if (!Array.isArray(mcp?.command) || mcp.command.length === 0) fail('no harness-control MCP server in OPENCODE_CONFIG_CONTENT')
+  const server = { command: mcp.command[0], args: mcp.command.slice(1), env: mcp.environment ?? {} }
+
+  const sessionId = args.session ?? opencodeSessionId()
+  const summary = `PLAN-OK ${sessionId}`
+  log(`start opencode session=${sessionId} terminal=${process.env.HARNESS_TERMINAL_ID ?? ''} model=${args.model}`)
+  const prompts = []
+  const client = {
+    session: {
+      messages: async () => ({ data: [{ info: { role: 'assistant' }, parts: [{ type: 'text', text: summary }] }] }),
+      promptAsync: async (request) => {
+        prompts.push(request)
+      }
+    }
+  }
+  const HarnessStatus = await loadOpencodePlugin()
+  const hooks = await HarnessStatus({ client })
+  const fire = (type, properties) => hooks.event({ event: { type, properties } })
+  const busy = () => fire('session.status', { sessionID: sessionId, status: { type: 'busy' } })
+
+  await busy()
+  await new Promise((resolve) => setTimeout(resolve, CODEX_DISCOVERY_SLACK_MS))
+  await fire('session.idle', { sessionID: sessionId })
+  if (prompts.length !== 1) fail(`expected one promptAsync after the first idle, got ${prompts.length}`)
+  if (prompts[0]?.body?.agent !== OPENCODE_STEP_AGENT || prompts[0]?.path?.id !== sessionId) {
+    fail(`promptAsync went to the wrong agent or session: ${JSON.stringify(prompts[0])}`)
+  }
+  log('plugin: promptAsync to harness-step')
+
+  await busy()
+  await completeStep(server, summary)
+  await fire('session.idle', { sessionID: sessionId })
+  if (prompts.length !== 1) fail(`plugin prompted again after complete_step (${prompts.length} prompts)`)
+  log('done')
+  process.exit(0)
+}
+
 async function main() {
   if (process.env.FAKE_AGENT_KIND === 'codex') return mainCodex()
+  if (process.env.FAKE_AGENT_KIND === 'opencode') return mainOpencode()
   const args = parseArgs(process.argv.slice(2))
   if (!args.mcpConfig) fail('missing --mcp-config')
   if (!args.sessionId) fail('missing --session-id')

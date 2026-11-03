@@ -4,10 +4,11 @@
 // Usage: node scripts/workflow-smoke.mjs <token> <port> <repoPath> <curl:yes|no>
 //
 // Expects the server to have booted with Labs workflows on, hooks consent
-// accepted, claudeCommand and codexCommand pointing at shims for
-// scripts/fake-agent.mjs, a scratch CODEX_HOME that trusts Tatsu's hooks and
-// the repo, and the personal definitions `smoke` (Claude step then shell
-// step), `smoke-codex` (Codex step then shell step), `smoke-retry` (one
+// accepted, claudeCommand, codexCommand and opencodeCommand pointing at
+// shims for scripts/fake-agent.mjs, a scratch CODEX_HOME that trusts Tatsu's
+// hooks and the repo, and the personal definitions `smoke` (Claude step then
+// shell step), `smoke-codex` (Codex step then shell step), `smoke-opencode`
+// (opencode step then shell step), `smoke-retry` (one
 // `test -f flag` shell step) and `smoke-full`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
 // on a 60 s timeout per scenario.
@@ -25,6 +26,7 @@ const curlPresent = curlArg === 'yes'
 const SCENARIO_TIMEOUT_MS = 60_000
 const STARTING_ERROR = 'Tatsu is still starting; try again'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const OPENCODE_SESSION = /^ses_[0-9A-Za-z]{1,64}$/
 const sessionRecorded = []
 
 const ws = new WebSocket(`ws://127.0.0.1:${Number(portArg)}?token=${encodeURIComponent(token)}`)
@@ -212,6 +214,34 @@ async function scenarioCodexThenShell(worktreePath) {
   )
 }
 
+async function scenarioOpencodeThenShell(worktreePath) {
+  const runId = await startRun('personal:smoke-opencode', worktreePath)
+  const record = await runSettled(runId)
+  expectThat(record.status === 'done', `opencode scenario run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+  const [plan] = attemptsFor(record, 'plan')
+  const [echo] = attemptsFor(record, 'echo')
+  expectThat(plan?.status === 'done', 'opencode plan attempt is not done', record)
+  expectThat(plan.metrics.completedBy === 'tool', `opencode plan completedBy ${plan.metrics.completedBy}`, record)
+  expectThat(plan.metrics.continuations === 1, `opencode plan continuations ${plan.metrics.continuations}, expected 1`, record)
+  expectThat(
+    typeof plan.sessionId === 'string' && OPENCODE_SESSION.test(plan.sessionId),
+    'opencode plan has no discovered session id',
+    record
+  )
+  expectThat(plan.result?.summary === `PLAN-OK ${plan.sessionId}`, 'opencode plan summary does not carry its session id', record)
+  const recorded = sessionRecorded.filter((attemptId) => attemptId === plan.attemptId).length
+  expectThat(recorded === 1, `attemptSessionRecorded dispatched ${recorded} times for the opencode plan`, record)
+  expectThat(echo?.status === 'done', 'opencode scenario echo attempt is not done', record)
+  expectThat(echo.result?.summary?.includes(plan.result.summary), 'opencode echo summary lacks the plan summary', record)
+  console.log(
+    'scenario opencode OK: run=%s done; plan completedBy=%s continuations=%d session=%s; echo summary contains it',
+    runId,
+    plan.metrics.completedBy,
+    plan.metrics.continuations,
+    plan.sessionId
+  )
+}
+
 async function scenarioFailRetry(worktreePath) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const runId = await startRun('personal:smoke-retry', worktreePath)
@@ -254,7 +284,13 @@ async function main() {
   if (added?.kind !== 'added') fail('repo:addAtPath did not add the repo', added)
   await request('workflows:reloadDefinitions')
 
-  const definitionIds = ['personal:smoke', 'personal:smoke-codex', 'personal:smoke-retry', 'personal:smoke-full']
+  const definitionIds = [
+    'personal:smoke',
+    'personal:smoke-codex',
+    'personal:smoke-opencode',
+    'personal:smoke-retry',
+    'personal:smoke-full'
+  ]
   const worktreePath = await waitFor('the repo, hooks consent, Codex hook trust and definitions', () => {
     const wt = state.worktrees.list.find((w) => w.path === added.repoRoot || w.path === repoPath)
     const ready =
@@ -272,6 +308,7 @@ async function main() {
   await scenarioFullRefused(worktreePath)
   await scenarioAgentThenShell(worktreePath)
   await scenarioCodexThenShell(worktreePath)
+  await scenarioOpencodeThenShell(worktreePath)
   await scenarioFailRetry(worktreePath)
   ws.close()
   process.exit(0)
