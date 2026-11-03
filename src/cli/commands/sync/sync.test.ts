@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type {
+  HarnessConfigApplyResult,
   HarnessConfigComparison,
   HarnessConfigFileRef,
   HarnessConfigScope,
@@ -7,7 +8,7 @@ import type {
 } from '../../../shared/state/harness-config'
 import type { connect as connectWs, TatsuClient } from '../../client'
 import { main, type CliIO } from '../../main'
-import { classifyPlan, renderPlan, renderStatus, syncPlanCommand, syncStatusCommand } from '.'
+import { classifyPlan, renderPlan, renderStatus, syncApplyCommand, syncPlanCommand, syncStatusCommand } from '.'
 
 const SKILLS: HarnessConfigScope = { agentKind: 'claude', resourceType: 'skills' }
 
@@ -187,7 +188,7 @@ async function cli(argv: string[], backend: ReturnType<typeof fakeBackend>) {
   const code = await main(
     [...argv, '--url', 'ws://127.0.0.1:9', '--token', 't'],
     { stdout: (t) => (stdout += t), stderr: (t) => (stderr += t), env: {}, files: NO_FILES, connect: backend.connect },
-    [syncStatusCommand, syncPlanCommand]
+    [syncStatusCommand, syncPlanCommand, syncApplyCommand]
   )
   return { code, stdout, stderr }
 }
@@ -322,5 +323,169 @@ describe('sync plan', () => {
     const r = await cli(['sync', 'plan', '--agent', 'claude', '--type', 'skills'], backend)
     expect(r.code).toBe(1)
     expect(r.stderr).toContain("malformed reply to 'harnessConfig:planSyncToDisk'")
+  })
+})
+
+describe('sync apply', () => {
+  const PLAN = 'harnessConfig:planSyncToDisk'
+  const APPLY = 'harnessConfig:syncToDisk'
+  const WRITES = plan({ planId: 'plan-7', status: 'config-only', configOnly: [GREET] })
+  const RESULT: HarnessConfigApplyResult = {
+    scope: SKILLS,
+    planId: 'plan-7',
+    applied: [
+      { type: 'create', id: GREET.id, relativePath: 'greet/SKILL.md' },
+      { type: 'detach', id: 'claude:skills:built/SKILL.md' }
+    ],
+    resultingRefs: [],
+    requiresRescan: true
+  }
+  const SCOPE_ARGS = ['sync', 'apply', '--agent', 'claude', '--type', 'skills']
+
+  function backendFor(planValue: unknown, applyReply: unknown = ok(RESULT)) {
+    return fakeBackend((name) => (name === PLAN ? ok(planValue) : applyReply))
+  }
+
+  function neverUnconfirmed(backend: ReturnType<typeof fakeBackend>) {
+    const unconfirmed = backend.requests.filter(({ args }) =>
+      args.some((arg) => typeof arg === 'object' && arg !== null && 'confirmed' in arg && arg.confirmed !== true)
+    )
+    expect(unconfirmed).toStrictEqual([])
+  }
+
+  it('prints Already in sync. and never applies an empty plan, even with --yes', async () => {
+    for (const yes of [[], ['--yes']]) {
+      const backend = backendFor(plan())
+      const r = await cli([...SCOPE_ARGS, ...yes], backend)
+      expect(r.code).toBe(0)
+      expect(r.stdout).toContain('Already in sync.')
+      expect(backend.requests).toStrictEqual([{ name: PLAN, args: [{ scope: SKILLS }] }])
+      neverUnconfirmed(backend)
+    }
+  })
+
+  it('prints the issues and exits 1 without applying when there is nothing to write, even with --yes', async () => {
+    for (const yes of [[], ['--yes']]) {
+      const backend = backendFor(plan({ status: 'conflict', renderErrors: [RENDER_ERROR], fragmentEdits: [FRAGMENT_EDIT] }))
+      const r = await cli([...SCOPE_ARGS, ...yes], backend)
+      expect(r.code).toBe(1)
+      expect(r.stdout).toContain('Render errors:\n  skill/broken: bad frontmatter')
+      expect(r.stderr).toBe('tatsu: nothing to write; 2 issues need attention\n')
+      expect(backend.requests).toStrictEqual([{ name: PLAN, args: [{ scope: SKILLS }] }])
+      neverUnconfirmed(backend)
+    }
+  })
+
+  it('prints the plan and refuses with exit 2 when there are writes but no --yes', async () => {
+    const backend = backendFor(WRITES)
+    const r = await cli(SCOPE_ARGS, backend)
+    expect(r.code).toBe(2)
+    expect(r.stdout).toContain('Not on disk:\n  greet/SKILL.md')
+    expect(r.stderr).toBe('tatsu: refusing to write without --yes\n')
+    expect(backend.requests).toStrictEqual([{ name: PLAN, args: [{ scope: SKILLS }] }])
+    neverUnconfirmed(backend)
+  })
+
+  it('plans then applies with confirmed:true and the plan id on one connection, printing each applied op', async () => {
+    const backend = backendFor(WRITES)
+    const r = await cli([...SCOPE_ARGS, '--yes'], backend)
+    expect(r.code).toBe(0)
+    expect(backend.connections()).toBe(1)
+    expect(backend.requests).toStrictEqual([
+      { name: PLAN, args: [{ scope: SKILLS }] },
+      { name: APPLY, args: [{ scope: SKILLS, planId: 'plan-7', confirmed: true }] }
+    ])
+    expect(r.stdout).toBe('create  greet/SKILL.md\ndetach  claude:skills:built/SKILL.md\n')
+  })
+
+  it('plans with --detach ids and applies without them', async () => {
+    const backend = backendFor({ ...WRITES, detach: ['a'] })
+    const r = await cli([...SCOPE_ARGS, '--detach', 'a', '--yes'], backend)
+    expect(r.code).toBe(0)
+    expect(backend.requests).toStrictEqual([
+      { name: PLAN, args: [{ scope: SKILLS, detach: ['a'] }] },
+      { name: APPLY, args: [{ scope: SKILLS, planId: 'plan-7', confirmed: true }] }
+    ])
+  })
+
+  it('maps a rejected --detach id to usage without applying', async () => {
+    const backend = fakeBackend(() => ({ ok: false, error: { code: 'unknown-resource', message: 'Only template-built files that exist on disk can be detached' } }))
+    const r = await cli([...SCOPE_ARGS, '--detach', 'nope', '--yes'], backend)
+    expect(r.code).toBe(2)
+    expect(backend.requests).toStrictEqual([{ name: PLAN, args: [{ scope: SKILLS, detach: ['nope'] }] }])
+  })
+
+  it('applies --plan <id> --yes directly without planning', async () => {
+    const backend = backendFor(WRITES)
+    const r = await cli([...SCOPE_ARGS, '--plan', 'plan-7', '--yes'], backend)
+    expect(r.code).toBe(0)
+    expect(backend.requests).toStrictEqual([{ name: APPLY, args: [{ scope: SKILLS, planId: 'plan-7', confirmed: true }] }])
+    expect(r.stdout).toContain('create  greet/SKILL.md')
+  })
+
+  it.each([
+    [['--plan', 'x']],
+    [['--plan', 'x', '--detach', 'y', '--yes']],
+    [['--plan', 'x', '--detach', 'y']],
+    [['--plan', '', '--yes']]
+  ])('rejects %j as usage before connecting', async (args) => {
+    const backend = backendFor(WRITES)
+    const r = await cli([...SCOPE_ARGS, ...args], backend)
+    expect(r.code).toBe(2)
+    expect(backend.connections()).toBe(0)
+    expect(backend.requests).toStrictEqual([])
+  })
+
+  it.each([[['--agent', 'claude', '--yes']], [['--type', 'skills', '--yes']], [['--agent', 'claude', '--type', 'skills', 'extra', '--yes']]])(
+    'rejects %j as usage before connecting',
+    async (args) => {
+      const backend = backendFor(WRITES)
+      const r = await cli(['sync', 'apply', ...args], backend)
+      expect(r.code).toBe(2)
+      expect(backend.connections()).toBe(0)
+    }
+  )
+
+  it.each(['unknown-plan', 'stale-plan'])('exits 1 with the re-plan hint on %s', async (code) => {
+    const backend = backendFor(WRITES, { ok: false, error: { code, message: 'The plan is unavailable' } })
+    const r = await cli([...SCOPE_ARGS, '--plan', 'bogus', '--yes'], backend)
+    expect(r.code).toBe(1)
+    expect(r.stderr).toContain("The plan is unavailable; re-run 'tatsu sync plan'")
+    expect(backend.requests).toStrictEqual([{ name: APPLY, args: [{ scope: SKILLS, planId: 'bogus', confirmed: true }] }])
+  })
+
+  it('lists the operations applied before a partial failure in the error text and details', async () => {
+    const applied = [{ type: 'create', id: GREET.id, relativePath: 'greet/SKILL.md' }]
+    const failure = { ok: false, error: { code: 'write-failed', message: 'disk full', applied } }
+    const human = await cli([...SCOPE_ARGS, '--yes'], backendFor(WRITES, failure))
+    expect(human.code).toBe(1)
+    expect(human.stderr).toBe('tatsu: disk full\napplied before the failure:\n  create  greet/SKILL.md\n')
+    const json = await cli([...SCOPE_ARGS, '--yes', '--json'], backendFor(WRITES, failure))
+    expect(json.code).toBe(1)
+    expect(JSON.parse(json.stderr)).toMatchObject({ error: { code: 'command-failed', details: { code: 'write-failed', applied } } })
+  })
+
+  it('prints the HarnessConfigApplyResult with --json when it wrote', async () => {
+    const r = await cli([...SCOPE_ARGS, '--yes', '--json'], backendFor(WRITES))
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual(RESULT)
+  })
+
+  it.each([
+    ['already-in-sync', plan(), ['--yes'], 0],
+    ['issues', plan({ status: 'conflict', renderErrors: [RENDER_ERROR] }), ['--yes'], 1],
+    ['not-confirmed', WRITES, [], 2]
+  ] as const)('prints {plan, written:false, reason:%s} with --json', async (reason, p, yes, code) => {
+    const backend = backendFor(p)
+    const r = await cli([...SCOPE_ARGS, ...yes, '--json'], backend)
+    expect(r.code).toBe(code)
+    expect(JSON.parse(r.stdout)).toEqual({ plan: p, written: false, reason })
+    expect(backend.requests.map((req) => req.name)).toStrictEqual([PLAN])
+  })
+
+  it('rejects an apply value that is not an apply result', async () => {
+    const r = await cli([...SCOPE_ARGS, '--yes'], backendFor(WRITES, ok({ planId: 'plan-7' })))
+    expect(r.code).toBe(1)
+    expect(r.stderr).toContain("malformed reply to 'harnessConfig:syncToDisk'")
   })
 })

@@ -1,8 +1,8 @@
-# CLI sync (`tatsu config ls`, `tatsu sync status`, `tatsu sync plan`)
+# CLI sync (`tatsu config ls`, `tatsu sync status`, `tatsu sync plan`, `tatsu sync apply`)
 
 `tatsu config ls` lists the agents, skills and commands Tatsu sees, one block per scope (harness × resource type). It calls `harnessConfig:scan({scope})` once per scope, one call after another. The scopes come from the shared agent registry: the supported capabilities of `claude`, `codex` and `opencode`, in registry order. The CLI never reads harness files itself.
 
-`tatsu sync status` calls `harnessConfig:compare({scope})` per scope in the same order, and `tatsu sync plan` calls `harnessConfig:planSyncToDisk({scope})` (or `{scope, detach}`) for exactly one scope. Neither writes anything. Ticket 03 (`sync apply`) adds its steps to this file. They reuse the preconditions and the `control.mjs` shim below.
+`tatsu sync status` calls `harnessConfig:compare({scope})` per scope in the same order, and `tatsu sync plan` calls `harnessConfig:planSyncToDisk({scope})` (or `{scope, detach}`) for exactly one scope. Neither writes anything. `tatsu sync apply` is the only CLI command that writes: it plans (or takes `--plan <id>`) and calls `harnessConfig:syncToDisk({scope, planId, confirmed: true})` only when the user passed `--yes`. It never sends `confirmed: false`, because the handler would invalidate the plan binding. All steps reuse the preconditions and the `control.mjs` shim below.
 
 ## Sub-features
 
@@ -28,10 +28,17 @@
   - neither: `Already in sync.`
 
   `sync plan` exits 0 whenever the request succeeds, issues or not. `--json` prints the `HarnessConfigSyncPlan`. A `--detach` id the backend rejects (`unknown-resource`) exits 2.
+- `apply`: `sync apply --agent <k> --type <t> [--plan <id>] [--detach <id>...] [--yes]`, one connection for plan and apply. Without `--plan` it plans first and branches on `classifyPlan`:
+  - in sync: prints the plan with `Already in sync.`, exits 0, no apply;
+  - issues only: prints the issues, exits 1 with `nothing to write; N issues need attention`, no apply;
+  - writes without `--yes`: prints the plan, exits 2 with `refusing to write without --yes`, no apply (the binding is left to expire);
+  - writes with `--yes`: applies with the plan's id and prints one `<type>  <relativePath>` line per applied operation (`create`, `overwrite`, `detach`).
+
+  `--detach` ids go to the plan request only. `--plan <id> --yes` skips planning. `--plan` without `--yes`, `--plan` with `--detach`, and an empty `--plan` exit 2 before the CLI connects. An unknown or stale plan id exits 1 with the re-plan hint. A partial failure lists the operations applied before it under `applied before the failure:` in the error text and in `details.applied`. `--json` prints the `HarnessConfigApplyResult` when it wrote, otherwise `{plan, written: false, reason: 'already-in-sync' | 'not-confirmed' | 'issues'}` (on stdout, also on the exit 1/2 branches).
 
 ## How to get to it (user POV)
 
-- From a shell: `pnpm tatsu config ls [--agent claude|codex|opencode] [--type agents|skills|commands] [--json]`. This runs `node dist-headless/cli/index.js`. Likewise `pnpm tatsu sync status [--agent] [--type] [--check] [--json]` and `pnpm tatsu sync plan --agent <k> --type <t> [--detach <id>...] [--json]`.
+- From a shell: `pnpm tatsu config ls [--agent claude|codex|opencode] [--type agents|skills|commands] [--json]`. This runs `node dist-headless/cli/index.js`. Likewise `pnpm tatsu sync status [--agent] [--type] [--check] [--json]`, `pnpm tatsu sync plan --agent <k> --type <t> [--detach <id>...] [--json]` and `pnpm tatsu sync apply --agent <k> --type <t> [--plan <id>] [--detach <id>...] [--yes] [--json]`.
 - The CLI finds the backend the same way as `tatsu status` (see [cli-status.md](cli-status.md)).
 
 ## Driving it
@@ -121,6 +128,25 @@ Same preconditions and shim as above (`launch.sh --build clisync2`).
 - **Teardown.** `cleanup.sh` prints `real harness roots unchanged`.
 
 Last run: ticket sync-02 (tatsu-cli/sync-02-status-plan). Every step above passed; the baseline was all `synced`, so the risk mitigation (narrowing `--check` to `--agent claude`) was not needed.
+
+### `sync apply` steps
+
+Same preconditions and shim as above (`launch.sh --build clisync3`). This drive writes into `$SANDBOX_HOME`, so check the doctor's `HOME is the sandbox` line before the first apply.
+
+- **Hash before.** `LINK_TARGET=$(readlink "$SANDBOX_HOME/.claude/skills/linked-skill")`, then `(cd "$LINK_TARGET" && find . -type f -exec shasum {} \; | sort | shasum)`. Record the value.
+- **Baseline.** `CLI sync status --check` exits 0.
+- **Seed `greet`** with the exact `saveTemplate` request from the `sync plan` steps.
+- **No `--yes`.** `CLI sync apply --agent claude --type skills` prints the plan (`Not on disk:` `greet/SKILL.md`, `Apply with: ...`), then exits 2 with `tatsu: refusing to write without --yes`. `test ! -e "$SANDBOX_HOME/.claude/skills/greet/SKILL.md"` passes.
+- **`--yes`.** `CLI sync apply --agent claude --type skills --yes` exits 0 and prints `create  greet/SKILL.md`. The file now exists.
+- **Rerun.** `CLI sync plan --agent claude --type skills` prints `Already in sync.`. `sync apply ... --yes` again prints `Already in sync.` and exits 0 without applying.
+- **Unfiltered check.** `CLI sync status --check` exits 0 with all 8 scopes `synced`. `Claude Code · commands` clears too, because the alias row points at the same file.
+- **Bogus plan.** `CLI sync apply --agent claude --type skills --plan bogus --yes` exits 1 with `tatsu: The plan is unavailable; re-run 'tatsu sync plan' (...)`. With `--json`, `details` is `{"code":"unknown-plan"}`.
+- **`--plan` round-trip.** Seed a second template `wave` (same request, `"name":"wave"`). Run `CLI sync plan --agent claude --type skills --json`, take `planId`, and immediately run `CLI sync apply --agent claude --type skills --plan <planId> --yes`. It exits 0 with `create  wave/SKILL.md`, and `wave/SKILL.md` exists. Applying the same id again exits 1 with the re-plan hint, because a binding is single-use.
+- **Usage guards.** `--plan x` without `--yes` exits 2 (`refusing to write without --yes`); `--plan x --detach y --yes` exits 2 (`--detach is fixed when the plan is made; ...`). Neither connects.
+- **Hash after.** The `linked-skill` hash matches the value from before.
+- **Teardown.** `cleanup.sh` prints `real harness roots unchanged`.
+
+Last run: ticket sync-03 (tatsu-cli/sync-03-apply). Every step above passed, the hash was unchanged, and cleanup printed `real harness roots unchanged`.
 
 ## Gotchas
 
