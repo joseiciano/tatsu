@@ -14,6 +14,7 @@ what end state proves it works. Journeys reuse `scripts/browser.mjs`.
 | Import existing setup | [import-existing-setup.md](import-existing-setup.md) | `journeys/import-existing-setup.mjs`, `journeys/import-full-setup.mjs` (proven: every folder kind) |
 | CLI `tatsu status` | [cli-status.md](cli-status.md) | Shell recipe in the file, against `launch.sh` (proven: flag and env forms exit 0, wrong token 4, closed port 3, `--url` without `--token` 2, endpoint-file discovery by data dir and inside a PTY exit 0, stale file 3, SIGTERM removes the file) |
 | CLI `tatsu worktrees`, `tatsu new` | [cli-worktrees.md](cli-worktrees.md) | Shell recipe in the file, against `launch.sh` plus a `control.mjs` shim for the fixture repo (proven: empty list `[]` and `No worktrees.`, fixture main worktree in JSON and human table, `--repo` by the `/var` spelling exit 0, unmatched `--repo` exit 2; `new` with the xterm guard: success `tab: "agent"` inside the sandbox, git error exit 1, bad `--agent` exit 2, two repos + cwd outside exit 2, cwd default exit 0) |
+| CLI `tatsu diff` | [cli-diff.md](cli-diff.md) | Shell recipe in the file, against the code-diff `launch.sh` (proven: the fixture's 11-file set and totals in JSON, human list with rename and dirty header, default base `origin/main`, `--base nope` exit 1, no merge base exit 1, unknown worktree exit 2 with `details.worktrees`, cwd inside the worktree resolves to it) |
 
 Unless a file says a step was run, its selectors and end states come from
 reading the source. Treat them as a starting point, not as proof. The first
