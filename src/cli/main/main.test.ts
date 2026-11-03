@@ -197,6 +197,26 @@ describe('main: client lifecycle', () => {
     expect(fake.closed()).toBe(1)
   })
 
+  it("uses the command's defaultTimeoutMs when --timeout is absent, and --timeout overrides it", async () => {
+    const endpointArgs = ['--url', 'ws://127.0.0.1:9', '--token', 't']
+    const { command } = recorder('slow', async (ctx) => {
+      await ctx.client()
+    })
+    const slow: Command = { ...command, defaultTimeoutMs: 600_000 }
+
+    const byDefault = fakeConnect()
+    await runWith(['slow', ...endpointArgs], slow, byDefault.connect)
+    expect(byDefault.calls[0].timeoutMs).toBe(600_000)
+
+    const overridden = fakeConnect()
+    await runWith(['slow', ...endpointArgs, '--timeout', '250'], slow, overridden.connect)
+    expect(overridden.calls[0].timeoutMs).toBe(250)
+
+    const plain = fakeConnect()
+    await runWith(['slow', ...endpointArgs], command, plain.connect)
+    expect(plain.calls[0].timeoutMs).toBeUndefined()
+  })
+
   it('reads TATSU_URL and TATSU_TOKEN from the env', async () => {
     const fake = fakeConnect()
     const { command } = recorder('status', async (ctx) => {
