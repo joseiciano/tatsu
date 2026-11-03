@@ -4,7 +4,7 @@
 # Launches dist-headless/main/index.js on an ephemeral port + localhost,
 # parses the [web-client] URL out of stdout, then delegates to
 # scripts/web-smoke.mjs and scripts/ws-smoke.mjs for HTTP + WS
-# validation. Finally SIGTERMs the server and confirms it exits within
+# validation, then scripts/cli-smoke.mjs for the tatsu CLI. Finally SIGTERMs the server and confirms it exits within
 # 5s (no zombies).
 #
 # Run locally:  pnpm run build:headless && bash scripts/smoke-headless.sh
@@ -57,6 +57,11 @@ node scripts/web-smoke.mjs "$HOST_PORT" "$TOKEN"
 
 # 3. WS upgrade + snapshot round-trip.
 node scripts/ws-smoke.mjs "$TOKEN" "$PORT"
+
+# 3b. tatsu CLI: discover the server through the endpoint file written
+# under HARNESS_DATA_DIR. Explicit TATSU_* overrides are unset so the
+# step exercises discovery even when run from inside a Tatsu terminal.
+env -u TATSU_URL -u TATSU_TOKEN -u TATSU_ENDPOINT_FILE node scripts/cli-smoke.mjs "$PORT"
 
 # 4. Bundled-runtime boot smoke (OpenCode + Codex ACP): resolve the bundled
 # executables from node_modules and confirm each ACP subprocess spawns +
