@@ -1,4 +1,11 @@
+pub mod desktop;
 mod file_backend;
+#[cfg(target_os = "macos")]
+mod keychain_macos;
+pub mod oscrypt;
+#[cfg(target_os = "linux")]
+mod secret_service_linux;
+mod secrets_file;
 pub mod ws_token;
 
 #[cfg(test)]
@@ -7,10 +14,12 @@ mod tests;
 use std::io;
 use std::sync::Arc;
 
-use crate::data_dir::DataDir;
+use crate::data_dir::{DataDir, Platform, Runtime};
 use crate::logs;
 
-pub use file_backend::{FileBackend, KEY_FILE, SECRETS_FILE};
+pub use desktop::{DesktopBackend, KeyStore};
+pub use file_backend::{FileBackend, KEY_FILE};
+pub use secrets_file::SECRETS_FILE;
 
 pub trait Secrets: Send + Sync {
     fn get(&self, key: &str) -> Option<String>;
@@ -44,4 +53,17 @@ pub fn open_headless(
         "using local encrypted file backend (dev/self-hosted only)",
     );
     Ok(Arc::new(backend))
+}
+
+pub fn open_desktop(data_dir: &DataDir, runtime: Runtime) -> Arc<dyn Secrets> {
+    let platform = if cfg!(target_os = "macos") {
+        Platform::MacOs
+    } else {
+        Platform::Linux
+    };
+    Arc::new(DesktopBackend::new(
+        data_dir.path(),
+        platform,
+        desktop::os_key_store(runtime),
+    ))
 }

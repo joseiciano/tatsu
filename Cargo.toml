@@ -38,3 +38,9 @@ aes-gcm = "0.10"
 rand = "0.9"
 base64 = "0.22"
 hex = "0.4"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+sha1 = "0.10"
+security-framework = "3"
+secret-service = { version = "5", features = ["rt-async-io-crypto-rust"] }
