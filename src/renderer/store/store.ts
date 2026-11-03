@@ -48,6 +48,7 @@ import {
   createRunAttemptsSelector,
   findWorkflowStepTab,
   selectWorkflowRunIdForWorktree,
+  workflowRunRecordKey,
   type WorkflowStepTabRef
 } from '../workflow-selectors'
 
@@ -631,6 +632,10 @@ const selectWorkflowRunAttempts = createRunAttemptsSelector()
 
 export function useWorkflowRunAttempts(runId: string) {
   return useAppState((s) => selectWorkflowRunAttempts(s.workflows, runId))
+}
+
+export function useWorkflowRunRecordKey(runId: string): string | null {
+  return useAppState((s) => workflowRunRecordKey(s.workflows, runId))
 }
 
 export function useWorktreeRepoRoot(worktreePath: string | null): string | null {

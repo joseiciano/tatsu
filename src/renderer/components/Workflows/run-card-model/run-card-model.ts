@@ -52,7 +52,7 @@ export function formatElapsed(ms: number): string {
   return `${seconds}s`
 }
 
-function formatCost(usd: number | undefined): string {
+export function formatCost(usd: number | undefined): string {
   if (usd === undefined) return NO_COST
   if (usd > 0 && usd < 0.01) return '<$0.01'
   return `$${usd.toFixed(2)}`

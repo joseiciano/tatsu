@@ -10,7 +10,11 @@ const { storeState } = vi.hoisted(() => ({ storeState: { current: null as AppSta
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-vi.mock('../../../backend', () => ({ useBackend: () => ({ getWorkflowRun: vi.fn().mockResolvedValue(null) }) }))
+const { backendApi } = vi.hoisted(() => ({
+  backendApi: { getWorkflowRun: vi.fn(), getWorkflowAttemptResult: vi.fn() }
+}))
+
+vi.mock('../../../backend', () => ({ useBackend: () => backendApi }))
 vi.mock('../../../store', async () => {
   const selectors = await import('../../../workflow-selectors')
   const selectPaused = selectors.createPausedRunIdsSelector()
@@ -26,6 +30,7 @@ vi.mock('../../../store', async () => {
     useWorkflowAttempt: (id: string | null) => useAppState((s) => (id ? s.workflows.attempts[id] ?? null : null)),
     useWorkflowDefinition: (id: string | null) => useAppState((s) => (id ? s.workflows.definitions[id] ?? null : null)),
     useWorkflowRunAttempts: (id: string) => useAppState((s) => selectAttempts(s.workflows, id)),
+    useWorkflowRunRecordKey: (id: string) => useAppState((s) => selectors.workflowRunRecordKey(s.workflows, id)),
     useWorktreeRepoRoot: (path: string | null) =>
       useAppState((s) => (path ? s.worktrees.list.find((w) => w.path === path)?.repoRoot ?? null : null)),
     useWorkflowStepTabLeaf: () => null
@@ -92,6 +97,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
   vi.setSystemTime(NOW)
   onClose.mockReset()
+  backendApi.getWorkflowRun.mockReset().mockResolvedValue(null)
+  backendApi.getWorkflowAttemptResult.mockReset().mockResolvedValue(null)
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -187,4 +194,46 @@ describe('WorkflowsView', () => {
     await act(async () => back?.click())
     expect(onClose).toHaveBeenCalledOnce()
   })
+
+  it('opens a run detail from its card and returns to the list', async () => {
+    setState(
+      { old: run({ status: 'done', startedAt: NOW - 500_000, finishedAt: NOW - 400_000, worktreePath: '/repos/app/old' }) },
+      { 'a-plan': attempt('plan'), 'a-build': attempt('build') }
+    )
+    await render()
+    const open = container.querySelector<HTMLButtonElement>('button[aria-label="Open run: Ship it on old"]')
+    await act(async () => open?.click())
+    expect(backendApi.getWorkflowRun).toHaveBeenCalledWith('old')
+    expect(container.querySelector('h2')?.textContent).toBe('Ship it')
+    expect(document.activeElement).toBe(container.querySelector('h2'))
+    expect(container.textContent).not.toContain('No active runs.')
+
+    const allRuns = [...container.querySelectorAll('button')].find((b) => b.textContent === 'All runs')
+    await act(async () => allRuns?.click())
+    expect(region('Recent runs').querySelector('article')?.getAttribute('aria-label')).toBe('Ship it on old')
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Open run: Ship it on old')
+  })
+
+  it('restores focus to the returned-from card once and never steals it later', async () => {
+    setState({ live: run({}) }, { 'a-plan': attempt('plan'), 'a-build': attempt('build') })
+    await render()
+    const open = container.querySelector<HTMLButtonElement>('button[aria-label="Open run: Ship it on feature"]')
+    await act(async () => open?.click())
+    const allRuns = [...container.querySelectorAll('button')].find((b) => b.textContent === 'All runs')
+    await act(async () => allRuns?.click())
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Open run: Ship it on feature')
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    setState(
+      { live: run({ status: 'done', finishedAt: NOW - 1_000 }) },
+      { 'a-plan': attempt('plan'), 'a-build': attempt('build') }
+    )
+    await render()
+    expect(region('Recent runs').querySelector('article')?.getAttribute('aria-label')).toBe('Ship it on feature')
+    expect(document.activeElement).toBe(input)
+    input.remove()
+  })
 })
+

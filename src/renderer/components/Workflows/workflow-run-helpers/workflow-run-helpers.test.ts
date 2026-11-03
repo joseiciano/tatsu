@@ -105,6 +105,7 @@ const CODEX: NeedsYouStepInfo = { kind: 'agent', agent: 'codex' }
 const OPENCODE: NeedsYouStepInfo = { kind: 'agent', agent: 'opencode' }
 const SHELL: NeedsYouStepInfo = { kind: 'shell' }
 const FAILED: NeedsYouAttemptInfo = { status: 'failed', resumable: false }
+const FAILED_WITH_SNAPSHOT: NeedsYouAttemptInfo = { status: 'failed', resumable: false, hasBaseSnapshot: true }
 const LIVE: NeedsYouAttemptInfo = { status: 'running', resumable: true }
 const INTERRUPTED_SESSION: NeedsYouAttemptInfo = { status: 'interrupted', resumable: true }
 
@@ -122,8 +123,10 @@ describe('pausedReasonLabel', () => {
 
 describe('needsYouActions', () => {
   it.each<[string, WorkflowPausedReason, NeedsYouStepInfo | null, NeedsYouAttemptInfo | null, boolean, NeedsYouActionKind[]]>([
-    ['step-failed with a tab', 'step-failed', SHELL, FAILED, true, ['retry', 'retry-from-clean', 'skip', 'cancel', 'jump']],
-    ['step-failed without a tab', 'step-failed', SHELL, FAILED, false, ['retry', 'retry-from-clean', 'skip', 'cancel']],
+    ['step-failed with a tab', 'step-failed', SHELL, FAILED_WITH_SNAPSHOT, true, ['retry', 'retry-from-clean', 'skip', 'cancel', 'jump']],
+    ['step-failed without a tab', 'step-failed', SHELL, FAILED_WITH_SNAPSHOT, false, ['retry', 'retry-from-clean', 'skip', 'cancel']],
+    ['step-failed without a base snapshot', 'step-failed', SHELL, FAILED, true, ['retry', 'skip', 'cancel', 'jump']],
+    ['step-failed before the record loaded', 'step-failed', null, null, false, ['retry', 'skip', 'cancel']],
     ['needs-input with a tab', 'needs-input', CLAUDE, LIVE, true, ['jump', 'retry', 'skip', 'cancel']],
     ['needs-input without a tab', 'needs-input', CLAUDE, FAILED, false, ['retry', 'skip', 'cancel']],
     ['needs-approval with a tab', 'needs-approval', CLAUDE, LIVE, true, ['jump', 'cancel']],
@@ -202,8 +205,16 @@ describe('recordStepContext', () => {
     expect(recordStepContext(rec)).toEqual({
       stepId: 'fix',
       step: { kind: 'agent', agent: 'claude' },
-      attempt: { status: 'interrupted', resumable: true }
+      attempt: { status: 'interrupted', resumable: true, hasBaseSnapshot: false }
     })
+  })
+
+  it("reports whether the cursor step's latest attempt has a base snapshot", () => {
+    const snapshot = { commit: 'c1', ref: 'refs/harness/base' }
+    const withSnapshot = record([PLAN_STEP], 0, [{ status: 'failed' }, { status: 'failed', baseSnapshot: snapshot }])
+    const latestWithout = record([PLAN_STEP], 0, [{ status: 'failed', baseSnapshot: snapshot }, { status: 'failed' }])
+    expect(recordStepContext(withSnapshot)?.attempt?.hasBaseSnapshot).toBe(true)
+    expect(recordStepContext(latestWithout)?.attempt?.hasBaseSnapshot).toBe(false)
   })
 
   it('has no attempt for a step that never started', () => {
