@@ -3,6 +3,7 @@ pub mod data_dir;
 pub mod hub;
 pub mod logs;
 pub mod router;
+pub mod secrets;
 pub mod store;
 
 pub use config::ConfigDoc;

@@ -6,6 +6,10 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+aes-gcm.workspace = true
+base64.workspace = true
+hex.workspace = true
+rand.workspace = true
 tatsu-js.workspace = true
 parking_lot.workspace = true
 tatsu-state.workspace = true

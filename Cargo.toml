@@ -34,3 +34,7 @@ tokio = "1"
 uuid = { version = "1", features = ["v4"] }
 axum = { version = "0.8", default-features = false }
 tokio-tungstenite = "0.29"
+aes-gcm = "0.10"
+rand = "0.9"
+base64 = "0.22"
+hex = "0.4"
