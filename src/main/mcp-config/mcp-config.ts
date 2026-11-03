@@ -116,6 +116,33 @@ export function pruneMcpConfigs(keepIds: Set<string>): void {
 
 const STEP_MARKER_EXTENSION = '.step'
 
+export interface StepMarker {
+  runId: string
+  stepId: string
+  attemptId: string
+}
+
+export function stepMarkerPath(terminalId: string, dir: string = mcpConfigsDir()): string {
+  return join(dir, `${sanitize(terminalId)}${STEP_MARKER_EXTENSION}`)
+}
+
+export function writeStepMarker(terminalId: string, marker: StepMarker, dir: string = mcpConfigsDir()): string {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
+  const path = stepMarkerPath(terminalId, dir)
+  const { runId, stepId, attemptId } = marker
+  writeFileSync(path, JSON.stringify({ runId, stepId, attemptId }), { mode: 0o600 })
+  chmodSync(path, 0o600)
+  return path
+}
+
+export function removeStepMarker(terminalId: string, dir: string = mcpConfigsDir()): void {
+  try {
+    unlinkSync(stepMarkerPath(terminalId, dir))
+  } catch (err) {
+    if (!(err instanceof Error && 'code' in err && err.code === 'ENOENT')) log('mcp', 'step marker not removed')
+  }
+}
+
 export function removeStaleStepMarkers(dir: string = mcpConfigsDir()): number {
   let names: string[]
   try {
