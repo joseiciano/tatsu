@@ -1,7 +1,9 @@
 mod agents;
+mod chat_ui;
 mod onboarding;
 mod prompts;
 mod settings;
+mod tab_types;
 mod terminal_font;
 mod timers;
 mod toggles;
@@ -22,6 +24,8 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     worktree_settings::register(core);
     terminal_font::register(core);
     timers::register(core);
+    tab_types::register(core);
+    chat_ui::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {

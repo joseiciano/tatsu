@@ -1,0 +1,1490 @@
+[
+  {
+    "name": "setDefaultClaudeTabType: json writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      "json"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "json"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: json keeps the stored key in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      "json"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "json"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: xterm removes a stored json",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      "xterm"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: xterm with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      "xterm"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: \"JSON\" normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      "JSON"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: 1 normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: null normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: no argument normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultClaudeTabType: [\"json\"] normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultClaudeTabType",
+    "args": [
+      [
+        "json"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultClaudeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultClaudeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: json writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      "json"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "json"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: json keeps the stored key in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      "json"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "json"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: xterm removes a stored json",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      "xterm"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: xterm with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      "xterm"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: \"JSON\" normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      "JSON"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: 1 normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: null normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: no argument normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultOpencodeTabType: [\"json\"] normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultOpencodeTabType",
+    "args": [
+      [
+        "json"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultOpencodeTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultOpencodeTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: json writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      "json"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "json"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: json keeps the stored key in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      "json"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "json"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: xterm removes a stored json",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      "xterm"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: xterm with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      "xterm"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: \"JSON\" normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      "JSON"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: 1 normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: null normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: no argument normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setDefaultCodexTabType: [\"json\"] normalizes to xterm",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setDefaultCodexTabType",
+    "args": [
+      [
+        "json"
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"defaultCodexTabType\": \"json\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/defaultCodexTabTypeChanged",
+          "payload": "xterm"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: x-small writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "x-small"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"x-small\"\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "x-small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: medium writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "medium"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"medium\"\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "medium"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: large writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "large"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\"\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "large"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: x-large writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "x-large"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"x-large\"\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "x-large"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: large replaces a stored medium in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "large"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"medium\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "large"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: small removes the stored key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "small"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: small with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "small"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: \"Large\" normalizes to small",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      "Large"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: 1 normalizes to small",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: null normalizes to small",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setUiScale: no argument normalizes to small",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setUiScale",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"uiScale\": \"large\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/uiScaleChanged",
+          "payload": "small"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setChatPromotionDismissed: true writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setChatPromotionDismissed",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"chatPromotionDismissed\": true\n}",
+      "events": [
+        {
+          "type": "settings/chatPromotionDismissedChanged",
+          "payload": true
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setChatPromotionDismissed: true keeps the stored key in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setChatPromotionDismissed",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"chatPromotionDismissed\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"chatPromotionDismissed\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/chatPromotionDismissedChanged",
+          "payload": true
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setChatPromotionDismissed: false removes the stored key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setChatPromotionDismissed",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"chatPromotionDismissed\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/chatPromotionDismissedChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setChatPromotionDismissed: false with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setChatPromotionDismissed",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/chatPromotionDismissedChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: comfy writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      "comfy"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "comfy"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: comfy keeps the stored key in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      "comfy"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "comfy"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: compact removes the stored key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      "compact"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "compact"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: compact with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      "compact"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "compact"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: \"COMFY\" normalizes to compact",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      "COMFY"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "compact"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: 1 normalizes to compact",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "compact"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: null normalizes to compact",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "compact"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeChatDensity: no argument normalizes to compact",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeChatDensity",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeChatDensity\": \"comfy\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeChatDensityChanged",
+          "payload": "compact"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: true writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": true
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: true keeps the stored key in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": true
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: false removes the stored key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: false with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      false
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: 1 is not true",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: \"true\" is not true",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      "true"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: null is not true",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeSendOnEnter: no argument is not true",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeSendOnEnter",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeSendOnEnter\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeSendOnEnterChanged",
+          "payload": false
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: default writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "default"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"default\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "default"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: plan writes the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "plan"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "plan"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: plan replaces a stored default in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "plan"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"default\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "plan"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: acceptEdits removes the stored key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "acceptEdits"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: acceptEdits with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "acceptEdits"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: \"Plan\" normalizes to acceptEdits",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "Plan"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: \"bypassPermissions\" normalizes to acceptEdits",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      "bypassPermissions"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: 1 normalizes to acceptEdits",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: null normalizes to acceptEdits",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setJsonModeDefaultPermissionMode: no argument normalizes to acceptEdits",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setJsonModeDefaultPermissionMode",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"jsonModeDefaultPermissionMode\": \"plan\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/jsonModeDefaultPermissionModeChanged",
+          "payload": "acceptEdits"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  }
+]
