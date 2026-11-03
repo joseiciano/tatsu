@@ -230,7 +230,8 @@ function buildTerminalTheme(): NonNullable<ConstructorParameters<typeof Terminal
   }
 }
 
-import type { AgentKind } from '../../../shared/state/terminals'
+import type { AgentKind, TerminalTabWorkflow } from '../../../shared/state/terminals'
+import { StepResultOverlay } from '../Workflows/StepTab'
 import { agentDisplayName } from '../../../shared/agent-registry'
 
 interface XTerminalProps {
@@ -253,12 +254,13 @@ interface XTerminalProps {
   onRestartAgent?: () => void
   /** Main owns this tab's PTY: attach when it is live, never spawn. */
   workflowStep?: boolean
+  workflow?: TerminalTabWorkflow
   /** When provided AND this is a Claude agent tab, an overlay chip in
    *  the top-left invites the user to switch to the Chat interface. */
   onSwitchToChat?: () => void
 }
 
-export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, workflowStep, onSwitchToChat }: XTerminalProps): JSX.Element {
+export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionName, sessionId, initialPrompt, teleportSessionId, modelOverride, shellCommand, shellCwd, onRestartAgent, workflowStep, workflow, onSwitchToChat }: XTerminalProps): JSX.Element {
   // Lazy font-cache init — fires once on first XTerminal mount. See
   // initFontCache() comment for why this is lazy rather than at module
   // top.
@@ -965,7 +967,13 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
           </Tooltip>
         </div>
       )}
-      {exited && workflowStep && (
+      {exited && workflowStep && workflow && (
+        <StepResultOverlay
+          workflow={workflow}
+          title={`${type === 'agent' ? agentDisplayName(agentKind) : 'Step'} exited.`}
+        />
+      )}
+      {exited && workflowStep && !workflow && (
         <div className="absolute inset-0 flex items-center justify-center bg-app/80">
           <div className="text-sm text-dim">
             {type === 'agent' ? agentDisplayName(agentKind) : 'Step'} exited.

@@ -1,9 +1,20 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import type { AgentKind, TerminalTab, PaneNode } from '../../types'
 import { getLeaves, findLeaf, findLeafByTabId } from '../../../shared/state/terminals'
 import { agentDisplayName, getAgentInfo } from '../../../shared/agent-registry'
 import { focusTerminalById, markTerminalClosing } from '../../components/XTerminal'
 import { useBackend } from '../../backend'
+import { readWorkflowAttempt } from '../../store'
+import { cancelStepThenClose, stepTabCloseDecision } from '../../components/Workflows/StepTab'
+
+export interface PendingStepClose {
+  worktreePath: string
+  tabId: string
+  runId: string
+  stepId: string
+  busy: boolean
+  error: string | null
+}
 
 function makeTerminalId(prefix: string, worktreePath: string): string {
   const safe = worktreePath.replace(/[/\\]/g, '-').replace(/^-+/, '').replace(/-+/g, '-')
@@ -101,7 +112,7 @@ export function useTabHandlers({
     [appendTabToPane]
   )
 
-  const handleCloseTab = useCallback(
+  const closeTabNow = useCallback(
     (worktreePath: string, tabId: string) => {
       // PanesFSM is the authoritative path for json-claude/agent/shell
       // teardown — its closeTab kills the subprocess via killJsonClaude
@@ -119,8 +130,43 @@ export function useTabHandlers({
       }
       void backend.panesCloseTab(worktreePath, tabId)
     },
-    []
+    [backend]
   )
+
+  const [pendingStepClose, setPendingStepClose] = useState<PendingStepClose | null>(null)
+
+  const handleCloseTab = useCallback(
+    (worktreePath: string, tabId: string) => {
+      const tree = panes[worktreePath]
+      const tab = tree ? findLeafByTabId(tree, tabId)?.tabs.find((t) => t.id === tabId) : undefined
+      const ref = tab?.workflow
+      if (tab && ref && stepTabCloseDecision(tab, readWorkflowAttempt(ref.attemptId)) === 'confirm-cancel') {
+        setPendingStepClose((current) =>
+          current?.tabId === tabId
+            ? current
+            : { worktreePath, tabId, runId: ref.runId, stepId: ref.stepId, busy: false, error: null }
+        )
+        return
+      }
+      closeTabNow(worktreePath, tabId)
+    },
+    [panes, closeTabNow]
+  )
+
+  const dismissStepClose = useCallback(() => setPendingStepClose(null), [])
+
+  const confirmStepClose = useCallback(async () => {
+    const pending = pendingStepClose
+    if (!pending || pending.busy) return
+    setPendingStepClose({ ...pending, busy: true, error: null })
+    const error = await cancelStepThenClose(
+      () => backend.cancelWorkflowStep(pending.runId, pending.stepId),
+      () => closeTabNow(pending.worktreePath, pending.tabId)
+    )
+    setPendingStepClose((current) =>
+      current?.tabId !== pending.tabId ? current : error === null ? null : { ...pending, busy: false, error }
+    )
+  }, [pendingStepClose, backend, closeTabNow])
 
   const handleRestartAgentTab = useCallback(
     (worktreePath: string, tabId: string) => {
@@ -351,6 +397,9 @@ export function useTabHandlers({
   )
 
   return {
+    pendingStepClose,
+    confirmStepClose,
+    dismissStepClose,
     appendTabToPane,
     handleAddTerminalTab,
     handleAddAgentTab,

@@ -13,6 +13,7 @@ import { Tooltip } from '../Tooltip'
 import { repoNameColor } from '../RepoIcon'
 import { getClientId, useTerminalProgress, useTerminalSession } from '../../store'
 import { useBackend } from '../../backend'
+import { StepTabBadge } from '../Workflows/StepTab'
 
 /** Chip shown in the tab bar when other clients are attached to the
  *  active terminal. Click-through is intentional — taking/releasing
@@ -310,6 +311,7 @@ function SortableTab({ tab, isActive, status, shellActivity, showClose, onSelect
       ) : (
         <span>{displayLabel}</span>
       )}
+      {tab.workflow && <StepTabBadge attemptId={tab.workflow.attemptId} />}
       <TabProgressBar terminalId={tab.id} />
       {showClose && (
         <Tooltip label="Close tab" action="closeTab">
@@ -592,7 +594,7 @@ export function TerminalPanel({
             {pane.tabs.map((tab) => {
               const isClaudeAgent = tab.type === 'agent' && tab.agentKind === 'claude'
               const isJsonClaude = tab.type === 'json-claude'
-              const convertible = !!onConvertTabType && (isClaudeAgent || isJsonClaude)
+              const convertible = !!onConvertTabType && !tab.workflow && (isClaudeAgent || isJsonClaude)
               return (
                 <SortableTab
                   key={tab.id}

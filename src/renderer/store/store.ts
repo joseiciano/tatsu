@@ -617,6 +617,10 @@ export function useWorkflowAttempt(id: string | null) {
   return useAppState((s) => (id ? s.workflows.attempts[id] ?? null : null))
 }
 
+export function readWorkflowAttempt(id: string) {
+  return getActiveState().workflows.attempts[id] ?? null
+}
+
 const selectPausedWorkflowRunIds = createPausedRunIdsSelector()
 
 export function usePausedWorkflowRunIds(): readonly string[] {

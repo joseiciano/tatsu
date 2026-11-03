@@ -613,6 +613,7 @@ export function WorkspaceView({
                     shellCommand={tab.type === 'shell' ? tab.command : undefined}
                     shellCwd={tab.type === 'shell' ? tab.cwd : undefined}
                     workflowStep={!!tab.workflow}
+                    workflow={tab.workflow}
                     onRestartAgent={
                       tab.type === 'agent' && !tab.workflow
                         ? (): void => onRestartAgentTab(worktreePath, tab.id)
