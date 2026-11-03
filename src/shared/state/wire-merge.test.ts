@@ -89,6 +89,38 @@ describe('mergeWireSnapshot', () => {
     expect(merged.workflows.attempts).toEqual({})
   })
 
+  it('leaves step kind, cursor and resumability absent in an old-server workflow run', () => {
+    const runs = {
+      'run-1': {
+        defId: 'personal:a',
+        defHash: 'hash-a',
+        worktreePath: '/wt',
+        status: 'paused' as const,
+        pausedReason: 'interrupted' as const,
+        startedAt: 1,
+        steps: { plan: { status: 'interrupted' as const, attemptIds: ['att-1'] } }
+      }
+    }
+    const attempts = {
+      'att-1': {
+        runId: 'run-1',
+        stepId: 'plan',
+        n: 1,
+        status: 'interrupted' as const,
+        summaryPreview: '',
+        startedAt: 2,
+        endedAt: 3
+      }
+    }
+    const merged = mergeWireSnapshot({ workflows: { definitions: {}, runs, attempts } })
+    expect(merged.workflows.runs).toEqual(runs)
+    expect(merged.workflows.attempts).toEqual(attempts)
+    expect('cursorStepId' in merged.workflows.runs['run-1']).toBe(false)
+    expect('kind' in merged.workflows.runs['run-1'].steps.plan).toBe(false)
+    expect('agent' in merged.workflows.runs['run-1'].steps.plan).toBe(false)
+    expect('resumable' in merged.workflows.attempts['att-1']).toBe(false)
+  })
+
   it('keeps a workflow step tab tag in the panes and leaves untagged tabs untagged', () => {
     const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
     const merged = mergeWireSnapshot({

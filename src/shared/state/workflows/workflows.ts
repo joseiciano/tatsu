@@ -1,3 +1,4 @@
+import type { ResolvedWorkflowStep } from '../../workflow-def'
 import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX } from './constants'
 import type {
   WorkflowAttempt,
@@ -100,13 +101,21 @@ export function runsToEvict(state: WorkflowsState, max: number): string[] {
   return finished.slice(0, finished.length - max).map((entry) => entry.runId)
 }
 
+export function runStepFacts(step: ResolvedWorkflowStep): Pick<WorkflowRunStep, 'kind' | 'agent'> {
+  if (step.kind === 'agent') return { kind: 'agent', agent: step.agent }
+  if (step.kind === 'shell') return { kind: 'shell' }
+  return {}
+}
+
 export function projectRunRecord(record: WorkflowRunRecord): {
   run: WorkflowRun
   attempts: Record<string, WorkflowAttempt>
 } {
+  const definitionSteps = new Map(record.definition.steps.map((step) => [step.id, step]))
   const steps: Record<string, WorkflowRunStep> = {}
   for (const [stepId, status] of Object.entries(record.steps)) {
-    steps[stepId] = { status, attemptIds: [] }
+    const step = definitionSteps.get(stepId)
+    steps[stepId] = { status, attemptIds: [], ...(step ? runStepFacts(step) : {}) }
   }
   const attempts: Record<string, WorkflowAttempt> = {}
   for (const attempt of record.attempts) {
@@ -122,9 +131,11 @@ export function projectRunRecord(record: WorkflowRunRecord): {
       startedAt: attempt.startedAt,
       ...(ended ? { endedAt: attempt.endedAt } : {}),
       ...(result ? { completedBy: result.completedBy } : {}),
-      ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd })
+      ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd }),
+      ...(attempt.sessionId === undefined ? {} : { resumable: true })
     }
   }
+  const cursorStepId = record.definition.steps[record.cursor]?.id
   const run: WorkflowRun = {
     defId: record.defId,
     defHash: record.defHash,
@@ -133,6 +144,7 @@ export function projectRunRecord(record: WorkflowRunRecord): {
     ...(record.pausedReason === undefined ? {} : { pausedReason: record.pausedReason }),
     startedAt: record.startedAt,
     ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
+    ...(cursorStepId === undefined ? {} : { cursorStepId }),
     steps
   }
   return { run, attempts }
@@ -279,6 +291,25 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
     }
     case 'workflows/runsEvicted':
       return evictRuns(state, event.payload.runIds)
+    case 'workflows/cursorChanged': {
+      const { runId, stepId } = event.payload
+      const run = state.runs[runId]
+      if (
+        !run ||
+        run.cursorStepId === stepId ||
+        !Object.hasOwn(run.steps, stepId) ||
+        TERMINAL_RUN_STATUSES.has(run.status)
+      ) {
+        return state
+      }
+      return patchRun(state, runId, { ...run, cursorStepId: stepId })
+    }
+    case 'workflows/attemptSessionRecorded': {
+      const { attemptId } = event.payload
+      const attempt = state.attempts[attemptId]
+      if (!attempt || attempt.resumable || isTerminalRun(state, attempt.runId)) return state
+      return { ...state, attempts: { ...state.attempts, [attemptId]: { ...attempt, resumable: true } } }
+    }
     default: {
       const _exhaustive: never = event
       void _exhaustive
