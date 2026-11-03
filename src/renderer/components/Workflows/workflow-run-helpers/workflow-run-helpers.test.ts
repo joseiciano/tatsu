@@ -5,6 +5,7 @@ import {
   currentStepId,
   recordStepContext,
   runNeedsYouAction,
+  sliceStepContext,
   deriveStepStrip,
   needsYouActions,
   stepOrderFor,
@@ -13,6 +14,7 @@ import {
   type NeedsYouStepInfo
 } from '.'
 import type {
+  WorkflowAttempt,
   WorkflowAttemptRecord,
   WorkflowDefinitionSummary,
   WorkflowPausedReason,
@@ -101,9 +103,9 @@ describe('currentStepId', () => {
 const CLAUDE: NeedsYouStepInfo = { kind: 'agent', agent: 'claude' }
 const CODEX: NeedsYouStepInfo = { kind: 'agent', agent: 'codex' }
 const SHELL: NeedsYouStepInfo = { kind: 'shell' }
-const FAILED: NeedsYouAttemptInfo = { status: 'failed' }
-const LIVE: NeedsYouAttemptInfo = { status: 'running', sessionId: 's-1' }
-const INTERRUPTED_SESSION: NeedsYouAttemptInfo = { status: 'interrupted', sessionId: 's-1' }
+const FAILED: NeedsYouAttemptInfo = { status: 'failed', resumable: false }
+const LIVE: NeedsYouAttemptInfo = { status: 'running', resumable: true }
+const INTERRUPTED_SESSION: NeedsYouAttemptInfo = { status: 'interrupted', resumable: true }
 
 describe('pausedReasonLabel', () => {
   it('reads a step-failed pause on a cancelled step as cancelled by user', () => {
@@ -126,7 +128,7 @@ describe('needsYouActions', () => {
     ['needs-approval with a tab', 'needs-approval', CLAUDE, LIVE, true, ['jump', 'cancel']],
     ['needs-approval without a tab', 'needs-approval', CLAUDE, LIVE, false, ['cancel']],
     ['interrupted Claude step with a session', 'interrupted', CLAUDE, INTERRUPTED_SESSION, true, ['resume', 'retry', 'cancel']],
-    ['interrupted Claude step without a session', 'interrupted', CLAUDE, { status: 'interrupted' }, false, ['retry', 'cancel']],
+    ['interrupted Claude step without a session', 'interrupted', CLAUDE, { status: 'interrupted', resumable: false }, false, ['retry', 'cancel']],
     ['interrupted non-Claude agent step', 'interrupted', CODEX, INTERRUPTED_SESSION, false, ['retry', 'cancel']],
     ['interrupted shell step', 'interrupted', SHELL, INTERRUPTED_SESSION, false, ['retry', 'cancel']],
     ['interrupted run held while labs was off', 'interrupted', CLAUDE, null, false, ['retry', 'cancel']],
@@ -143,7 +145,7 @@ describe('needsYouActions', () => {
   })
 
   it('offers Resume only when the last attempt was interrupted', () => {
-    expect(needsYouActions({ reason: 'interrupted', step: CLAUDE, attempt: { status: 'failed', sessionId: 's' }, tabExists: false })).toEqual([
+    expect(needsYouActions({ reason: 'interrupted', step: CLAUDE, attempt: { status: 'failed', resumable: true }, tabExists: false })).toEqual([
       'retry',
       'cancel'
     ])
@@ -197,7 +199,7 @@ describe('recordStepContext', () => {
     expect(recordStepContext(rec)).toEqual({
       stepId: 'fix',
       step: { kind: 'agent', agent: 'claude' },
-      attempt: { status: 'interrupted', sessionId: 'new' }
+      attempt: { status: 'interrupted', resumable: true }
     })
   })
 
@@ -207,6 +209,35 @@ describe('recordStepContext', () => {
 
   it('is null when the cursor is past the last step', () => {
     expect(recordStepContext(record([PLAN_STEP], 1, []))).toBeNull()
+  })
+})
+
+describe('sliceStepContext', () => {
+  function slicedRun(cursorStepId: string | undefined, withKinds = true): WorkflowRun {
+    return {
+      ...run({ plan: 'done', fix: 'interrupted' }, 'paused', 'interrupted'),
+      ...(cursorStepId === undefined ? {} : { cursorStepId }),
+      steps: {
+        plan: { status: 'done', attemptIds: ['a0'], ...(withKinds ? { kind: 'shell' as const } : {}) },
+        fix: { status: 'interrupted', attemptIds: ['a1'], ...(withKinds ? { kind: 'agent' as const, agent: 'claude' as const } : {}) }
+      }
+    }
+  }
+  const interrupted: WorkflowAttempt = { runId: 'r', stepId: 'fix', n: 1, status: 'interrupted', summaryPreview: '', startedAt: 1, endedAt: 2 }
+
+  it("reads the cursor step's kind, agent and the last attempt's resumability from the slice", () => {
+    expect(sliceStepContext(slicedRun('fix'), { ...interrupted, resumable: true })).toEqual({
+      stepId: 'fix',
+      step: { kind: 'agent', agent: 'claude' },
+      attempt: { status: 'interrupted', resumable: true }
+    })
+    expect(sliceStepContext(slicedRun('fix'), interrupted)?.attempt).toEqual({ status: 'interrupted', resumable: false })
+    expect(sliceStepContext(slicedRun('plan'), null)).toEqual({ stepId: 'plan', step: { kind: 'shell' }, attempt: null })
+  })
+
+  it('is null when an old server sent no cursor or no step kind', () => {
+    expect(sliceStepContext(slicedRun(undefined), interrupted)).toBeNull()
+    expect(sliceStepContext(slicedRun('fix', false), interrupted)).toBeNull()
   })
 })
 
