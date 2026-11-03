@@ -223,11 +223,21 @@ async function flowExitMarkDone(page, backend) {
     log(`exit-mark-done: overlay status=${status} completedBy=${completedBy} summary=${JSON.stringify(await definitionText(overlay, 'Summary'))}`)
 
     const form = overlay.getByRole('form', { name: 'Mark step done' })
-    await form.getByLabel(/^Summary/).fill('Marked done from the browser smoke')
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    const summaryBox = form.getByLabel(/^Summary/)
+    await summaryBox.fill('Marked done from the browser smoke')
+    const typed = await summaryBox.inputValue()
+    if (typed !== 'Marked done from the browser smoke') throw new Error(`Summary field lost the typed text: ${JSON.stringify(typed)}`)
     await shot('mark-done-form')
     await form.getByRole('button', { name: 'Mark done' }).click()
 
     await form.waitFor({ state: 'detached' })
+    await overlay.locator('dd', { hasText: 'you (Mark done)' }).waitFor()
+    const doneStatus = await definitionText(overlay, 'Status')
+    const doneSummary = await definitionText(overlay, 'Summary')
+    if (doneStatus !== 'done' || doneSummary !== 'Marked done from the browser smoke') {
+      throw new Error(`overlay after Mark done shows status=${doneStatus} summary=${doneSummary}`)
+    }
     await row.waitFor({ state: 'detached' })
     await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
     await shot('run-done')
