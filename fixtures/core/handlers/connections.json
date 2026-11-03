@@ -1,0 +1,2545 @@
+[
+  {
+    "name": "list: the seeded local entry",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:list",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": [
+          {
+            "id": "local",
+            "label": "Local",
+            "url": "",
+            "kind": "local",
+            "addedAt": 1767225600000
+          }
+        ]
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "list: local plus remotes in stored order",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:list",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": [
+          {
+            "id": "local",
+            "label": "Local",
+            "url": "",
+            "kind": "local",
+            "addedAt": 1767225600000
+          },
+          {
+            "id": "r1",
+            "label": "Box",
+            "url": "ws://box:1",
+            "kind": "remote",
+            "addedAt": 1700000000000
+          },
+          {
+            "id": "r2",
+            "label": "Pi",
+            "url": "ws://pi:2",
+            "kind": "remote",
+            "addedAt": 1700000000001,
+            "color": "#f00",
+            "initials": "PI"
+          }
+        ]
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "list: a non-array connections value is returned as stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:list",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": \"x\",\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "x"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "getActive: local by default",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getActive",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "local"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "getActive: the stored remote id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getActive",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"r2\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "r2"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "getActive: a non-string stored id is returned raw",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getActive",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": 7,\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": 7
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "getToken: local is never looked up",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [
+      "local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": null
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "getToken: a stored remote token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "tok-r1"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "getToken: an id with no token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [
+      "nope"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": null
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "getToken: a number id is stringified into the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "tok-5"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "getToken: a missing id reads backend-token:undefined",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "tok-undef"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "getToken: a null id reads backend-token:null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "tok-null"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "getToken: an object id reads backend-token:[object Object]",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:getToken",
+    "args": [
+      {
+        "id": "r1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "tok-obj"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: local is never looked up",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [
+      "local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: a stored remote token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: an id with no token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [
+      "nope"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: a number id is stringified into the key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: a missing id reads backend-token:undefined",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: a null id reads backend-token:null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "hasToken: an object id reads backend-token:[object Object]",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:hasToken",
+    "args": [
+      {
+        "id": "r1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:5": "tok-5",
+      "backend-token:undefined": "tok-undef",
+      "backend-token:null": "tok-null",
+      "backend-token:[object Object]": "tok-obj",
+      "backend-token:local": "tok-local"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:5": "tok-5",
+        "backend-token:undefined": "tok-undef",
+        "backend-token:null": "tok-null",
+        "backend-token:[object Object]": "tok-obj",
+        "backend-token:local": "tok-local"
+      }
+    }
+  },
+  {
+    "name": "add: missing input",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: null input",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      null,
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: string input",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      "remote",
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: array input",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      [
+        "remote"
+      ],
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: kind local",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "local"
+      },
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: kind missing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://b"
+      },
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: kind check runs before the url check",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "kind": "x"
+      },
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "connections:add only accepts remote connections"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: url missing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "kind": "remote"
+      },
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "url is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: url number",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": 5,
+        "kind": "remote"
+      },
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "url is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: url empty, checked before label and token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "kind": "remote",
+        "url": "",
+        "label": ""
+      },
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "url is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: label missing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "kind": "remote",
+        "url": "ws://b"
+      },
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: label number",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": 3,
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      "tok"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: label empty, checked before token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: token missing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "token is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: token number",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      42
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "token is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: token empty",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "token is required"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: color and initials kept after addedAt in fixed order",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "initials": "BX",
+        "color": "#abc",
+        "kind": "remote",
+        "url": "ws://box:37291",
+        "label": "Box",
+        "extra": "dropped"
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    },\n    {\n      \"id\": \"11111111-2222-4333-8444-555555555555\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:37291\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1767225600000,\n      \"color\": \"#abc\",\n      \"initials\": \"BX\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": {
+          "id": "11111111-2222-4333-8444-555555555555",
+          "label": "Box",
+          "url": "ws://box:37291",
+          "kind": "remote",
+          "addedAt": 1767225600000,
+          "color": "#abc",
+          "initials": "BX"
+        }
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": "tok-1",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: falsy color and initials are left out",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote",
+        "color": "",
+        "initials": 0
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"11111111-2222-4333-8444-555555555555\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:37291\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": {
+          "id": "11111111-2222-4333-8444-555555555555",
+          "label": "Box",
+          "url": "ws://box:37291",
+          "kind": "remote",
+          "addedAt": 1767225600000
+        }
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": "tok-1",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: truthy non-string color and initials are stored raw",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote",
+        "color": 3,
+        "initials": {
+          "a": 1
+        }
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"11111111-2222-4333-8444-555555555555\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:37291\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1767225600000,\n      \"color\": 3,\n      \"initials\": {\n        \"a\": 1\n      }\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": {
+          "id": "11111111-2222-4333-8444-555555555555",
+          "label": "Box",
+          "url": "ws://box:37291",
+          "kind": "remote",
+          "addedAt": 1767225600000,
+          "color": 3,
+          "initials": {
+            "a": 1
+          }
+        }
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": "tok-1",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: a whitespace-only label is accepted untrimmed",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "  ",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"11111111-2222-4333-8444-555555555555\",\n      \"label\": \"  \",\n      \"url\": \"ws://box:37291\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": {
+          "id": "11111111-2222-4333-8444-555555555555",
+          "label": "  ",
+          "url": "ws://box:37291",
+          "kind": "remote",
+          "addedAt": 1767225600000
+        }
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": "tok-1",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: a string connections value fails at push",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": \"x\",\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "list.push is not a function"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "add: an object connections value fails at slice",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": {\n    \"a\": 1\n  },\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "(config.connections ?? []).slice is not a function"
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: local is refused",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      "local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "cannot remove the local backend"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: a remote that is not active",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": null,
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: the active remote resets activeBackendId to local",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      "r2"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"r2\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": null,
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: an unknown id is false and touches nothing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      "nope"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: a number id never matches a string id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:1": "tok-1"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:1": "tok-1"
+      }
+    }
+  },
+  {
+    "name": "remove: a number id matches a number id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": 1,\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": 1,\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:1": "tok-1"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:1": null
+      }
+    }
+  },
+  {
+    "name": "remove: a missing id matches an entry with no id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:undefined": "tok-u"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:undefined": null
+      }
+    }
+  },
+  {
+    "name": "remove: a null id matches an entry whose id is null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": null,\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:null": "tok-null"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:null": null
+      }
+    }
+  },
+  {
+    "name": "remove: an object id matches nothing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      {
+        "id": "r1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: a null entry throws while filtering",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    null\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of null (reading 'id')"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: a string connections value throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": \"x\",\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "list.filter is not a function"
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: trims and keeps label in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r2",
+      "  New name 　"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"New name\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: blank label",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1",
+      "   "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: JS-only whitespace label is blank",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1",
+      "﻿　 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: non-string label",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1",
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: missing label",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: the label check runs before the id lookup",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "nope",
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "label is required"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: a number id matches a number id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      1,
+      "Num"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": 1,\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": 1,\n      \"label\": \"Num\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: unknown id is false",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "nope",
+      "X"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: an entry with no label key gets it appended",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r9",
+      "Named"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r9\",\n      \"url\": \"ws://n\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r9\",\n      \"url\": \"ws://n\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1,\n      \"label\": \"Named\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: a null id matches an entry whose id is null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      null,
+      "Named"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": null,\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": null,\n      \"label\": \"Named\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: findIndex stops before a later null entry",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1",
+      "Z"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    null\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Z\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    null\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: a null entry before the match throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1",
+      "Z"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    null,\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of null (reading 'id')"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "rename: a string connections value throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:rename",
+    "args": [
+      "r1",
+      "Z"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": \"x\",\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "list.findIndex is not a function"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: a known remote",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"r1\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: local is known",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      "local"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"r1\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: unknown string id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      "nope"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "unknown backend id: nope"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: missing id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "unknown backend id: undefined"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: number id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "unknown backend id: 5"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: null id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "unknown backend id: null"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: object id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      {
+        "id": "r1"
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "unknown backend id: [object Object]"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: array id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      [
+        "a",
+        null,
+        1
+      ]
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "unknown backend id: a,,1"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: a number id stored as a number",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": 1,\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": 1,\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": 1,\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: a missing id matching an entry with no id drops activeBackendId",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"r1\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setActive: a string connections value throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setActive",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": \"x\",\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "list.some is not a function"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: appends lastConnectedAt from when",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r2",
+      1700000009999
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\",\n      \"lastConnectedAt\": 1700000009999\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: without when uses now",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000,\n      \"lastConnectedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a string when falls back to now",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r1",
+      "123"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000,\n      \"lastConnectedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a null when falls back to now",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r1",
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000,\n      \"lastConnectedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a fractional when is kept",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r1",
+      12.5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000,\n      \"lastConnectedAt\": 12.5\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: keeps an existing lastConnectedAt in place",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r1",
+      1700000099999
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000,\n      \"lastConnectedAt\": 1700000000500,\n      \"color\": \"#0f0\"\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000,\n      \"lastConnectedAt\": 1700000099999,\n      \"color\": \"#0f0\"\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a missing id matches an entry with no id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"label\": \"Anon\",\n      \"url\": \"ws://a\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1,\n      \"lastConnectedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a missing id spreads a matched string entry by index",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    \"ab\"\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"0\": \"a\",\n      \"1\": \"b\",\n      \"lastConnectedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a missing id spreads a matched number entry to nothing",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    5\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"lastConnectedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a missing id spreads a matched array entry by index",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    [\n      \"p\",\n      null\n    ]\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"0\": \"p\",\n      \"1\": null,\n      \"lastConnectedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "remove: a missing id removes primitive entries",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:remove",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    5,\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    \"s\"\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "backend-token:r1": "tok-r1",
+      "backend-token:r2": "tok-r2",
+      "githubToken": "gh-keep",
+      "backend-token:undefined": "tok-u"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "secretsAfter": {
+        "backend-token:r1": "tok-r1",
+        "backend-token:r2": "tok-r2",
+        "githubToken": "gh-keep",
+        "backend-token:undefined": null
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: unknown id is false",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "nope",
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"r1\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:1\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000000\n    },\n    {\n      \"id\": \"r2\",\n      \"label\": \"Pi\",\n      \"url\": \"ws://pi:2\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1700000000001,\n      \"color\": \"#f00\",\n      \"initials\": \"PI\"\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "setLastConnected: a string connections value throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:setLastConnected",
+    "args": [
+      "r1",
+      1
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": \"x\",\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "secretsBefore": {
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "list.findIndex is not a function"
+      },
+      "secretsAfter": {
+        "githubToken": "gh-keep"
+      }
+    }
+  }
+]

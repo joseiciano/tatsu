@@ -87,6 +87,25 @@ impl ConfigHandle {
         result
     }
 
+    // Like `update`, but an `Err` leaves the document unsaved; the closure must not change it then.
+    pub fn try_update<T, E>(
+        &self,
+        change: impl FnOnce(&mut ConfigDoc) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let result = {
+            let mut state = self.inner.state.lock();
+            let result = change(&mut state.doc);
+            if result.is_ok() {
+                state.dirty = true;
+            }
+            result
+        };
+        if result.is_ok() {
+            self.schedule_save();
+        }
+        result
+    }
+
     pub fn flush_sync(&self) {
         if let Some(timer) = self.inner.timer.lock().take() {
             timer.abort();

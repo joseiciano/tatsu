@@ -1,6 +1,7 @@
 mod activity;
 mod agents;
 mod chat_ui;
+mod connections;
 mod hooks;
 mod info;
 mod logs;
@@ -44,6 +45,7 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     logs::register(core);
     info::register(core);
     activity::register(core);
+    connections::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {

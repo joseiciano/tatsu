@@ -17,16 +17,12 @@ const RESULT_MARKER: &str = "@@CASE-RESULT@@";
 const ISOLATED_ENV: &str = "TATSU_HANDLER_FIXTURE_ISOLATED";
 
 enum Pending {
+    #[allow(dead_code)]
     Unregistered,
     Differs(&'static [&'static str]),
 }
 
 const PENDING: &[(&str, &str, Pending)] = &[
-    (
-        "ids + secrets: connections:add stores the token under the injected id",
-        "ticket 31",
-        Pending::Unregistered,
-    ),
     (
         "worktrees: listChanged clears the removed worktree's snooze entry from config",
         "snooze prune (aux-services module) plus the boot worktree list (worktrees-git module)",

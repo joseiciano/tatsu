@@ -199,3 +199,24 @@ async fn pending_save_is_the_unwritten_document_until_the_debounced_write_lands(
     assert_eq!(config.pending_save(), None);
     assert_eq!(read(dir.path()).as_deref(), Some("{\n  \"a\": 1\n}"));
 }
+
+#[tokio::test(start_paused = true)]
+async fn try_update_saves_on_ok_and_leaves_nothing_pending_on_err() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = handle_in(dir.path(), r#"{"k":1}"#);
+    let refused: Result<(), &str> = config.try_update(|doc| {
+        assert_eq!(doc.get("k"), Some(&json!(1)));
+        Err("no")
+    });
+    assert_eq!(refused, Err("no"));
+    assert_eq!(config.pending_save(), None);
+    advance(1_000).await;
+    assert_eq!(read(dir.path()), None);
+    let n = config.try_update(|doc| {
+        doc.set("k", json!(2));
+        Ok::<_, ()>(7)
+    });
+    assert_eq!(n, Ok(7));
+    advance(500).await;
+    assert_eq!(read(dir.path()), Some(doc_from(r#"{"k":2}"#).to_json()));
+}
