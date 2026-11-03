@@ -1,6 +1,7 @@
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { STEP_OUTPUT_STRING_MAX_CHARS, STEP_SUMMARY_MAX_CHARS, type ResolvedWorkflowStep } from '../../../../shared/workflow-def'
 import type { WorkflowActionResponse, WorkflowMarkDonePayload } from '../../../../shared/state/workflows'
+import { useFocusTrap } from '../../../hooks/useFocusTrap'
 import {
   buildMarkDoneFields,
   initialMarkDoneValues,
@@ -12,6 +13,7 @@ import {
 
 interface MarkDoneFormProps {
   step: ResolvedWorkflowStep | undefined
+  active: boolean
   onSubmit: (payload: WorkflowMarkDonePayload) => Promise<WorkflowActionResponse>
 }
 
@@ -140,7 +142,7 @@ function FieldInput({ field, id, value, error, onChange }: FieldInputProps): JSX
   )
 }
 
-export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element {
+export function MarkDoneForm({ step, active, onSubmit }: MarkDoneFormProps): JSX.Element {
   const baseId = useId()
   const fields = useMemo(() => buildMarkDoneFields(step), [step])
   const [summary, setSummary] = useState('')
@@ -148,6 +150,11 @@ export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element
   const [errors, setErrors] = useState<MarkDoneErrors>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [done, setDone] = useState(false)
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const summaryRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useFocusTrap(formRef, { active, initialFocus: summaryRef })
 
   const fieldId = (name: string): string => `${baseId}-f-${name}`
   const summaryId = `${baseId}-summary`
@@ -161,7 +168,7 @@ export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element
 
   const submit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
-    if (submitting) return
+    if (submitting || done) return
     setServerError(null)
     const result = markDonePayload(step, summary, values)
     if (!result.ok) {
@@ -174,6 +181,7 @@ export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element
     try {
       const response = await onSubmit(result.payload)
       if ('error' in response) setServerError(response.error)
+      else setDone(true)
     } catch {
       setServerError('Could not mark the step done')
     } finally {
@@ -185,6 +193,7 @@ export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element
 
   return (
     <form
+      ref={formRef}
       noValidate
       aria-label="Mark step done"
       onSubmit={(e) => void submit(e)}
@@ -195,6 +204,7 @@ export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element
           Summary <span className="text-dim">(required)</span>
         </label>
         <textarea
+          ref={summaryRef}
           id={summaryId}
           rows={3}
           maxLength={STEP_SUMMARY_MAX_CHARS}
@@ -225,7 +235,7 @@ export function MarkDoneForm({ step, onSubmit }: MarkDoneFormProps): JSX.Element
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || done}
           className="text-xs px-3 py-1.5 rounded bg-accent text-app hover:opacity-90 cursor-pointer disabled:opacity-50 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {submitting ? 'Marking done…' : 'Mark done'}

@@ -971,6 +971,7 @@ export function XTerminal({ terminalId, cwd, type, agentKind, visible, sessionNa
         <StepResultOverlay
           workflow={workflow}
           title={`${type === 'agent' ? agentDisplayName(agentKind) : 'Step'} exited.`}
+          active={visible}
         />
       )}
       {exited && workflowStep && !workflow && (
