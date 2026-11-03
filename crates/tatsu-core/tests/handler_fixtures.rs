@@ -63,11 +63,6 @@ const PENDING: &[(&str, &str, Pending)] = &[
         Pending::Unregistered,
     ),
     (
-        "worktrees: listChanged prunes the removed worktree's scratchpad note from config",
-        "ticket 25 plus the boot worktree list (worktrees-git module)",
-        Pending::Differs(&["configAfter", "events"]),
-    ),
-    (
         "worktrees: listChanged clears the removed worktree's snooze entry from config",
         "snooze prune (aux-services module) plus the boot worktree list (worktrees-git module)",
         Pending::Differs(&["configAfter", "events"]),

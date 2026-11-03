@@ -1,0 +1,1805 @@
+[
+  {
+    "name": "scratchpad:setText: the first note creates scratchpadNotes under the repo root",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt1",
+      "hello"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"hello\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt1",
+            "text": "hello"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: a new note in a known repo goes last in its repo map",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt2",
+      "two"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\",\n      \"$CASE/repos/app-wt2\": \"two\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt2",
+            "text": "two"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: editing an existing note keeps its position",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt1",
+      "edited"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\",\n      \"$CASE/repos/app-wt2\": \"two\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"edited\",\n      \"$CASE/repos/app-wt2\": \"two\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt1",
+            "text": "edited"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: empty text clears the note and keeps the repo map with others",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt1",
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\",\n      \"$CASE/repos/app-wt2\": \"two\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt2\": \"two\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt1",
+            "text": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: clearing the last note in a repo deletes the repo map",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt1",
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt1",
+            "text": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: clearing the last note overall deletes scratchpadNotes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt1",
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt1",
+            "text": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: clearing a missing note still saves",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "$CASE/repos/app-wt2",
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt2",
+            "text": ""
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: a worktree with an empty repo root dispatches without saving",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "/w/orphan",
+      "note"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "worktrees": [
+      {
+        "path": "/w/orphan",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": ""
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "/w/orphan",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": ""
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "/w/orphan",
+            "text": "note"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: a worktree not in the list dispatches without saving",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "/w/unknown",
+      "note"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "/w/unknown",
+            "text": "note"
+          }
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: a non-string worktree path returns false",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      42,
+      "note"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: an empty worktree path returns false",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "",
+      "note"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "scratchpad:setText: a non-string text returns false",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "scratchpad:setText",
+    "args": [
+      "/w/a",
+      7
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": false
+      }
+    }
+  },
+  {
+    "name": "scratchpad prune: a listChanged that removes nothing dispatches nothing and does not save",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "event": {
+      "type": "worktrees/listChanged",
+      "payload": [
+        {
+          "path": "$CASE/repos/app",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/app-wt1",
+          "branch": "wt1",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": false,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/app-wt2",
+          "branch": "wt2",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": false,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/lib",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/lib"
+        },
+        {
+          "path": "$CASE/repos/lib-wt1",
+          "branch": "wt1",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": false,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/lib"
+        }
+      ]
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "worktrees/listChanged",
+          "payload": [
+            {
+              "path": "$CASE/repos/app",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/app-wt1",
+              "branch": "wt1",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": false,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/app-wt2",
+              "branch": "wt2",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": false,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/lib",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/lib"
+            },
+            {
+              "path": "$CASE/repos/lib-wt1",
+              "branch": "wt1",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": false,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/lib"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "scratchpad prune: other events never prune",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "event": {
+      "type": "scratchpad/textChanged",
+      "payload": {
+        "worktreePath": "$CASE/repos/app-wt2",
+        "text": "kept"
+      }
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "scratchpad/textChanged",
+          "payload": {
+            "worktreePath": "$CASE/repos/app-wt2",
+            "text": "kept"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "scratchpad prune: removing two worktrees drops their notes in order and deletes the emptied repo map",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"keep\",\n      \"$CASE/repos/app-wt2\": \"drop\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"drop too\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "event": {
+      "type": "worktrees/listChanged",
+      "payload": [
+        {
+          "path": "$CASE/repos/app",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/app-wt1",
+          "branch": "wt1",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": false,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/lib",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/lib"
+        }
+      ]
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"keep\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "worktrees/listChanged",
+          "payload": [
+            {
+              "path": "$CASE/repos/app",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/app-wt1",
+              "branch": "wt1",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": false,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/lib",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/lib"
+            }
+          ]
+        },
+        {
+          "type": "scratchpad/worktreeRemoved",
+          "payload": "$CASE/repos/app-wt2"
+        },
+        {
+          "type": "scratchpad/worktreeRemoved",
+          "payload": "$CASE/repos/lib-wt1"
+        }
+      ]
+    }
+  },
+  {
+    "name": "scratchpad prune: removing the last notes deletes scratchpadNotes",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"one\"\n    },\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib-wt1\": \"lib\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      }
+    ],
+    "event": {
+      "type": "worktrees/listChanged",
+      "payload": [
+        {
+          "path": "$CASE/repos/app",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/lib",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/lib"
+        }
+      ]
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "worktrees/listChanged",
+          "payload": [
+            {
+              "path": "$CASE/repos/app",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/lib",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/lib"
+            }
+          ]
+        },
+        {
+          "type": "scratchpad/worktreeRemoved",
+          "payload": "$CASE/repos/app-wt1"
+        },
+        {
+          "type": "scratchpad/worktreeRemoved",
+          "payload": "$CASE/repos/lib-wt1"
+        }
+      ]
+    }
+  },
+  {
+    "name": "scratchpad prune: a slice-only note is dropped without saving",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\",\n    \"$CASE/repos/lib\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/lib\": {\n      \"$CASE/repos/lib\": \"main note\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/lib",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      },
+      {
+        "path": "$CASE/repos/lib-wt1",
+        "branch": "wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/lib"
+      }
+    ],
+    "setup": [
+      {
+        "type": "worktrees/listChanged",
+        "payload": [
+          {
+            "path": "$CASE/repos/app",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/app-wt2",
+            "branch": "wt2",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/app"
+          },
+          {
+            "path": "$CASE/repos/lib",
+            "branch": "main",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": true,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          },
+          {
+            "path": "$CASE/repos/lib-wt1",
+            "branch": "wt1",
+            "head": "0000000000000000000000000000000000000000",
+            "isBare": false,
+            "isMain": false,
+            "createdAt": 0,
+            "repoRoot": "$CASE/repos/lib"
+          }
+        ]
+      },
+      {
+        "type": "scratchpad/textChanged",
+        "payload": {
+          "worktreePath": "$CASE/repos/app-wt2",
+          "text": "unsaved"
+        }
+      }
+    ],
+    "event": {
+      "type": "worktrees/listChanged",
+      "payload": [
+        {
+          "path": "$CASE/repos/app",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/lib",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/lib"
+        }
+      ]
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "worktrees/listChanged",
+          "payload": [
+            {
+              "path": "$CASE/repos/app",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/lib",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/lib"
+            }
+          ]
+        },
+        {
+          "type": "scratchpad/worktreeRemoved",
+          "payload": "$CASE/repos/app-wt2"
+        }
+      ]
+    }
+  }
+]

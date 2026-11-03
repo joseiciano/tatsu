@@ -3,6 +3,7 @@ mod chat_ui;
 mod onboarding;
 mod prompts;
 mod repo_config;
+mod scratchpad;
 mod settings;
 mod tab_types;
 mod terminal_font;
@@ -32,6 +33,7 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     chat_ui::register(core);
     themes::register(core);
     repo_config::register(core);
+    scratchpad::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {
