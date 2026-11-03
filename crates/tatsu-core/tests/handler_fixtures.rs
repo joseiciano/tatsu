@@ -23,11 +23,6 @@ enum Pending {
 
 const PENDING: &[(&str, &str, Pending)] = &[
     (
-        "activityBefore: activity:clear drops one worktree",
-        "ticket 30",
-        Pending::Unregistered,
-    ),
-    (
         "ids + secrets: connections:add stores the token under the injected id",
         "ticket 31",
         Pending::Unregistered,

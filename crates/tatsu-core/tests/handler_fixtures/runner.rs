@@ -574,6 +574,7 @@ pub async fn run_prepared(p: &Prepared, case: &Value) -> Result<CaseResult, Stri
     }
     if case.get("activityBefore").is_some() {
         tokio::time::sleep(ACTIVITY_FLUSH).await;
+        core.activity().settled().await;
         actual.insert("activityAfter".to_owned(), p.activity_after());
     }
     let actual = Value::Object(actual);

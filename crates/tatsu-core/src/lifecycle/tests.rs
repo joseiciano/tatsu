@@ -310,3 +310,70 @@ async fn an_injected_timer_drives_both_store_and_router_timing() {
         .await;
     assert!(calls.load(std::sync::atomic::Ordering::SeqCst) > after_dispatch);
 }
+
+fn boot_at(dir: &TempDir, now: i64) -> Arc<Core> {
+    CoreBuilder::new(Runtime::Headless, env(dir))
+        .pre_runtime()
+        .unwrap()
+        .boot(
+            Vec::new(),
+            BootOptions {
+                clock: Arc::new(move || now),
+                ..BootOptions::default()
+            },
+        )
+        .unwrap()
+}
+
+fn record_signal(core: &Core, args: serde_json::Value) {
+    let ctx = crate::router::ConnCtx {
+        client_id: crate::router::ClientId("test".to_owned()),
+    };
+    let serde_json::Value::Array(args) = args else {
+        panic!("args must be an array");
+    };
+    core.router().dispatch_signal(ctx, "activity:record", args);
+}
+
+fn activity_text(core: &Core) -> Option<String> {
+    std::fs::read_to_string(core.activity().path()).ok()
+}
+
+#[tokio::test]
+async fn shutdown_seals_open_activity_after_module_steps_and_before_the_config_flush() {
+    let dir = TempDir::new().unwrap();
+    let core = boot_at(&dir, 1_000);
+    record_signal(&core, json!(["/w/a", "processing"]));
+    core.config().set("themeLight", json!("pending-theme"));
+
+    let at_module_step = Arc::new(Mutex::new(None));
+    {
+        let seen = at_module_step.clone();
+        let weak = Arc::downgrade(&core);
+        core.on_shutdown("module", move || async move {
+            *seen.lock() = Some(activity_text(&weak.upgrade().unwrap()));
+        });
+    }
+    let after_seal = Arc::new(Mutex::new(None));
+    {
+        let seen = after_seal.clone();
+        let weak = Arc::downgrade(&core);
+        core.push_core_step("after seal", move || async move {
+            let core = weak.upgrade().unwrap();
+            *seen.lock() = Some((activity_text(&core), config_text(&core)));
+        });
+    }
+
+    core.shutdown().await;
+
+    assert_eq!(*at_module_step.lock(), Some(None));
+    let (activity, config) = after_seal.lock().clone().unwrap();
+    assert_eq!(
+        activity.as_deref(),
+        Some(
+            r#"{"/w/a":{"events":[{"t":1000,"s":"processing"},{"t":1000,"s":"idle"}],"createdAt":1000}}"#
+        )
+    );
+    assert!(!config.contains("pending-theme"));
+    assert!(config_text(&core).contains("pending-theme"));
+}

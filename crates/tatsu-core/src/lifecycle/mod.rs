@@ -13,6 +13,7 @@ use tatsu_state::slices::repo_configs::RepoConfigsEvent;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
+use crate::activity::{ACTIVITY_FILENAME, ActivityLog};
 use crate::config::{self, CONFIG_FILE, ConfigHandle};
 use crate::data_dir::{DataDir, Env, Runtime};
 use crate::handlers::{register_core_handlers, reload_custom_themes};
@@ -29,6 +30,7 @@ mod tests;
 
 pub const SHUTDOWN_STEP_TIMEOUT: Duration = Duration::from_secs(5);
 const CATEGORY: &str = "lifecycle";
+const ACTIVITY_SEAL_STEP: &str = "activity seal";
 const GITHUB_TOKEN_KEY: &str = "githubToken";
 const APP_CATEGORY: &str = "app";
 const DEBUG_LOG_FILE: &str = "debug.log";
@@ -175,6 +177,12 @@ impl PreRuntime {
         let store = Arc::new(Store::with_options(initial, store_options));
         let router = Arc::new(Router::with_options(router_options));
         let hub = Hub::new(store.clone(), router.clone(), handle.clone());
+        let activity = ActivityLog::new(
+            self.data_dir.path().join(ACTIVITY_FILENAME),
+            handle.clone(),
+            options.clock.clone(),
+        );
+        let seal = activity.clone();
         let core = Arc::new(Core {
             runtime: self.runtime,
             data_dir: self.data_dir,
@@ -188,12 +196,16 @@ impl PreRuntime {
             ids: options.ids,
             clock: options.clock,
             repo_configs: RepoConfigStore::new(),
+            activity,
             hooks_installer: RwLock::new(None),
             resources_dir: RwLock::new(None),
             ws_bound: RwLock::new(None),
             ws_token: Mutex::new(None),
             module_steps: Mutex::new(Vec::new()),
-            core_steps: Mutex::new(Vec::new()),
+            core_steps: Mutex::new(vec![ShutdownStep::new(
+                ACTIVITY_SEAL_STEP,
+                move || async move { seal.seal_all() },
+            )]),
             shutdown_done: Mutex::new(None),
         });
         logs::log(
@@ -264,6 +276,7 @@ pub struct Core {
     ids: Arc<dyn IdSource>,
     clock: Clock,
     repo_configs: RepoConfigStore,
+    activity: ActivityLog,
     hooks_installer: RwLock<Option<Arc<dyn HooksInstaller>>>,
     resources_dir: RwLock<Option<PathBuf>>,
     ws_bound: RwLock<Option<WsBound>>,
@@ -320,6 +333,10 @@ impl Core {
 
     pub fn repo_configs(&self) -> &RepoConfigStore {
         &self.repo_configs
+    }
+
+    pub fn activity(&self) -> &ActivityLog {
+        &self.activity
     }
 
     pub fn set_hooks_installer(&self, installer: Arc<dyn HooksInstaller>) {

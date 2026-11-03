@@ -1,0 +1,216 @@
+[
+  {
+    "name": "activity:get with no activity.json replies an empty log",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:get",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": {}
+      }
+    }
+  },
+  {
+    "name": "activity:get replies the full migrated log",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:get",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": {
+          "/w/a": {
+            "branch": "a",
+            "repoRoot": "/w",
+            "createdAt": 1767225595000,
+            "events": [
+              {
+                "t": 1767225595000,
+                "s": "processing"
+              }
+            ]
+          },
+          "/w/b": {
+            "branch": "b",
+            "createdAt": 1767225596000,
+            "removedAt": 1767225599000,
+            "prNumber": 7,
+            "prState": "merged",
+            "events": [
+              {
+                "t": 1767225596000,
+                "s": "idle"
+              },
+              {
+                "t": 1767225599000,
+                "s": "merged"
+              }
+            ]
+          },
+          "/w/legacy": {
+            "events": [
+              {
+                "t": 1767225590000,
+                "s": "waiting"
+              }
+            ],
+            "createdAt": 1767225590000
+          }
+        }
+      },
+      "activityAfter": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}"
+    }
+  },
+  {
+    "name": "activity:clear with a path drops only that worktree",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:clear",
+    "args": [
+      "/w/b"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "activityAfter": "{\"/w/a\":{\"branch\":\"a\",\"repoRoot\":\"/w\",\"createdAt\":1767225595000,\"events\":[{\"t\":1767225595000,\"s\":\"processing\"}]},\"/w/legacy\":{\"events\":[{\"t\":1767225590000,\"s\":\"waiting\"}],\"createdAt\":1767225590000}}"
+    }
+  },
+  {
+    "name": "activity:clear with an unknown path keeps the log",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:clear",
+    "args": [
+      "/w/none"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "activityAfter": "{\"/w/a\":{\"branch\":\"a\",\"repoRoot\":\"/w\",\"createdAt\":1767225595000,\"events\":[{\"t\":1767225595000,\"s\":\"processing\"}]},\"/w/b\":{\"branch\":\"b\",\"createdAt\":1767225596000,\"removedAt\":1767225599000,\"prNumber\":7,\"prState\":\"merged\",\"events\":[{\"t\":1767225596000,\"s\":\"idle\"},{\"t\":1767225599000,\"s\":\"merged\"}]},\"/w/legacy\":{\"events\":[{\"t\":1767225590000,\"s\":\"waiting\"}],\"createdAt\":1767225590000}}"
+    }
+  },
+  {
+    "name": "activity:clear with a number path clears its string key",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:clear",
+    "args": [
+      7
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"7\": {\"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"idle\"}]}, \"/w/a\": {\"createdAt\": 1767225596000, \"events\": [{\"t\": 1767225596000, \"s\": \"processing\"}]}}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "activityAfter": "{\"/w/a\":{\"createdAt\":1767225596000,\"events\":[{\"t\":1767225596000,\"s\":\"processing\"}]}}"
+    }
+  },
+  {
+    "name": "activity:clear with no path clears every worktree",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:clear",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "activityAfter": "{}"
+    }
+  },
+  {
+    "name": "activity:clear with an empty path clears every worktree",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:clear",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "activityAfter": "{}"
+    }
+  },
+  {
+    "name": "activity:record appends a new state at now",
+    "now": 1767225600000,
+    "kind": "signal",
+    "channel": "activity:record",
+    "args": [
+      "/w/a",
+      "idle"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "activityAfter": "{\"/w/a\":{\"branch\":\"a\",\"repoRoot\":\"/w\",\"createdAt\":1767225595000,\"events\":[{\"t\":1767225595000,\"s\":\"processing\"},{\"t\":1767225600000,\"s\":\"idle\"}]},\"/w/b\":{\"branch\":\"b\",\"createdAt\":1767225596000,\"removedAt\":1767225599000,\"prNumber\":7,\"prState\":\"merged\",\"events\":[{\"t\":1767225596000,\"s\":\"idle\"},{\"t\":1767225599000,\"s\":\"merged\"}]},\"/w/legacy\":{\"events\":[{\"t\":1767225590000,\"s\":\"waiting\"}],\"createdAt\":1767225590000}}"
+    }
+  },
+  {
+    "name": "activity:record with the current state changes nothing",
+    "now": 1767225600000,
+    "kind": "signal",
+    "channel": "activity:record",
+    "args": [
+      "/w/a",
+      "processing"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "activityAfter": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}"
+    }
+  },
+  {
+    "name": "activity:record for a new worktree creates its record",
+    "now": 1767225600000,
+    "kind": "signal",
+    "channel": "activity:record",
+    "args": [
+      "/w/new",
+      "needs-approval"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "activityAfter": "{\"/w/a\":{\"branch\":\"a\",\"repoRoot\":\"/w\",\"createdAt\":1767225595000,\"events\":[{\"t\":1767225595000,\"s\":\"processing\"}]},\"/w/b\":{\"branch\":\"b\",\"createdAt\":1767225596000,\"removedAt\":1767225599000,\"prNumber\":7,\"prState\":\"merged\",\"events\":[{\"t\":1767225596000,\"s\":\"idle\"},{\"t\":1767225599000,\"s\":\"merged\"}]},\"/w/legacy\":{\"events\":[{\"t\":1767225590000,\"s\":\"waiting\"}],\"createdAt\":1767225590000},\"/w/new\":{\"events\":[{\"t\":1767225600000,\"s\":\"needs-approval\"}],\"createdAt\":1767225600000}}"
+    }
+  }
+]
