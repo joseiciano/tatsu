@@ -195,6 +195,19 @@ class FakeClaude {
 }
 
 describe('createClaudeStepDriver start', () => {
+  it('resumes a stored session in a new tab and binds that session id', async () => {
+    const fake = new FakeClaude()
+    const plan = resolvedStep(DEFAULTS_SOURCE, 'plan')
+    const stored = randomUUID()
+    const first = await fake.driver.start(fake.attempt(plan))
+    const resumed = await fake.driver.start(fake.attempt(plan, { attemptId: 'att-plan-2', n: 2, resumeSessionId: stored }))
+
+    expect(resumed).toEqual({ executionId: 'agent-tab-2', sessionId: stored })
+    expect(resumed.executionId).not.toBe(first.executionId)
+    expect(fake.tabs[1].spawn.sessionId).toBe(stored)
+    expect(fake.bound.at(-1)).toEqual({ executionId: 'agent-tab-2', sessionId: stored })
+  })
+
   it('opens a tagged Claude tab with the step permissions, a fresh session and the rendered prompt', async () => {
     const fake = new FakeClaude()
     const plan = resolvedStep(DEFAULTS_SOURCE, 'plan')

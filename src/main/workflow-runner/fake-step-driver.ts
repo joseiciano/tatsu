@@ -5,6 +5,8 @@ import type {
   StepDriverListener,
   StepExecution
 } from './drivers/types'
+import type { WorkflowRunner } from './workflow-runner'
+import type { Worktree } from '../../shared/state/worktrees'
 
 export type FakeStartBehavior = 'ok' | 'reject' | 'throw' | 'defer'
 
@@ -74,4 +76,13 @@ export class FakeStepDriver implements StepDriver {
   emit(event: StepDriverEvent): void {
     for (const listener of this.listeners) listener(event)
   }
+}
+
+export function currentStepId(runner: Pick<WorkflowRunner, 'getRunRecord'>, runId: string): string {
+  const record = runner.getRunRecord(runId)
+  return record?.definition.steps[record.cursor]?.id ?? ''
+}
+
+export function worktreeFixture(path: string): Worktree {
+  return { path, branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: path }
 }

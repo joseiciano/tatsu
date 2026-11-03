@@ -20,7 +20,7 @@ import { Store } from '../store'
 import { buildInitialAppState } from '../build-initial-state'
 import { loadRunRecordsSync } from '../workflow-run-records'
 import { WorkflowRunner, createClaudeStepDriver, type StepDriver, type WorkflowRunnerDeps } from '.'
-import { FakeStepDriver } from './fake-step-driver'
+import { currentStepId, FakeStepDriver, worktreeFixture } from './fake-step-driver'
 import type { Config } from '../persistence'
 import type {
   WorkflowAttemptRecord,
@@ -38,6 +38,12 @@ steps:
   - id: build
     agent: claude
     prompt: "build"
+`
+const ONE_SHELL = `name: one-shell
+steps:
+  - id: plan
+    kind: shell
+    run: "true"
 `
 const ONE_AGENT = `name: one-agent
 steps:
@@ -115,6 +121,8 @@ function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, 
   const initial = buildInitialAppState(emptyConfig, { hasGithubToken: false, workflowRuns: records })
   const store = new Store({
     ...initial,
+    hooks: { ...initial.hooks, consent: 'accepted' },
+    worktrees: { ...initial.worktrees, list: [worktreeFixture('/wt/x')] },
     settings: {
       ...initial.settings,
       labs: { workflows: options.labs ?? true },
@@ -345,7 +353,7 @@ describe('WorkflowRunner.reconcile', () => {
     expect(ctx.runner.runIdForAttempt('att-1')).toBe('run-a')
     expect(ctx.runner.getRunRecord('run-a')?.status).toBe('paused')
 
-    expect(ctx.runner.retry('run-a')).toBe(true)
+    expect(ctx.runner.retryStep('run-a', currentStepId(ctx.runner, 'run-a'))).toEqual({ ok: true })
     await flush()
     expect(ctx.agent.started).toHaveLength(1)
     expect(ctx.agent.started[0]).toMatchObject({ runId: 'run-a', stepId: 'plan', n: 2 })
@@ -374,6 +382,7 @@ describe('WorkflowRunner.reconcile', () => {
       }
     }
     const ctx = boot([], { loader: { getDefinition: () => detail } })
+    ctx.runner.reconcile(ctx.records)
     const started = ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/x', inputs: {} })
     if (!started.ok) throw new Error(started.reason)
     await flush()
@@ -414,12 +423,12 @@ describe('WorkflowRunner.reconcile with labs off', () => {
   it('refuses retry while labs is off and recovers a held step with no attempt once it is on', async () => {
     const ctx = boot([record('run-p', { steps: { plan: 'pending' } })], { labs: false })
     ctx.runner.reconcile(ctx.records)
-    expect(ctx.runner.retry('run-p')).toBe(false)
+    expect(ctx.runner.retryStep('run-p', currentStepId(ctx.runner, 'run-p'))).toEqual({ ok: false, reason: 'labs-off' })
     await flush()
     expect(ctx.agent.started).toEqual([])
 
     setLabs(ctx, true)
-    expect(ctx.runner.retry('run-p')).toBe(true)
+    expect(ctx.runner.retryStep('run-p', currentStepId(ctx.runner, 'run-p'))).toEqual({ ok: true })
     await flush()
     expect(ctx.agent.started).toHaveLength(1)
     expect(ctx.agent.started[0]).toMatchObject({ runId: 'run-p', stepId: 'plan', n: 1 })
@@ -444,5 +453,77 @@ describe('WorkflowRunner.reconcile with labs off', () => {
     expect(ctx.agent.started).toEqual([])
     expect(ctx.stepStatus('run-a', 'build')).toBe('pending')
     expect(ctx.wf().runs['run-a']).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+  })
+})
+
+describe('WorkflowRunner.resumeStep', () => {
+  const SESSION = '11111111-1111-4111-8111-111111111111'
+  const interrupted = (patch: Partial<WorkflowAttemptRecord> = {}) =>
+    record('run-a', {
+      steps: { plan: 'running' },
+      attempts: [attempt('att-1', { executionId: 'pty-dead', sessionId: SESSION, ...patch })]
+    })
+
+  it('starts attempt n+1 with the stored session id of an interrupted Claude attempt', async () => {
+    const ctx = boot([interrupted()])
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.resumeStep('run-a', 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.agent.started[0]).toMatchObject({ runId: 'run-a', stepId: 'plan', n: 2, resumeSessionId: SESSION })
+    expect(ctx.wf().runs['run-a'].status).toBe('running')
+  })
+
+  it('keeps the stored session when the resumed step waits in the agent queue', async () => {
+    const ctx = boot([interrupted(), record('run-b', { steps: { plan: 'pending' }, startedAt: 1 })], { cap: 1 })
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.agent.started.map((started) => started.runId)).toEqual(['run-b'])
+    expect(ctx.runner.resumeStep('run-a', 'plan')).toEqual({ ok: true })
+    expect(ctx.stepStatus('run-a', 'plan')).toBe('queued')
+    ctx.runner.complete(ctx.wf().runs['run-b'].steps.plan.attemptIds[0], {
+      status: 'done',
+      summary: 'ok',
+      completedBy: 'tool'
+    })
+    await flush()
+    expect(ctx.agent.started[1]).toMatchObject({ runId: 'run-a', n: 2, resumeSessionId: SESSION })
+  })
+
+  it.each([
+    ['no stored session', undefined],
+    ['a stored session that is not a uuid', '$(touch /tmp/pwned)']
+  ])('suggests retry when the interrupted attempt has %s', (_name, sessionId) => {
+    const ctx = boot([interrupted({ sessionId })])
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.resumeStep('run-a', 'plan')).toEqual({ ok: false, reason: 'no-session' })
+    expect(ctx.agent.started).toEqual([])
+  })
+
+  it('refuses a shell step, a failed attempt and a step that is not current', async () => {
+    const shell = boot([
+      record('run-a', {
+        definition: definitionOf(ONE_SHELL),
+        steps: { plan: 'running' },
+        attempts: [attempt('att-1', { sessionId: SESSION })]
+      })
+    ])
+    shell.runner.reconcile(shell.records)
+    expect(shell.runner.resumeStep('run-a', 'plan')).toEqual({ ok: false, reason: 'not-claude-step' })
+
+    const failed = boot([
+      record('run-a', {
+        status: 'paused',
+        pausedReason: 'step-failed',
+        steps: { plan: 'failed' },
+        attempts: [attempt('att-1', { status: 'failed', endedAt: 6, sessionId: SESSION })]
+      })
+    ])
+    failed.runner.reconcile(failed.records)
+    expect(failed.runner.resumeStep('run-a', 'plan')).toEqual({ ok: false, reason: 'not-interrupted' })
+    expect(failed.runner.resumeStep('run-a', 'build')).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(failed.runner.resumeStep('run-zz', 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+    await flush()
+    expect([...shell.shell.started, ...failed.agent.started]).toEqual([])
   })
 })

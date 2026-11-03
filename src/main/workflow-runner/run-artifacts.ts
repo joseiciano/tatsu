@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from 'fs/promises'
 import { join } from 'path'
-import { ensureRunsExcluded, takeSnapshot } from '../workflow-snapshots'
+import { ensureRunsExcluded, restoreSnapshot, takeSnapshot } from '../workflow-snapshots'
 import type { RunArtifacts } from './types'
 
 export function runArtifactsDir(worktreePath: string, runId: string): string {
@@ -23,6 +23,9 @@ export function createGitRunArtifacts(): RunArtifacts {
     },
     async appendContext({ contextPath, section }) {
       await appendFile(contextPath, section, 'utf8')
+    },
+    async restore({ worktreePath, commit }) {
+      await restoreSnapshot(worktreePath, commit)
     }
   }
 }
