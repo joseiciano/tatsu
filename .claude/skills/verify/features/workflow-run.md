@@ -34,7 +34,11 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
 
 - `journeys/workflow-run.mjs <state> smoke`: launch sheet -> Start ->
   strip shows `plan running, echo pending` -> strip disappears -> run record
-  `status: done`.
+  `status: done` -> step tab `⚙ plan · Claude` in the tab bar.
+- `journeys/workflow-run.mjs <state> smoke-codex`: same path for a Codex
+  agent step then a shell step; step tab `⚙ plan · Codex`. The run record's
+  `plan` attempt carries the session id the fake codex reported through its
+  SessionStart hook, and `continuations: 1` when curl is present.
 - `journeys/workflow-flows.sh <state>` (runs `scripts/browser-smoke.mjs`):
   - `launch-sheet-focus`: open the launch sheet -> focus starts inside ->
     Tab, then Shift+Tab, pressed (focusables + 3) times each keeps
@@ -68,5 +72,8 @@ lines in `journal.log`, and the run record in `workflow-runs/`.
   row going away plus the run record.
 - Mark done records a new attempt. The step tab's badge stays `failed` (it
   tracks the exited attempt); the overlay switches to the Mark done result.
+- A Codex definition is refused at Start (`Open a Codex tab and run /hooks`)
+  until Tatsu's Codex hooks are trusted in `CODEX_HOME/config.toml`; the seed
+  trusts them in the scratch `CODEX_HOME` only.
 - `exit-mark-done` needs curl: without it the Stop hook fails open and the
   step completes by fallback instead of failing.
