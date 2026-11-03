@@ -12,6 +12,7 @@ what end state proves it works. Journeys reuse `scripts/browser.mjs`.
 | Config folders in Settings | [config-folders-settings.md](config-folders-settings.md) | `journeys/config-folders.mjs` (proven: both entry points, relative-path rejection, override, reset) |
 | Templates and fragments | [templates.md](templates.md) | `journeys/template-render-sync.mjs`, `journeys/template-fragments.mjs` (proven: create, fragments, reorder, remove, outside-change prompt, deletes, sync), `journeys/inline-fragments.mjs` (proven: `{{fragment:x}}` in a skill expands on Save, a fragment change reaches the file only through Sync, a hand-edited section is resolved with Use fragment) |
 | Import existing setup | [import-existing-setup.md](import-existing-setup.md) | `journeys/import-existing-setup.mjs`, `journeys/import-full-setup.mjs` (proven: every folder kind) |
+| CLI `tatsu status` | [cli-status.md](cli-status.md) | Shell recipe in the file, against `launch.sh` (proven: flag and env forms exit 0, wrong token 4, closed port 3, `--url` without `--token` 2) |
 
 Unless a file says a step was run, its selectors and end states come from
 reading the source. Treat them as a starting point, not as proof. The first
