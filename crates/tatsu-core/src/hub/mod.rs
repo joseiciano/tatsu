@@ -17,6 +17,9 @@ mod tests;
 use outbound::Conn;
 pub use outbound::{CloseCause, Outbound, OutboundRx, OverflowPolicy};
 
+pub const SHUTDOWN_CODE: u16 = 1001;
+pub const SHUTDOWN_REASON: &str = "server shutting down";
+
 pub type DisconnectCallback = Arc<dyn Fn(&ClientId) + Send + Sync>;
 
 pub struct ConnHandle {

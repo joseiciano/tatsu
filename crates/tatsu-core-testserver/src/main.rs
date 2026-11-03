@@ -5,9 +5,8 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
-use tatsu_core::{DataDir, Hub, Reply, Router, Store};
-use tatsu_state::{AppState, StateEvent};
-use tokio::runtime::Handle;
+use tatsu_core::{BootOptions, CoreBuilder, Env, Hub, PreRuntime, Reply, Router, Runtime, Store};
+use tatsu_state::StateEvent;
 
 const USAGE: &str = "usage: tatsu-core-testserver --data-dir <dir> --token <token> [--port <port>] [--host <host>] [--test-hooks]";
 const NESTED_PREFIX: &str = "nested:";
@@ -116,8 +115,7 @@ fn nested_count(ev: &StateEvent) -> Option<u32> {
         .ok()
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(args) => args,
         Err(message) => {
@@ -125,37 +123,70 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let data_dir = match DataDir::from_path(&args.data_dir) {
-        Ok(dir) => dir,
+    let env = match Env::from_process() {
+        Ok(env) => Env {
+            harness_data_dir: Some(args.data_dir.clone().into()),
+            ..env
+        },
+        Err(err) => {
+            eprintln!("environment: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let pre = match CoreBuilder::new(Runtime::Headless, env).pre_runtime() {
+        Ok(pre) => pre,
         Err(err) => {
             eprintln!("data dir {}: {err}", args.data_dir.display());
             return ExitCode::FAILURE;
         }
     };
-    tatsu_core::logs::init(&data_dir);
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            eprintln!("runtime: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    runtime.block_on(serve(pre, args))
+}
 
-    let store = Arc::new(Store::new(AppState::default()));
-    let router = Arc::new(Router::new());
-    let hub = Hub::new(store.clone(), router.clone(), Handle::current());
+async fn serve(pre: PreRuntime, args: Args) -> ExitCode {
+    let core = match pre.boot(Vec::new(), BootOptions::default()) {
+        Ok(core) => core,
+        Err(err) => {
+            eprintln!("boot: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
     if args.test_hooks {
-        register_test_hooks(&store, &router, &hub);
+        register_test_hooks(core.store(), core.router(), core.hub());
     }
 
-    let server =
-        match tatsu_ws::listen(SocketAddr::new(args.host, args.port), hub, args.token).await {
-            Ok(server) => server,
-            Err(err) => {
-                eprintln!("listen: {err}");
-                return ExitCode::FAILURE;
-            }
-        };
+    let server = match tatsu_ws::listen(
+        SocketAddr::new(args.host, args.port),
+        core.hub().clone(),
+        args.token,
+    )
+    .await
+    {
+        Ok(server) => server,
+        Err(err) => {
+            eprintln!("listen: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
     let addr = server.local_addr();
+    core.set_ws_bound(addr.ip().to_string(), addr.port());
     let mut stdout = std::io::stdout().lock();
     let _ = writeln!(stdout, "ws://{}:{}", addr.ip(), addr.port());
     let _ = stdout.flush();
     drop(stdout);
 
     let _ = tokio::signal::ctrl_c().await;
+    core.shutdown().await;
     server.shutdown().await;
     ExitCode::SUCCESS
 }

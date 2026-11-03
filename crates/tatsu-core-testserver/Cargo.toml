@@ -10,7 +10,7 @@ serde_json.workspace = true
 tatsu-core.workspace = true
 tatsu-state.workspace = true
 tatsu-ws.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
 
 [dev-dependencies]
 tempfile.workspace = true

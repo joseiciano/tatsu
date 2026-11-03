@@ -63,3 +63,7 @@ pub fn perf_with<T: Serialize + ?Sized>(category: &str, message: &str, data: &T)
         guard(&logs.perf).log_with(category, message, data);
     }
 }
+
+pub fn flush() {
+    let _ = std::io::stdout().flush();
+}

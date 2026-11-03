@@ -23,6 +23,7 @@ use axum::extract::ws::rejection::WebSocketUpgradeRejection;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
+pub use tatsu_core::hub::{SHUTDOWN_CODE, SHUTDOWN_REASON};
 use tatsu_core::{CloseCause, ConnHandle, FrameError, Hub, Outbound, OverflowPolicy};
 use tokio::net::TcpListener;
 use tokio::sync::{Notify, oneshot};
@@ -30,8 +31,6 @@ use tokio::task::JoinHandle;
 
 pub const CATEGORY: &str = "ws-transport";
 pub const CLOSE_ABOVE_BYTES: usize = 8 * 1024 * 1024;
-pub const SHUTDOWN_CODE: u16 = 1001;
-pub const SHUTDOWN_REASON: &str = "server shutting down";
 pub const OVERFLOW_CODE: u16 = 1013;
 pub const OVERFLOW_REASON: &str = "client too slow";
 pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);

@@ -20,7 +20,10 @@ struct Running {
 }
 
 fn start(extra: &[&str]) -> Running {
-    let dir = tempfile::tempdir().unwrap();
+    start_in(tempfile::tempdir().unwrap(), extra)
+}
+
+fn start_in(dir: tempfile::TempDir, extra: &[&str]) -> Running {
     let mut child = Command::new(env!("CARGO_BIN_EXE_tatsu-core-testserver"))
         .args([
             "--data-dir",
@@ -191,5 +194,27 @@ fn test_hooks_give_reply_shapes_echo_signals_and_nested_dispatches() {
         next_frame(&mut client, |f| f["t"] == "sig"),
         json!({"t": "sig", "name": "test:echo", "args": ["a", 1]})
     );
+    server.stop();
+}
+
+#[test]
+fn serves_the_state_booted_from_the_data_dir_config() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("config.json"),
+        r#"{"repoRoot": "/repo", "themeLight": "solarized-light", "terminalFontSize": 15}"#,
+    )
+    .unwrap();
+    let server = start_in(dir, &[]);
+    let mut client = server.connect();
+
+    send(&mut client, json!({"t": "snapreq", "id": "s"}));
+    let snapres = next_frame(&mut client, |f| f["t"] == "snapres");
+
+    let state = &snapres["snapshot"]["state"];
+    assert_eq!(state["settings"]["themeLight"], "solarized-light");
+    assert_eq!(state["settings"]["terminalFontSize"], 15);
+    assert_eq!(state["settings"]["claudeCommand"], "claude");
+    assert_eq!(state["worktrees"]["repoRoots"], json!(["/repo"]));
     server.stop();
 }
