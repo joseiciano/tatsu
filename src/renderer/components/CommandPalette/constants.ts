@@ -43,3 +43,5 @@ export const EXCLUDED_ACTIONS: Set<Action> = new Set([
   'commandPalette',
   'fileQuickOpen',
 ])
+
+export const EXCLUDED_ACTIONS_WITHOUT_LABS_WORKFLOWS: ReadonlySet<Action> = new Set<Action>([...EXCLUDED_ACTIONS, 'toggleWorkflows'])

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs scripts/browser-smoke.mjs (the smoke's browser leg: hang -> close step
-# tab -> Cancel step -> Needs you; exit-no-complete -> overlay -> Mark done;
+# tab -> Cancel step -> Needs you; hang -> palette -> Workflows section run
+# card -> Cancel run; exit-no-complete -> overlay -> Mark done;
 # repo definition -> trust panel -> Trust -> Start -> step strip) against a verify instance. Screenshots and journal go to
 # $EVIDENCE/workflow-flows/.
 #

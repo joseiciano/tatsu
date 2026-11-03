@@ -200,12 +200,7 @@ async function flowHangCancel(page, backend) {
     await stepStrip(page, 'hang running').waitFor()
     await shot('strip-running')
 
-    await page.getByRole('button', { name: 'Close tab ⚙ hang · Claude', exact: true }).click()
-    const confirm = page.getByRole('alertdialog', { name: 'Cancel step “hang”?' })
-    await confirm.waitFor()
-    await shot('cancel-confirm')
-    await confirm.getByRole('button', { name: 'Cancel step and close tab' }).click()
-    await confirm.waitFor({ state: 'hidden' })
+    await cancelHangStepFromTab(page, shot)
 
     const row = needsYouRow(page, 'browser-hang')
     await row.filter({ hasText: 'Cancelled by user · hang' }).waitFor()
@@ -227,6 +222,76 @@ async function flowHangCancel(page, backend) {
     await row.waitFor({ state: 'detached' })
     await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
     await shot('run-cancelled')
+  })
+}
+
+async function cancelHangStepFromTab(page, shot) {
+  await page.getByRole('button', { name: 'Close tab ⚙ hang · Claude', exact: true }).click()
+  const confirm = page.getByRole('alertdialog', { name: 'Cancel step “hang”?' })
+  await confirm.waitFor()
+  await shot('cancel-confirm')
+  await confirm.getByRole('button', { name: 'Cancel step and close tab' }).click()
+  await confirm.waitFor({ state: 'hidden' })
+}
+
+async function flowWorkflowsSection(page, backend) {
+  await scenario(page, 'workflows-section', async (shot) => {
+    await startFromLaunchSheet(page, 'browser-hang', shot)
+    await stepStrip(page, 'hang running').waitFor()
+    await cancelHangStepFromTab(page, shot)
+    await needsYouRow(page, 'browser-hang').filter({ hasText: 'Cancelled by user · hang' }).waitFor()
+    const runId = await liveRunId(backend, 'browser-hang')
+    if ((await page.locator('.xterm:visible').count()) === 0) throw new Error('no workspace terminal visible before opening the Workflows section')
+
+    await page.keyboard.press('Meta+k')
+    const search = page.getByPlaceholder('Search worktrees and commands...')
+    await search.fill('workflows')
+    await shot('palette')
+    await page.getByRole('button', { name: /^Toggle workflows/ }).click()
+
+    const section = page.getByRole('region', { name: 'Workflows', exact: true })
+    await section.waitFor()
+    if ((await page.locator('.xterm:visible').count()) !== 0) throw new Error('workspace terminals stay visible behind the Workflows section')
+
+    const needsYou = section.getByRole('region', { name: /^NEEDS YOU/ }).getByRole('listitem').filter({ hasText: 'browser-hang' })
+    await needsYou.filter({ hasText: 'Cancelled by user · hang' }).waitFor()
+    const card = section.getByRole('region', { name: 'Active runs' }).getByRole('article', { name: 'browser-hang on repo', exact: true })
+    await card.getByRole('img', { name: 'Workflow steps: hang paused', exact: true }).waitFor()
+    const cardText = (await card.textContent()) ?? ''
+    for (const expected of ['Paused · Cancelled by user', 'hang · Claude Code', 'Elapsed', 'Cost']) {
+      if (!cardText.includes(expected)) throw new Error(`active run card lacks ${JSON.stringify(expected)}: ${cardText}`)
+    }
+    log(`workflows-section: active card ${JSON.stringify(cardText)}`)
+    await shot('section-active-card')
+
+    const recent = section.getByRole('region', { name: 'Recent runs' }).getByRole('article', { name: 'browser-hang on repo', exact: true })
+    const recentBefore = await recent.count()
+    await needsYou.getByRole('button', { name: 'Cancel run: browser-hang on repo', exact: true }).click()
+    await waitForRunStatus(backend, runId, 'cancelled')
+    await card.waitFor({ state: 'detached' })
+    await needsYou.waitFor({ state: 'detached' })
+    const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+    while ((await recent.count()) !== recentBefore + 1) {
+      if (Date.now() > deadline) throw new Error(`Recent shows ${await recent.count()} browser-hang cards, expected ${recentBefore + 1}`)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    await shot('section-recent')
+
+    await section.getByRole('button', { name: 'Back' }).click()
+    await section.waitFor({ state: 'detached' })
+    await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+
+    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    await section.waitFor()
+    await shot('sidebar-button')
+    await page.keyboard.press('Meta+Alt+w')
+    await section.waitFor({ state: 'detached' })
+    await page.keyboard.press('Meta+Alt+w')
+    await section.waitFor()
+    await shot('hotkey')
+    await section.getByRole('button', { name: 'Back' }).click()
+    await section.waitFor({ state: 'detached' })
+    if ((await page.locator('.xterm:visible').count()) === 0) throw new Error('workspace terminals did not come back after closing the Workflows section')
   })
 }
 
@@ -363,6 +428,7 @@ async function main() {
     })
     await flowLaunchSheetFocus(page)
     await flowHangCancel(page, backend)
+    await flowWorkflowsSection(page, backend)
     await flowExitMarkDone(page, backend)
     await flowRepoTrust(page, backend)
   } catch {

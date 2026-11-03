@@ -45,6 +45,7 @@ import {
 } from './constants'
 import {
   createPausedRunIdsSelector,
+  createRunAttemptsSelector,
   findWorkflowStepTab,
   selectWorkflowRunIdForWorktree,
   type WorkflowStepTabRef
@@ -626,6 +627,15 @@ export function readWorkflowAttempt(id: string) {
 }
 
 const selectPausedWorkflowRunIds = createPausedRunIdsSelector()
+const selectWorkflowRunAttempts = createRunAttemptsSelector()
+
+export function useWorkflowRunAttempts(runId: string) {
+  return useAppState((s) => selectWorkflowRunAttempts(s.workflows, runId))
+}
+
+export function useWorktreeRepoRoot(worktreePath: string | null): string | null {
+  return useAppState((s) => (worktreePath ? s.worktrees.list.find((w) => w.path === worktreePath)?.repoRoot ?? null : null))
+}
 
 export function usePausedWorkflowRunIds(): readonly string[] {
   return useAppState((s) => selectPausedWorkflowRunIds(s.workflows))

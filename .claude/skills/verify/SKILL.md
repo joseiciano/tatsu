@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch Tatsu's headless server in a scratch sandbox (fake HOME, fake-agent `claude`, `codex` and `opencode` shims), drive its web client in headless system Chrome with playwright-core, and capture screenshot and on-disk evidence that a workflow feature works the way a user sees it. Reach for it to prove a change to the Labs workflow UI (Run workflow here…, launch sheet, step strip, Needs you, step tabs) or the workflow runner it drives. Never runs a real agent, the user's login shell rc files, or touches the user's ~/.claude, ~/.codex or ~/.config/opencode.
+description: Launch Tatsu's headless server in a scratch sandbox (fake HOME, fake-agent `claude`, `codex` and `opencode` shims), drive its web client in headless system Chrome with playwright-core, and capture screenshot and on-disk evidence that a workflow feature works the way a user sees it. Reach for it to prove a change to the Labs workflow UI (Run workflow here…, launch sheet, step strip, Needs you, step tabs, Workflows section) or the workflow runner it drives. Never runs a real agent, the user's login shell rc files, or touches the user's ~/.claude, ~/.codex or ~/.config/opencode.
 ---
 
 # Verify Tatsu by driving the real app

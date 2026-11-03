@@ -32,6 +32,7 @@ import { AgentIcon } from '../components/AgentIcon'
 import { InterfaceToggle } from '../components/InterfaceToggle'
 import { Activity, type ActivityTab } from '../components/Activity'
 import { Cleanup } from '../components/Cleanup'
+import { WorkflowsView } from '../components/Workflows/WorkflowsView'
 import { ReviewScreen } from '../components/ReviewScreen'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
@@ -238,6 +239,7 @@ function DesktopApp(): JSX.Element {
   const [showActivity, setShowActivity] = useState(false)
   const [activityTab, setActivityTab] = useState<ActivityTab>('command')
   const [showCleanup, setShowCleanup] = useState(false)
+  const [showWorkflows, setShowWorkflows] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
@@ -266,6 +268,7 @@ function DesktopApp(): JSX.Element {
     if (nextVisible) {
       setShowNewWorktree(false)
       setShowCleanup(false)
+      setShowWorkflows(false)
       setShowReview(false)
       setReportIssueState(null)
       setShowNewProject(false)
@@ -276,6 +279,7 @@ function DesktopApp(): JSX.Element {
     }
   }, [showCommandCenter])
   const settings = useSettings()
+  const workflowsVisible = showWorkflows && settings.labs.workflows
   const { hasGithubToken: hasGithubPat, githubAuthSource, nameClaudeSessions, defaultAgent } = settings
   // Apply the persisted UI scale to the root html element so every
   // rem-based size (text-xs/sm/base/lg, w-N/h-N icons, padding-*) shifts
@@ -604,10 +608,21 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowNewWorktree(false)
     setShowActivity(false)
     setShowCleanup(false)
+    setShowWorkflows(false)
     setShowReview(false)
     setReportIssueState(null)
     setShowNewProject(false)
   }, [])
+
+  const toggleWorkflows = useCallback(() => {
+    if (showWorkflows) {
+      setShowWorkflows(false)
+    } else {
+      closeFullscreenViews()
+      setShowWorkflows(true)
+    }
+  }, [showWorkflows, closeFullscreenViews])
+  const closeWorkflows = useCallback(() => setShowWorkflows(false), [])
 
   const toggleCommandCenter = useCallback(() => {
     if (showCommandCenter) {
@@ -691,6 +706,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
       setShowNewWorktree(false)
       setShowActivity(false)
       setShowCleanup(false)
+      setShowWorkflows(false)
       setShowCommandCenter(false)
       setActiveWorktreeId(worktreePath)
       handleSelectTab(worktreePath, paneId, tabId)
@@ -727,6 +743,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowPerfMonitor,
     setShowHotkeyCheatsheet,
     setShowReview,
+    toggleWorkflows,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
@@ -1393,6 +1410,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowNewWorktree(false)
               setShowActivity(false)
               setShowCleanup(false)
+              setShowWorkflows(false)
               setShowCommandCenter(false)
               setActiveWorktreeId(path)
             }}
@@ -1431,6 +1449,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowCleanup(true)
             }}
             onOpenCommandCenter={toggleCommandCenter}
+            onOpenWorkflows={toggleWorkflows}
             onOpenNewProject={() => {
               closeFullscreenViews()
               setShowNewProject(true)
@@ -1462,6 +1481,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
               setShowCleanup(true)
             }}
             onOpenCommandCenter={toggleCommandCenter}
+            onOpenWorkflows={toggleWorkflows}
             onOpenNewProject={() => {
               closeFullscreenViews()
               setShowNewProject(true)
@@ -1485,7 +1505,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
           if (!paneTree) return null
           const leaves = getLeaves(paneTree)
           if (leaves.length === 0 || !leaves.some((l) => l.tabs.length > 0)) return null
-          const isVisible = !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && wt.path === activeWorktreeId && !pendingDeletionByPath[wt.path]
+          const isVisible = !showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && wt.path === activeWorktreeId && !pendingDeletionByPath[wt.path]
           return (
             <div
               key={wt.path}
@@ -1524,7 +1544,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                     singleScreenMode ? 0 : sidebarVisible ? sidebarWidth + 1 : 48
                   }
                   topBarTrailingExtendPx={
-                    !singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null
+                    !singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null
                       ? rightColumnHidden
                         ? 48
                         : rightPanelWidth + 1
@@ -1569,6 +1589,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
                 setShowNewWorktree(false)
                 setShowActivity(false)
                 setShowCleanup(false)
+                setShowWorkflows(false)
                 setActiveWorktreeId(path)
               }}
             />
@@ -1584,6 +1605,11 @@ const setQuestStep = useCallback((next: QuestStep) => {
               lastActive={lastActive}
               onBulkDelete={handleBulkDeleteWorktrees}
             />
+          </div>
+        )}
+        {workflowsVisible && (
+          <div className="flex-1 min-w-0 flex">
+            <WorkflowsView onClose={closeWorkflows} onJumpToTab={handleJumpToWorkflowTab} />
           </div>
         )}
         {showReview && activeWorktreeId && (() => {
@@ -1605,12 +1631,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
             </div>
           )
         })()}
-        {!showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !activeWorktreeId && worktrees.length > 0 && (
+        {!showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && !activeWorktreeId && worktrees.length > 0 && (
           <div className="flex-1 flex items-center justify-center text-dim">
             Select a worktree to begin
           </div>
         )}
-        {!showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && isPendingId(activeWorktreeId) && (() => {
+        {!showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && isPendingId(activeWorktreeId) && (() => {
           const pending = pendingWorktrees.find((p) => p.id === activeWorktreeId)
           if (!pending) return null
           return (
@@ -1622,7 +1648,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             />
           )
         })()}
-        {!showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && activeWorktreeId && pendingDeletionByPath[activeWorktreeId] && (
+        {!showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && activeWorktreeId && pendingDeletionByPath[activeWorktreeId] && (
           <DeletingWorktreeScreen
             deletion={pendingDeletionByPath[activeWorktreeId]}
             onDismiss={handleDismissPendingDeletion}
@@ -1635,10 +1661,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
         />
         {/* Right panel — hidden on the new-worktree screen so the form gets the full width.
             Pushed down 40px so the workspace tab bar can extend across the top, full width. */}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><ResizeHandle onDelta={handleRightPanelResize} /></div>
         )}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && !rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><RightColumn
             width={rightPanelWidth}
             activeWorktreeId={activeWorktreeId}
@@ -1672,7 +1698,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             onCollapse={() => setRightColumnHidden(true)}
           /></div>
         )}
-        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !showCommandCenter && !showReview && reportIssueState === null && rightColumnHidden && (
+        {!singleScreenMode && !showNewWorktree && !showActivity && !showCleanup && !workflowsVisible && !showCommandCenter && !showReview && reportIssueState === null && rightColumnHidden && (
           <div className="mt-10 shrink-0 flex"><CollapsedRightPanel
             worktreePath={activeWorktreeId}
             onExpand={() => setRightColumnHidden(false)}
@@ -1710,6 +1736,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
           setShowNewWorktree(false)
           setShowActivity(false)
           setShowCleanup(false)
+          setShowWorkflows(false)
           setShowCommandCenter(false)
           setActiveWorktreeId(path)
         }}

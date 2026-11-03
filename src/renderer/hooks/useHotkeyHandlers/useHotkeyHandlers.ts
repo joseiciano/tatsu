@@ -38,6 +38,7 @@ interface UseHotkeyHandlersArgs {
   setShowPerfMonitor: React.Dispatch<React.SetStateAction<boolean>>
   setShowHotkeyCheatsheet: React.Dispatch<React.SetStateAction<boolean>>
   setShowReview: React.Dispatch<React.SetStateAction<boolean>>
+  toggleWorkflows: () => void
   // Imperative hooks into other handlers — passed in to avoid this hook
   // depending on useTabHandlers + useWorktreeHandlers directly.
   handleAddTerminalTab: (worktreePath: string, paneId?: string) => void
@@ -83,6 +84,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
     setShowPerfMonitor,
     setShowHotkeyCheatsheet,
     setShowReview,
+    toggleWorkflows,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
@@ -97,6 +99,7 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
   const viewerLogin = allSettings.viewerLogin
   const uiScale = allSettings.uiScale
   const configuredWorktreeDetail = allSettings.worktreeDetail
+  const labsWorkflows = allSettings.labs.workflows
   const snoozeByPath = useSnooze().byPath
   const snoozedPaths = useMemo(() => {
     const m: Record<string, true> = {}
@@ -286,6 +289,9 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
         backend.openInEditor(activeWorktreeId)
       },
       toggleCommandCenter: () => setShowCommandCenter((v) => !v),
+      toggleWorkflows: () => {
+        if (labsWorkflows) toggleWorkflows()
+      },
       commandPalette: () => {
         setShowHotkeyCheatsheet(false)
         setCommandPaletteMode('root')
@@ -359,6 +365,8 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
       setShowPerfMonitor,
       setShowHotkeyCheatsheet,
       setShowReview,
+      toggleWorkflows,
+      labsWorkflows,
       setShowSettings,
       backend,
       uiScale,

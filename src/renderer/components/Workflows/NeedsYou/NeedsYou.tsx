@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useBackend } from '../../../backend'
 import {
@@ -168,10 +168,11 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
 export function NeedsYouGroup({ onJumpToTab }: { onJumpToTab?: JumpToTabHandler }): JSX.Element | null {
   const labsWorkflows = useAppState((s) => s.settings.labs.workflows)
   const runIds = usePausedWorkflowRunIds()
+  const headingId = useId()
   if (!labsWorkflows || runIds.length === 0) return null
   return (
-    <section aria-labelledby="needs-you-heading" className="mb-1 border-b border-border pb-1">
-      <h2 id="needs-you-heading" className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-warning">
+    <section aria-labelledby={headingId} className="mb-1 border-b border-border pb-1">
+      <h2 id={headingId} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-warning">
         NEEDS YOU
         <span className="text-faint ml-auto">{runIds.length}</span>
       </h2>

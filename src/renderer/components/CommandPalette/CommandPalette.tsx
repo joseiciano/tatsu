@@ -11,6 +11,7 @@ import { useSettings, useSnooze } from '../../store'
 import type { CommandPaletteProps, FileItem, PaletteItem, PaletteMode, PaletteRecent } from './types'
 import {
   EXCLUDED_ACTIONS,
+  EXCLUDED_ACTIONS_WITHOUT_LABS_WORKFLOWS,
   FILE_CACHE_TTL_MS,
   MAX_FILE_RESULTS,
   PALETTE_RECENTS_KEY,
@@ -201,7 +202,8 @@ export function CommandPalette({
     return roots.size > 1
   }, [worktrees])
 
-  const viewerLogin = useSettings().viewerLogin
+  const { viewerLogin, labs } = useSettings()
+  const hiddenActions = labs.workflows ? EXCLUDED_ACTIONS : EXCLUDED_ACTIONS_WITHOUT_LABS_WORKFLOWS
   const snoozeByPath = useSnooze().byPath
   const snoozedPaths = useMemo(() => {
     const m: Record<string, true> = {}
@@ -216,12 +218,12 @@ export function CommandPalette({
   const actionItems = useMemo(() => {
     const items: { action: Action; label: string; hint?: string }[] = []
     for (const [action, label] of Object.entries(ACTION_LABELS)) {
-      if (EXCLUDED_ACTIONS.has(action as Action)) continue
+      if (hiddenActions.has(action as Action)) continue
       const binding = resolvedHotkeys[action as Action]
       items.push({ action: action as Action, label, hint: binding ? bindingToString(binding) : undefined })
     }
     return items
-  }, [resolvedHotkeys])
+  }, [resolvedHotkeys, hiddenActions])
 
   const fileItems = useMemo<FileItem[]>(() => {
     if (mode !== 'files' || !activeWorktreeId) return []
@@ -311,7 +313,7 @@ export function CommandPalette({
           if (wt) recentPaletteItems.push({ kind: 'recent-worktree', wt })
         } else if (r.type === 'action') {
           const action = r.id as Action
-          if (ACTION_LABELS[action] && !EXCLUDED_ACTIONS.has(action)) {
+          if (ACTION_LABELS[action] && !hiddenActions.has(action)) {
             const binding = resolvedHotkeys[action]
             recentPaletteItems.push({
               kind: 'recent-action',
@@ -353,7 +355,7 @@ export function CommandPalette({
     }
 
     return { items, selectableCount: selectable }
-  }, [mode, fileItems, query, worktrees, groups, actionItems, recents, resolvedHotkeys, activeWorktreeId])
+  }, [mode, fileItems, query, worktrees, groups, actionItems, recents, resolvedHotkeys, activeWorktreeId, hiddenActions])
 
   // Map from selectable index → flat index
   const selectableIndices = useMemo(() => {

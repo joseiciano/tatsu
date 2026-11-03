@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createPausedRunIdsSelector, findWorkflowStepTab, selectWorkflowRunIdForWorktree } from '.'
+import {
+  createPausedRunIdsSelector,
+  createRunAttemptsSelector,
+  findWorkflowStepTab,
+  selectWorkflowRunIdForWorktree
+} from '.'
 import type { WorkflowAttempt, WorkflowRun, WorkflowRunStatus, WorkflowsState } from '../../shared/state/workflows'
 import type { PaneLeaf, PaneNode, TerminalTab } from '../../shared/state/terminals'
 
@@ -123,5 +128,37 @@ describe('findWorkflowStepTab', () => {
   it('is null without a matching tab or pane tree', () => {
     expect(findWorkflowStepTab(leaf('p1', [other, tab('plain')]), ref)).toBeNull()
     expect(findWorkflowStepTab(undefined, ref)).toBeNull()
+  })
+})
+
+describe('createRunAttemptsSelector', () => {
+  const steps = { plan: { status: 'done' as const, attemptIds: ['a1'] }, build: { status: 'running' as const, attemptIds: ['a2', 'gone'] } }
+
+  it('lists the run attempts that exist, step by step', () => {
+    const select = createRunAttemptsSelector()
+    const a1 = attempt('r', 1, 2)
+    const a2 = attempt('r', 3)
+    expect(select(state({ r: run('running', { steps }) }, { a1, a2, other: attempt('x', 1) }), 'r')).toEqual([a1, a2])
+  })
+
+  it('keeps the same array while the run attempts are unchanged', () => {
+    const select = createRunAttemptsSelector()
+    const attempts = { a1: attempt('r', 1, 2), a2: attempt('r', 3) }
+    const first = select(state({ r: run('running', { steps }) }, attempts), 'r')
+    const unrelated = { ...attempts, other: attempt('x', 1) }
+    expect(select(state({ r: run('paused', { steps }) }, unrelated), 'r')).toBe(first)
+  })
+
+  it('returns a new array when one of the run attempts changes', () => {
+    const select = createRunAttemptsSelector()
+    const attempts = { a1: attempt('r', 1, 2), a2: attempt('r', 3) }
+    const first = select(state({ r: run('running', { steps }) }, attempts), 'r')
+    const next = select(state({ r: run('running', { steps }) }, { ...attempts, a2: attempt('r', 3, 4) }), 'r')
+    expect(next).not.toBe(first)
+    expect(next[1].endedAt).toBe(4)
+  })
+
+  it('is empty for an unknown run', () => {
+    expect(createRunAttemptsSelector()(state({}), 'missing')).toEqual([])
   })
 })
