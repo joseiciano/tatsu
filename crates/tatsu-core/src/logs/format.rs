@@ -1,6 +1,7 @@
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::Serialize;
 use time::macros::format_description;
@@ -35,6 +36,16 @@ pub(crate) fn line(at: OffsetDateTime, category: &str, message: &str, suffix: &s
 
 pub(crate) fn line_now(category: &str, message: &str, suffix: &str) -> String {
     line(OffsetDateTime::now_utc(), category, message, suffix)
+}
+
+pub type LogClock = Arc<dyn Fn() -> i64 + Send + Sync>;
+
+pub(crate) fn now(clock: Option<&LogClock>) -> OffsetDateTime {
+    clock
+        .and_then(|clock| {
+            OffsetDateTime::from_unix_timestamp_nanos(i128::from(clock()) * 1_000_000).ok()
+        })
+        .unwrap_or_else(OffsetDateTime::now_utc)
 }
 
 pub(crate) fn append(path: &Path, text: &str) -> io::Result<()> {

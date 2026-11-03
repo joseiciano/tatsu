@@ -28,11 +28,6 @@ const PENDING: &[(&str, &str, Pending)] = &[
         Pending::Unregistered,
     ),
     (
-        "debugLogBefore: existing lines are not new lines",
-        "ticket 28",
-        Pending::Unregistered,
-    ),
-    (
         "ids + secrets: connections:add stores the token under the injected id",
         "ticket 31",
         Pending::Unregistered,
@@ -471,4 +466,50 @@ async fn isolated_a_signal_case_has_no_reply_and_reports_the_save_it_scheduled()
     };
     assert!(actual.get("reply").is_none());
     assert_eq!(mismatched, Vec::<String>::new(), "{actual}");
+}
+
+async fn request_on_booted_core(channel: &str) -> Value {
+    let p = prepare(&smoke_case("hooksInstaller ok: hooks:accept saves consent")).unwrap();
+    let ctx = ConnCtx {
+        client_id: ClientId("c".to_owned()),
+    };
+    let routed = p
+        .core
+        .router()
+        .dispatch_request(ctx, channel, Vec::new())
+        .await;
+    reply_of(routed.reply)
+}
+
+#[tokio::test]
+async fn updater_get_version_returns_the_package_json_version() {
+    let package = read_json(&repo_root().join("package.json"));
+    let version = package["version"].as_str().unwrap();
+    assert_eq!(
+        request_on_booted_core("updater:getVersion").await,
+        json!({ "value": version })
+    );
+}
+
+fn node_lan_addresses() -> Value {
+    let script = "const r=[];for(const[n,l]of Object.entries(require('os').networkInterfaces())){for(const e of l||[]){if(e.family==='IPv4'&&!e.internal)r.push({iface:n,address:e.address})}}process.stdout.write(JSON.stringify(r))";
+    let output = Command::new("node")
+        .args(["-e", script])
+        .output()
+        .expect("node on PATH");
+    assert!(output.status.success(), "{output:?}");
+    tatsu_js::parse_lenient(&String::from_utf8(output.stdout).unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn net_get_lan_addresses_returns_non_internal_ipv4_like_node_on_this_host() {
+    let reply = request_on_booted_core("net:getLanAddresses").await;
+    let entries = reply["value"].as_array().expect("an array reply");
+    for entry in entries {
+        let keys: Vec<&String> = entry.as_object().unwrap().keys().collect();
+        assert_eq!(keys, ["iface", "address"], "{entry}");
+        let ip: std::net::Ipv4Addr = entry["address"].as_str().unwrap().parse().unwrap();
+        assert!(!ip.is_loopback(), "{entry}");
+    }
+    assert_eq!(reply["value"], node_lan_addresses());
 }

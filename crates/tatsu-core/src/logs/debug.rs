@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use time::OffsetDateTime;
 
-use super::format::{append, data_suffix, iso, line_now};
+use super::format::{LogClock, append, data_suffix, iso, line, now};
 
 pub const MAX_BYTES: u64 = 10 * 1024 * 1024;
 pub const ROTATE_CHECK_EVERY: u32 = 1000;
@@ -14,6 +14,7 @@ pub struct DebugLog {
     opened: bool,
     writes_since_rotate_check: u32,
     echo: Box<dyn Write + Send>,
+    clock: Option<LogClock>,
 }
 
 impl DebugLog {
@@ -27,6 +28,7 @@ impl DebugLog {
             opened: false,
             writes_since_rotate_check: 0,
             echo,
+            clock: None,
         }
     }
 
@@ -34,12 +36,20 @@ impl DebugLog {
         &self.path
     }
 
+    pub fn set_clock(&mut self, clock: LogClock) {
+        self.clock = Some(clock);
+    }
+
+    fn now(&self) -> OffsetDateTime {
+        now(self.clock.as_ref())
+    }
+
     pub fn log(&mut self, category: &str, message: &str) {
-        self.write_line(line_now(category, message, ""));
+        self.write_line(line(self.now(), category, message, ""));
     }
 
     pub fn log_with<T: Serialize + ?Sized>(&mut self, category: &str, message: &str, data: &T) {
-        self.write_line(line_now(category, message, &data_suffix(data)));
+        self.write_line(line(self.now(), category, message, &data_suffix(data)));
     }
 
     fn write_line(&mut self, line: String) {
@@ -59,9 +69,9 @@ impl DebugLog {
         }
         self.opened = true;
         rotate_if_needed(&self.path);
-        let now = OffsetDateTime::now_utc();
-        if append(&self.path, &session_header(now)).is_err() {
-            let _ = std::fs::write(&self.path, fresh_header(now));
+        let at = self.now();
+        if append(&self.path, &session_header(at)).is_err() {
+            let _ = std::fs::write(&self.path, fresh_header(at));
         }
     }
 }
@@ -156,6 +166,23 @@ mod tests {
         assert_eq!(
             line.len(),
             prefix.len() + "2026-01-01T00:00:00.000Z ===".len()
+        );
+    }
+
+    #[test]
+    fn an_injected_clock_stamps_the_header_and_the_lines() {
+        let dir = TempDir::new().unwrap();
+        let (mut log, _) = open(&dir);
+        log.set_clock(std::sync::Arc::new(|| 1_767_225_600_123));
+
+        log.log("boot", "ready");
+
+        assert_eq!(
+            lines(&log),
+            [
+                "=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.123Z ===",
+                "[00:00:00.123] [boot] ready",
+            ]
         );
     }
 

@@ -1,0 +1,529 @@
+[
+  {
+    "name": "debug:readRecentLog with no argument returns the last 200 lines",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with 0 keeps at least one line",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      0
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": ""
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with 2 returns the last two lines trimmed",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      2
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with a large count returns the whole file",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      100000
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with a fractional count truncates toward zero",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      3.7
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with a negative count keeps one line",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      -5
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": ""
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with null keeps one line",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      null
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": ""
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with a numeric string uses its number",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      "3"
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with a non-numeric string returns the whole file",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      "abc"
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with true keeps one line",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      true
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": ""
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with a one-element array uses its number",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      [
+        4
+      ]
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "[23:59:59.500] [old] three\n=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog with an object returns the whole file",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [
+      {}
+    ],
+    "debugLogBefore": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "[23:59:58.000] [old] one\n[23:59:59.000] [old] two\n[23:59:59.500] [old] three\n=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:readRecentLog without a debugLogBefore reads the boot lines",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:readRecentLog",
+    "args": [],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "=== Claude Tatsu debug log session started at 2026-01-01T00:00:00.000Z ===\n[00:00:00.000] [app] started, log file: $CASE/data/debug.log"
+      }
+    }
+  },
+  {
+    "name": "debug:logError writes one renderer-error entry",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:logError",
+    "args": [
+      "ErrorBoundary",
+      "Error",
+      "failed to render",
+      "Error: x\n    at A",
+      "    at Panel\n    at App"
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [renderer-error] [ErrorBoundary] Error: failed to render"
+        },
+        {
+          "file": "debug.log",
+          "line": "Stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "Error: x"
+        },
+        {
+          "file": "debug.log",
+          "line": "    at A"
+        },
+        {
+          "file": "debug.log",
+          "line": "Component stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "    at Panel"
+        },
+        {
+          "file": "debug.log",
+          "line": "    at App"
+        }
+      ]
+    }
+  },
+  {
+    "name": "debug:logError stringifies non-string arguments like a template literal",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:logError",
+    "args": [
+      42,
+      null,
+      {
+        "a": 1
+      },
+      [
+        1,
+        null,
+        "b"
+      ],
+      false
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [renderer-error] [42] null: [object Object]"
+        },
+        {
+          "file": "debug.log",
+          "line": "Stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "1,,b"
+        },
+        {
+          "file": "debug.log",
+          "line": "Component stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "false"
+        }
+      ]
+    }
+  },
+  {
+    "name": "debug:logError writes undefined for missing arguments",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "request",
+    "channel": "debug:logError",
+    "args": [
+      "Only"
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [renderer-error] [Only] undefined: undefined"
+        },
+        {
+          "file": "debug.log",
+          "line": "Stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "undefined"
+        },
+        {
+          "file": "debug.log",
+          "line": "Component stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "undefined"
+        }
+      ]
+    }
+  },
+  {
+    "name": "perf:logSlowRender writes one render-slow line",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "signal",
+    "channel": "perf:logSlowRender",
+    "args": [
+      "Sidebar",
+      23.456,
+      "update"
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "logLines": [
+        {
+          "file": "perf.log",
+          "line": "=== session started at 2026-01-01T00:00:00.000Z ==="
+        },
+        {
+          "file": "perf.log",
+          "line": "[<ts>] [render-slow] Sidebar 23.5ms update {\"id\":\"Sidebar\",\"ms\":23.46,\"phase\":\"update\"}"
+        }
+      ]
+    }
+  },
+  {
+    "name": "perf:logSlowRender rounds ms with toFixed",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "signal",
+    "channel": "perf:logSlowRender",
+    "args": [
+      "Panel",
+      1.005,
+      "mount"
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "logLines": [
+        {
+          "file": "perf.log",
+          "line": "=== session started at 2026-01-01T00:00:00.000Z ==="
+        },
+        {
+          "file": "perf.log",
+          "line": "[<ts>] [render-slow] Panel 1.0ms mount {\"id\":\"Panel\",\"ms\":1,\"phase\":\"mount\"}"
+        }
+      ]
+    }
+  },
+  {
+    "name": "perf:logSlowRender keeps the minus sign of a tiny negative ms",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "signal",
+    "channel": "perf:logSlowRender",
+    "args": [
+      "Panel",
+      -0.001,
+      "update"
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "logLines": [
+        {
+          "file": "perf.log",
+          "line": "=== session started at 2026-01-01T00:00:00.000Z ==="
+        },
+        {
+          "file": "perf.log",
+          "line": "[<ts>] [render-slow] Panel -0.0ms update {\"id\":\"Panel\",\"ms\":0,\"phase\":\"update\"}"
+        }
+      ]
+    }
+  },
+  {
+    "name": "perf:logSlowRender treats a non-number ms as 0 and null id as empty",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "signal",
+    "channel": "perf:logSlowRender",
+    "args": [
+      null,
+      "12",
+      5
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "logLines": [
+        {
+          "file": "perf.log",
+          "line": "=== session started at 2026-01-01T00:00:00.000Z ==="
+        },
+        {
+          "file": "perf.log",
+          "line": "[<ts>] [render-slow]  0.0ms 5 {\"id\":\"\",\"ms\":0,\"phase\":\"5\"}"
+        }
+      ]
+    }
+  },
+  {
+    "name": "perf:logSlowRender stringifies object and array arguments",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "signal",
+    "channel": "perf:logSlowRender",
+    "args": [
+      {
+        "a": 1
+      },
+      3,
+      [
+        "x",
+        "y"
+      ]
+    ],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "logLines": [
+        {
+          "file": "perf.log",
+          "line": "=== session started at 2026-01-01T00:00:00.000Z ==="
+        },
+        {
+          "file": "perf.log",
+          "line": "[<ts>] [render-slow] [object Object] 3.0ms x,y {\"id\":\"[object Object]\",\"ms\":3,\"phase\":\"x,y\"}"
+        }
+      ]
+    }
+  },
+  {
+    "name": "perf:logSlowRender with no arguments writes empty fields",
+    "now": 1767225600000,
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "kind": "signal",
+    "channel": "perf:logSlowRender",
+    "args": [],
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "logLines": [
+        {
+          "file": "perf.log",
+          "line": "=== session started at 2026-01-01T00:00:00.000Z ==="
+        },
+        {
+          "file": "perf.log",
+          "line": "[<ts>] [render-slow]  0.0ms  {\"id\":\"\",\"ms\":0,\"phase\":\"\"}"
+        }
+      ]
+    }
+  }
+]

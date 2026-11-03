@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::data_dir::DataDir;
 
 pub use debug::{DebugLog, MAX_BYTES, ROTATE_CHECK_EVERY};
+pub use format::LogClock;
 pub use perf::PerfLog;
 
 struct Logs {
@@ -24,6 +25,13 @@ pub fn init(data_dir: &DataDir) {
         debug: Mutex::new(DebugLog::new(data_dir.path().join("debug.log"))),
         perf: Mutex::new(PerfLog::new(data_dir.path().join("perf.log"))),
     });
+}
+
+pub fn set_clock(clock: LogClock) {
+    if let Some(logs) = LOGS.get() {
+        guard(&logs.debug).set_clock(clock.clone());
+        guard(&logs.perf).set_clock(clock);
+    }
 }
 
 fn guard<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {

@@ -6,12 +6,15 @@ pub mod hub;
 pub mod initial_state;
 pub mod lifecycle;
 pub mod logs;
+pub mod net;
 pub mod repo_config;
 pub mod router;
 pub mod secrets;
 pub mod store;
 pub mod themes;
 pub mod ws_settings;
+
+pub const APP_VERSION: &str = env!("TATSU_APP_VERSION");
 
 pub use config::ConfigDoc;
 pub use data_dir::{DataDir, Env, Platform, Runtime};

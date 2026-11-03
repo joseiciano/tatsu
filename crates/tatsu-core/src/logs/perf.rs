@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use time::OffsetDateTime;
 
-use super::format::{append, data_suffix, iso, line_now};
+use super::format::{LogClock, append, data_suffix, iso, line, now};
 
 pub struct PerfLog {
     path: PathBuf,
     header_written: bool,
+    clock: Option<LogClock>,
 }
 
 impl PerfLog {
@@ -15,6 +16,7 @@ impl PerfLog {
         Self {
             path: path.into(),
             header_written: false,
+            clock: None,
         }
     }
 
@@ -22,12 +24,20 @@ impl PerfLog {
         &self.path
     }
 
+    pub fn set_clock(&mut self, clock: LogClock) {
+        self.clock = Some(clock);
+    }
+
+    fn now(&self) -> OffsetDateTime {
+        now(self.clock.as_ref())
+    }
+
     pub fn log(&mut self, category: &str, message: &str) {
-        self.write_line(line_now(category, message, ""));
+        self.write_line(line(self.now(), category, message, ""));
     }
 
     pub fn log_with<T: Serialize + ?Sized>(&mut self, category: &str, message: &str, data: &T) {
-        self.write_line(line_now(category, message, &data_suffix(data)));
+        self.write_line(line(self.now(), category, message, &data_suffix(data)));
     }
 
     fn write_line(&mut self, line: String) {
@@ -43,10 +53,7 @@ impl PerfLog {
         let sep = if self.path.exists() { "\n" } else { "" };
         let _ = append(
             &self.path,
-            &format!(
-                "{sep}=== session started at {} ===\n",
-                iso(OffsetDateTime::now_utc())
-            ),
+            &format!("{sep}=== session started at {} ===\n", iso(self.now())),
         );
     }
 }
@@ -70,6 +77,20 @@ mod tests {
         assert_eq!(
             line.len(),
             "=== session started at 2026-01-01T00:00:00.000Z ===".len()
+        );
+    }
+
+    #[test]
+    fn an_injected_clock_stamps_the_separator_and_the_lines() {
+        let dir = TempDir::new().unwrap();
+        let mut log = PerfLog::new(dir.path().join("perf.log"));
+        log.set_clock(std::sync::Arc::new(|| 1_767_225_600_123));
+
+        log.log("render-slow", "x");
+
+        assert_eq!(
+            read(&log),
+            "=== session started at 2026-01-01T00:00:00.123Z ===\n[00:00:00.123] [render-slow] x\n"
         );
     }
 

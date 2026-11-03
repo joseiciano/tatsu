@@ -144,6 +144,7 @@ impl PreRuntime {
 
     pub fn boot(self, seed_hooks: Vec<SeedHook>, options: BootOptions) -> io::Result<Arc<Core>> {
         let handle = Handle::try_current().map_err(io::Error::other)?;
+        logs::set_clock(options.clock.clone());
         let config_path = self.data_dir.path().join(CONFIG_FILE);
         let doc = config::load(&config_path, (options.clock)());
         let config = ConfigHandle::new(config_path, doc, handle.clone());
