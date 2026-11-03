@@ -14,6 +14,7 @@ use runner::{
 
 const CASE_ENV: &str = "TATSU_HANDLER_FIXTURE_CASE";
 const RESULT_MARKER: &str = "@@CASE-RESULT@@";
+const ISOLATED_ENV: &str = "TATSU_HANDLER_FIXTURE_ISOLATED";
 
 enum Pending {
     Unregistered,
@@ -311,18 +312,64 @@ async fn smoke_activity_before_is_placed_and_read_back_unchanged() {
     assert_eq!(p.activity_after(), case["activityBefore"]);
 }
 
+// logs::init sets a process-global logger, so a test that reads debug.log runs in its own process where its boot owns the logger.
+fn run_isolated(test: &str) {
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--nocapture", "--test-threads=1"])
+        .env(ISOLATED_ENV, test)
+        .output()
+        .expect("spawn the isolated test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "isolated test {test} failed (status {}):\n{stdout}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn isolated(test: &str) -> bool {
+    std::env::var(ISOLATED_ENV).is_ok_and(|name| name == test)
+}
+
+#[test]
+fn smoke_debug_log_before_is_placed_and_its_lines_are_not_new() {
+    run_isolated("isolated_debug_log_before_is_placed_and_its_lines_are_not_new");
+}
+
 #[tokio::test]
-async fn smoke_debug_log_before_is_placed_and_its_lines_are_not_new() {
+async fn isolated_debug_log_before_is_placed_and_its_lines_are_not_new() {
+    if !isolated("isolated_debug_log_before_is_placed_and_its_lines_are_not_new") {
+        return;
+    }
     let case = smoke_case("debugLogBefore: existing lines are not new lines");
     let p = prepare(&case).unwrap();
     let before = case["debugLogBefore"].as_str().unwrap();
     let log = p.data_dir.join("debug.log");
-    assert_eq!(std::fs::read_to_string(&log).unwrap(), before);
-    assert_eq!(
-        runner::new_log_lines(&log, 0, "debug.log"),
-        vec![json!({"file": "debug.log", "line": "[<ts>] [old] earlier session line"})]
+    let content = std::fs::read_to_string(&log).unwrap();
+    assert!(content.starts_with(before), "{content}");
+    let header = "=== Claude Tatsu debug log session started at ";
+    let lines = runner::new_log_lines(&log, 0, "debug.log");
+    let header_line = lines[1]["line"].as_str().unwrap();
+    assert!(
+        header_line.starts_with(header)
+            && header_line.ends_with("Z ===")
+            && header_line.len() == header.len() + "2026-01-01T00:00:00.000Z ===".len(),
+        "{header_line}"
     );
-    assert!(runner::new_log_lines(&log, before.len() as u64, "debug.log").is_empty());
+    let old = json!({"file": "debug.log", "line": "[<ts>] [old] earlier session line"});
+    let boot = vec![
+        json!({"file": "debug.log", "line": header_line}),
+        json!({"file": "debug.log", "line": format!(
+            "[<ts>] [app] started, log file: {}",
+            log.display()
+        )}),
+    ];
+    assert_eq!(lines, [vec![old], boot.clone()].concat());
+    assert_eq!(
+        runner::new_log_lines(&log, before.len() as u64, "debug.log"),
+        boot
+    );
 }
 
 #[tokio::test]

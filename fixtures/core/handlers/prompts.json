@@ -1,0 +1,728 @@
+[
+  {
+    "name": "setHarnessSystemPrompt: custom prompt is stored untrimmed",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      "  Be brief.\n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"  Be brief.\\n\"\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "  Be brief.\n"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: replaces a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      "Be terse."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be terse.\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "Be terse."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: empty removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: whitespace removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      " \n\t 　﻿"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: default text removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: padded default text removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      "\n You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash.  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: default text with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": "You are running inside Tatsu, a desktop app that manages multiple Claude Code sessions across git worktrees. You have access to harness-control MCP tools:\n\n- mcp__harness-control__create_worktree: Create a new worktree with its own Claude session. Always provide a detailed initialPrompt so the new session has full context.\n- mcp__harness-control__list_worktrees: List all active worktrees.\n\nWhen the user wants to start a new task, fix, or investigation that would benefit from isolation, suggest creating a worktree for it rather than doing everything inline. Each worktree is an independent git branch with its own terminal and Claude session.\n\nTatsu also exposes embedded browser tabs — you can open a browser alongside the terminal and see and drive what's in it via the harness-control browser tools (scoped to this worktree only):\n\n- create_browser_tab: open a new browser tab in this worktree (optionally navigating to a URL).\n- list_browser_tabs, get_tab_url, get_tab_dom, get_tab_console_logs: inspect what's in the tab.\n- navigate_tab, back_tab, forward_tab, reload_tab: drive the tab.\n- get_tab_clickables: returns a compact JSON snapshot of in-viewport interactive elements (buttons, links, inputs, [role=button|link|tab|menuitem|checkbox|radio|switch|option|combobox|searchbox|textbox], [tabindex], [contenteditable], [onclick]) — including elements inside open shadow roots. Each entry is {role, name, cx, cy, w, h} with the click center already computed.\n- click_tab, type_tab, scroll_tab, show_cursor: interact with the page — click at (x, y), type into the focused field, scroll, or just move the visible cursor overlay so the user can see what you're about to do.\n- screenshot_tab: visual verification only. Returns JPEG quality 70 by default for context-efficiency; ask for format:'png' only when lossless matters. Screenshot dimensions match the CSS viewport, so coords observed in a screenshot can be passed straight to click_tab.\n\nClick targeting workflow: **prefer get_tab_clickables → match by role + name → call click_tab(cx, cy) for anything you want to click**. It's far cheaper than a screenshot + vision and far more reliable for real DOM targets. Reserve screenshot_tab for confirming a click had the visual effect you wanted, or for targets without accessible names (canvas/SVG/images). The clickables snapshot is in-viewport only and capped at 500 items — if the target isn't there, scroll_tab first, then re-snapshot. To type into a field: click_tab on it first to focus, then type_tab. type_tab also accepts a `key` argument (Enter, Tab, Backspace, ArrowDown, …) for submitting forms or navigating menus.\n\nPrefer these over blind curl/fetch — or shelling out to `open <url>`, which launches the user's default browser outside Tatsu where you can't see the result — when you need to verify rendered UI, inspect a dev server, debug a page the user is looking at, or confirm your changes actually work in the browser.\n\nTatsu also exposes shell tabs for long-running processes — anything that wouldn't naturally exit within a few seconds (dev servers, watchers, `tail -f`, REPL-style tools, long builds). Drive them via the harness-control shell tools (scoped to this worktree only):\n\n- create_shell: spawn a shell tab, optionally with a command to run (`zsh -ilc <command>`). Returns an id — keep it for later reads.\n- list_shells: enumerate existing shell tabs (id, label, command, alive). Check here before spawning — don't start a second `pnpm dev` if one is already running.\n- read_shell_output: read a shell's output, optionally with a `match` regex + `context` lines to scan a long log for errors/warnings without pulling back megabytes.\n- kill_shell: terminate the process AND close the tab. For natural exits (process finishes on its own), the tab stays open for inspection — kill_shell is explicit cleanup.\n\nPrefer these over running long-running commands via Bash — Bash either blocks until the process exits or loses the output stream when backgrounded, whereas a Tatsu shell tab keeps streaming, stays readable via read_shell_output after the fact, and is visible to the user in the Tatsu UI. Short one-shots (`pnpm test`, `tsc --noEmit`, `git status`) still belong on Bash."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: unicode-padded prompt is stored as given",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      " Ünïcode 🐉 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \" Ünïcode 🐉 \"\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptChanged",
+          "payload": " Ünïcode 🐉 "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: non-string throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "prompt.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: boolean throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "prompt.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: null throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of null (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPrompt: absent throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPrompt",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of undefined (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: custom prompt is stored untrimmed",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      "  Be brief.\n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"  Be brief.\\n\"\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "  Be brief.\n"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: replaces a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      "Be terse."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be terse.\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "Be terse."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: empty removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: whitespace removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      " \n\t 　﻿"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: default text removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: padded default text removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      "\n You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable.  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: default text with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": "You are on the main worktree. This is the primary checkout — avoid making direct changes here unless the user explicitly asks. Instead, use this session to plan, review, and coordinate work across worktrees. When the user describes a task, create a new worktree for it with a thorough initialPrompt that gives the new Claude session all the context it needs to work independently. If you need to run a dev server, watcher, or other long-running process here, use the harness-control shell tools (create_shell / list_shells / read_shell_output / kill_shell) rather than Bash, so the output keeps streaming and stays readable."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: unicode-padded prompt is stored as given",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      " Ünïcode 🐉 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \" Ünïcode 🐉 \"\n}",
+      "events": [
+        {
+          "type": "settings/harnessSystemPromptMainChanged",
+          "payload": " Ünïcode 🐉 "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: non-string throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "prompt.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: boolean throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "prompt.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: null throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of null (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setHarnessSystemPromptMain: absent throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setHarnessSystemPromptMain",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"harnessSystemPromptMain\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of undefined (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: custom prompt is stored untrimmed",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      "  Be brief.\n"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"  Be brief.\\n\"\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "  Be brief.\n"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: replaces a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      "Be terse."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\",\n  \"claudeCommand\": \"claude-x\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be terse.\",\n  \"claudeCommand\": \"claude-x\"\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "Be terse."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: empty removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      ""
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: whitespace removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      " \n\t 　﻿"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: default text removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: padded default text removes a stored prompt",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      "\n Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved.  "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: default text with nothing stored",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": "Review this PR. Read the diff, then check for correctness issues, design problems, security concerns, and missing edge cases. Cite file paths and line numbers for anything you flag. Skip restating what the PR does — focus on what could go wrong or be improved."
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: unicode-padded prompt is stored as given",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      " Ünïcode 🐉 "
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \" Ünïcode 🐉 \"\n}",
+      "events": [
+        {
+          "type": "settings/prReviewPromptChanged",
+          "payload": " Ünïcode 🐉 "
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: non-string throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      5
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "prompt.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: boolean throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      true
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "prompt.trim is not a function"
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: null throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [
+      null
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of null (reading 'trim')"
+      }
+    }
+  },
+  {
+    "name": "setPrReviewPrompt: absent throws",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:setPrReviewPrompt",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"prReviewPrompt\": \"Be brief.\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "Cannot read properties of undefined (reading 'trim')"
+      }
+    }
+  }
+]

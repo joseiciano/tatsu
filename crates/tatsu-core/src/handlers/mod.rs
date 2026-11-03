@@ -1,6 +1,8 @@
 mod agents;
 mod onboarding;
+mod prompts;
 mod settings;
+mod toggles;
 
 use std::sync::{Arc, Weak};
 
@@ -10,6 +12,8 @@ pub fn register_core_handlers(core: &Arc<Core>) {
     settings::register(core);
     onboarding::register(core);
     agents::register(core);
+    toggles::register(core);
+    prompts::register(core);
 }
 
 fn upgrade(core: &Weak<Core>) -> Result<Arc<Core>, String> {
