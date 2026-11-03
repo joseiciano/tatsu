@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { buildInputFields, canStart, needsFull, showRunWorkflowItem, startBlockReason, type CanStartArgs } from '.'
+import {
+  buildInputFields,
+  canStart,
+  needsFull,
+  showRunWorkflowItem,
+  startBlockReason,
+  trustNeeded,
+  trustStepRows,
+  type CanStartArgs
+} from '.'
 import { validateWorkflowDefinition, type ResolvedDefinition } from '../../../../shared/workflow-def'
 import type { WorkflowRun, WorkflowRunStatus } from '../../../../shared/state/workflows'
 import type { CodexHookTrustSummary } from '../../../../shared/state/hooks'
@@ -79,6 +88,7 @@ function args(overrides: Partial<CanStartArgs> = {}): CanStartArgs {
     inputs: FILLED,
     needsFull: false,
     allowFull: false,
+    trustNeeded: false,
     definition: ALL_INPUTS,
     ...overrides
   }
@@ -165,9 +175,65 @@ describe('canStart', () => {
     expect(canStart({ ...full, allowFull: true })).toBe(true)
   })
 
+  it('is false for an untrusted repo definition before any other check', () => {
+    const untrusted = args({ trustNeeded: true, consent: 'pending', inputs: {} })
+    expect(canStart(untrusted)).toBe(false)
+    expect(startBlockReason(untrusted)).toBe('Trust this definition to start it')
+    expect(canStart(args({ trustNeeded: false }))).toBe(true)
+  })
+
   it('is false when the definition is missing or broken', () => {
     expect(canStart(args({ definition: null }))).toBe(false)
     expect(startBlockReason(args({ definition: null }))).toBe('Pick a valid workflow')
+  })
+})
+
+describe('trustNeeded', () => {
+  const hash = 'a'.repeat(64)
+
+  it('needs trust for a repo definition with no trusted hash or a different one', () => {
+    expect(trustNeeded({ scope: 'repo', hash, trustedHash: undefined })).toBe(true)
+    expect(trustNeeded({ scope: 'repo', hash, trustedHash: 'b'.repeat(64) })).toBe(true)
+  })
+
+  it('does not need trust for a repo definition trusted at this hash or for a personal one', () => {
+    expect(trustNeeded({ scope: 'repo', hash, trustedHash: hash })).toBe(false)
+    expect(trustNeeded({ scope: 'personal', hash, trustedHash: undefined })).toBe(false)
+  })
+})
+
+describe('trustStepRows', () => {
+  it('lists each step with its agent and resolved permission level, defaults included, and shell steps as shell', () => {
+    const definition = resolve(`name: mixed
+defaults:
+  permissions: full
+steps:
+  - id: plan
+    agent: codex
+    permissions: read-only
+    prompt: go
+  - id: build
+    agent: claude
+    allow: ["pnpm test"]
+    prompt: go
+  - id: test
+    kind: shell
+    run: pnpm test
+`)
+    expect(trustStepRows(definition)).toEqual([
+      { id: 'plan', agent: 'codex', permission: 'read-only' },
+      { id: 'build', agent: 'claude', permission: 'full + pnpm test' },
+      { id: 'test', agent: 'shell', permission: 'shell' }
+    ])
+  })
+
+  it('uses the edit default when neither the step nor defaults set permissions', () => {
+    expect(trustStepRows(resolve(`name: d
+steps:
+  - id: plan
+    agent: claude
+    prompt: go
+`))).toEqual([{ id: 'plan', agent: 'claude', permission: 'edit' }])
   })
 })
 

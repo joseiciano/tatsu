@@ -11,12 +11,14 @@ const { backendApi, storeState } = vi.hoisted(() => {
   const backendApi = {
     getWorkflowDefinition: vi.fn(),
     startWorkflowRun: vi.fn(),
-    acceptHooks: vi.fn()
+    acceptHooks: vi.fn(),
+    trustWorkflowDefinition: vi.fn()
   }
   const storeState: {
     definitions: Record<string, WorkflowDefinitionSummary>
     consent: HooksConsent
-  } = { definitions: {}, consent: 'accepted' }
+    trust: Record<string, string>
+  } = { definitions: {}, consent: 'accepted', trust: {} }
   return { backendApi, storeState }
 })
 
@@ -25,7 +27,8 @@ const { backendApi, storeState } = vi.hoisted(() => {
 vi.mock('../../../backend', () => ({ useBackend: () => backendApi }))
 vi.mock('../../../store', () => ({
   useWorkflowDefinitions: () => storeState.definitions,
-  useHooks: () => ({ consent: storeState.consent, codexTrust: null })
+  useHooks: () => ({ consent: storeState.consent, codexTrust: null }),
+  useWorkflowTrust: (id: string | null) => (id === null ? undefined : storeState.trust[id])
 }))
 
 const SOURCES: Record<string, string> = {
@@ -44,10 +47,40 @@ steps:
     agent: claude
     permissions: full
     prompt: go
+`,
+  'repo:abcdefabcdef:ship': `name: ship
+defaults:
+  permissions: full
+steps:
+  - id: review
+    agent: opencode
+    permissions: read-only
+    prompt: review
+  - id: fix
+    agent: claude
+    prompt: fix
+  - id: test
+    kind: shell
+    run: pnpm test
 `
 }
 
+const REPO_ID = 'repo:abcdefabcdef:ship'
+const DISK_HASH = 'd'.repeat(64)
+
 function summary(id: string, issues: string[] = []): WorkflowDefinitionSummary {
+  if (id === REPO_ID) {
+    return {
+      id,
+      name: 'ship',
+      scope: 'repo',
+      repoRoot: '/repo',
+      path: '/repo/.harness/workflows/ship.yaml',
+      hash: 'slice-hash',
+      stepIds: [],
+      issues
+    }
+  }
   const name = id.replace('personal:', '')
   return { id, name, scope: 'personal', path: `/defs/${name}.yaml`, hash: `h-${name}`, stepIds: [], issues }
 }
@@ -55,7 +88,12 @@ function summary(id: string, issues: string[] = []): WorkflowDefinitionSummary {
 function detail(id: string): WorkflowDefinitionDetail | null {
   const source = SOURCES[id]
   if (source === undefined) return null
-  return { ...validateWorkflowDefinition(source), source, summary: summary(id) }
+  const base = summary(id)
+  return {
+    ...validateWorkflowDefinition(source),
+    source,
+    summary: id === REPO_ID ? { ...base, hash: DISK_HASH } : base
+  }
 }
 
 let container: HTMLDivElement
@@ -66,9 +104,12 @@ beforeEach(() => {
   storeState.definitions = {
     'personal:plan': summary('personal:plan'),
     'personal:full': summary('personal:full'),
-    'personal:broken': summary('personal:broken', ['steps[0].prompt is required'])
+    'personal:broken': summary('personal:broken', ['steps[0].prompt is required']),
+    [REPO_ID]: summary(REPO_ID)
   }
   storeState.consent = 'accepted'
+  storeState.trust = {}
+  backendApi.trustWorkflowDefinition.mockReset().mockResolvedValue({ ok: true })
   backendApi.getWorkflowDefinition.mockReset().mockImplementation(async (id: string) => detail(id))
   backendApi.startWorkflowRun.mockReset().mockResolvedValue({ runId: 'run-1' })
   backendApi.acceptHooks.mockReset().mockResolvedValue(true)
@@ -220,6 +261,68 @@ describe('LaunchSheet', () => {
     expect(q('[role="alert"]').textContent).toBe('A workflow is already running in this worktree')
     expect(onClose).not.toHaveBeenCalled()
     expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+
+  it('shows no trust panel for a personal definition', async () => {
+    await mount()
+    await select('personal:full')
+    expect(container.querySelector('section')).toBeNull()
+  })
+
+  it('shows the repo source and resolved step permissions and keeps Start disabled until trusted', async () => {
+    await mount()
+    await select(REPO_ID)
+    const region = q<HTMLElement>('section[aria-labelledby]')
+    expect(document.getElementById(region.getAttribute('aria-labelledby') ?? '')?.textContent).toBe(
+      'Trust this repo workflow?'
+    )
+    expect(q<HTMLPreElement>('pre').textContent).toBe(SOURCES[REPO_ID])
+    const rows = [...region.querySelectorAll('tbody tr')].map((row) =>
+      [...row.querySelectorAll('td')].map((cell) => cell.textContent)
+    )
+    expect(rows).toEqual([
+      ['review', 'opencode', 'read-only'],
+      ['fix', 'claude', 'full'],
+      ['test', 'shell', 'shell']
+    ])
+    expect(startButton().disabled).toBe(true)
+    expect(container.textContent).toContain('Trust this definition to start it')
+  })
+
+  it('trusts the hash of the source it displayed, not the slice summary hash, then enables Start', async () => {
+    await mount()
+    await select(REPO_ID)
+    await click(buttonByText('Trust this definition'))
+    expect(backendApi.trustWorkflowDefinition).toHaveBeenCalledWith(REPO_ID, DISK_HASH)
+    expect(backendApi.startWorkflowRun).not.toHaveBeenCalled()
+
+    storeState.trust = { [REPO_ID]: DISK_HASH }
+    await mount()
+    expect(container.querySelector('section')).toBeNull()
+    expect(container.textContent).toContain('Confirm full access to start')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    expect(startButton().disabled).toBe(false)
+  })
+
+  it('asks again when the trusted hash differs from the displayed source', async () => {
+    storeState.trust = { [REPO_ID]: 'e'.repeat(64) }
+    await mount()
+    await select(REPO_ID)
+    expect(container.querySelector('section')).not.toBeNull()
+    expect(startButton().disabled).toBe(true)
+  })
+
+  it('shows a trust refusal inline', async () => {
+    backendApi.trustWorkflowDefinition.mockResolvedValue({
+      error: 'The workflow definition changed on disk; review it again before trusting it'
+    })
+    await mount()
+    await select(REPO_ID)
+    await click(buttonByText('Trust this definition'))
+    expect(q('[role="alert"]').textContent).toBe(
+      'The workflow definition changed on disk; review it again before trusting it'
+    )
+    expect(startButton().disabled).toBe(true)
   })
 
   it('closes on Escape', async () => {

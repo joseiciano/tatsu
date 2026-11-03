@@ -1,13 +1,21 @@
-import { useId, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { Loader2, Play, ShieldAlert, X } from 'lucide-react'
 import type { HooksConsent } from '../../../../shared/state/hooks'
 import { useFocusTrap } from '../../../hooks/useFocusTrap'
-import type { LaunchInputField } from '../launch-sheet-helpers'
+import type { LaunchInputField, TrustStepRow } from '../launch-sheet-helpers'
+import { TrustPanel } from './TrustPanel'
 
 export interface LaunchSheetOption {
   id: string
   name: string
   issue: string | null
+  repo: boolean
+}
+
+export interface LaunchSheetTrust {
+  source: string
+  rows: TrustStepRow[]
+  trusting: boolean
 }
 
 export interface LaunchSheetFormProps {
@@ -20,6 +28,7 @@ export interface LaunchSheetFormProps {
   installingHooks: boolean
   needsFull: boolean
   allowFull: boolean
+  trust: LaunchSheetTrust | null
   blockReason: string | null
   submitting: boolean
   error: string | null
@@ -27,6 +36,7 @@ export interface LaunchSheetFormProps {
   onInputChange: (name: string, value: string) => void
   onInstallHooks: () => void
   onAllowFullChange: (allowFull: boolean) => void
+  onTrust: () => void
   onStart: () => void
   onClose: () => void
 }
@@ -35,8 +45,9 @@ const FIELD_CLASS =
   'w-full bg-app/40 border border-border rounded px-2.5 py-1.5 text-xs text-fg-bright placeholder:text-faint focus:outline-none focus:border-accent disabled:opacity-50'
 const LABEL_CLASS = 'block text-xs font-medium text-dim uppercase tracking-wider'
 
-function optionLabel({ name, issue }: LaunchSheetOption): string {
-  return issue === null ? name : `${name} (${issue})`
+function optionLabel({ name, issue, repo }: LaunchSheetOption): string {
+  const label = repo ? `${name} (repo)` : name
+  return issue === null ? label : `${label} (${issue})`
 }
 
 export function LaunchSheetForm({
@@ -49,6 +60,7 @@ export function LaunchSheetForm({
   installingHooks,
   needsFull,
   allowFull,
+  trust,
   blockReason,
   submitting,
   error,
@@ -56,6 +68,7 @@ export function LaunchSheetForm({
   onInputChange,
   onInstallHooks,
   onAllowFullChange,
+  onTrust,
   onStart,
   onClose
 }: LaunchSheetFormProps): JSX.Element {
@@ -65,8 +78,16 @@ export function LaunchSheetForm({
 
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const selectRef = useRef<HTMLSelectElement | null>(null)
+  const startRef = useRef<HTMLButtonElement | null>(null)
+  const trustShown = trust !== null
+  const trustWasShown = useRef(trustShown)
 
   useFocusTrap(dialogRef, { active: true, onEscape: onClose, initialFocus: selectRef })
+
+  useEffect(() => {
+    if (trustWasShown.current && !trustShown && !startRef.current?.disabled) startRef.current?.focus()
+    trustWasShown.current = trustShown
+  }, [trustShown])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-app/80 backdrop-blur-sm" onMouseDown={onClose}>
@@ -128,6 +149,16 @@ export function LaunchSheetForm({
                 ))}
               </select>
             </div>
+          )}
+
+          {trust !== null && (
+            <TrustPanel
+              source={trust.source}
+              rows={trust.rows}
+              trusting={trust.trusting}
+              disabled={submitting}
+              onTrust={onTrust}
+            />
           )}
 
           {fields.map((field) => {
@@ -218,6 +249,7 @@ export function LaunchSheetForm({
               Cancel
             </button>
             <button
+              ref={startRef}
               type="submit"
               disabled={blockReason !== null}
               aria-describedby={blockReason !== null ? reasonId : undefined}
