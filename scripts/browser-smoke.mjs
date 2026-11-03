@@ -196,6 +196,49 @@ async function flowHangCancel(page, backend) {
   })
 }
 
+async function definitionText(overlay, term) {
+  return (await overlay.locator('dt', { hasText: term }).locator('xpath=following-sibling::dd[1]').textContent())?.trim()
+}
+
+async function flowExitMarkDone(page, backend) {
+  await scenario(page, 'exit-mark-done', async (shot) => {
+    if (curlArg !== 'yes') {
+      throw new Error('exit-no-complete needs curl: without it the Stop hook fails open and the step completes by fallback')
+    }
+    await startFromLaunchSheet(page, 'browser-exit', shot)
+    const row = needsYouRow(page, 'browser-exit')
+    await row.filter({ hasText: 'Step failed · exit' }).waitFor()
+    await stepStrip(page, 'exit paused').waitFor()
+    const runId = await liveRunId(backend, 'browser-exit')
+    await shot('needs-you-failed')
+
+    await row.getByRole('button', { name: 'Jump to tab: browser-exit on repo' }).click()
+    const overlay = page.getByRole('region', { name: 'Claude Code exited.' })
+    await overlay.waitFor()
+    const status = await definitionText(overlay, 'Status')
+    const completedBy = await definitionText(overlay, 'Completed by')
+    if (status !== 'failed' || completedBy !== 'process exit') {
+      throw new Error(`overlay shows status=${status} completedBy=${completedBy}, expected failed/process exit`)
+    }
+    log(`exit-mark-done: overlay status=${status} completedBy=${completedBy} summary=${JSON.stringify(await definitionText(overlay, 'Summary'))}`)
+
+    const form = overlay.getByRole('form', { name: 'Mark step done' })
+    await form.getByLabel(/^Summary/).fill('Marked done from the browser smoke')
+    await shot('mark-done-form')
+    await form.getByRole('button', { name: 'Mark done' }).click()
+
+    await form.waitFor({ state: 'detached' })
+    await row.waitFor({ state: 'detached' })
+    await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+    await shot('run-done')
+    const record = await waitForRunStatus(backend, runId, 'done')
+    const last = record.attempts.filter((a) => a.stepId === 'exit').at(-1)
+    if (last?.result?.completedBy !== 'user' || last.result.summary !== 'Marked done from the browser smoke') {
+      throw new Error(`exit step result ${JSON.stringify(last?.result)}, expected completedBy user with the typed summary`)
+    }
+  })
+}
+
 async function main() {
   const backend = connect()
   await backend.opened
@@ -215,6 +258,7 @@ async function main() {
       await shot('worktree-row')
     })
     await flowHangCancel(page, backend)
+    await flowExitMarkDone(page, backend)
   } catch {
     failed = true
   } finally {
