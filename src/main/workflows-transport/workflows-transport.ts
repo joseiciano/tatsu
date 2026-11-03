@@ -41,6 +41,7 @@ const START_ERRORS: Record<StartRefusal, string> = {
   'unknown-definition': 'Unknown workflow definition',
   'invalid-definition': 'The workflow definition is invalid',
   'unsupported-step': 'The workflow uses a step kind this version cannot run',
+  'full-permission-unconfirmed': 'This workflow has a full-access step; confirm full access to start it',
   'worktree-busy': 'A workflow is already running in this worktree',
   'unknown-worktree': 'Unknown worktree',
   'invalid-inputs': 'The workflow inputs are invalid',
@@ -91,6 +92,8 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
   const defId = ownValue(payload, 'defId')
   const worktreePath = ownValue(payload, 'worktreePath')
   const rawInputs = ownValue(payload, 'inputs', {})
+  const allowFull = ownValue(payload, 'allowFull')
+  if (allowFull !== undefined && typeof allowFull !== 'boolean') return null
   if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(worktreePath, WORKTREE_PATH_MAX_CHARS)) return null
   if (!isPlainObject(rawInputs)) return null
   const entries = Object.entries(rawInputs)
@@ -100,7 +103,7 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
     if (typeof value !== 'string') return null
     Object.defineProperty(inputs, key, { value, enumerable: true, writable: true, configurable: true })
   }
-  return { defId, worktreePath, inputs }
+  return allowFull === true ? { defId, worktreePath, inputs, allowFull } : { defId, worktreePath, inputs }
 }
 
 function parseMarkDone(payload: unknown): MarkDoneRequest | null {

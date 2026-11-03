@@ -137,6 +137,19 @@ function expectThat(condition, message, record) {
   if (!condition) fail(message, record)
 }
 
+const FULL_UNCONFIRMED_ERROR = 'This workflow has a full-access step; confirm full access to start it'
+
+async function scenarioFullRefused(worktreePath) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const response = await request('workflows:startRun', { defId: 'personal:smoke-full', worktreePath, inputs: {} })
+    if (response?.error === FULL_UNCONFIRMED_ERROR) break
+    if (response?.error !== STARTING_ERROR || Date.now() > deadline) fail('scenario 0 full-access start was not refused', response)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  console.log('scenario 0 OK: full-access start without allowFull refused')
+}
+
 async function scenarioAgentThenShell(worktreePath) {
   const runId = await startRun('personal:smoke', worktreePath)
   const record = await runSettled(runId)
@@ -212,14 +225,16 @@ async function main() {
       wt &&
       state.hooks.consent === 'accepted' &&
       state.workflows.definitions['personal:smoke'] &&
-      state.workflows.definitions['personal:smoke-retry']
+      state.workflows.definitions['personal:smoke-retry'] &&
+      state.workflows.definitions['personal:smoke-full']
     return ready ? wt.path : undefined
   })
-  for (const id of ['personal:smoke', 'personal:smoke-retry']) {
+  for (const id of ['personal:smoke', 'personal:smoke-retry', 'personal:smoke-full']) {
     const issues = state.workflows.definitions[id].issues
     if (issues.length > 0) fail(`definition ${id} has issues`, issues)
   }
 
+  await scenarioFullRefused(worktreePath)
   await scenarioAgentThenShell(worktreePath)
   await scenarioFailRetry(worktreePath)
   ws.close()

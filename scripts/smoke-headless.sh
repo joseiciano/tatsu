@@ -107,6 +107,14 @@ steps:
     kind: shell
     run: test -f flag
 YAML
+cat > "$HARNESS_DATA_DIR/workflows/smoke-full.yaml" <<'YAML'
+name: smoke-full
+steps:
+  - id: plan
+    agent: claude
+    permissions: full
+    prompt: "This must never start without allowFull."
+YAML
 
 if command -v curl >/dev/null 2>&1; then CURL=yes; else CURL=no; fi
 echo "curl present: $CURL"

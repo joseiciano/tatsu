@@ -36,6 +36,14 @@ steps:
     prompt: Plan it
 `
 
+const FULL_YAML = `name: Full flow
+steps:
+  - id: plan
+    agent: claude
+    permissions: full
+    prompt: Plan it
+`
+
 type Handler = (ctx: unknown, ...args: unknown[]) => unknown
 
 class FakeTransport {
@@ -338,6 +346,16 @@ describe('workflow action requests', () => {
     ])
   })
 
+  it('passes allowFull to the runner only when it is exactly true', async () => {
+    const base = { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {} }
+    await transport.call('workflows:startRun', { ...base, allowFull: true })
+    await transport.call('workflows:startRun', { ...base, allowFull: false })
+    expect(runner.calls).toEqual([
+      ['start', { ...base, allowFull: true }],
+      ['start', base]
+    ])
+  })
+
   const badIds: unknown[] = [undefined, null, 42, '', '../run', 'a/b', 'x'.repeat(129), { runId: RUN }, [RUN]]
   const badStartPayloads: unknown[] = [
     undefined,
@@ -352,6 +370,9 @@ describe('workflow action requests', () => {
     { defId: 'personal:plan', worktreePath: '/wt/a', inputs: { task: 1 } },
     { defId: 'personal:plan', worktreePath: '/wt/a', inputs: null },
     Object.create({ defId: 'personal:plan', worktreePath: '/wt/a' }),
+    { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: 'true' },
+    { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: 1 },
+    { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: null },
     new Map([['defId', 'personal:plan']])
   ]
   const badMarkDone: unknown[] = [
@@ -458,7 +479,7 @@ describe('workflows:startRun against the runner', () => {
     cancel: () => {},
     onEvent: () => () => {}
   })
-  function realRunner(options: { labs?: boolean; consent?: 'accepted' | 'pending' } = {}) {
+  function realRunner(options: { labs?: boolean; consent?: 'accepted' | 'pending'; yaml?: string } = {}) {
     const store = new Store({
       ...initialState,
       hooks: { ...initialState.hooks, consent: options.consent ?? 'accepted' },
@@ -471,7 +492,8 @@ describe('workflows:startRun against the runner', () => {
         labs: { ...initialState.settings.labs, workflows: options.labs ?? true }
       }
     })
-    const detail = { ...validateWorkflowDefinition(VALID_YAML), source: VALID_YAML }
+    const yaml = options.yaml ?? VALID_YAML
+    const detail = { ...validateWorkflowDefinition(yaml), source: yaml }
     const live = new WorkflowRunner({
       store,
       loader: {
@@ -535,6 +557,18 @@ describe('workflows:startRun against the runner', () => {
     expect(await own.call('workflows:startRun', payload)).toEqual({
       error: 'A workflow is already running in this worktree'
     })
+  })
+
+  it('refuses a full-access step without allowFull and starts it with allowFull true', async () => {
+    const own = realRunner({ yaml: FULL_YAML })
+    expect(await own.call('workflows:startRun', payload)).toEqual({
+      error: 'This workflow has a full-access step; confirm full access to start it'
+    })
+    expect(await own.call('workflows:startRun', { ...payload, allowFull: false })).toEqual({
+      error: 'This workflow has a full-access step; confirm full access to start it'
+    })
+    expect(await own.call('workflows:startRun', { ...payload, allowFull: 'true' })).toEqual({ error: 'invalid request' })
+    expect(await own.call('workflows:startRun', { ...payload, allowFull: true })).toEqual({ runId: 'id-1' })
   })
 
   it('returns the unknown worktree and missing input errors without echoing the input', async () => {
