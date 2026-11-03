@@ -30,6 +30,7 @@ vi.mock('../hooks', () => ({
 import { homedir } from 'os'
 import { join } from 'path'
 import { log } from '../debug'
+import { makeHookCommand } from '../hooks'
 import {
   buildSpawnArgs,
   CLAUDE_COMPLETE_STEP_TOOL,
@@ -305,6 +306,27 @@ describe('hook install / dedup', () => {
       )
       expect(harnessEntries).toHaveLength(1)
     }
+  })
+
+  it('installHooks() upgrades an old Stop command to the current one, leaving one Tatsu Stop entry', () => {
+    const oldStop = String.raw`bash -c 'h="$HARNESS_TERMINAL_ID"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; d=/tmp/harness-status; mkdir -p "$d"; p=$(cat); [ -z "$p" ] && p=null; printf "{\"event\":\"Stop\",\"ts\":%s,\"payload\":%s}\n" "$(date +%s)" "$p" >> "$d/$h.ndjson"'`
+    const userStop = { hooks: [{ type: 'command', command: 'say done' }] }
+    fsState.files.set(
+      SETTINGS_PATH,
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: 'command', command: oldStop, timeout: 5 }] }, userStop] }
+      })
+    )
+
+    installHooks()
+
+    const stop = JSON.parse(fsState.files.get(SETTINGS_PATH) as string).hooks.Stop as Array<{
+      hooks: { command: string }[]
+    }>
+    const tatsu = stop.filter((entry) => entry.hooks.some((h) => h.command.includes('/tmp/harness-status')))
+    expect(tatsu).toEqual([{ hooks: [{ type: 'command', command: makeHookCommand('Stop'), timeout: 5 }] }])
+    expect(tatsu[0].hooks[0].command).not.toBe(oldStop)
+    expect(stop).toContainEqual(userStop)
   })
 
   it('uninstallHooks() removes harness entries but preserves user-authored hooks', () => {
