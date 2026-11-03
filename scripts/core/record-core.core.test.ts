@@ -1,14 +1,16 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { isDeepStrictEqual } from 'node:util'
-import { it } from 'vitest'
+import { expect, it } from 'vitest'
 import { configRecorder } from './recorders/config'
+import { replyOf } from './recorders/handler-boot'
+import { agentKindRecorder, handlerRecorders } from './recorders/handlers'
 import type { Recorder } from './recorders/types'
 
 const update = process.env.CORE_UPDATE === '1'
 
 type AnyRecorder = Recorder<{ name: string }, unknown>
 
-const recorders = [configRecorder] as unknown as AnyRecorder[]
+const recorders = [configRecorder, agentKindRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
 
 function diff(path: string, name: string, before: unknown, after: unknown): string {
   const text = (value: unknown): string =>
@@ -24,30 +26,32 @@ function diff(path: string, name: string, before: unknown, after: unknown): stri
   return `${path} > ${name}\n${lines(before, '-')}\n${lines(after, '+')}`
 }
 
-it.runIf(process.env.CORE_RECORD === '1')('records core golden values from the TS code', () => {
+it.runIf(process.env.CORE_RECORD === '1')('records core golden values from the TS code', async () => {
   const writes: Array<{ path: string; cases: unknown[] }> = []
   const refusals: string[] = []
 
   for (const { path, record, recordedOf, withRecorded } of recorders) {
     const loaded = JSON.parse(readFileSync(path, 'utf8')) as Array<{ name: string }>
     let changed = false
-    const cases = loaded.map((fixture) => {
-      const after = record(fixture)
+    const cases: unknown[] = []
+    for (const fixture of loaded) {
+      const after = await record(fixture)
       const before = recordedOf(fixture)
       if (before === undefined) {
         changed = true
         process.stdout.write(`recorded: ${path} > ${fixture.name}\n`)
-        return withRecorded(fixture, after)
-      }
-      if (isDeepStrictEqual(before, after)) return fixture
-      if (!update) {
+        cases.push(withRecorded(fixture, after))
+      } else if (isDeepStrictEqual(before, after)) {
+        cases.push(fixture)
+      } else if (!update) {
         refusals.push(diff(path, fixture.name, before, after))
-        return fixture
+        cases.push(fixture)
+      } else {
+        changed = true
+        process.stdout.write(`updated: ${diff(path, fixture.name, before, after)}\n`)
+        cases.push(withRecorded(fixture, after))
       }
-      changed = true
-      process.stdout.write(`updated: ${diff(path, fixture.name, before, after)}\n`)
-      return withRecorded(fixture, after)
-    })
+    }
     if (changed) writes.push({ path, cases })
   }
 
@@ -61,4 +65,16 @@ it.runIf(process.env.CORE_RECORD === '1')('records core golden values from the T
     writeFileSync(path, `${JSON.stringify(cases, null, 2)}\n`)
   }
   if (writes.length === 0) process.stdout.write('core fixtures: no change\n')
+})
+
+it('encodes handler replies as value, noValue or error', async () => {
+  expect(await replyOf(() => undefined)).toEqual({ noValue: true })
+  expect(await replyOf(async () => undefined)).toEqual({ noValue: true })
+  expect(await replyOf(() => null)).toEqual({ value: null })
+  expect(await replyOf(async () => ({ ok: false }))).toEqual({ value: { ok: false } })
+  expect(
+    await replyOf(() => {
+      throw new Error('nope')
+    })
+  ).toEqual({ error: 'nope' })
 })

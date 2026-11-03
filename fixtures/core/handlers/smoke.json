@@ -1,0 +1,540 @@
+[
+  {
+    "name": "themesDir: reloadCustomThemes reads the copied folder",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:reloadCustomThemes",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "themesDir": "basic",
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "settings/customThemesChanged",
+          "payload": [
+            {
+              "id": "ocean",
+              "name": "Ocean",
+              "mode": "dark",
+              "colors": {
+                "background": "#001122"
+              }
+            }
+          ]
+        }
+      ],
+      "reply": {
+        "value": 1
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [themes] skipping broken.json: missing required name/mode or invalid shape"
+        }
+      ]
+    }
+  },
+  {
+    "name": "repoFiles: repoConfig:set merges and writes .harness.json",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "repoConfig:set",
+    "args": [
+      "$CASE/repos/app",
+      {
+        "setupCommand": "pnpm install",
+        "teardownCommand": null
+      }
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "repoFiles": {
+      "app": "{\n  \"teardownCommand\": \"make clean\",\n  \"baseBranch\": \"main\"\n}\n",
+      "other": null
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [
+        {
+          "type": "repoConfigs/changed",
+          "payload": {
+            "repoRoot": "$CASE/repos/app",
+            "config": {
+              "version": 1,
+              "setupCommand": "pnpm install"
+            }
+          }
+        }
+      ],
+      "reply": {
+        "value": {
+          "version": 1,
+          "setupCommand": "pnpm install"
+        }
+      },
+      "repoFilesAfter": {
+        "app": "{\n  \"version\": 1,\n  \"setupCommand\": \"pnpm install\"\n}\n",
+        "other": null
+      }
+    }
+  },
+  {
+    "name": "activityBefore: activity:clear drops one worktree",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "activity:clear",
+    "args": [
+      "/w/a"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "activityBefore": "{\"/w/a\": {\"branch\": \"a\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}]}}",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "activityAfter": "{\"/w/b\":{\"branch\":\"b\",\"createdAt\":1767225596000,\"events\":[{\"t\":1767225596000,\"s\":\"idle\"}]}}"
+    }
+  },
+  {
+    "name": "debugLogBefore: existing lines are not new lines",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "debug:logError",
+    "args": [
+      "Panel",
+      "TypeError",
+      "boom",
+      "at x",
+      "at Panel"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "debugLogBefore": "[00:00:00.000] [old] earlier session line\n",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": true
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [renderer-error] [Panel] TypeError: boom"
+        },
+        {
+          "file": "debug.log",
+          "line": "Stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "at x"
+        },
+        {
+          "file": "debug.log",
+          "line": "Component stack:"
+        },
+        {
+          "file": "debug.log",
+          "line": "at Panel"
+        }
+      ]
+    }
+  },
+  {
+    "name": "ids + secrets: connections:add stores the token under the injected id",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "connections:add",
+    "args": [
+      {
+        "label": "Box",
+        "url": "ws://box:37291",
+        "kind": "remote"
+      },
+      "tok-1"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "ids": [
+      "11111111-2222-4333-8444-555555555555"
+    ],
+    "secretsBefore": {
+      "backend-token:11111111-2222-4333-8444-555555555555": null,
+      "githubToken": "gh-keep"
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    },\n    {\n      \"id\": \"11111111-2222-4333-8444-555555555555\",\n      \"label\": \"Box\",\n      \"url\": \"ws://box:37291\",\n      \"kind\": \"remote\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [],
+      "reply": {
+        "value": {
+          "id": "11111111-2222-4333-8444-555555555555",
+          "label": "Box",
+          "url": "ws://box:37291",
+          "kind": "remote",
+          "addedAt": 1767225600000
+        }
+      },
+      "secretsAfter": {
+        "backend-token:11111111-2222-4333-8444-555555555555": "tok-1",
+        "githubToken": "gh-keep"
+      }
+    }
+  },
+  {
+    "name": "randomBytes: rotateWsToken uses the injected bytes",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:rotateWsToken",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "randomBytes": [
+      "abababababababababababababababababababababababababababababababab"
+    ],
+    "secretsBefore": {
+      "wsAuthToken": "old-token"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": "abababababababababababababababababababababababababababababababab"
+      },
+      "secretsAfter": {
+        "wsAuthToken": "abababababababababababababababababababababababababababababababab"
+      },
+      "logLines": [
+        {
+          "file": "debug.log",
+          "line": "[<ts>] [ws-transport] auth token rotated — takes effect on next launch"
+        }
+      ]
+    }
+  },
+  {
+    "name": "hooksInstaller ok: hooks:accept saves consent",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "hooks:accept",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "hooksInstaller": "ok",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"accepted\",\n  \"hooksMigratedToGlobal\": true\n}",
+      "events": [
+        {
+          "type": "hooks/consentChanged",
+          "payload": "accepted"
+        }
+      ],
+      "reply": {
+        "value": true
+      }
+    }
+  },
+  {
+    "name": "hooksInstaller throw: hooks:accept fails before saving",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "hooks:accept",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "hooksInstaller": "throw",
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "error": "hooks installer failed (fixture)"
+      }
+    }
+  },
+  {
+    "name": "wsBound: getWsTransportInfo reports host, port and token",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:getWsTransportInfo",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "wsBound": {
+      "host": "0.0.0.0",
+      "port": 41234
+    },
+    "secretsBefore": {
+      "wsAuthToken": "case-token"
+    },
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": {
+          "port": 41234,
+          "token": "case-token",
+          "host": "0.0.0.0"
+        }
+      },
+      "secretsAfter": {
+        "wsAuthToken": "case-token"
+      }
+    }
+  },
+  {
+    "name": "wsBound null: getWsTransportInfo returns null",
+    "now": 1767225600000,
+    "kind": "request",
+    "channel": "config:getWsTransportInfo",
+    "args": [],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "wsBound": null,
+    "expected": {
+      "configAfter": null,
+      "events": [],
+      "reply": {
+        "value": null
+      }
+    }
+  },
+  {
+    "name": "kind signal: setLastEffectiveAppBg saves the hex",
+    "now": 1767225600000,
+    "kind": "signal",
+    "channel": "config:setLastEffectiveAppBg",
+    "args": [
+      "#101418"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"lastEffectiveAppBg\": \"#101418\"\n}",
+      "events": []
+    }
+  },
+  {
+    "name": "kind signal: same hex is not saved again",
+    "now": 1767225600000,
+    "kind": "signal",
+    "channel": "config:setLastEffectiveAppBg",
+    "args": [
+      "#101418"
+    ],
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"lastEffectiveAppBg\": \"#101418\"\n}",
+    "expected": {
+      "configAfter": null,
+      "events": []
+    }
+  },
+  {
+    "name": "worktrees: listChanged prunes the removed worktree's scratchpad note from config",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"keep\",\n      \"$CASE/repos/app-wt2\": \"drop\"\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "app-wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "app-wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      }
+    ],
+    "event": {
+      "type": "worktrees/listChanged",
+      "payload": [
+        {
+          "path": "$CASE/repos/app",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/app-wt1",
+          "branch": "app-wt1",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": false,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        }
+      ]
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"scratchpadNotes\": {\n    \"$CASE/repos/app\": {\n      \"$CASE/repos/app-wt1\": \"keep\"\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "worktrees/listChanged",
+          "payload": [
+            {
+              "path": "$CASE/repos/app",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/app-wt1",
+              "branch": "app-wt1",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": false,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            }
+          ]
+        },
+        {
+          "type": "scratchpad/worktreeRemoved",
+          "payload": "$CASE/repos/app-wt2"
+        }
+      ]
+    }
+  },
+  {
+    "name": "worktrees: listChanged clears the removed worktree's snooze entry from config",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snooze\": {\n    \"$CASE/repos/app-wt1\": {\n      \"path\": \"$CASE/repos/app-wt1\",\n      \"snoozedAt\": 1767225600000,\n      \"wakeAt\": 1767229200000\n    },\n    \"$CASE/repos/app-wt2\": {\n      \"path\": \"$CASE/repos/app-wt2\",\n      \"snoozedAt\": 1767225600000,\n      \"wakeAt\": 1767229200000\n    }\n  }\n}",
+    "worktrees": [
+      {
+        "path": "$CASE/repos/app",
+        "branch": "main",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": true,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt1",
+        "branch": "app-wt1",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      },
+      {
+        "path": "$CASE/repos/app-wt2",
+        "branch": "app-wt2",
+        "head": "0000000000000000000000000000000000000000",
+        "isBare": false,
+        "isMain": false,
+        "createdAt": 0,
+        "repoRoot": "$CASE/repos/app"
+      }
+    ],
+    "event": {
+      "type": "worktrees/listChanged",
+      "payload": [
+        {
+          "path": "$CASE/repos/app",
+          "branch": "main",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": true,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        },
+        {
+          "path": "$CASE/repos/app-wt1",
+          "branch": "app-wt1",
+          "head": "0000000000000000000000000000000000000000",
+          "isBare": false,
+          "isMain": false,
+          "createdAt": 0,
+          "repoRoot": "$CASE/repos/app"
+        }
+      ]
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [\n    \"$CASE/repos/app\"\n  ],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snooze\": {\n    \"$CASE/repos/app-wt1\": {\n      \"path\": \"$CASE/repos/app-wt1\",\n      \"snoozedAt\": 1767225600000,\n      \"wakeAt\": 1767229200000\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "worktrees/listChanged",
+          "payload": [
+            {
+              "path": "$CASE/repos/app",
+              "branch": "main",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": true,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            },
+            {
+              "path": "$CASE/repos/app-wt1",
+              "branch": "app-wt1",
+              "head": "0000000000000000000000000000000000000000",
+              "isBare": false,
+              "isMain": false,
+              "createdAt": 0,
+              "repoRoot": "$CASE/repos/app"
+            }
+          ]
+        },
+        {
+          "type": "snooze/clear",
+          "payload": "$CASE/repos/app-wt2"
+        }
+      ]
+    }
+  },
+  {
+    "name": "kind event + setup: snooze/set persists every snoozed worktree",
+    "now": 1767225600000,
+    "kind": "event",
+    "configBefore": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true\n}",
+    "setup": [
+      {
+        "type": "snooze/set",
+        "payload": {
+          "path": "/w/a",
+          "snoozedAt": 1767225600000,
+          "wakeAt": 1767229200000
+        }
+      }
+    ],
+    "event": {
+      "type": "snooze/set",
+      "payload": {
+        "path": "/w/b",
+        "snoozedAt": 1767225600000,
+        "wakeAt": 1767232800000
+      }
+    },
+    "expected": {
+      "configAfter": "{\n  \"schemaVersion\": 9,\n  \"windowBounds\": null,\n  \"repoRoots\": [],\n  \"harnessConfig\": {\n    \"version\": 1,\n    \"resources\": []\n  },\n  \"connections\": [\n    {\n      \"id\": \"local\",\n      \"label\": \"Local\",\n      \"url\": \"\",\n      \"kind\": \"local\",\n      \"addedAt\": 1767225600000\n    }\n  ],\n  \"activeBackendId\": \"local\",\n  \"hooksConsent\": \"pending\",\n  \"hooksMigratedToGlobal\": true,\n  \"snooze\": {\n    \"/w/a\": {\n      \"path\": \"/w/a\",\n      \"snoozedAt\": 1767225600000,\n      \"wakeAt\": 1767229200000\n    },\n    \"/w/b\": {\n      \"path\": \"/w/b\",\n      \"snoozedAt\": 1767225600000,\n      \"wakeAt\": 1767232800000\n    }\n  }\n}",
+      "events": [
+        {
+          "type": "snooze/set",
+          "payload": {
+            "path": "/w/b",
+            "snoozedAt": 1767225600000,
+            "wakeAt": 1767232800000
+          }
+        }
+      ]
+    }
+  }
+]

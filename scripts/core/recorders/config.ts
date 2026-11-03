@@ -23,7 +23,7 @@ interface ConfigRecorded {
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
 
-function loadAndSave({ name, now, input }: ConfigCase): ConfigRecorded {
+export function loadAndSave({ name, now, input }: ConfigCase): ConfigRecorded {
   if (input !== null && LONE_SURROGATE.test(input)) {
     throw new Error(`${name}: input must hold lone surrogates only as \\u escapes`)
   }

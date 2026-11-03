@@ -1,0 +1,41 @@
+[
+  {
+    "name": "known: claude",
+    "input": "claude",
+    "expected": "claude"
+  },
+  {
+    "name": "known: codex",
+    "input": "codex",
+    "expected": "codex"
+  },
+  {
+    "name": "known: opencode",
+    "input": "opencode",
+    "expected": "opencode"
+  },
+  {
+    "name": "known: pi",
+    "input": "pi",
+    "expected": "pi"
+  },
+  {
+    "name": "unknown value",
+    "input": "gpt",
+    "expected": "claude"
+  },
+  {
+    "name": "empty string",
+    "input": "",
+    "expected": "claude"
+  },
+  {
+    "name": "wrong case",
+    "input": "Codex",
+    "expected": "claude"
+  },
+  {
+    "name": "absent",
+    "expected": "claude"
+  }
+]
