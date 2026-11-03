@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
-import { renderTemplate } from '../../../shared/workflow-def'
+import { renderTemplate, type WorkflowAgent } from '../../../shared/workflow-def'
 import { isPermissionLevel, sanitizeBashAllow } from '../../../shared/permission-level'
 import type { PtyStatus, TerminalTab } from '../../../shared/state/terminals'
 import type { StepSpawnExtras } from '../../agent-spawn'
@@ -24,15 +24,31 @@ export const PROMPT_INLINE_MAX_BYTES = 8192
 
 const FILE_SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 
-export const CLAUDE_START_SUMMARIES = {
-  notClaude: 'not a claude agent step',
+export const AGENT_START_SUMMARIES = {
+  unsupported: 'not a claude agent step',
   noPermission: 'step has no explicit permission level',
   unsafeId: 'step or run id is not a safe file name',
   consent: 'hooks consent required',
+  ended: 'attempt ended before spawn'
+} as const
+
+export const CLAUDE_START_SUMMARIES = {
+  notClaude: AGENT_START_SUMMARIES.unsupported,
+  noPermission: AGENT_START_SUMMARIES.noPermission,
+  unsafeId: AGENT_START_SUMMARIES.unsafeId,
+  consent: AGENT_START_SUMMARIES.consent,
   trust: 'claude folder trust required',
-  ended: 'attempt ended before spawn',
+  ended: AGENT_START_SUMMARIES.ended,
   spawnFailed: 'claude failed to start'
 } as const
+
+export interface AgentProfile {
+  kind: WorkflowAgent
+  label: string
+  session: 'preassigned' | 'discovered'
+  checkTrust(worktreePath: string): Promise<TrustStatus>
+  startSummaries: { trust: string; spawnFailed: string }
+}
 
 export interface ClaudeStopEvent {
   terminalId: string
@@ -40,7 +56,8 @@ export interface ClaudeStopEvent {
   continued?: boolean
 }
 
-export interface ClaudeStepDriverDeps {
+export interface AgentStepDriverDeps {
+  profiles: readonly AgentProfile[]
   addTab(worktreePath: string, tab: TerminalTab, spawn: StepSpawnExtras): void
   hasTerminal(id: string): boolean
   onExit(listener: (id: string, exitCode: number, signal?: number) => void): () => void
@@ -48,7 +65,6 @@ export interface ClaudeStepDriverDeps {
   onStopEvent(listener: (event: ClaudeStopEvent) => void): () => void
   onPromptSubmit(listener: (event: { terminalId: string }) => void): () => void
   store: Pick<Store, 'getSnapshot' | 'subscribe'>
-  checkFolderTrust(path: string): Promise<{ status: TrustStatus }>
   writeMarker(terminalId: string, marker: StepMarker): void
   removeMarker(terminalId: string): void
   writePromptFile(path: string, text: string): Promise<void>
@@ -57,8 +73,12 @@ export interface ClaudeStepDriverDeps {
   log: WorkflowLog
 }
 
-export interface ClaudeStepDriver extends StepDriver {
-  start(attempt: StepAttempt): Promise<Required<StepExecution>>
+export interface ClaudeStepDriverDeps extends Omit<AgentStepDriverDeps, 'profiles'> {
+  checkFolderTrust(path: string): Promise<{ status: TrustStatus }>
+}
+
+export interface AgentStepDriver extends StepDriver {
+  start(attempt: StepAttempt): Promise<StepExecution>
   release(executionId: string): void
   dispose(): void
 }
@@ -72,15 +92,30 @@ export function stepPromptPath(worktreePath: string, runId: string, stepId: stri
   return join(runArtifactsDir(worktreePath, runId), `${stepId}.prompt.md`)
 }
 
-async function folderTrust(deps: ClaudeStepDriverDeps, path: string): Promise<TrustStatus> {
+async function folderTrust(profile: AgentProfile, path: string): Promise<TrustStatus> {
   try {
-    return (await deps.checkFolderTrust(path)).status
+    return await profile.checkTrust(path)
   } catch {
     return 'unknown'
   }
 }
 
-export function createClaudeStepDriver(deps: ClaudeStepDriverDeps): ClaudeStepDriver {
+export function claudeProfile(checkFolderTrust: ClaudeStepDriverDeps['checkFolderTrust']): AgentProfile {
+  return {
+    kind: 'claude',
+    label: 'Claude',
+    session: 'preassigned',
+    checkTrust: async (path) => (await checkFolderTrust(path)).status,
+    startSummaries: { trust: CLAUDE_START_SUMMARIES.trust, spawnFailed: CLAUDE_START_SUMMARIES.spawnFailed }
+  }
+}
+
+export function createClaudeStepDriver({ checkFolderTrust, ...deps }: ClaudeStepDriverDeps): AgentStepDriver {
+  return createAgentStepDriver({ ...deps, profiles: [claudeProfile(checkFolderTrust)] })
+}
+
+export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDriver {
+  const profiles = new Map(deps.profiles.map((profile) => [profile.kind, profile]))
   const listeners = new Set<StepDriverListener>()
   const owned = new Set<string>()
   const lastStatus = new Map<string, PtyStatus>()
@@ -121,24 +156,25 @@ export function createClaudeStepDriver(deps: ClaudeStepDriverDeps): ClaudeStepDr
   }
 
   return {
-    async start(attempt: StepAttempt): Promise<Required<StepExecution>> {
+    async start(attempt: StepAttempt): Promise<StepExecution> {
       const { step, runId, stepId, attemptId, worktreePath, scope } = attempt
       const ids = { runId, stepId, attemptId }
-      if (step.kind !== 'agent' || step.agent !== 'claude') throw new StepStartError(CLAUDE_START_SUMMARIES.notClaude)
+      const profile = step.kind === 'agent' ? profiles.get(step.agent) : undefined
+      if (step.kind !== 'agent' || profile === undefined) throw new StepStartError(AGENT_START_SUMMARIES.unsupported)
       if (!isPermissionLevel(step.permissions) || !Array.isArray(step.allow)) {
-        throw new StepStartError(CLAUDE_START_SUMMARIES.noPermission)
+        throw new StepStartError(AGENT_START_SUMMARIES.noPermission)
       }
       if (!FILE_SAFE_ID.test(runId) || !FILE_SAFE_ID.test(stepId)) {
-        throw new StepStartError(CLAUDE_START_SUMMARIES.unsafeId)
+        throw new StepStartError(AGENT_START_SUMMARIES.unsafeId)
       }
       if (deps.store.getSnapshot().state.hooks.consent !== 'accepted') {
         log('step blocked consent', ids)
-        throw new StepPauseError('needs-input', CLAUDE_START_SUMMARIES.consent)
+        throw new StepPauseError('needs-input', AGENT_START_SUMMARIES.consent)
       }
-      const trust = await folderTrust(deps, worktreePath)
+      const trust = await folderTrust(profile, worktreePath)
       if (trust !== 'trusted') {
         log(`step blocked trust ${trust}`, ids)
-        throw new StepPauseError('trust', CLAUDE_START_SUMMARIES.trust)
+        throw new StepPauseError('trust', profile.startSummaries.trust)
       }
       const rendered = renderTemplate(step.prompt, scope)
       if (rendered.missing.length > 0) log(`prompt refs missing ${rendered.missing.length}`, ids)
@@ -150,27 +186,29 @@ export function createClaudeStepDriver(deps: ClaudeStepDriverDeps): ClaudeStepDr
         log('prompt written to file', ids)
       }
       const executionId = deps.newTabId()
-      const sessionId = attempt.resumeSessionId ?? deps.newSessionId()
-      if (!attempt.bind({ executionId, sessionId })) throw new StepStartError(CLAUDE_START_SUMMARIES.ended)
+      const sessionId =
+        profile.session === 'preassigned' ? (attempt.resumeSessionId ?? deps.newSessionId()) : attempt.resumeSessionId
+      const execution: StepExecution = sessionId === undefined ? { executionId } : { executionId, sessionId }
+      if (!attempt.bind(execution)) throw new StepStartError(AGENT_START_SUMMARIES.ended)
       owned.add(executionId)
       deps.writeMarker(executionId, ids)
       const tab: TerminalTab = {
         id: executionId,
         type: 'agent',
-        agentKind: 'claude',
-        label: `⚙ ${stepId} · Claude`,
+        agentKind: profile.kind,
+        label: `⚙ ${stepId} · ${profile.label}`,
         workflow: ids
       }
       deps.addTab(worktreePath, tab, {
         permissionLevel: step.permissions,
         bashAllow: sanitizeBashAllow(step.allow.filter((entry): entry is string => typeof entry === 'string')),
         initialPrompt,
-        sessionId,
+        ...(sessionId === undefined ? {} : { sessionId }),
         ...(step.model === undefined ? {} : { model: step.model })
       })
-      if (!deps.hasTerminal(executionId)) throw new StepStartError(CLAUDE_START_SUMMARIES.spawnFailed)
+      if (!deps.hasTerminal(executionId)) throw new StepStartError(profile.startSummaries.spawnFailed)
       log('step spawned', { ...ids, executionId })
-      return { executionId, sessionId }
+      return execution
     },
     continue() {},
     cancel(executionId: string) {
