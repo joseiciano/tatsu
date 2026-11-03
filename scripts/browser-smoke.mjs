@@ -67,26 +67,28 @@ function connect() {
   let nextId = 1
   ws.on('message', (raw) => {
     const frame = JSON.parse(raw.toString())
-    if (frame.t !== 'res') return
+    if (frame.t !== 'res' && frame.t !== 'snapres') return
     const waiter = pending.get(frame.id)
     if (!waiter) return
     pending.delete(frame.id)
-    if (frame.ok) waiter.resolve(frame.value)
+    if (frame.ok) waiter.resolve(frame.t === 'snapres' ? frame.snapshot : frame.value)
     else waiter.reject(new Error(`${waiter.name} failed: ${JSON.stringify(frame.error)}`))
   })
   const opened = new Promise((resolve, reject) => {
     ws.once('open', resolve)
     ws.once('error', reject)
   })
+  const send = (frame, name) => {
+    const id = String(nextId++)
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject, name })
+      ws.send(JSON.stringify({ ...frame, id }))
+    })
+  }
   return {
     opened,
-    request(name, ...args) {
-      const id = String(nextId++)
-      return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject, name })
-        ws.send(JSON.stringify({ t: 'req', name, args, id }))
-      })
-    },
+    request: (name, ...args) => send({ t: 'req', name, args }, name),
+    snapshot: () => send({ t: 'snapreq' }, 'snapshot'),
     close: () => ws.close()
   }
 }
@@ -117,6 +119,83 @@ function worktreeRow(page) {
   return page.getByText(worktreePath.split('/').slice(-2).join('/'), { exact: true })
 }
 
+function stepStrip(page, label) {
+  return page.getByRole('img', { name: `Workflow steps: ${label}`, exact: true })
+}
+
+function needsYouRow(page, workflowName) {
+  return page
+    .getByRole('region', { name: /^NEEDS YOU/ })
+    .getByRole('listitem')
+    .filter({ hasText: workflowName })
+}
+
+async function startFromLaunchSheet(page, defName, shot) {
+  const row = worktreeRow(page)
+  await row.scrollIntoViewIfNeeded()
+  await row.click({ button: 'right' })
+  await page.getByRole('menu').waitFor()
+  await shot('context-menu')
+  await page.getByRole('menuitem', { name: 'Run workflow here…' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+  await sheet.getByLabel('Workflow').selectOption({ label: defName })
+  await shot('launch-sheet')
+  await sheet.getByRole('button', { name: 'Start' }).click()
+  await sheet.waitFor({ state: 'hidden' })
+}
+
+async function liveRunId(backend, defName) {
+  const { state } = await backend.snapshot()
+  const live = Object.entries(state.workflows.runs).filter(
+    ([, run]) => run.defId === `personal:${defName}` && ['queued', 'running', 'paused'].includes(run.status)
+  )
+  if (live.length !== 1) throw new Error(`expected one live ${defName} run, found ${live.length}`)
+  return live[0][0]
+}
+
+async function waitForRunStatus(backend, runId, status) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const record = await backend.request('workflows:getRun', runId)
+    if (record?.status === status) return record
+    if (Date.now() > deadline) throw new Error(`run ${runId} is ${record?.status}, expected ${status}`)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+async function flowHangCancel(page, backend) {
+  await scenario(page, 'hang-cancel', async (shot) => {
+    await startFromLaunchSheet(page, 'browser-hang', shot)
+    await stepStrip(page, 'hang running').waitFor()
+    await shot('strip-running')
+
+    await page.getByRole('button', { name: 'Close tab ⚙ hang · Claude', exact: true }).click()
+    const confirm = page.getByRole('alertdialog', { name: 'Cancel step “hang”?' })
+    await confirm.waitFor()
+    await shot('cancel-confirm')
+    await confirm.getByRole('button', { name: 'Cancel step and close tab' }).click()
+    await confirm.waitFor({ state: 'hidden' })
+
+    const row = needsYouRow(page, 'browser-hang')
+    await row.filter({ hasText: 'Cancelled by user · hang' }).waitFor()
+    await stepStrip(page, 'hang paused').waitFor()
+    await shot('needs-you-cancelled')
+
+    const runId = await liveRunId(backend, 'browser-hang')
+    const record = await backend.request('workflows:getRun', runId)
+    const attempt = record.attempts.find((a) => a.stepId === 'hang')
+    if (record.pausedReason !== 'step-failed' || attempt?.status !== 'cancelled') {
+      throw new Error(`expected paused step-failed with a cancelled attempt, got ${record.pausedReason}/${attempt?.status}`)
+    }
+    const cancelled = await backend.request('workflows:cancelRun', runId)
+    if (cancelled?.ok !== true) throw new Error(`cancelRun refused: ${JSON.stringify(cancelled)}`)
+    await waitForRunStatus(backend, runId, 'cancelled')
+    await row.waitFor({ state: 'detached' })
+    await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+    await shot('run-cancelled')
+  })
+}
+
 async function main() {
   const backend = connect()
   await backend.opened
@@ -135,6 +214,7 @@ async function main() {
       await worktreeRow(page).waitFor()
       await shot('worktree-row')
     })
+    await flowHangCancel(page, backend)
   } catch {
     failed = true
   } finally {
