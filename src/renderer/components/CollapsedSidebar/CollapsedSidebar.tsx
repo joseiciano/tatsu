@@ -11,7 +11,8 @@ import {
   Activity,
   ShieldAlert,
   HatGlasses,
-  GitPullRequest
+  GitPullRequest,
+  Workflow
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { openReportIssue } from '../ReportIssueScreen'
@@ -25,6 +26,7 @@ interface CollapsedSidebarProps {
   onNewWorktree: () => void
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
+  onOpenWorkflows: () => void
   onOpenNewProject: () => void
   onOpenHotkeyCheatsheet: () => void
   onOpenSettings: () => void
@@ -38,6 +40,7 @@ export function CollapsedSidebar({
   onNewWorktree,
   onOpenCleanup,
   onOpenCommandCenter,
+  onOpenWorkflows,
   onOpenNewProject,
   onOpenHotkeyCheatsheet,
   onOpenSettings
@@ -47,7 +50,7 @@ export function CollapsedSidebar({
   const worktrees = useWorktrees().list
   const prs = usePrs()
   const snooze = useSnooze()
-  const viewerLogin = useSettings().viewerLogin
+  const { viewerLogin, labs } = useSettings()
   const snoozedPaths = useMemo(() => {
     const m: Record<string, true> = {}
     for (const p of Object.keys(snooze.byPath)) m[p] = true
@@ -160,6 +163,17 @@ export function CollapsedSidebar({
             <LayoutGrid className="icon-sm" />
           </button>
         </Tooltip>
+        {labs.workflows && (
+          <Tooltip label="Workflows" action="toggleWorkflows" side="right">
+            <button
+              onClick={onOpenWorkflows}
+              aria-label="Workflows"
+              className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+            >
+              <Workflow className="icon-sm" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip label="New project" side="right">
           <button
             onClick={onOpenNewProject}

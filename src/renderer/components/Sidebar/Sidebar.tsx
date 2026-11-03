@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, FolderOpen, Loader2, Settings as SettingsIcon, Sparkles, Trash2, LayoutGrid, X, Layers, Rows3, AlertCircle, Keyboard, MessageSquareHeart, PanelLeftClose, FilePlus, RefreshCw, SlidersHorizontal, Workflow } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
 import { Tooltip } from '../Tooltip'
 import { HotkeyBadge } from '../HotkeyBadge'
@@ -12,6 +12,7 @@ import { SnoozeCalendar } from '../SnoozeCalendar'
 import { repoNameColor } from '../RepoIcon'
 import { BackendChipStrip } from '../BackendChipStrip'
 import { useBackend } from '../../backend'
+import { useAppState } from '../../store'
 import { NeedsYouGroup, type JumpToTabHandler } from '../Workflows/NeedsYou'
 
 interface SidebarProps {
@@ -48,6 +49,7 @@ interface SidebarProps {
   onOpenHotkeyCheatsheet: () => void
   onOpenCleanup: () => void
   onOpenCommandCenter: () => void
+  onOpenWorkflows: () => void
   onOpenNewProject: () => void
   onRunWorkflow?: (worktreePath: string) => void
   onJumpToWorkflowTab?: JumpToTabHandler
@@ -93,6 +95,7 @@ export function Sidebar({
   onOpenHotkeyCheatsheet,
   onOpenCleanup,
   onOpenCommandCenter,
+  onOpenWorkflows,
   onOpenNewProject,
   onRunWorkflow,
   onJumpToWorkflowTab,
@@ -107,6 +110,7 @@ export function Sidebar({
   onCollapseSidebar
 }: SidebarProps): JSX.Element {
   const backend = useBackend()
+  const labsWorkflows = useAppState((s) => s.settings.labs.workflows)
   const deletingPaths = useMemo(() => {
     const s = new Set<string>()
     for (const d of pendingDeletions) s.add(d.path)
@@ -280,6 +284,17 @@ export function Sidebar({
             <LayoutGrid className="icon-sm" />
           </button>
         </Tooltip>
+        {labsWorkflows && (
+          <Tooltip label="Workflows" action="toggleWorkflows" side="bottom">
+            <button
+              onClick={onOpenWorkflows}
+              aria-label="Workflows"
+              className="text-dim hover:text-fg hover:bg-surface rounded p-1.5 transition-colors cursor-pointer"
+            >
+              <Workflow className="icon-sm" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip label="New project" side="bottom">
           <button
             onClick={onOpenNewProject}
