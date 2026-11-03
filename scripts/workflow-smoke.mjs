@@ -4,10 +4,12 @@
 // Usage: node scripts/workflow-smoke.mjs <token> <port> <repoPath> <curl:yes|no>
 //
 // Expects the server to have booted with Labs workflows on, hooks consent
-// accepted, claudeCommand pointing at a shim for scripts/fake-agent.mjs and
-// the personal definitions `smoke` (agent step then shell step) and
-// `smoke-retry` (one `test -f flag` shell step). Adds <repoPath> as a repo,
-// runs both scenarios and exits non-zero on the first failed assertion or
+// accepted, claudeCommand and codexCommand pointing at shims for
+// scripts/fake-agent.mjs, a scratch CODEX_HOME that trusts Tatsu's hooks and
+// the repo, and the personal definitions `smoke` (Claude step then shell
+// step), `smoke-codex` (Codex step then shell step), `smoke-retry` (one
+// `test -f flag` shell step) and `smoke-full`. Adds <repoPath> as a repo,
+// runs every scenario and exits non-zero on the first failed assertion or
 // on a 60 s timeout per scenario.
 
 import { WebSocket } from 'ws'
@@ -22,6 +24,8 @@ if (!token || !portArg || !repoPath || !['yes', 'no'].includes(curlArg)) {
 const curlPresent = curlArg === 'yes'
 const SCENARIO_TIMEOUT_MS = 60_000
 const STARTING_ERROR = 'Tatsu is still starting; try again'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const sessionRecorded = []
 
 const ws = new WebSocket(`ws://127.0.0.1:${Number(portArg)}?token=${encodeURIComponent(token)}`)
 let state = null
@@ -33,6 +37,8 @@ let nextId = 1
 function applyEvent(event) {
   if (event.type === 'worktrees/listChanged') state.worktrees.list = event.payload
   else if (event.type === 'hooks/consentChanged') state.hooks.consent = event.payload
+  else if (event.type === 'hooks/codexTrustChanged') state.hooks.codexTrust = event.payload
+  else if (event.type === 'workflows/attemptSessionRecorded') sessionRecorded.push(event.payload.attemptId)
   else if (event.type === 'workflows/definitionsLoaded') {
     state.workflows.definitions = Object.fromEntries(event.payload.definitions.map((d) => [d.id, d]))
   }
@@ -177,6 +183,35 @@ async function scenarioAgentThenShell(worktreePath) {
   )
 }
 
+async function scenarioCodexThenShell(worktreePath) {
+  const runId = await startRun('personal:smoke-codex', worktreePath)
+  const record = await runSettled(runId)
+  expectThat(record.status === 'done', `codex scenario run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+  const [plan] = attemptsFor(record, 'plan')
+  const [echo] = attemptsFor(record, 'echo')
+  expectThat(plan?.status === 'done', 'codex plan attempt is not done', record)
+  expectThat(plan.metrics.completedBy === 'tool', `codex plan completedBy ${plan.metrics.completedBy}`, record)
+  const expectedContinuations = curlPresent ? 1 : 0
+  expectThat(
+    plan.metrics.continuations === expectedContinuations,
+    `codex plan continuations ${plan.metrics.continuations}, expected ${expectedContinuations}`,
+    record
+  )
+  expectThat(typeof plan.sessionId === 'string' && UUID.test(plan.sessionId), 'codex plan has no discovered session id', record)
+  expectThat(plan.result?.summary === `PLAN-OK ${plan.sessionId}`, 'codex plan summary does not carry its session id', record)
+  const recorded = sessionRecorded.filter((attemptId) => attemptId === plan.attemptId).length
+  expectThat(recorded === 1, `attemptSessionRecorded dispatched ${recorded} times for the codex plan`, record)
+  expectThat(echo?.status === 'done', 'codex scenario echo attempt is not done', record)
+  expectThat(echo.result?.summary?.includes(plan.result.summary), 'codex echo summary lacks the plan summary', record)
+  console.log(
+    'scenario codex OK: run=%s done; plan completedBy=%s continuations=%d session=%s; echo summary contains it',
+    runId,
+    plan.metrics.completedBy,
+    plan.metrics.continuations,
+    plan.sessionId
+  )
+}
+
 async function scenarioFailRetry(worktreePath) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const runId = await startRun('personal:smoke-retry', worktreePath)
@@ -219,23 +254,24 @@ async function main() {
   if (added?.kind !== 'added') fail('repo:addAtPath did not add the repo', added)
   await request('workflows:reloadDefinitions')
 
-  const worktreePath = await waitFor('the repo, hooks consent and definitions', () => {
+  const definitionIds = ['personal:smoke', 'personal:smoke-codex', 'personal:smoke-retry', 'personal:smoke-full']
+  const worktreePath = await waitFor('the repo, hooks consent, Codex hook trust and definitions', () => {
     const wt = state.worktrees.list.find((w) => w.path === added.repoRoot || w.path === repoPath)
     const ready =
       wt &&
       state.hooks.consent === 'accepted' &&
-      state.workflows.definitions['personal:smoke'] &&
-      state.workflows.definitions['personal:smoke-retry'] &&
-      state.workflows.definitions['personal:smoke-full']
+      state.hooks.codexTrust?.state === 'ok' &&
+      definitionIds.every((id) => state.workflows.definitions[id])
     return ready ? wt.path : undefined
   })
-  for (const id of ['personal:smoke', 'personal:smoke-retry', 'personal:smoke-full']) {
+  for (const id of definitionIds) {
     const issues = state.workflows.definitions[id].issues
     if (issues.length > 0) fail(`definition ${id} has issues`, issues)
   }
 
   await scenarioFullRefused(worktreePath)
   await scenarioAgentThenShell(worktreePath)
+  await scenarioCodexThenShell(worktreePath)
   await scenarioFailRetry(worktreePath)
   ws.close()
   process.exit(0)
