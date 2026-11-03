@@ -1,0 +1,116 @@
+[
+  {
+    "name": "shellQuote: empty",
+    "fn": "shellQuote",
+    "input": "",
+    "expected": "''"
+  },
+  {
+    "name": "shellQuote: plain word",
+    "fn": "shellQuote",
+    "input": "hello",
+    "expected": "'hello'"
+  },
+  {
+    "name": "shellQuote: spaces",
+    "fn": "shellQuote",
+    "input": "a b  c",
+    "expected": "'a b  c'"
+  },
+  {
+    "name": "shellQuote: single quote",
+    "fn": "shellQuote",
+    "input": "it's",
+    "expected": "'it'\\''s'"
+  },
+  {
+    "name": "shellQuote: only quotes",
+    "fn": "shellQuote",
+    "input": "''",
+    "expected": "''\\'''\\'''"
+  },
+  {
+    "name": "shellQuote: newlines",
+    "fn": "shellQuote",
+    "input": "line1\nline2\n",
+    "expected": "'line1\nline2\n'"
+  },
+  {
+    "name": "shellQuote: command substitution and backticks",
+    "fn": "shellQuote",
+    "input": "$(rm -rf ~) `id` $HOME",
+    "expected": "'$(rm -rf ~) `id` $HOME'"
+  },
+  {
+    "name": "shellQuote: double quotes and backslash",
+    "fn": "shellQuote",
+    "input": "say \"hi\" \\n",
+    "expected": "'say \"hi\" \\n'"
+  },
+  {
+    "name": "shellQuote: non-ASCII and emoji",
+    "fn": "shellQuote",
+    "input": "café 日本 🐉",
+    "expected": "'café 日本 🐉'"
+  },
+  {
+    "name": "sanitizeId: allowed characters kept",
+    "fn": "sanitizeId",
+    "input": "abc-XYZ_09.txt",
+    "expected": "abc-XYZ_09.txt"
+  },
+  {
+    "name": "sanitizeId: colon and slash",
+    "fn": "sanitizeId",
+    "input": "wt:1/tab",
+    "expected": "wt_1_tab"
+  },
+  {
+    "name": "sanitizeId: path traversal",
+    "fn": "sanitizeId",
+    "input": "../../etc/passwd",
+    "expected": ".._.._etc_passwd"
+  },
+  {
+    "name": "sanitizeId: dot dot",
+    "fn": "sanitizeId",
+    "input": "..",
+    "expected": ".."
+  },
+  {
+    "name": "sanitizeId: empty",
+    "fn": "sanitizeId",
+    "input": "",
+    "expected": ""
+  },
+  {
+    "name": "sanitizeId: space and tab",
+    "fn": "sanitizeId",
+    "input": "a b\tc",
+    "expected": "a_b_c"
+  },
+  {
+    "name": "sanitizeId: latin accent",
+    "fn": "sanitizeId",
+    "input": "é",
+    "expected": "_"
+  },
+  {
+    "name": "sanitizeId: BMP CJK",
+    "fn": "sanitizeId",
+    "input": "日本",
+    "expected": "__"
+  },
+  {
+    "name": "sanitizeId: emoji is two UTF-16 units",
+    "fn": "sanitizeId",
+    "input": "🐉",
+    "expected": "__"
+  },
+  {
+    "name": "sanitizeId: mixed",
+    "fn": "sanitizeId",
+    "input": "term-🐉-é:1",
+    "expected": "term-__-__1"
+  }
+]

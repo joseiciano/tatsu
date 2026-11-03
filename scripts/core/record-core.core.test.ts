@@ -6,6 +6,7 @@ import { agentRegistryRecorder } from './recorders/agent-registry'
 import { configRecorder, migrationsRecorder } from './recorders/config'
 import { replyOf } from './recorders/handler-boot'
 import { agentKindRecorder, handlerRecorders } from './recorders/handlers'
+import { shellHelpersRecorder } from './recorders/helpers'
 import { initialStateRecorder } from './recorders/initial-state'
 import { repoConfigSaveRecorder } from './recorders/repo-config'
 import { builtinThemesRecorder, themesRecorder } from './recorders/themes'
@@ -15,7 +16,7 @@ const update = process.env.CORE_UPDATE === '1'
 
 type AnyRecorder = Recorder<{ name: string }, unknown>
 
-const recorders = [configRecorder, migrationsRecorder, initialStateRecorder, agentKindRecorder, agentRegistryRecorder, themesRecorder, builtinThemesRecorder, repoConfigSaveRecorder, activityRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
+const recorders = [configRecorder, migrationsRecorder, initialStateRecorder, agentKindRecorder, shellHelpersRecorder, agentRegistryRecorder, themesRecorder, builtinThemesRecorder, repoConfigSaveRecorder, activityRecorder, ...handlerRecorders()] as unknown as AnyRecorder[]
 
 function diff(path: string, name: string, before: unknown, after: unknown): string {
   const text = (value: unknown): string =>

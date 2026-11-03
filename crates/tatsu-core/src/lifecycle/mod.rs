@@ -21,6 +21,7 @@ use crate::hub::{Hub, SHUTDOWN_CODE, SHUTDOWN_REASON};
 use crate::initial_state::{SeedHook, build_initial_state};
 use crate::logs;
 use crate::repo_config::RepoConfigStore;
+use crate::resources::Resources;
 use crate::router::{Router, RouterOptions};
 use crate::secrets::{self, OsRandom, RandomSource, Secrets};
 use crate::store::{Store, StoreOptions};
@@ -353,6 +354,10 @@ impl Core {
 
     pub fn resources_dir(&self) -> Option<PathBuf> {
         self.resources_dir.read().clone()
+    }
+
+    pub fn resources(&self) -> Resources {
+        Resources::new(self.resources_dir())
     }
 
     pub fn ws_token(&self) -> String {

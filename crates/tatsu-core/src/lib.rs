@@ -10,10 +10,14 @@ pub mod lifecycle;
 pub mod logs;
 pub mod net;
 pub mod repo_config;
+pub mod resources;
 pub mod router;
 pub mod secrets;
+pub mod shell_quote;
 pub mod store;
+pub mod terminal_history;
 pub mod themes;
+pub mod user_shell;
 pub mod ws_settings;
 
 pub const APP_VERSION: &str = env!("TATSU_APP_VERSION");

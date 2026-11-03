@@ -161,6 +161,7 @@ async fn values_set_after_boot_are_read_at_call_time() {
     assert_eq!(core.ws_bound(), None);
     assert!(core.hooks_installer().is_none());
     assert_eq!(core.resources_dir(), None);
+    assert_eq!(core.resources().runtime_manifest_path(), None);
 
     core.set_ws_bound("127.0.0.1", 37291);
     core.set_hooks_installer(Arc::new(Installer));
@@ -178,6 +179,10 @@ async fn values_set_after_boot_are_read_at_call_time() {
         Err("nope".to_owned())
     );
     assert_eq!(core.resources_dir().as_deref(), Some(dir.path()));
+    assert_eq!(
+        core.resources().runtime_manifest_path(),
+        Some(dir.path().join("runtime-manifest.json"))
+    );
 }
 
 #[tokio::test(start_paused = true)]
