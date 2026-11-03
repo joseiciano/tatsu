@@ -92,6 +92,7 @@ export class PtyManager {
   private historyDirty = new Set<string>()
   private historyFlushTimer: NodeJS.Timeout | null = null
   private perfMonitor: PerfMonitor | null = null
+  private cliEndpointFile: string | null = null
 
   /** Wire the authoritative store after it's constructed. PTY status,
    * shell activity, and cleanup events dispatch through it. */
@@ -101,6 +102,10 @@ export class PtyManager {
 
   setPerfMonitor(monitor: PerfMonitor): void {
     this.perfMonitor = monitor
+  }
+
+  setCliEndpointFile(path: string | null): void {
+    this.cliEndpointFile = path
   }
 
   getActivePtyCount(): number {
@@ -148,6 +153,8 @@ export class PtyManager {
       CLAUDE_HARNESS_ID: id,
       HARNESS_TERMINAL_ID: id
     } as Record<string, string>
+    delete env.TATSU_ENDPOINT_FILE
+    if (this.cliEndpointFile) env.TATSU_ENDPOINT_FILE = this.cliEndpointFile
     const shell = command || env.SHELL || '/bin/zsh'
     let ptyProcess: pty.IPty
     try {
