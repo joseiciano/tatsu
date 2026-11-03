@@ -23,7 +23,7 @@ const GLOBAL_OPTIONS: Record<string, CommandOption> = {
   json: { type: 'boolean', description: 'Print machine-readable JSON' },
   url: { type: 'string', valueName: 'url', description: 'Backend WebSocket URL (skips discovery)' },
   token: { type: 'string', valueName: 'token', description: 'Backend auth token (with --url)' },
-  timeout: { type: 'string', valueName: 'ms', description: 'Request timeout in milliseconds (default 30000)' },
+  timeout: { type: 'string', valueName: 'ms', description: 'Request timeout in milliseconds (default 30000 unless the command sets its own)' },
   help: { type: 'boolean', short: 'h', description: 'Show help' },
   version: { type: 'boolean', description: 'Print the CLI version' }
 }
@@ -150,7 +150,7 @@ async function dispatch(argv: string[], io: CliIO, registry: readonly Command[])
       env: io.env,
       client: () =>
         (client ??= resolveEndpoint(globals, { ...io.files, env: io.env }).then((endpoint) =>
-          connect(endpoint, { timeoutMs: globals.timeoutMs })
+          connect(endpoint, { timeoutMs: globals.timeoutMs ?? command.defaultTimeoutMs })
         )),
       output
     })
