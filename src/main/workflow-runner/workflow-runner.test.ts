@@ -2703,3 +2703,93 @@ describe('WorkflowRunner gates', () => {
     expect(ctx.stepStatus(runId, 'plan')).toBe('running')
   })
 })
+
+describe('WorkflowRunner autopilot', () => {
+  async function autopilotRun(slug: DefSlug, autopilot: unknown = true) {
+    const ctx = setup()
+    const request = { defId: `personal:${slug}`, worktreePath: `/wt/${slug}`, inputs: {}, autopilot }
+    const result = await ctx.runner.start(request as unknown as Parameters<typeof ctx.runner.start>[0])
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    return { ctx, runId: result.runId }
+  }
+
+  it('passes the gate on done without pausing: gateResolved autopilot, step done, dependents start', async () => {
+    const { ctx, runId } = await autopilotRun('gated')
+    expect(ctx.records.at(-1)?.autopilot).toBe(true)
+    const first = ctx.attemptOf(runId, 'plan')
+    const seen = ctx.eventsSince(() => ctx.runner.complete(first, done(SUMMARY_SECRET)))
+    expect(seen).not.toContain('runPaused')
+    expect(seen).not.toContain('runResumed')
+    expect(seen.filter((type) => type === 'gateResolved')).toHaveLength(1)
+    const stepDone = ctx.events.findIndex(
+      (event) => event.type === 'workflows/stepStatusChanged' && event.payload.stepId === 'plan' && event.payload.status === 'done'
+    )
+    const resolved = ctx.events.findIndex((event) => event.type === 'workflows/gateResolved')
+    expect(stepDone).toBeGreaterThanOrEqual(0)
+    expect(stepDone).toBeLessThan(resolved)
+    expect(ctx.logs).toContain(`[workflow] step done ${JSON.stringify({ runId, stepId: 'plan' })}`)
+    expect(ctx.events.find((event) => event.type === 'workflows/gateResolved')?.payload).toEqual({
+      runId,
+      stepId: 'plan',
+      decision: 'autopilot'
+    })
+    expect(ctx.wf().attempts[first]).toMatchObject({ status: 'done' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('done')
+    expect(ctx.stepStatus(runId, 'test')).toBe('running')
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'running', autopilot: true, steps: { plan: 'done', test: 'running' } })
+    expect(ctx.records.at(-1)?.attempts[0].metrics.pauses).toEqual([])
+    expect(ctx.logs).toContain(`[workflow] gate approved ${JSON.stringify({ runId, stepId: 'plan', decision: 'autopilot' })}`)
+    expect(ctx.logs.some((line) => line.includes('run paused'))).toBe(false)
+    expect(ctx.runner.approveGate(runId, 'plan')).toEqual({ ok: false, reason: 'not-awaiting-gate' })
+    await flush()
+    ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(ctx.attemptOf(runId, 'test')), code: 0 })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.events.filter((event) => event.type === 'workflows/runFinished')).toHaveLength(1)
+  })
+
+  it('passes a gated shell step on exit 0', async () => {
+    const { ctx, runId } = await autopilotRun('gated-shell')
+    ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(ctx.attemptOf(runId, 'test')), code: 0 })
+    expect(ctx.stepStatus(runId, 'test')).toBe('done')
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    await flush()
+    expect(ctx.stepStatus(runId, 'fix')).toBe('running')
+  })
+
+  it('still pauses a failed step and still stops at a gate a needs-approval pause held', async () => {
+    const failing = await autopilotRun('gated')
+    failing.ctx.runner.complete(failing.ctx.attemptOf(failing.runId, 'plan'), failed())
+    expect(failing.ctx.wf().runs[failing.runId].pausedReason).toBe('step-failed')
+
+    const held = await autopilotRun('gated')
+    const first = held.ctx.attemptOf(held.runId, 'plan')
+    held.ctx.agent.emit({ type: 'needsApproval', executionId: held.ctx.agent.executionFor(first) })
+    expect(held.ctx.wf().runs[held.runId].pausedReason).toBe('needs-approval')
+    const seen = held.ctx.eventsSince(() => held.ctx.runner.complete(first, done()))
+    expect(seen).toContain('runResumed')
+    expect(seen).toContain('gateResolved')
+    expect(held.ctx.stepStatus(held.runId, 'plan')).toBe('done')
+    expect(held.ctx.wf().runs[held.runId].status).toBe('running')
+  })
+
+  it.each<[string, unknown]>([
+    ['false', false],
+    ['the string true', 'true'],
+    ['the number 1', 1]
+  ])('stops at the gate when autopilot is %s', async (_name, autopilot) => {
+    const { ctx, runId } = await autopilotRun('gated', autopilot)
+    expect(ctx.records.at(-1)?.autopilot).toBeUndefined()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    expect(ctx.stepStatus(runId, 'plan')).toBe('awaiting-gate')
+    expect(ctx.wf().runs[runId].pausedReason).toBe('gate')
+  })
+
+  it('never grants full permissions: a full workflow on autopilot still needs allowFull', async () => {
+    const ctx = setup()
+    const request = { defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, autopilot: true }
+    expect(await ctx.runner.start(request)).toEqual({ ok: false, reason: 'full-permission-unconfirmed' })
+    expect(Object.keys(ctx.wf().runs)).toEqual([])
+    expect((await ctx.runner.start({ ...request, allowFull: true })).ok).toBe(true)
+  })
+})

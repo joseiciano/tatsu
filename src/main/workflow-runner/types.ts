@@ -27,6 +27,7 @@ export interface StartRunRequest {
   inputs: Record<string, string>
   allowFull?: boolean
   overrides?: Record<string, StepOverrideRequest>
+  autopilot?: boolean
 }
 
 export interface StepOverrideRequest {

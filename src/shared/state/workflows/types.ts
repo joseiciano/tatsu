@@ -142,7 +142,7 @@ export type WorkflowsEvent =
   | { type: 'workflows/trustGranted'; payload: { defId: string; hash: string } }
   | { type: 'workflows/gateResolved'; payload: { runId: string; stepId: string; decision: WorkflowGateDecision } }
 
-export type WorkflowGateDecision = 'approved' | 'changes-requested'
+export type WorkflowGateDecision = 'approved' | 'autopilot' | 'changes-requested'
 
 export interface StepResult {
   status: 'done' | 'failed' | 'needs-input'
@@ -207,6 +207,7 @@ export interface WorkflowRunRecord {
   attempts: WorkflowAttemptRecord[]
   overriddenFrom?: Record<string, WorkflowStepHarness>
   inputsUntrusted?: boolean
+  autopilot?: true
   continuations?: Record<string, WorkflowContinuation>
 }
 
@@ -235,6 +236,7 @@ export interface WorkflowStartRunPayload {
   inputs: Record<string, string>
   allowFull?: boolean
   overrides?: Record<string, WorkflowStepOverride>
+  autopilot?: boolean
 }
 
 export interface WorkflowMarkDonePayload {

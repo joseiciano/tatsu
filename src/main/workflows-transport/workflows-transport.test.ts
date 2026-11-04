@@ -603,6 +603,16 @@ describe('workflow action requests', () => {
     ])
   })
 
+  it('passes autopilot to the runner only when it is exactly true', async () => {
+    const base = { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {} }
+    await transport.call('workflows:startRun', { ...base, autopilot: true })
+    await transport.call('workflows:startRun', { ...base, autopilot: false })
+    expect(runner.calls).toEqual([
+      ['start', { ...base, autopilot: true }],
+      ['start', base]
+    ])
+  })
+
   const badIds: unknown[] = [undefined, null, 42, '', '../run', 'a/b', 'x'.repeat(129), { runId: RUN }, [RUN]]
   const badStartPayloads: unknown[] = [
     undefined,
@@ -620,6 +630,9 @@ describe('workflow action requests', () => {
     { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: 'true' },
     { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: 1 },
     { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: null },
+    { defId: 'personal:plan', worktreePath: '/wt/a', autopilot: 'true' },
+    { defId: 'personal:plan', worktreePath: '/wt/a', autopilot: 1 },
+    { defId: 'personal:plan', worktreePath: '/wt/a', autopilot: null },
     { defId: 'personal:plan', worktreePath: '/wt/a', inputsUntrusted: false },
     { defId: 'personal:plan', worktreePath: '/wt/a', trusted: true },
     { defId: 'personal:plan', worktreePath: '/wt/a', definition: { steps: [] } },
@@ -1013,6 +1026,29 @@ describe('workflows:startRun against the runner', () => {
     const record = persisted.at(-1)
     expect(record?.inputsUntrusted).toBe(true)
     expect(record?.definition.steps[0]).toMatchObject({ permissions: 'edit' })
+  })
+
+  it('turns autopilot off server-side for an untrusted issue run, with no client override', async () => {
+    const persisted: WorkflowRunRecord[] = []
+    const own = realRunner({ yaml: ISSUE_FULL_YAML, inputTrust: async () => 'untrusted', persisted })
+    const issuePayload = { ...payload, inputs: { ticket: '7' }, autopilot: true }
+    expect(await own.call('workflows:startRun', { ...issuePayload, autopilotOverride: true })).toEqual({
+      error: 'invalid request'
+    })
+    expect(await own.call('workflows:startRun', issuePayload)).toEqual({ runId: 'id-1' })
+    expect(persisted.at(-1)?.inputsUntrusted).toBe(true)
+    expect(persisted.at(-1)?.autopilot).toBeUndefined()
+  })
+
+  it('still needs allowFull for a full step on autopilot', async () => {
+    const persisted: WorkflowRunRecord[] = []
+    const own = realRunner({ yaml: ISSUE_FULL_YAML, inputTrust: async () => 'trusted', persisted })
+    const issuePayload = { ...payload, inputs: { ticket: '7' }, autopilot: true }
+    expect(await own.call('workflows:startRun', issuePayload)).toEqual({
+      error: 'This workflow has a full-access step; confirm full access to start it'
+    })
+    expect(await own.call('workflows:startRun', { ...issuePayload, allowFull: true })).toEqual({ runId: 'id-1' })
+    expect(persisted.at(-1)?.autopilot).toBe(true)
   })
 
   it('still asks for full access when the server lookup trusts the issue author', async () => {

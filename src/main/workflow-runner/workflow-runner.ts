@@ -380,6 +380,7 @@ export class WorkflowRunner {
     const { overriddenFrom } = applied
     const needsFull = definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
     if (needsFull && request.allowFull !== true) return this.refuse('full-permission-unconfirmed')
+    const autopilot = request.autopilot === true && !inputsUntrusted
 
     const runId = newId()
     const steps: Record<string, WorkflowRunStep> = {}
@@ -414,7 +415,8 @@ export class WorkflowRunner {
         startedAt: run.startedAt,
         attempts: [],
         ...(overriddenFrom === undefined ? {} : { overriddenFrom }),
-        ...(inputsUntrusted ? { inputsUntrusted } : {})
+        ...(inputsUntrusted ? { inputsUntrusted } : {}),
+        ...(autopilot ? { autopilot } : {})
       },
       stepStatus,
       live: new Map(),
@@ -433,6 +435,7 @@ export class WorkflowRunner {
       })
     )
     if (inputsUntrusted) this.log('run capped at edit permissions', { runId })
+    if (request.autopilot === true && !autopilot) this.log('run autopilot disabled untrusted-inputs', { runId })
     for (const stepId of Object.keys(overriddenFrom ?? {})) this.logHarness('step overridden', state, stepId)
     this.schedule(state)
     this.settle(state)
@@ -452,6 +455,9 @@ export class WorkflowRunner {
     if (result.status === 'needs-input') {
       live.record.result = result
       this.pause(state, stepId, 'needs-input')
+    } else if (result.status === 'done' && this.gated(state, stepId) && state.record.autopilot === true) {
+      this.endAttempt(state, live, 'done', result, false)
+      this.passGate(state, stepId, 'autopilot')
     } else if (result.status === 'done' && this.gated(state, stepId)) {
       this.endAttempt(state, live, 'done', result, false)
       this.setStep(state, stepId, 'awaiting-gate')
@@ -649,14 +655,19 @@ export class WorkflowRunner {
     const ids = { runId, stepId }
     const target = this.gateTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, ids)
-    const { state } = target
-    state.stepStatus[stepId] = 'done'
-    this.resume(state, stepId)
-    this.deps.store.dispatch({ type: 'workflows/gateResolved', payload: { runId, stepId, decision: 'approved' } })
-    this.log('gate approved', ids)
-    this.schedule(state)
-    this.settle(state)
+    this.passGate(target.state, stepId, 'approved')
+    this.settle(target.state)
     return ACTION_OK
+  }
+
+  private passGate(state: RunState, stepId: string, decision: 'approved' | 'autopilot'): void {
+    const { runId } = state.record
+    if (decision === 'autopilot') this.setStep(state, stepId, 'done')
+    else state.stepStatus[stepId] = 'done'
+    this.resume(state, stepId)
+    this.deps.store.dispatch({ type: 'workflows/gateResolved', payload: { runId, stepId, decision } })
+    this.log('gate approved', decision === 'approved' ? { runId, stepId } : { runId, stepId, decision })
+    this.schedule(state)
   }
 
   requestChanges(runId: string, stepId: string, request: RequestChangesRequest): StepActionResult {

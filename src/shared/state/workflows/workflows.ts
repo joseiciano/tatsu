@@ -408,7 +408,7 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
     case 'workflows/gateResolved': {
       const { runId, stepId, decision } = event.payload
       if (state.runs[runId]?.steps[stepId]?.status !== 'awaiting-gate') return state
-      return setStepStatus(state, runId, stepId, decision === 'approved' ? 'done' : 'pending')
+      return setStepStatus(state, runId, stepId, decision === 'changes-requested' ? 'pending' : 'done')
     }
     default: {
       const _exhaustive: never = event
