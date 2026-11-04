@@ -785,6 +785,112 @@ describe('LaunchSheet overrides', () => {
     await click(startButton())
     expect(startPayload()).toMatchObject({ worktreePath: '/wts/new', overrides: { fix: { agent: 'opencode' } } })
   })
+  const budget = (): HTMLInputElement => byLabel<HTMLInputElement>('Budget (USD)')
+  const describedBy = (el: HTMLElement): string[] =>
+    (el.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? `missing #${id}`)
+
+  it('sends a valid budget as budgetUsd and counts it as a change, and sends nothing for a blank one', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    await fillPlan()
+    expect(budget().value).toBe('')
+    await type(budget(), '   ')
+    expect(toggle().textContent?.trim()).toBe('Overrides')
+    await click(startButton())
+    expect(Object.hasOwn(startPayload(), 'budgetUsd')).toBe(false)
+    await type(budget(), ' 2.50 ')
+    expect(toggle().textContent?.trim()).toBe('Overrides (1 changed)')
+    await click(startButton())
+    expect(startPayload()).toMatchObject({ defId: 'personal:plan', budgetUsd: 2.5 })
+  })
+
+  it('blocks Start on an invalid budget with an inline message tied to the field', async () => {
+    await mount()
+    await select('personal:plan')
+    await fillPlan()
+    await openOverrides()
+    expect(startButton().disabled).toBe(false)
+    for (const [text, message] of [
+      ['0', 'Budget must be more than $0'],
+      ['abc', 'Budget must be a number, like 5 or 2.50'],
+      ['10000.01', 'Budget must be $10,000 or less']
+    ]) {
+      await type(budget(), text)
+      expect(startButton().disabled).toBe(true)
+      expect(container.textContent).toContain('Enter a valid budget')
+      expect(budget().getAttribute('aria-invalid')).toBe('true')
+      expect(describedBy(budget())).toContain(message)
+      expect(toggle().textContent?.trim()).toBe('Overrides')
+    }
+    await type(budget(), '5')
+    expect(startButton().disabled).toBe(false)
+    expect(budget().hasAttribute('aria-invalid')).toBe(false)
+    await click(startButton())
+    expect(startPayload()).toMatchObject({ budgetUsd: 5 })
+  })
+
+  it('keeps the budget message visible while another reason blocks Start', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    await fillPlan()
+    await type(budget(), '0')
+    await type(byLabel<HTMLInputElement>('Model for plan'), 'm'.repeat(201))
+    expect(startButton().disabled).toBe(true)
+    expect(container.textContent).toContain('Model for plan is too long')
+    expect(container.textContent).not.toContain('Enter a valid budget')
+    expect(describedBy(budget())).toContain('Budget must be more than $0')
+  })
+
+  it('describes the field as best effort and adds the opencode notice from the overridden steps', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    const help = describedBy(budget())
+    expect(help).toHaveLength(1)
+    expect(help[0]).toMatch(/best effort/i)
+    await choose(byLabel<HTMLSelectElement>('Agent for plan'), 'opencode')
+    expect(describedBy(budget())).toStrictEqual([
+      help[0],
+      "Every agent step runs on opencode, which reports no cost, so this run can't reach its budget."
+    ])
+    await choose(byLabel<HTMLSelectElement>('Agent for plan'), 'claude')
+    expect(describedBy(budget())).toStrictEqual(help)
+  })
+
+  it('says some steps report no cost when only some agent steps run on opencode', async () => {
+    await mount()
+    await select(REPO_ID)
+    await click(buttonByText('Trust this definition'))
+    await openOverrides()
+    expect(describedBy(budget())).toContain(
+      "Some steps run on opencode, which reports no cost; they don't count toward the budget."
+    )
+  })
+
+  it('resets the budget when the selected definition changes', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    await type(budget(), '5')
+    await select('personal:full')
+    await select('personal:plan')
+    expect(budget().value).toBe('')
+    expect(toggle().textContent?.trim()).toBe('Overrides')
+  })
+
+  it('shows no budget field for a gated definition without agent steps', async () => {
+    storeState.definitions = { ...storeState.definitions, 'personal:gatedshell': summary('personal:gatedshell') }
+    await mount()
+    await select('personal:gatedshell')
+    await openOverrides()
+    expect(container.textContent).toContain('Autopilot (approve gates automatically)')
+    expect(container.textContent).not.toContain('Budget (USD)')
+  })
 })
 
 describe('LaunchSheet input pickers', () => {

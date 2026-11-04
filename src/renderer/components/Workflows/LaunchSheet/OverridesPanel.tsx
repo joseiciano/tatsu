@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info, ShieldAlert } from 'lucide-react'
 import { agentDisplayName } from '../../../../shared/agent-registry'
 import { STEP_HARNESS_AGENTS, WORKFLOW_STEP_MODEL_MAX_CHARS } from '../../../../shared/state/workflows'
 import type { WorkflowAgent } from '../../../../shared/workflow-def'
@@ -8,6 +8,12 @@ import { AUTOPILOT_UNTRUSTED_NOTICE, type OverrideDraft, type OverrideRow } from
 export interface AutopilotView {
   checked: boolean
   blocked: boolean
+}
+
+export interface BudgetView {
+  text: string
+  error: string | null
+  notice: string | null
 }
 
 export interface OverridesPanelProps {
@@ -19,15 +25,18 @@ export interface OverridesPanelProps {
   invalidStep: string | null
   reasonId: string
   autopilot: AutopilotView | null
+  budget: BudgetView | null
   onToggle: () => void
   onAgentChange: (stepId: string, agent: WorkflowAgent) => void
   onModelChange: (stepId: string, model: string) => void
   onAutopilotChange: (checked: boolean) => void
+  onBudgetChange: (text: string) => void
 }
 
 const FIELD_CLASS =
   'w-full bg-app/40 border border-border rounded px-2.5 py-1.5 text-xs text-fg-bright placeholder:text-faint focus:outline-none focus:border-accent disabled:opacity-50'
 const AGENT_DEFAULT = 'Agent default'
+const BUDGET_HELP = 'Optional. Best effort: once the reported cost reaches it, the run pauses before starting more steps.'
 
 function fieldView(row: OverrideRow, draft: OverrideDraft | undefined): { agent: WorkflowAgent; model: string; placeholder: string } {
   const agent = draft?.agent ?? row.agent
@@ -48,14 +57,26 @@ export function OverridesPanel({
   invalidStep,
   reasonId,
   autopilot,
+  budget,
   onToggle,
   onAgentChange,
   onModelChange,
-  onAutopilotChange
+  onAutopilotChange,
+  onBudgetChange
 }: OverridesPanelProps): JSX.Element {
   const baseId = useId()
   const bodyId = `${baseId}-body`
   const autopilotNoticeId = `${baseId}-autopilot-notice`
+  const budgetId = `${baseId}-budget`
+  const budgetHelpId = `${budgetId}-help`
+  const budgetNoticeId = `${budgetId}-notice`
+  const budgetErrorId = `${budgetId}-error`
+  const budgetDescribedBy =
+    budget === null
+      ? undefined
+      : [budgetHelpId, budget.notice !== null ? budgetNoticeId : null, budget.error !== null ? budgetErrorId : null]
+          .filter((id) => id !== null)
+          .join(' ')
   const Chevron = expanded ? ChevronDown : ChevronRight
   return (
     <div className="rounded border border-border">
@@ -123,6 +144,41 @@ export function OverridesPanel({
             </div>
           )
         })}
+        {budget !== null && (
+          <div className="space-y-1">
+            <label htmlFor={budgetId} className="block text-xs text-dim">
+              Budget (USD)
+            </label>
+            <input
+              id={budgetId}
+              type="text"
+              inputMode="decimal"
+              value={budget.text}
+              placeholder="No budget"
+              disabled={disabled}
+              spellCheck={false}
+              autoComplete="off"
+              aria-invalid={budget.error !== null || undefined}
+              aria-describedby={budgetDescribedBy}
+              onChange={(e) => onBudgetChange(e.target.value)}
+              className={`${FIELD_CLASS} tabular-nums`}
+            />
+            <p id={budgetHelpId} className="text-xs text-faint">
+              {BUDGET_HELP}
+            </p>
+            {budget.notice !== null && (
+              <p id={budgetNoticeId} className="flex items-start gap-1.5 text-xs text-warning">
+                <Info className="icon-xs mt-0.5 shrink-0" />
+                {budget.notice}
+              </p>
+            )}
+            {budget.error !== null && (
+              <p id={budgetErrorId} className="text-xs text-danger">
+                {budget.error}
+              </p>
+            )}
+          </div>
+        )}
         {autopilot !== null && (
           <div className="space-y-1">
             <label className="flex items-center gap-2 text-xs text-fg cursor-pointer has-[:disabled]:cursor-default">

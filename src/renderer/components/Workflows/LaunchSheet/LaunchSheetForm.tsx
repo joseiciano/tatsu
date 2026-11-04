@@ -13,7 +13,7 @@ import type {
   TrustStepRow
 } from '../launch-sheet-helpers'
 import { InputPicker } from '../InputPicker'
-import { OverridesPanel, type AutopilotView } from './OverridesPanel'
+import { OverridesPanel, type AutopilotView, type BudgetView } from './OverridesPanel'
 import { TrustPanel } from './TrustPanel'
 
 export interface LaunchSheetOption {
@@ -36,6 +36,7 @@ export interface LaunchSheetOverrides {
   expanded: boolean
   invalidStep: string | null
   autopilot: AutopilotView | null
+  budget: BudgetView | null
 }
 
 export type TargetMode = 'new' | 'existing'
@@ -93,6 +94,7 @@ export interface LaunchSheetFormProps {
   onOverrideAgentChange: (stepId: string, agent: WorkflowAgent) => void
   onOverrideModelChange: (stepId: string, model: string) => void
   onAutopilotChange: (checked: boolean) => void
+  onBudgetChange: (text: string) => void
   onStart: () => void
   onClose: () => void
 }
@@ -141,6 +143,7 @@ export function LaunchSheetForm({
   onOverrideAgentChange,
   onOverrideModelChange,
   onAutopilotChange,
+  onBudgetChange,
   onStart,
   onClose
 }: LaunchSheetFormProps): JSX.Element {
@@ -383,10 +386,12 @@ export function LaunchSheetForm({
               invalidStep={overrides.invalidStep}
               reasonId={reasonId}
               autopilot={overrides.autopilot}
+              budget={overrides.budget}
               onToggle={onToggleOverrides}
               onAgentChange={onOverrideAgentChange}
               onModelChange={onOverrideModelChange}
               onAutopilotChange={onAutopilotChange}
+              onBudgetChange={onBudgetChange}
             />
           )}
 
