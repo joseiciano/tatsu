@@ -789,7 +789,7 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it('skips feature checks while other errors remain', () => {
-    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: codex\n    prompt: "{{inputs.nope}}"\n    timeout: 60\n')
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    kind: orchestrator\n    agent: claude\n    prompt: "{{inputs.nope}}"\n')
     expect(result.diagnostics.map((d) => d.code)).toEqual(['unknown-ref'])
   })
 
@@ -803,9 +803,21 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   const reader = (id: string, extra = '') => step(id, `    permissions: read-only\n${extra}`)
   const linearOnly = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'nonlinear-needs')
 
-  it('supports non-linear needs and parallel_safe by default', () => {
+  it('supports non-linear needs, parallel_safe and timeout by default', () => {
     expect(WORKFLOW_FEATURES['nonlinear-needs'].supported).toBe(true)
     expect(WORKFLOW_FEATURES.parallel_safe.supported).toBe(true)
+    expect(WORKFLOW_FEATURES.timeout.supported).toBe(true)
+  })
+
+  it('reports one timeout error naming phase 4 when the feature is not supported', () => {
+    const text = `name: x\nsteps:\n${step('a', '    timeout: 60\n')}`
+    const withoutTimeout = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'timeout')
+    const result = validateWorkflowDefinition(text)
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps[0].timeout).toBe(60)
+    const diagnostics = validateWorkflowDefinition(text, { supportedFeatures: withoutTimeout }).diagnostics
+    expect(diagnostics.map((d) => [d.code, d.feature, d.path])).toEqual([['unsupported-feature', 'timeout', 'steps[0].timeout']])
+    expect(diagnostics[0].message).toContain('phase 4')
   })
 
   it('reports one parallel_safe error naming phase 4 when the feature is not supported', () => {
@@ -834,7 +846,6 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it.each([
-    ['timeout', `name: x\nsteps:\n${step('a', '    timeout: 60\n')}`, 'steps[0].timeout', 4],
     ['foreach', 'name: x\nsteps:\n  - id: each\n    kind: foreach\n    over: inputs.list\n', 'steps[0].kind', 6],
     ['orchestrator', 'name: x\nsteps:\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n', 'steps[0].kind', 8]
   ] as const)('reports one %s error naming its phase', (feature, text, path, phase) => {

@@ -30,7 +30,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     swapWorkflowStep: vi.fn(),
     approveWorkflowGate: vi.fn(),
     requestWorkflowChanges: vi.fn(),
-    resolveWorkflowLoopCap: vi.fn()
+    resolveWorkflowLoopCap: vi.fn(),
+    keepWaitingWorkflowStep: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -205,7 +206,8 @@ beforeEach(() => {
     backendApi.swapWorkflowStep,
     backendApi.approveWorkflowGate,
     backendApi.requestWorkflowChanges,
-    backendApi.resolveWorkflowLoopCap
+    backendApi.resolveWorkflowLoopCap,
+    backendApi.keepWaitingWorkflowStep
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -550,6 +552,36 @@ describe('RunDetailContainer', () => {
       await click(actionButton('Continue anyway'))
       expect(backendApi.resolveWorkflowLoopCap).toHaveBeenLastCalledWith('r1', 'exit', 'continue')
       expect(backendApi.resolveWorkflowLoopCap).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('after a step timeout', () => {
+    const EXIT_RUNNING = attemptRecord({ attemptId: 'a-exit', stepId: 'exit', status: 'running', startedAt: NOW - 40_000, endedAt: undefined })
+    const timedOutRun = () =>
+      pausedRun({
+        pausedReason: 'timeout',
+        steps: {
+          plan: { status: 'done', attemptIds: ['a-plan'], kind: 'shell' },
+          exit: { status: 'running', attemptIds: ['a-exit'], kind: 'agent', agent: 'claude' }
+        }
+      })
+    const timedOutAttempts = { 'a-plan': sliceAttempt('plan', 'done'), 'a-exit': sliceAttempt('exit', 'running') }
+
+    beforeEach(() => {
+      backendApi.getWorkflowRun.mockResolvedValue(
+        record([PLAN_ATTEMPT, EXIT_RUNNING], { pausedReason: 'timeout', steps: { plan: 'done', exit: 'running' } })
+      )
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => [PLAN_ATTEMPT, EXIT_RUNNING].find((a) => a.attemptId === id) ?? null)
+    })
+
+    it('offers Keep waiting named for the timed-out step beside Mark done and Cancel step, and sends it', async () => {
+      setState(timedOutRun(), timedOutAttempts)
+      await render()
+      expect(actionButtons()).toEqual(['Keep waiting', 'Mark done', 'Cancel step', 'Cancel run'])
+      expect(actionButton('Keep waiting').getAttribute('aria-label')).toBe('Keep waiting: exit')
+      await click(actionButton('Keep waiting'))
+      expect(backendApi.keepWaitingWorkflowStep).toHaveBeenCalledExactlyOnceWith('r1', 'exit')
+      expect(backendApi.cancelWorkflowStep).not.toHaveBeenCalled()
     })
   })
 

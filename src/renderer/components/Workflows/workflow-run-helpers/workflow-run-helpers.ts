@@ -29,6 +29,7 @@ export type NeedsYouActionKind =
   | 'request-changes'
   | 'loop-again'
   | 'loop-continue'
+  | 'keep-waiting'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -70,6 +71,7 @@ export type NeedsYouActionsApi = Pick<
   | 'retryWorkflowStepFromClean'
   | 'approveWorkflowGate'
   | 'resolveWorkflowLoopCap'
+  | 'keepWaitingWorkflowStep'
 >
 
 export const STEP_GLYPHS: Record<WorkflowStepStatus, StepGlyph> = {
@@ -168,8 +170,9 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
       return ['approve', ...(step?.kind === 'agent' ? (['request-changes'] as const) : []), 'cancel', ...jump]
     case 'loop-cap':
       return ['loop-again', 'loop-continue', 'cancel', ...jump]
-    case 'budget':
     case 'timeout':
+      return ['keep-waiting', 'cancel', ...jump]
+    case 'budget':
     case 'restack-conflict':
       return ['cancel', ...jump]
     default: {
@@ -224,6 +227,8 @@ export function runNeedsYouAction(
       return api.resolveWorkflowLoopCap(runId, stepId, 'again')
     case 'loop-continue':
       return api.resolveWorkflowLoopCap(runId, stepId, 'continue')
+    case 'keep-waiting':
+      return api.keepWaitingWorkflowStep(runId, stepId)
     default: {
       const _exhaustive: never = kind
       return _exhaustive

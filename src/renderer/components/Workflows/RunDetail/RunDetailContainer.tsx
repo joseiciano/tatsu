@@ -244,6 +244,7 @@ export function RunDetailContainer({
       case 'approve':
       case 'loop-again':
       case 'loop-continue':
+      case 'keep-waiting':
       case 'retry':
       case 'skip':
       case 'resume':

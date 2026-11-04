@@ -444,6 +444,7 @@ export interface ElectronAPI {
   approveWorkflowGate(runId: string, stepId: string): Promise<WorkflowActionResponse>
   requestWorkflowChanges(runId: string, stepId: string, payload: WorkflowRequestChangesPayload): Promise<WorkflowActionResponse>
   resolveWorkflowLoopCap(runId: string, stepId: string, action: WorkflowLoopCapAction): Promise<WorkflowActionResponse>
+  keepWaitingWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   /** Reveal the themes directory in the OS file browser (Electron only).
    *  Always returns the absolute directory path so the web client can
    *  surface it manually. */

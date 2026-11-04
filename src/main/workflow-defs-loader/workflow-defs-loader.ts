@@ -74,7 +74,7 @@ export interface WorkflowDefsLoaderDeps {
   clearTimer?: (handle: TimerHandle) => void
 }
 
-type TimerHandle = ReturnType<typeof setTimeout>
+export type TimerHandle = ReturnType<typeof setTimeout>
 
 export type SaveDefinitionRequest = WorkflowSaveDefinitionPayload
 

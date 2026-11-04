@@ -28,6 +28,7 @@ import {
   type StepExecution
 } from './drivers'
 import { runContextPath } from './run-artifacts'
+import type { TimerHandle } from '../workflow-defs-loader'
 import {
   STEP_SUMMARY_MAX_CHARS,
   evaluateCondition,
@@ -75,6 +76,7 @@ import {
 const ENDED_EXECUTIONS_MAX = 256
 const CONTINUATION_PROMPT_MAX_CHARS = 1024 * 1024
 const INPUT_TRUST_TIMEOUT_MS = 10_000
+const MAX_TIMER_MS = 2 ** 31 - 1
 export const RUN_INPUTS_MAX = 64
 export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
 
@@ -93,6 +95,7 @@ interface LiveAttempt {
   blockPending?: boolean
   continuedThisTurn?: boolean
   staleStops?: boolean
+  timer?: TimerHandle
 }
 
 interface RunState {
@@ -185,6 +188,11 @@ function withPreviousResult(prompt: string, previous: WorkflowAttemptRecord): st
   return `${prompt}\n\nPrevious result:\n${previous.result?.summary ?? ''}`
 }
 
+function timeoutMsOf(step: ResolvedWorkflowStep): number | undefined {
+  const ms = step.timeout === undefined ? undefined : step.timeout * 1000
+  return ms !== undefined && Number.isFinite(ms) ? ms : undefined
+}
+
 function isRunnable(step: ResolvedWorkflowStep): step is RunnableStep {
   return step.kind === 'agent' || step.kind === 'shell'
 }
@@ -231,9 +239,13 @@ export class WorkflowRunner {
   private ready = false
   private readonly unsubscribers: Array<() => void>
   private readonly persist: (run: WorkflowRunRecord) => void
+  private readonly setTimer: (fn: () => void, ms: number) => TimerHandle
+  private readonly clearTimer: (handle: TimerHandle) => void
 
   constructor(private readonly deps: WorkflowRunnerDeps) {
     this.persist = deps.persist ?? (() => {})
+    this.setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
+    this.clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle))
     this.unsubscribers = (['agent', 'shell'] as const).map((kind) =>
       deps.drivers[kind].onEvent((event) => this.onDriverEvent(kind, event))
     )
@@ -241,6 +253,9 @@ export class WorkflowRunner {
 
   dispose(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe()
+    for (const state of this.runs.values()) {
+      for (const live of state.live.values()) this.disarm(live)
+    }
   }
 
   getRunRecord(runId: string): WorkflowRunRecord | null {
@@ -812,6 +827,73 @@ export class WorkflowRunner {
     return ACTION_OK
   }
 
+  keepWaiting(runId: string, stepId: string): StepActionResult {
+    const ids = { runId, stepId }
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
+    if (!this.ready) return this.refuseAction('starting', ids)
+    if (!this.labsOn()) return this.refuseAction('labs-off', ids)
+    if (state.busy) return this.refuseAction('busy', ids)
+    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
+    if (!step) return this.refuseAction('wrong-step', ids)
+    const live = state.live.get(stepId)
+    const ms = timeoutMsOf(step)
+    if (state.pauses.get(stepId) !== 'timeout' || !live || ms === undefined) {
+      return this.refuseAction('not-timed-out', ids)
+    }
+    live.record.timeoutAt = this.deps.now() + ms
+    this.arm(state, live, ms)
+    this.log('step keep waiting', ids)
+    this.resume(state, stepId)
+    this.schedule(state)
+    this.settle(state)
+    return ACTION_OK
+  }
+
+  private arm(state: RunState, live: LiveAttempt, ms: number): void {
+    this.disarm(live)
+    const delay = Math.min(ms, MAX_TIMER_MS)
+    live.timer = this.setTimer(() => {
+      live.timer = undefined
+      if (ms > delay) this.arm(state, live, ms - delay)
+      else this.onTimeout(state, live)
+    }, delay)
+  }
+
+  private disarm(live: LiveAttempt): void {
+    if (live.timer === undefined) return
+    this.clearTimer(live.timer)
+    live.timer = undefined
+  }
+
+  private onTimeout(state: RunState, live: LiveAttempt): void {
+    const { stepId, attemptId } = live.record
+    if (this.runs.get(state.record.runId) !== state || state.live.get(stepId) !== live) return
+    const ids = { runId: state.record.runId, stepId, attemptId }
+    const existing = state.pauses.get(stepId)
+    if (existing !== undefined) {
+      this.log(`step timeout deferred ${existing}`, ids)
+      return
+    }
+    this.log('step timed out', ids)
+    this.pause(state, stepId, 'timeout')
+    this.persist(state.record)
+  }
+
+  private armRemaining(state: RunState, live: LiveAttempt, step: ResolvedWorkflowStep): void {
+    const ms = timeoutMsOf(step)
+    if (ms === undefined || live.timer !== undefined || state.pauses.get(step.id) === 'timeout') return
+    const { timeoutAt, startedAt } = live.record
+    const deadline = typeof timeoutAt === 'number' && Number.isFinite(timeoutAt) ? timeoutAt : startedAt + ms
+    this.arm(state, live, Math.max(0, deadline - this.deps.now()))
+  }
+
+  private rearmAfterPause(state: RunState, stepId: string): void {
+    const live = state.live.get(stepId)
+    const step = live ? state.record.definition.steps.find((candidate) => candidate.id === stepId) : undefined
+    if (live && step) this.armRemaining(state, live, step)
+  }
+
   private spanOf(state: RunState, loopingId: string): string[] {
     const { steps } = state.record.definition
     return loopSpan(
@@ -984,10 +1066,12 @@ export class WorkflowRunner {
       const { executionId } = running
       const alive = executionId !== undefined && (this.deps.hasExecution?.(executionId) ?? false)
       if (!alive || !step || !isRunnable(step) || state.live.has(step.id)) continue
-      state.live.set(step.id, { record: running, kind: step.kind, executionId })
+      const live: LiveAttempt = { record: running, kind: step.kind, executionId }
+      state.live.set(step.id, live)
       this.liveAttempts.set(running.attemptId, runId)
       this.executions.set(executionId, running.attemptId)
       if (step.kind === 'agent') this.agentSlots.add(running.attemptId)
+      this.armRemaining(state, live, step)
     }
     return state
   }
@@ -1323,6 +1407,7 @@ export class WorkflowRunner {
     const n = state.record.attempts.filter((attempt) => attempt.stepId === step.id).length + 1
     const attemptId = newId()
     const startedAt = now()
+    const timeoutMs = timeoutMsOf(step)
     const record: WorkflowAttemptRecord = {
       attemptId,
       stepId: step.id,
@@ -1330,11 +1415,13 @@ export class WorkflowRunner {
       status: 'running',
       startedAt,
       ...(step.kind === 'agent' ? harnessOf(step) : {}),
+      ...(timeoutMs === undefined ? {} : { timeoutAt: startedAt + timeoutMs }),
       metrics: { continuations: 0, pauses: [] }
     }
     const live: LiveAttempt = { record, kind: step.kind }
     state.record.attempts.push(record)
     state.live.set(step.id, live)
+    if (timeoutMs !== undefined) this.arm(state, live, timeoutMs)
     this.liveAttempts.set(attemptId, runId)
     if (step.kind === 'agent') this.agentSlots.add(attemptId)
     this.setStep(state, step.id, 'running')
@@ -1595,6 +1682,7 @@ export class WorkflowRunner {
     cancelExecution: boolean
   ): void {
     const { attemptId, stepId } = live.record
+    this.disarm(live)
     if (state.live.get(stepId) === live) state.live.delete(stepId)
     const endedAt = this.deps.now()
     live.record.status = status
@@ -1673,6 +1761,7 @@ export class WorkflowRunner {
   private resume(state: RunState, stepId: string): void {
     const { record } = state
     const removed = state.pauses.delete(stepId)
+    if (removed) this.rearmAfterPause(state, stepId)
     if (record.status !== 'paused' || (!removed && state.pauses.size > 0)) return
     const head = this.headReason(state)
     this.syncCursor(state)

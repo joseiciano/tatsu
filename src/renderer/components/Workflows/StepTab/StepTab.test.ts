@@ -94,6 +94,7 @@ describe('stepTabOverlayMode', () => {
     ['cancelled step', stepTab, failed, runRecord({ stepStatus: 'cancelled' }), 'result-with-mark-done'],
     ['interrupted step', stepTab, failed, runRecord({ stepStatus: 'interrupted' }), 'result-with-mark-done'],
     ['needs-input with the attempt still live', stepTab, failed, runRecord({ reason: 'needs-input', stepStatus: 'running' }), 'result-with-mark-done'],
+    ['timeout with the attempt still live', stepTab, failed, runRecord({ reason: 'timeout', stepStatus: 'running' }), 'result-with-mark-done'],
     ['other pause reason', stepTab, failed, runRecord({ reason: 'interrupted' }), 'result'],
     ['needs-approval pause', stepTab, failed, runRecord({ reason: 'needs-approval' }), 'result'],
     ['run is running', stepTab, failed, runRecord({ status: 'running' }), 'result'],

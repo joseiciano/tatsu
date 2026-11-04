@@ -13,6 +13,7 @@ export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
   'request-changes': 'Request changes',
   'loop-again': 'Loop again',
   'loop-continue': 'Continue anyway',
+  'keep-waiting': 'Keep waiting',
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',

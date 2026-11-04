@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<NeedsYouActionKind, string> = {
   'request-changes': 'Request changes',
   'loop-again': 'Loop again',
   'loop-continue': 'Continue anyway',
+  'keep-waiting': 'Keep waiting',
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',
@@ -47,7 +48,8 @@ const STEP_NAMED_ACTIONS: ReadonlySet<NeedsYouActionKind> = new Set([
   'approve',
   'request-changes',
   'loop-again',
-  'loop-continue'
+  'loop-continue',
+  'keep-waiting'
 ])
 
 function actionAriaLabel(kind: NeedsYouActionKind, stepId: string | null, workflowName: string, worktreeName: string): string {

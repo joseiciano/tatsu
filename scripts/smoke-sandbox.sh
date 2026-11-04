@@ -168,6 +168,15 @@ steps:
     permissions: read-only
     prompt: "FAKE_AGENT_MODE=hang Review the right half and stay alive."
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-timeout.yaml" <<'YAML'
+name: smoke-timeout
+steps:
+  - id: wait
+    agent: claude
+    permissions: read-only
+    timeout: 2
+    prompt: "FAKE_AGENT_MODE=hang Stay alive past the step timeout."
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-gate.yaml" <<'YAML'
 name: smoke-gate
 steps:

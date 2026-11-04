@@ -165,6 +165,15 @@ describe('runDetailModel actions', () => {
     expect(actionsFor(rec)).toEqual(['retry', 'mark-done', 'skip', 'cancel-step', 'cancel-run'])
   })
 
+  it('offers Keep waiting, Mark done, Cancel step and Cancel run when a live step timed out', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'running', endedAt: undefined })], {
+      pausedReason: 'timeout',
+      steps: { plan: 'done', exit: 'running' }
+    })
+    expect(actionsFor(rec)).toEqual(['keep-waiting', 'mark-done', 'cancel-step', 'cancel-run'])
+    expect(actionsFor(rec, true)).toEqual(['keep-waiting', 'mark-done', 'cancel-step', 'cancel-run', 'jump'])
+  })
+
   it('offers Resume for an interrupted Claude attempt with a session', () => {
     const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'interrupted', sessionId: 's1' })], {
       pausedReason: 'interrupted',
