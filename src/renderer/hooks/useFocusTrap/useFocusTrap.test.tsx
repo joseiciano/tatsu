@@ -133,6 +133,21 @@ describe('useFocusTrap', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it('leaves Escape to a focused combobox whose popup is open', () => {
+    const onEscape = vi.fn()
+    render({ onEscape })
+    const middle = button('middle')
+    middle.setAttribute('role', 'combobox')
+    middle.setAttribute('aria-expanded', 'true')
+    act(() => middle.focus())
+    const event = press('Escape')
+    expect(onEscape).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
+    middle.setAttribute('aria-expanded', 'false')
+    press('Escape')
+    expect(onEscape).toHaveBeenCalledTimes(1)
+  })
+
   it('returns focus to the opener on unmount', () => {
     render()
     expect(document.activeElement).not.toBe(opener)

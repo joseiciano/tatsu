@@ -10,6 +10,7 @@ import type {
   OverrideRow,
   TrustStepRow
 } from '../launch-sheet-helpers'
+import { InputPicker } from '../InputPicker'
 import { OverridesPanel } from './OverridesPanel'
 import { TrustPanel } from './TrustPanel'
 
@@ -49,8 +50,14 @@ export type LaunchSheetTargetView =
       existingPath: string | null
     }
 
+export interface LaunchSheetPickerRoots {
+  repoRoot: string | null
+  filesRoot: string | null
+}
+
 export interface LaunchSheetFormProps {
   target: LaunchSheetTargetView
+  pickerRoots: LaunchSheetPickerRoots
   options: LaunchSheetOption[]
   selectedId: string
   fields: LaunchInputField[]
@@ -96,6 +103,7 @@ const MODE_OPTIONS: { mode: TargetMode; label: string }[] = [
 
 export function LaunchSheetForm({
   target,
+  pickerRoots,
   options,
   selectedId,
   fields,
@@ -309,32 +317,37 @@ export function LaunchSheetForm({
 
           {fields.map((field) => {
             const id = `${baseId}-input-${field.name}`
-            const common = {
-              id,
-              value: inputs[field.name] ?? '',
-              disabled: submitting,
-              required: true,
-              spellCheck: false
-            }
+            const value = inputs[field.name] ?? ''
+            const pickerRoot = field.type === 'file' ? pickerRoots.filesRoot : pickerRoots.repoRoot
             return (
               <div key={field.name} className="space-y-1.5">
                 <label htmlFor={id} className={LABEL_CLASS}>
                   {field.name}
                   <span className="ml-1.5 normal-case tracking-normal text-faint">{field.type}</span>
                 </label>
-                {field.control === 'textarea' ? (
+                {field.type === 'text' ? (
                   <textarea
-                    {...common}
+                    id={id}
+                    value={value}
+                    disabled={submitting}
+                    required
+                    spellCheck={false}
                     rows={3}
                     onChange={(e) => onInputChange(field.name, e.target.value)}
                     className={`${FIELD_CLASS} resize-y`}
                   />
                 ) : (
-                  <input
-                    {...common}
-                    type="text"
-                    onChange={(e) => onInputChange(field.name, e.target.value)}
+                  <InputPicker
+                    key={`${selectedId}:${pickerRoot ?? ''}`}
+                    id={id}
+                    label={field.name}
+                    kind={field.type}
+                    value={value}
+                    disabled={submitting}
+                    repoRoot={pickerRoots.repoRoot}
+                    filesRoot={pickerRoots.filesRoot}
                     className={`${FIELD_CLASS} font-mono`}
+                    onChange={(next) => onInputChange(field.name, next)}
                   />
                 )}
               </div>

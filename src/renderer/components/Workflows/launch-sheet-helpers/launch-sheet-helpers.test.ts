@@ -106,9 +106,9 @@ describe('buildInputFields', () => {
   it('maps text to a textarea and issue, pr and file to single-line fields, in declared order', () => {
     expect(buildInputFields(ALL_INPUTS)).toEqual([
       { name: 'task', type: 'text', control: 'textarea' },
-      { name: 'issue', type: 'issue', control: 'text' },
-      { name: 'pr', type: 'pr', control: 'text' },
-      { name: 'file', type: 'file', control: 'text' }
+      { name: 'issue', type: 'issue', control: 'picker' },
+      { name: 'pr', type: 'pr', control: 'picker' },
+      { name: 'file', type: 'file', control: 'picker' }
     ])
   })
 

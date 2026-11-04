@@ -20,7 +20,10 @@ const { backendApi, storeState } = vi.hoisted(() => {
     acceptHooks: vi.fn(),
     trustWorkflowDefinition: vi.fn(),
     runPendingWorktree: vi.fn(),
-    dismissPendingWorktree: vi.fn()
+    dismissPendingWorktree: vi.fn(),
+    listRepoIssues: vi.fn(),
+    listRepoPRs: vi.fn(),
+    listAllFiles: vi.fn()
   }
   const storeState: {
     definitions: Record<string, WorkflowDefinitionSummary>
@@ -87,6 +90,15 @@ steps:
     run: pnpm test
 `
 }
+
+SOURCES['personal:pick'] = `name: pick
+inputs:
+  target: { type: file }
+steps:
+  - id: check
+    kind: shell
+    run: test -f {{inputs.target}}
+`
 
 const REPO_ID = 'repo:abcdefabcdef:ship'
 const DISK_HASH = 'd'.repeat(64)
@@ -155,6 +167,9 @@ beforeEach(() => {
   backendApi.getWorkflowDefinition.mockReset().mockImplementation(async (id: string) => detail(id))
   backendApi.startWorkflowRun.mockReset().mockResolvedValue({ runId: 'run-1' })
   backendApi.acceptHooks.mockReset().mockResolvedValue(true)
+  backendApi.listRepoIssues.mockReset().mockResolvedValue({ status: 'no-token' })
+  backendApi.listRepoPRs.mockReset().mockResolvedValue(null)
+  backendApi.listAllFiles.mockReset().mockResolvedValue([])
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -280,7 +295,7 @@ describe('LaunchSheet', () => {
     expect(backendApi.startWorkflowRun).toHaveBeenCalledWith({
       defId: 'personal:plan',
       worktreePath: '/wt/feature',
-      inputs: { task: 'ship it', issue: '#12' }
+      inputs: { task: 'ship it', issue: '12' }
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -702,5 +717,99 @@ describe('LaunchSheet overrides', () => {
     expect(byLabel<HTMLSelectElement>('Agent for fix').value).toBe('opencode')
     await click(startButton())
     expect(startPayload()).toMatchObject({ worktreePath: '/wts/new', overrides: { fix: { agent: 'opencode' } } })
+  })
+})
+
+describe('LaunchSheet input pickers', () => {
+  beforeEach(() => {
+    storeState.definitions = { ...storeState.definitions, 'personal:pick': summary('personal:pick') }
+    backendApi.listAllFiles.mockImplementation(async (root: string) =>
+      root === '/repo' ? ['README.md', 'docs/primary.md'] : ['README.md', 'docs/feature.md']
+    )
+  })
+
+  function picker(): HTMLInputElement {
+    return byLabel<HTMLInputElement>('targetfile')
+  }
+
+  async function key(el: HTMLElement, name: string): Promise<KeyboardEvent> {
+    const event = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })
+    await act(async () => {
+      el.dispatchEvent(event)
+    })
+    return event
+  }
+
+  it('picks a file with the keyboard without submitting, Escape closes only the list, and Start sends the path', async () => {
+    await mount()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:pick')
+    const el = picker()
+    expect(el.getAttribute('role')).toBe('combobox')
+    expect(backendApi.listAllFiles).toHaveBeenCalledWith('/wt/feature')
+    await act(async () => el.focus())
+    await type(el, 'feat')
+    await key(el, 'Escape')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(el.getAttribute('aria-expanded')).toBe('false')
+    await key(el, 'ArrowDown')
+    await key(el, 'Enter')
+    expect(backendApi.startWorkflowRun).not.toHaveBeenCalled()
+    expect(el.value).toBe('docs/feature.md')
+    expect(startButton().disabled).toBe(false)
+    await click(startButton())
+    expect(backendApi.startWorkflowRun).toHaveBeenCalledWith({
+      defId: 'personal:pick',
+      worktreePath: '/wt/feature',
+      inputs: { target: 'docs/feature.md' }
+    })
+  })
+
+  it('keeps an Escape that closes the open list from reaching window listeners', async () => {
+    const behind = vi.fn()
+    window.addEventListener('keydown', behind)
+    try {
+      await mount()
+      await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:pick')
+      const el = picker()
+      await act(async () => el.focus())
+      await key(el, 'ArrowDown')
+      await key(el, 'Escape')
+      expect(el.getAttribute('aria-expanded')).toBe('false')
+      expect(onClose).not.toHaveBeenCalled()
+      expect(behind).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape' }))
+      await key(el, 'Escape')
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', behind)
+    }
+  })
+
+  it('blocks Start while the typed text is not a listed file', async () => {
+    await mount()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:pick')
+    await type(picker(), '/etc/passwd')
+    expect(startButton().disabled).toBe(true)
+    expect(container.textContent).toContain('Fill in target')
+  })
+
+  it('lists the primary checkout for a new worktree target and the chosen worktree for an existing one', async () => {
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:pick')
+    expect(backendApi.listAllFiles).toHaveBeenLastCalledWith('/repo')
+    await act(async () => picker().focus())
+    await key(picker(), 'ArrowDown')
+    expect([...container.querySelectorAll('[role="option"]')].map((o) => o.textContent)).toEqual([
+      'README.md',
+      'docs/primary.md'
+    ])
+    await key(picker(), 'ArrowDown')
+    await key(picker(), 'Enter')
+    expect(picker().value).toBe('docs/primary.md')
+
+    await click(radio('Existing worktree'))
+    await choose(byLabel<HTMLSelectElement>('Worktree'), '/wt/feature')
+    expect(backendApi.listAllFiles).toHaveBeenLastCalledWith('/wt/feature')
+    expect(picker().value).toBe('')
+    expect(startButton().disabled).toBe(true)
   })
 })

@@ -332,9 +332,12 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
           existingPath
         }
 
+  const filesRoot = target.kind === 'new' ? target.repoRoot : target.worktreePath
+
   return (
     <LaunchSheetForm
       target={targetView}
+      pickerRoots={{ repoRoot, filesRoot }}
       options={options}
       selectedId={selectedId}
       fields={fields}

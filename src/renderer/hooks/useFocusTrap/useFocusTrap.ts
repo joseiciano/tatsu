@@ -26,6 +26,11 @@ function focusDropped(): boolean {
   return current === null || current === document.body
 }
 
+function openComboboxFocused(): boolean {
+  const current = document.activeElement
+  return current?.getAttribute('role') === 'combobox' && current.getAttribute('aria-expanded') === 'true'
+}
+
 function insideAnotherTrap(): boolean {
   return document.activeElement?.closest(`[${FOCUS_TRAP_ATTRIBUTE}]`) != null
 }
@@ -69,7 +74,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, { active, onEsc
         return
       }
       const handler = onEscapeRef.current
-      if (e.key !== 'Escape' || !handler) return
+      if (e.key !== 'Escape' || !handler || openComboboxFocused()) return
       e.preventDefault()
       e.stopPropagation()
       handler()
