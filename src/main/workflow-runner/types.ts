@@ -4,6 +4,7 @@ import type {
   WorkflowInputTrust,
   WorkflowInputTrustType,
   WorkflowMarkDonePayload,
+  WorkflowRequestChangesPayload,
   WorkflowRunRecord,
   WorkflowSnapshotRef
 } from '../../shared/state/workflows'
@@ -131,6 +132,7 @@ export type StepActionRefusal =
   | 'starting'
   | 'not-continuable-step'
   | 'nothing-to-continue'
+  | 'not-awaiting-gate'
 
 export interface ContinueStepOptions {
   fresh?: boolean
@@ -142,3 +144,5 @@ export type StepActionResult =
   | { ok: false; reason: 'invalid-output'; errors: StepOutputFieldError[] }
 
 export type MarkDoneRequest = WorkflowMarkDonePayload
+
+export type RequestChangesRequest = WorkflowRequestChangesPayload

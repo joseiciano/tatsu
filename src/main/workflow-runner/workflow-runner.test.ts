@@ -161,6 +161,26 @@ steps:
     needs: [left, right]
     run: "echo {{steps.left.summary}} {{steps.right.summary}}"
 `,
+  gated: `name: gated
+steps:
+  - id: plan
+    agent: claude
+    prompt: "${PROMPT_SECRET} plan"
+    gate: approve
+  - id: test
+    kind: shell
+    run: "true"
+`,
+  'gated-shell': `name: gated-shell
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+    gate: approve
+  - id: fix
+    agent: claude
+    prompt: "fix"
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -2418,5 +2438,268 @@ describe('WorkflowRunner.continueStep', () => {
     expect(started).toMatchObject({ n: 2, prompt: `redo\n\nPrevious result:\n${SUMMARY_SECRET}` })
     expect(started?.resumeSessionId).toBeUndefined()
     expect(ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))).not.toBe(execution)
+  })
+})
+
+describe('WorkflowRunner gates', () => {
+  const FEEDBACK_SECRET = 'FEEDBACK-SECRET-heron-8'
+
+  async function gatedRun(options: SetupOptions = {}, alive = true) {
+    const ctx = setup({ ...options, deps: { hasExecution: () => alive, ...options.deps } })
+    const runId = await ctx.startRun('gated')
+    await flush()
+    const first = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(first)
+    return { ctx, runId, first, execution }
+  }
+
+  async function atGate(options: SetupOptions = {}, alive = true) {
+    const run = await gatedRun(options, alive)
+    run.ctx.runner.complete(run.first, done(SUMMARY_SECRET))
+    return run
+  }
+
+  it('stops a gated step at its gate on done: attempt done, step awaiting-gate, run paused gate, dependents wait', async () => {
+    const { ctx, runId, first } = await gatedRun()
+    const seen = ctx.eventsSince(() => ctx.runner.complete(first, done(SUMMARY_SECRET)))
+    expect(seen).toEqual(['attemptEnded', 'stepStatusChanged', 'runPaused'])
+    expect(ctx.wf().attempts[first]).toMatchObject({ status: 'done', completedBy: 'tool' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('awaiting-gate')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'gate', cursorStepId: 'plan' })
+    await flush()
+    expect(ctx.shell.started).toEqual([])
+    expect(ctx.stepStatus(runId, 'test')).toBe('pending')
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'paused', pausedReason: 'gate', steps: { plan: 'awaiting-gate' } })
+    expect(ctx.records.at(-1)?.attempts[0].metrics.pauses.map((pause) => pause.reason)).toEqual(['gate'])
+  })
+
+  it('gates a turn-end fallback completion and a shell exit 0, but not a failure', async () => {
+    const fallback = await gatedRun()
+    fallback.ctx.agent.emit({ type: 'turnEnded', executionId: fallback.execution, lastMessage: 'planned' })
+    expect(fallback.ctx.stepStatus(fallback.runId, 'plan')).toBe('awaiting-gate')
+
+    const ctx = setup()
+    const shellRun = await ctx.startRun('gated-shell')
+    await flush()
+    ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(ctx.attemptOf(shellRun, 'test')), code: 0 })
+    expect(ctx.stepStatus(shellRun, 'test')).toBe('awaiting-gate')
+    expect(ctx.wf().runs[shellRun].pausedReason).toBe('gate')
+
+    const failing = await gatedRun()
+    failing.ctx.runner.complete(failing.first, failed())
+    expect(failing.ctx.stepStatus(failing.runId, 'plan')).toBe('failed')
+    expect(failing.ctx.wf().runs[failing.runId].pausedReason).toBe('step-failed')
+  })
+
+  it('replaces a needs-approval pause of the same step with the gate in place', async () => {
+    const { ctx, runId, first, execution } = await gatedRun()
+    ctx.agent.emit({ type: 'needsApproval', executionId: execution })
+    const seen = ctx.eventsSince(() => ctx.runner.complete(first, done()))
+    expect(seen).not.toContain('runResumed')
+    expect(ctx.wf().runs[runId].pausedReason).toBe('gate')
+  })
+
+  it('never relaunches a step awaiting its gate when other actions reschedule', async () => {
+    const { ctx, runId } = await atGate()
+    ctx.runner.reschedule()
+    await flush()
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.shell.started).toEqual([])
+    expect(ctx.stepStatus(runId, 'plan')).toBe('awaiting-gate')
+  })
+
+  it('approve marks the step done, dispatches gateResolved, persists and starts the dependents', async () => {
+    const { ctx, runId } = await atGate()
+    const seen = ctx.eventsSince(() => expect(ctx.runner.approveGate(runId, 'plan')).toEqual({ ok: true }))
+    expect(seen).toEqual(['cursorChanged', 'runResumed', 'gateResolved', 'stepStarted', 'attemptStarted'])
+    expect(ctx.events.find((event) => event.type === 'workflows/gateResolved')?.payload).toEqual({
+      runId,
+      stepId: 'plan',
+      decision: 'approved'
+    })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('done')
+    expect(ctx.stepStatus(runId, 'test')).toBe('running')
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'running', steps: { plan: 'done', test: 'running' } })
+    expect(ctx.records.at(-1)?.pausedReason).toBeUndefined()
+    expect(ctx.logs).toContain(`[workflow] gate approved ${JSON.stringify({ runId, stepId: 'plan' })}`)
+
+    const again = ctx.eventsSince(() =>
+      expect(ctx.runner.approveGate(runId, 'plan')).toEqual({ ok: false, reason: 'not-awaiting-gate' })
+    )
+    expect(again).toEqual([])
+    expect(ctx.runner.requestChanges(runId, 'plan', { feedback: 'x', fresh: false })).toEqual({
+      ok: false,
+      reason: 'not-awaiting-gate'
+    })
+    await flush()
+    ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(ctx.attemptOf(runId, 'test')), code: 0 })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('request changes continues the same execution as attempt n+1 and shows the gate again on done', async () => {
+    const retagged: string[] = []
+    const { ctx, runId, first, execution } = await atGate({
+      deps: { retagStepTab: (_path, tabId, workflow) => retagged.push(`${tabId}:${workflow.attemptId}`) }
+    })
+    const seen = ctx.eventsSince(() =>
+      expect(ctx.runner.requestChanges(runId, 'plan', { feedback: `${FEEDBACK_SECRET} tighten`, fresh: false })).toEqual({
+        ok: true
+      })
+    )
+    expect(seen).toEqual(['gateResolved', 'runResumed', 'stepStarted', 'attemptStarted'])
+    const second = ctx.attemptOf(runId, 'plan')
+    expect(second).not.toBe(first)
+    expect(ctx.wf().attempts[second]).toMatchObject({ n: 2, status: 'running' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(retagged).toEqual([`${execution}:${second}`])
+    await flush()
+    expect(ctx.agent.continued).toEqual([
+      expect.objectContaining({ executionId: execution, prompt: `${FEEDBACK_SECRET} tighten` })
+    ])
+    expect(ctx.runner.completeExecution(execution, { status: 'done', summary: 'tighter' })).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('awaiting-gate')
+    expect(ctx.wf().runs[runId].pausedReason).toBe('gate')
+    expect(ctx.shell.started).toEqual([])
+    expect(ctx.logs).toContain(`[workflow] gate changes requested ${JSON.stringify({ runId, stepId: 'plan' })}`)
+    expect(ctx.logs.join('\n')).not.toContain(FEEDBACK_SECRET)
+    expect(JSON.stringify(ctx.events)).not.toContain(FEEDBACK_SECRET)
+  })
+
+  it('request changes with fresh starts a new session with the feedback and the previous summary, sanitized', async () => {
+    const { ctx, runId, execution } = await atGate()
+    ctx.runner.requestChanges(runId, 'plan', { feedback: `redo\x1b[201~\x07 it\n`, fresh: true })
+    await flush()
+    expect(ctx.agent.continued).toEqual([])
+    expect(ctx.agent.started.at(-1)).toMatchObject({ n: 2, prompt: `redo[201~ it\n\n\nPrevious result:\n${SUMMARY_SECRET}` })
+    expect(ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))).not.toBe(execution)
+  })
+
+  it('request changes after the PTY is gone resumes the recorded session with the sanitized feedback only', async () => {
+    const ctx = setup({ deps: { hasExecution: () => false } })
+    ctx.agent.sessionId = '0f8fad5b-d9cb-469f-a165-70867728950e'
+    const runId = await ctx.startRun('gated')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done(SUMMARY_SECRET))
+    ctx.runner.requestChanges(runId, 'plan', { feedback: 'again\x9b', fresh: false })
+    await flush()
+    expect(ctx.agent.started.at(-1)).toMatchObject({
+      n: 2,
+      resumeSessionId: '0f8fad5b-d9cb-469f-a165-70867728950e',
+      prompt: 'again'
+    })
+  })
+
+  it.each([
+    ['labs off', (ctx: Ctx) => ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } }), 'labs-off'],
+    ['the step is a shell step', null, 'not-continuable-step']
+  ] as const)('a refused request changes (%s) leaves the gate and its pause untouched', async (_name, arrange, reason) => {
+    const ctx = setup({ deps: { hasExecution: () => true } })
+    const slug = arrange ? 'gated' : 'gated-shell'
+    const stepId = arrange ? 'plan' : 'test'
+    const runId = await ctx.startRun(slug)
+    await flush()
+    const attempt = ctx.attemptOf(runId, stepId)
+    if (arrange) ctx.runner.complete(attempt, done())
+    else ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(attempt), code: 0 })
+    arrange?.(ctx)
+    const persistedBefore = ctx.persisted.length
+    const seen = ctx.eventsSince(() =>
+      expect(ctx.runner.requestChanges(runId, stepId, { feedback: 'x', fresh: false })).toEqual({ ok: false, reason })
+    )
+    expect(seen).toEqual([])
+    expect(ctx.persisted).toHaveLength(persistedBefore)
+    expect(ctx.stepStatus(runId, stepId)).toBe('awaiting-gate')
+    expect(ctx.runner.getRunRecord(runId)).toMatchObject({ status: 'paused', pausedReason: 'gate', steps: { [stepId]: 'awaiting-gate' } })
+    if (!arrange) {
+      expect(ctx.runner.approveGate(runId, stepId)).toEqual({ ok: true })
+      await flush()
+      expect(ctx.stepStatus(runId, 'fix')).toBe('running')
+    }
+  })
+
+  it('refuses approve and request changes on unknown runs and steps, a step not at its gate, labs off and a runner with no runs yet', async () => {
+    const { ctx, runId } = await atGate()
+    const changes = { feedback: 'x', fresh: false }
+    expect(ctx.runner.approveGate('nope', 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+    expect(ctx.runner.approveGate(runId, 'nope')).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(ctx.runner.requestChanges(runId, 'nope', changes)).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(ctx.runner.approveGate(runId, 'test')).toEqual({ ok: false, reason: 'not-awaiting-gate' })
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.approveGate(runId, 'plan')).toEqual({ ok: false, reason: 'labs-off' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('awaiting-gate')
+
+    const fresh = setup()
+    const unready = new WorkflowRunner({
+      store: fresh.store,
+      loader: { getDefinition: () => null },
+      drivers: { agent: new FakeStepDriver('agent'), shell: new FakeStepDriver('shell') },
+      now: () => 1,
+      newId: () => 'id',
+      log: () => {}
+    })
+    expect(unready.approveGate('nope', 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+  })
+
+  it('markDone on a running gated step counts as the approval; on a step awaiting its gate it is refused', async () => {
+    const running = await gatedRun()
+    expect(running.ctx.runner.markDone(running.runId, 'plan', { summary: 'by hand', fields: {} })).toEqual({ ok: true })
+    expect(running.ctx.stepStatus(running.runId, 'plan')).toBe('done')
+    expect(running.ctx.events.some((event) => event.type === 'workflows/gateResolved')).toBe(false)
+    await flush()
+    expect(running.ctx.stepStatus(running.runId, 'test')).toBe('running')
+
+    const { ctx, runId } = await atGate()
+    expect(ctx.runner.markDone(runId, 'plan', { summary: 'by hand', fields: {} })).toEqual({
+      ok: false,
+      reason: 'not-completable'
+    })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('awaiting-gate')
+  })
+
+  it('other step actions on a step awaiting its gate either refuse or clear the gate entry', async () => {
+    const refusals = await atGate()
+    const { runner } = refusals.ctx
+    const id = refusals.runId
+    expect(runner.cancelStep(id, 'plan')).toEqual({ ok: false, reason: 'nothing-to-cancel' })
+    expect(runner.swapStep(id, 'plan', { model: 'm' })).toEqual({ ok: false, reason: 'not-swappable' })
+    expect(runner.resumeStep(id, 'plan')).toEqual({ ok: false, reason: 'not-interrupted' })
+    expect(refusals.ctx.runner.getRunRecord(id)).toMatchObject({ status: 'paused', pausedReason: 'gate' })
+    expect(runner.approveGate(id, 'plan')).toEqual({ ok: true })
+
+    const skipped = await atGate()
+    expect(skipped.ctx.runner.skipStep(skipped.runId, 'plan')).toEqual({ ok: true })
+    expect(skipped.ctx.stepStatus(skipped.runId, 'plan')).toBe('skipped')
+    expect(skipped.ctx.wf().runs[skipped.runId].status).toBe('running')
+    expect(skipped.ctx.runner.approveGate(skipped.runId, 'plan')).toEqual({ ok: false, reason: 'not-awaiting-gate' })
+
+    const retried = await atGate()
+    expect(retried.ctx.runner.retryStep(retried.runId, 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(retried.ctx.wf().attempts[retried.ctx.attemptOf(retried.runId, 'plan')]).toMatchObject({ n: 2, status: 'running' })
+    expect(retried.ctx.wf().runs[retried.runId].status).toBe('running')
+    retried.ctx.runner.complete(retried.ctx.attemptOf(retried.runId, 'plan'), done())
+    expect(retried.ctx.stepStatus(retried.runId, 'plan')).toBe('awaiting-gate')
+
+    const cancelled = await atGate()
+    expect(cancelled.ctx.runner.cancelRun(cancelled.runId)).toEqual({ ok: true })
+    expect(cancelled.ctx.wf().runs[cancelled.runId].status).toBe('cancelled')
+    expect(cancelled.ctx.runner.approveGate(cancelled.runId, 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+  })
+
+  it('launches a queued changes-requested continuation once a slot frees', async () => {
+    const ctx = setup({ cap: 1, deps: { hasExecution: () => true } })
+    const runId = await ctx.startRun('gated')
+    await flush()
+    const first = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(first)
+    ctx.runner.complete(first, done())
+    const other = await ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    expect(ctx.runner.requestChanges(runId, 'plan', { feedback: 'fix', fresh: false })).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.agent.continued).toEqual([expect.objectContaining({ executionId: execution, prompt: 'fix' })])
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
   })
 })
