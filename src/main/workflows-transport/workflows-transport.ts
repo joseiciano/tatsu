@@ -29,6 +29,7 @@ import {
   type WorkflowActionResponse,
   type WorkflowDefinitionSaveResponse,
   type WorkflowInputTrustResponse,
+  type WorkflowLoopCapAction,
   type WorkflowStartRunResponse
 } from '../../shared/state/workflows'
 import type { PersistedWorkflowTrust } from '../persistence'
@@ -51,6 +52,7 @@ export type WorkflowActionsRunner = Pick<
   | 'swapStep'
   | 'approveGate'
   | 'requestChanges'
+  | 'resolveLoopCap'
 >
 
 export interface RegisterWorkflowsRequestHandlersDeps {
@@ -142,6 +144,7 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   'not-continuable-step': 'Only agent steps can continue their session',
   'nothing-to-continue': 'This step has no earlier attempt to continue',
   'not-awaiting-gate': 'This step is not waiting at its gate',
+  'not-at-loop-cap': 'This step is not waiting at its loop cap',
   'invalid-output': 'Invalid step output'
 }
 
@@ -153,6 +156,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function ownValue(record: Record<string, unknown>, key: string, fallback?: unknown): unknown {
   return Object.hasOwn(record, key) ? record[key] : fallback
+}
+
+function isLoopCapAction(value: unknown): value is WorkflowLoopCapAction {
+  return value === 'again' || value === 'continue'
 }
 
 function isStepId(value: unknown): value is string {
@@ -412,6 +419,10 @@ export function registerWorkflowsRequestHandlers({
     const request = parseRequestChanges(payload)
     if (!isRunId(runId) || !isStepId(stepId) || !request) return INVALID_REQUEST
     return actionResponse(runner.requestChanges(runId, stepId, request))
+  })
+  guarded('workflows:resolveLoopCap', ([runId, stepId, action]): WorkflowActionResponse => {
+    if (!isRunId(runId) || !isStepId(stepId) || !isLoopCapAction(action)) return INVALID_REQUEST
+    return actionResponse(runner.resolveLoopCap(runId, stepId, action))
   })
   guarded('workflows:markDone', ([runId, stepId, payload]): WorkflowActionResponse => {
     const request = parseMarkDone(payload)

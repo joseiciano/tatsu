@@ -55,7 +55,7 @@ detail.
 ## Driving it with Playwright
 
 - `journeys/workflow-flows.sh <state>` (runs `scripts/browser-smoke.mjs`):
-  - `gate` (right after `swap-step`, before `repo-trust`): launch sheet ->
+  - `gate` (right after `swap-step`, before `loop-cap`): launch sheet ->
     `browser-gate` -> Start -> Needs-you row `Waiting at gate · draft`, and
     the run record is paused `gate` with one settled `draft` attempt ->
     sidebar `Workflows` -> `Active runs` -> `Open run: browser-gate on

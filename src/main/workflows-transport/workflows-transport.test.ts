@@ -26,6 +26,7 @@ import {
   GATE_FEEDBACK_MAX_CHARS,
   type WorkflowAttemptRecord,
   type WorkflowDefinitionDetail,
+  type WorkflowLoopCapAction,
   type WorkflowRunRecord,
   type WorkflowsEvent
 } from '../../shared/state/workflows'
@@ -165,6 +166,11 @@ class FakeRunner implements WorkflowActionsRunner {
 
   requestChanges(runId: string, stepId: string, request: RequestChangesRequest): StepActionResult {
     this.record('requestChanges', runId, stepId, request)
+    return this.actionResult
+  }
+
+  resolveLoopCap(runId: string, stepId: string, action: WorkflowLoopCapAction): StepActionResult {
+    this.record('resolveLoopCap', runId, stepId, action)
     return this.actionResult
   }
 }
@@ -558,6 +564,8 @@ describe('workflow action requests', () => {
     ],
     ['workflows:resumeStep', [RUN, STEP], ['resumeStep', RUN, STEP]],
     ['workflows:approveGate', [RUN, STEP], ['approveGate', RUN, STEP]],
+    ['workflows:resolveLoopCap', [RUN, STEP, 'again'], ['resolveLoopCap', RUN, STEP, 'again']],
+    ['workflows:resolveLoopCap', [RUN, STEP, 'continue'], ['resolveLoopCap', RUN, STEP, 'continue']],
     [
       'workflows:requestChanges',
       [RUN, STEP, { feedback: 'tighten the plan', fresh: false }],
@@ -779,6 +787,31 @@ describe('workflow action requests', () => {
     expect(await transport.call('workflows:requestChanges', id, STEP, changes)).toEqual({ error: 'invalid request' })
     expect(await transport.call('workflows:requestChanges', RUN, id, changes)).toEqual({ error: 'invalid request' })
     expect(runner.calls).toEqual([])
+  })
+
+  it.each<unknown>(['', 'Again', 'continue ', 'raise', true, 1, null, undefined, ['again'], { action: 'again' }])(
+    'rejects resolveLoopCap action %#',
+    async (action) => {
+      expect(await transport.call('workflows:resolveLoopCap', RUN, STEP, action)).toEqual({ error: 'invalid request' })
+      expect(runner.calls).toEqual([])
+    }
+  )
+
+  it.each(badIds)('rejects resolveLoopCap ids %#', async (id) => {
+    expect(await transport.call('workflows:resolveLoopCap', id, STEP, 'continue')).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:resolveLoopCap', RUN, id, 'continue')).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('maps loop-cap refusals to fixed messages', async () => {
+    runner.actionResult = { ok: false, reason: 'not-at-loop-cap' }
+    expect(await transport.call('workflows:resolveLoopCap', RUN, STEP, 'again')).toEqual({
+      error: 'This step is not waiting at its loop cap'
+    })
+    runner.actionResult = { ok: false, reason: 'labs-off' }
+    expect(await transport.call('workflows:resolveLoopCap', RUN, STEP, 'continue')).toEqual({
+      error: 'Workflows are turned off in Labs'
+    })
   })
 
   it('maps gate refusals to fixed messages', async () => {
@@ -1007,6 +1040,39 @@ describe('workflows:startRun against the runner', () => {
     expect(await own.call('workflows:requestChanges', runId, 'check', changes)).toEqual({
       error: 'This step is not waiting at its gate'
     })
+  })
+
+  it('resolves a loop cap through the real runner: refused before the cap, then continue starts the dependents', async () => {
+    const yaml = `${VALID_YAML}  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: Review it
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: plan, until: { field: verdict, equals: pass }, max: 1 }
+  - id: check
+    kind: shell
+    run: "true"
+`
+    const own = realRunner({ yaml })
+    const { runId } = (await own.call('workflows:startRun', payload)) as { runId: string }
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const notAtCap = { error: 'This step is not waiting at its loop cap' }
+    expect(await own.call('workflows:resolveLoopCap', runId, 'review', 'continue')).toEqual(notAtCap)
+    const steps = () => own.store.getSnapshot().state.workflows.runs[runId].steps
+    own.runner.complete(steps().plan.attemptIds[0], { status: 'done', summary: 'p', completedBy: 'tool' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    own.runner.complete(steps().review.attemptIds[0], {
+      status: 'done',
+      summary: 'r',
+      completedBy: 'tool',
+      data: { verdict: 'fail' }
+    })
+    expect(own.store.getSnapshot().state.workflows.runs[runId].pausedReason).toBe('loop-cap')
+    expect(await own.call('workflows:resolveLoopCap', runId, 'plan', 'continue')).toEqual(notAtCap)
+    expect(await own.call('workflows:resolveLoopCap', runId, 'review', 'continue')).toEqual({ ok: true })
+    expect(steps().check.status).toBe('running')
+    expect(await own.call('workflows:resolveLoopCap', runId, 'review', 'again')).toEqual(notAtCap)
   })
 
   it('ignores no client trust claim: the server lookup caps an untrusted issue run', async () => {

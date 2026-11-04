@@ -29,7 +29,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     markWorkflowStepDone: vi.fn(),
     swapWorkflowStep: vi.fn(),
     approveWorkflowGate: vi.fn(),
-    requestWorkflowChanges: vi.fn()
+    requestWorkflowChanges: vi.fn(),
+    resolveWorkflowLoopCap: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -203,7 +204,8 @@ beforeEach(() => {
     backendApi.markWorkflowStepDone,
     backendApi.swapWorkflowStep,
     backendApi.approveWorkflowGate,
-    backendApi.requestWorkflowChanges
+    backendApi.requestWorkflowChanges,
+    backendApi.resolveWorkflowLoopCap
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -515,6 +517,39 @@ describe('RunDetailContainer', () => {
       await render()
       expect(graphLabels()).toEqual(['plan: done', 'exit: cancelled'])
       expect(actionButtons()).toEqual([])
+    })
+  })
+
+  describe('at a loop cap', () => {
+    const EXIT_DONE = attemptRecord({ attemptId: 'a-exit', stepId: 'exit', startedAt: NOW - 40_000, endedAt: NOW - 30_000 })
+    const cappedRun = () =>
+      pausedRun({
+        pausedReason: 'loop-cap',
+        steps: {
+          plan: { status: 'done', attemptIds: ['a-plan'], kind: 'shell' },
+          exit: { status: 'done', attemptIds: ['a-exit'], kind: 'agent', agent: 'claude' }
+        }
+      })
+    const cappedAttempts = { 'a-plan': sliceAttempt('plan', 'done'), 'a-exit': sliceAttempt('exit', 'done') }
+
+    beforeEach(() => {
+      backendApi.getWorkflowRun.mockResolvedValue(
+        record([PLAN_ATTEMPT, EXIT_DONE], { pausedReason: 'loop-cap', steps: { plan: 'done', exit: 'done' } })
+      )
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => [PLAN_ATTEMPT, EXIT_DONE].find((a) => a.attemptId === id) ?? null)
+    })
+
+    it('offers Loop again and Continue anyway named for the looping step, and sends each action', async () => {
+      setState(cappedRun(), cappedAttempts)
+      await render()
+      expect(actionButtons()).toEqual(['Loop again', 'Continue anyway', 'Cancel run'])
+      expect(actionButton('Loop again').getAttribute('aria-label')).toBe('Loop again: exit')
+      expect(actionButton('Continue anyway').getAttribute('aria-label')).toBe('Continue anyway: exit')
+      await click(actionButton('Loop again'))
+      expect(backendApi.resolveWorkflowLoopCap).toHaveBeenLastCalledWith('r1', 'exit', 'again')
+      await click(actionButton('Continue anyway'))
+      expect(backendApi.resolveWorkflowLoopCap).toHaveBeenLastCalledWith('r1', 'exit', 'continue')
+      expect(backendApi.resolveWorkflowLoopCap).toHaveBeenCalledTimes(2)
     })
   })
 

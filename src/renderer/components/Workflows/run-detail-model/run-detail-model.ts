@@ -11,6 +11,8 @@ import { needsYouActions, recordStepContext, STEP_STATUS_LABELS, type NeedsYouAc
 export type RunDetailActionKind =
   | 'approve'
   | 'request-changes'
+  | 'loop-again'
+  | 'loop-continue'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -49,6 +51,8 @@ export interface RunDetailModelArgs {
 export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
   'approve',
   'request-changes',
+  'loop-again',
+  'loop-continue',
   'resume',
   'retry',
   'retry-from-clean',

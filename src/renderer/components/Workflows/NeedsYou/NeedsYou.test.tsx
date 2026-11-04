@@ -23,7 +23,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     resumeWorkflowStep: vi.fn(),
     cancelWorkflowRun: vi.fn(),
     approveWorkflowGate: vi.fn(),
-    requestWorkflowChanges: vi.fn()
+    requestWorkflowChanges: vi.fn(),
+    resolveWorkflowLoopCap: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -157,7 +158,8 @@ beforeEach(() => {
     backendApi.resumeWorkflowStep,
     backendApi.cancelWorkflowRun,
     backendApi.approveWorkflowGate,
-    backendApi.requestWorkflowChanges
+    backendApi.requestWorkflowChanges,
+    backendApi.resolveWorkflowLoopCap
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -519,5 +521,42 @@ describe('NeedsYouGroup at a gate', () => {
     expect(changesDialog()).toBeNull()
     expect(document.activeElement).toBe(opener)
     expect(backendApi.requestWorkflowChanges).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('NeedsYouGroup at a loop cap', () => {
+  function cappedRun(): WorkflowRun {
+    const base = pausedRun('loop-cap', ['a1'])
+    return {
+      ...base,
+      cursorStepId: 'build',
+      steps: {
+        plan: { ...base.steps.plan, kind: 'shell' },
+        build: { status: 'done', attemptIds: ['a1'], kind: 'agent', agent: 'claude' }
+      }
+    }
+  }
+
+  it('offers Loop again and Continue anyway named for the looping step, and sends each action', async () => {
+    setState({ runs: { r1: cappedRun() }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    expect(container.textContent).toContain('feature · Loop limit reached · build')
+    expect(buttonLabels()).toEqual(['Loop again', 'Continue anyway', 'Cancel run'])
+    expect(button('Loop again').getAttribute('aria-label')).toBe('Loop again: build, Ship it on feature')
+    expect(button('Continue anyway').getAttribute('aria-label')).toBe('Continue anyway: build, Ship it on feature')
+    await click(button('Loop again'))
+    expect(backendApi.resolveWorkflowLoopCap).toHaveBeenLastCalledWith('r1', 'build', 'again')
+    await click(button('Continue anyway'))
+    expect(backendApi.resolveWorkflowLoopCap).toHaveBeenLastCalledWith('r1', 'build', 'continue')
+    expect(backendApi.resolveWorkflowLoopCap).toHaveBeenCalledTimes(2)
+    expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+  })
+
+  it('shows the refusal from a stale loop-cap action', async () => {
+    backendApi.resolveWorkflowLoopCap.mockResolvedValue({ error: 'This step is not waiting at its loop cap' })
+    setState({ runs: { r1: cappedRun() }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    await click(button('Continue anyway'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('This step is not waiting at its loop cap')
   })
 })

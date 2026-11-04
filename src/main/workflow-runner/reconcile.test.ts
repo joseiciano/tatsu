@@ -944,3 +944,156 @@ describe('WorkflowRunner gates after a restart', () => {
     expect(ctx.stepStatus('run-f', 'a')).toBe('queued')
   })
 })
+
+describe('WorkflowRunner loops after a restart', () => {
+  const LOOP_CAP = `name: loop-cap
+steps:
+  - id: build
+    agent: claude
+    prompt: "build"
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 2 }
+  - id: after
+    kind: shell
+    run: "true"
+`
+  const SESSION_B = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+
+  function pass(stepId: 'build' | 'review', n: number, summary: string, patch: Partial<WorkflowAttemptRecord> = {}): WorkflowAttemptRecord {
+    return attempt(`att-${stepId}-${n}`, {
+      stepId,
+      n,
+      status: 'done',
+      startedAt: 5 + n,
+      endedAt: 6 + n,
+      executionId: `pty-${stepId}-${n}`,
+      sessionId: stepId === 'build' ? SESSION_A : SESSION_B,
+      result: { status: 'done', summary, completedBy: 'tool', ...(stepId === 'review' ? { data: { verdict: 'fail' } } : {}) },
+      ...patch
+    })
+  }
+
+  function loopRecord(patch: Partial<WorkflowRunRecord>): WorkflowRunRecord {
+    return record('run-l', {
+      defId: 'personal:loop-cap',
+      definition: definitionOf(LOOP_CAP),
+      ...patch
+    })
+  }
+
+  function cappedRecord(): WorkflowRunRecord {
+    return loopRecord({
+      status: 'paused',
+      pausedReason: 'loop-cap',
+      cursor: 1,
+      steps: { build: 'done', review: 'done', after: 'pending' },
+      attempts: [
+        pass('build', 1, 'built-1'),
+        pass('review', 1, 'review-1'),
+        pass('build', 2, 'built-2'),
+        pass('review', 2, 'review-2', { metrics: { continuations: 0, pauses: [{ reason: 'loop-cap', at: 9 }] } })
+      ]
+    })
+  }
+
+  it('keeps a loop-cap pause on the looping step across a restart and continues anyway into the dependents', async () => {
+    const onDisk = cappedRecord()
+    const ctx = boot([onDisk])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.logs).toContain('[workflow] run reconciled paused {"runId":"run-l"}')
+    expect(ctx.runner.getRunRecord('run-l')).toEqual(onDisk)
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'paused', pausedReason: 'loop-cap', cursorStepId: 'review' })
+    expect(ctx.runner.resolveLoopCap('run-l', 'after', 'continue')).toEqual({ ok: false, reason: 'not-at-loop-cap' })
+    expect(ctx.runner.resolveLoopCap('run-l', 'review', 'continue')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.shell.started.map((started) => started.stepId)).toEqual(['after'])
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.lastPersisted('run-l')).toMatchObject({ status: 'running', steps: { review: 'done', after: 'running' } })
+  })
+
+  it('loops again after a restart by resuming the back_to step with the loop feedback', async () => {
+    const ctx = boot([cappedRecord()])
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.resolveLoopCap('run-l', 'review', 'again')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.agent.started[0]).toMatchObject({
+      stepId: 'build',
+      n: 3,
+      resumeSessionId: SESSION_A,
+      prompt: 'Your previous result was:\nbuilt-2\n\nAddress this feedback from review:\nreview-2'
+    })
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'running', cursorStepId: 'build' })
+    ctx.runner.complete(ctx.agent.started[0].attemptId, { status: 'done', summary: 'built-3', completedBy: 'tool' })
+    await flush()
+    expect(ctx.agent.started[1]).toMatchObject({ stepId: 'review', n: 3, resumeSessionId: SESSION_B })
+    ctx.runner.complete(ctx.agent.started[1].attemptId, { status: 'done', summary: 'review-3', completedBy: 'tool', data: { verdict: 'fail' } })
+    await flush()
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'paused', pausedReason: 'loop-cap', cursorStepId: 'review' })
+    expect(ctx.shell.started).toEqual([])
+  })
+
+  it('launches a queued loop continuation recorded before the restart', async () => {
+    const ctx = boot([
+      loopRecord({
+        cursor: 0,
+        steps: { build: 'queued', review: 'pending', after: 'pending' },
+        attempts: [pass('build', 1, 'built-1'), pass('review', 1, 'review-1')],
+        continuations: { build: { prompt: 'fix it' } }
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.logs).toContain('[workflow] run reconciled requeued {"runId":"run-l"}')
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.agent.started[0]).toMatchObject({ stepId: 'build', n: 2, resumeSessionId: SESSION_A, prompt: 'fix it' })
+    expect(ctx.runner.getRunRecord('run-l')?.continuations).toBeUndefined()
+    ctx.runner.complete(ctx.agent.started[0].attemptId, { status: 'done', summary: 'built-2', completedBy: 'tool' })
+    await flush()
+    expect(ctx.agent.started[1]).toMatchObject({
+      stepId: 'review',
+      n: 2,
+      resumeSessionId: SESSION_B,
+      prompt: 'Your previous result was:\nreview-1\n\nAddress this feedback from review:\nreview-1'
+    })
+  })
+
+  it('interrupts a span step that was running mid-loop and still re-enters the looping step after a retry', async () => {
+    const ctx = boot([
+      loopRecord({
+        cursor: 0,
+        steps: { build: 'running', review: 'pending', after: 'pending' },
+        attempts: [
+          pass('build', 1, 'built-1'),
+          pass('review', 1, 'review-1'),
+          attempt('att-build-2', { stepId: 'build', n: 2, startedAt: 9, executionId: 'pty-dead', sessionId: SESSION_A })
+        ]
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'paused', pausedReason: 'interrupted', cursorStepId: 'build' })
+    expect(ctx.stepStatus('run-l', 'review')).toBe('pending')
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.runner.resumeStep('run-l', 'build')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started[0]).toMatchObject({ stepId: 'build', n: 3, resumeSessionId: SESSION_A })
+    ctx.runner.complete(ctx.agent.started[0].attemptId, { status: 'done', summary: 'built-2', completedBy: 'tool' })
+    await flush()
+    expect(ctx.agent.started[1]).toMatchObject({
+      stepId: 'review',
+      n: 2,
+      resumeSessionId: SESSION_B,
+      prompt: 'Your previous result was:\nreview-1\n\nAddress this feedback from review:\nreview-1'
+    })
+    ctx.runner.complete(ctx.agent.started[1].attemptId, { status: 'done', summary: 'review-2', completedBy: 'tool', data: { verdict: 'pass' } })
+    await flush()
+    expect(ctx.shell.started.map((started) => started.stepId)).toEqual(['after'])
+  })
+})

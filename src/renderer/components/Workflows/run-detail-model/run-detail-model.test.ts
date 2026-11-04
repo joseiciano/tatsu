@@ -191,6 +191,15 @@ describe('runDetailModel actions', () => {
     expect(actionsFor(rec)).toEqual(['approve', 'cancel-run'])
   })
 
+  it('offers Loop again, Continue anyway and Cancel run, but no Mark done or Swap, on a looping step at its cap', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
+      pausedReason: 'loop-cap',
+      steps: { plan: 'done', exit: 'done' }
+    })
+    expect(actionsFor(rec)).toEqual(['loop-again', 'loop-continue', 'cancel-run'])
+    expect(actionsFor(rec, true)).toEqual(['loop-again', 'loop-continue', 'cancel-run', 'jump'])
+  })
+
   it('offers nothing but Jump to tab once a run cancelled at its gate', () => {
     const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
       status: 'cancelled',
