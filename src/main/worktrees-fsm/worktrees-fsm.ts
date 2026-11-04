@@ -5,6 +5,7 @@ import {
   fetchPullRequestRef,
   listWorktrees,
   localBranchExists,
+  resolveCommitRef,
   runWorktreeScript,
   symlinkClaudeSettings,
   type WorktreeInfo
@@ -81,6 +82,7 @@ interface WorktreesFSMOptions {
 export class WorktreesFSM {
   private store: Store
   private opts: WorktreesFSMOptions
+  private pendingBaseBranches = new Map<string, string>()
 
   constructor(store: Store, opts: WorktreesFSMOptions) {
     this.store = store
@@ -123,8 +125,10 @@ export class WorktreesFSM {
     agentKind?: AgentKind
     model?: string
     workflow?: boolean
+    baseBranch?: string
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model, workflow } = params
+    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model, workflow, baseBranch } = params
+    if (baseBranch !== undefined) this.pendingBaseBranches.set(id, baseBranch)
     const pending: PendingWorktree = {
       id,
       repoRoot,
@@ -140,6 +144,7 @@ export class WorktreesFSM {
     try {
       this.assertKnownRepo(repoRoot)
       await this.assertBranchName(branchName)
+      if (baseBranch !== undefined) await this.assertBaseBranch(repoRoot, baseBranch, branchName)
       const wtDir = defaultWorktreeDir(repoRoot)
       if (workflow) {
         reservedPath = join(wtDir, branchName)
@@ -147,9 +152,11 @@ export class WorktreesFSM {
       }
       const mode = this.opts.getWorktreeBaseMode()
       const created = await addWorktree(repoRoot, wtDir, branchName, {
-        fetchRemote: mode === 'remote'
+        fetchRemote: mode === 'remote',
+        baseBranch
       })
       reservedPath = null
+      this.pendingBaseBranches.delete(id)
       return await this.finishCreate({
         id,
         repoRoot,
@@ -240,6 +247,17 @@ export class WorktreesFSM {
   private async assertBranchName(branchName: string): Promise<void> {
     const problem = await checkBranchName(branchName)
     if (problem !== null) throw new Error(problem)
+  }
+
+  private async assertBaseBranch(repoRoot: string, baseBranch: string, branchName: string): Promise<void> {
+    const problem = await checkBranchName(baseBranch)
+    if (problem !== null) throw new Error(`Base branch: ${problem}`)
+    if ((await resolveCommitRef({ worktreePath: repoRoot, ref: baseBranch })) === null) {
+      throw new Error(`Base branch “${baseBranch}” does not resolve to a commit`)
+    }
+    if (await localBranchExists(repoRoot, branchName)) {
+      throw new Error(`Branch “${branchName}” already exists`)
+    }
   }
 
   /** Shared post-creation steps: setup script + .claude symlink +
@@ -372,11 +390,13 @@ export class WorktreesFSM {
       branchName: current.branchName,
       initialPrompt: current.initialPrompt,
       teleportSessionId: current.teleportSessionId,
-      workflow: current.workflow
+      workflow: current.workflow,
+      baseBranch: this.pendingBaseBranches.get(id)
     })
   }
 
   dismissPending(id: string): void {
+    this.pendingBaseBranches.delete(id)
     this.store.dispatch({ type: 'worktrees/pendingRemoved', payload: id })
   }
 }

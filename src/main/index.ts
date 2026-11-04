@@ -1200,7 +1200,16 @@ function registerIpcHandlers(): void {
       if (params.workflow !== undefined && typeof params.workflow !== 'boolean') {
         return { id: params.id, outcome: 'error' as const, error: 'workflow must be a boolean' }
       }
-      return worktreesFSM.runPending(params)
+      return worktreesFSM.runPending({
+        id: params.id,
+        repoRoot: params.repoRoot,
+        branchName: params.branchName,
+        initialPrompt: params.initialPrompt,
+        teleportSessionId: params.teleportSessionId,
+        agentKind: params.agentKind,
+        model: params.model,
+        workflow: params.workflow
+      })
     }
   )
   transport.onRequest(
