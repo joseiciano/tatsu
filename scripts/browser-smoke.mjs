@@ -13,7 +13,7 @@
 // a screenshot plus an ARIA snapshot to <evidenceDir>.
 
 import { execFileSync } from 'child_process'
-import { accessSync, appendFileSync, constants, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { accessSync, appendFileSync, constants, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
@@ -151,6 +151,19 @@ async function focusInside(sheet) {
   return sheet.evaluate((el) => document.activeElement !== document.body && el.contains(document.activeElement))
 }
 
+async function assertFocusTrapped(page, sheet, name) {
+  const count = await sheet.evaluate(
+    (el) => el.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])').length
+  )
+  for (const key of ['Tab', 'Shift+Tab']) {
+    for (let i = 0; i < count + 3; i += 1) {
+      await page.keyboard.press(key)
+      if (!(await focusInside(sheet))) throw new Error(`${key} press ${i + 1} of ${count + 3} moved focus out of the launch sheet`)
+    }
+  }
+  log(`${name}: focus stayed inside the sheet across ${count + 3} Tab and Shift+Tab presses (${count} focusables)`)
+}
+
 async function flowLaunchSheetFocus(page) {
   await scenario(page, 'launch-sheet-focus', async (shot) => {
     const row = worktreeRow(page)
@@ -160,16 +173,7 @@ async function flowLaunchSheetFocus(page) {
     const sheet = page.getByRole('dialog', { name: 'Run workflow' })
     await sheet.waitFor()
     if (!(await focusInside(sheet))) throw new Error('launch sheet opened without focus inside it')
-    const count = await sheet.evaluate(
-      (el) => el.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])').length
-    )
-    for (const key of ['Tab', 'Shift+Tab']) {
-      for (let i = 0; i < count + 3; i += 1) {
-        await page.keyboard.press(key)
-        if (!(await focusInside(sheet))) throw new Error(`${key} press ${i + 1} of ${count + 3} moved focus out of the launch sheet`)
-      }
-    }
-    log(`launch-sheet-focus: focus stayed inside the sheet across ${count + 3} Tab and Shift+Tab presses (${count} focusables)`)
+    await assertFocusTrapped(page, sheet, 'launch-sheet-focus')
     await shot('focus-inside')
     await page.keyboard.press('Escape')
     await sheet.waitFor({ state: 'detached' })
@@ -578,6 +582,65 @@ async function flowRepoTrust(page, backend) {
   })
 }
 
+async function flowLaunchTarget(page, backend) {
+  await scenario(page, 'launch-target', async (shot) => {
+    const dataDir = process.env.HARNESS_DATA_DIR
+    if (!dataDir) throw new Error('launch-target needs HARNESS_DATA_DIR to read the run record from disk')
+    let runId = null
+    try {
+      await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+      const section = page.getByRole('region', { name: 'Workflows', exact: true })
+      await section.waitFor()
+      await section.getByRole('button', { name: 'Run workflow…', exact: true }).click()
+      const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+      await sheet.waitFor()
+      const repo = sheet.getByLabel('Repository', { exact: true })
+      if (!(await repo.evaluate((el) => el === document.activeElement))) {
+        throw new Error('the launch sheet without a preset did not focus the Repository select')
+      }
+      await assertFocusTrapped(page, sheet, 'launch-target')
+      if (!(await sheet.getByRole('radio', { name: 'New worktree', exact: true }).isChecked())) {
+        throw new Error('New worktree is not the default target')
+      }
+      await sheet.getByLabel('Workflow', { exact: true }).selectOption({ label: 'browser-hang' })
+      const branch = await sheet.getByLabel('Branch name', { exact: true }).inputValue()
+      if (!/^wf\/browser-hang\/[0-9a-f]{8}$/.test(branch)) throw new Error(`default branch name ${JSON.stringify(branch)}`)
+      await shot('target-new-worktree')
+      await sheet.getByRole('button', { name: 'Start', exact: true }).click()
+      await sheet.waitFor({ state: 'detached' })
+      await section.waitFor({ state: 'detached' })
+
+      const row = page.locator('[aria-current="true"]').filter({ has: page.getByText(branch, { exact: true }) })
+      await row.waitFor()
+      await row.getByRole('img', { name: 'Workflow steps: hang running', exact: true }).waitFor()
+      await page.getByRole('button', { name: 'Close tab ⚙ hang · Claude', exact: true }).waitFor()
+      await shot('selected-with-strip')
+
+      const { state } = await backend.snapshot()
+      const created = state.worktrees.list.find((wt) => wt.branch === branch)
+      if (!created) throw new Error(`no worktree on branch ${branch} in the sidebar state`)
+      if (state.worktrees.pending.length !== 0) throw new Error(`pending worktrees left behind: ${JSON.stringify(state.worktrees.pending)}`)
+      const live = Object.entries(state.workflows.runs).filter(
+        ([, run]) => run.worktreePath === created.path && ['queued', 'running', 'paused'].includes(run.status)
+      )
+      if (live.length !== 1) throw new Error(`expected one live run on ${created.path}, found ${live.length}`)
+      runId = live[0][0]
+      const record = JSON.parse(readFileSync(join(dataDir, 'workflow-runs', `${runId}.json`), 'utf8'))
+      if (record.worktreePath !== created.path || record.defId !== 'personal:browser-hang') {
+        throw new Error(`run record ${runId} targets ${record.worktreePath} with ${record.defId}`)
+      }
+      log(`launch-target: run ${runId} started on new worktree ${created.path} (branch ${branch}), selected with a running strip`)
+    } finally {
+      if (runId) {
+        await backend.request('workflows:cancelRun', runId)
+        await waitForRunStatus(backend, runId, 'cancelled')
+      }
+      const original = worktreeRow(page)
+      if (await original.count()) await original.click()
+    }
+  })
+}
+
 async function main() {
   const backend = connect()
   await backend.opened
@@ -604,6 +667,7 @@ async function main() {
     await flowAttemptDiff(page, backend)
     await flowSwapStep(page, backend)
     await flowRepoTrust(page, backend)
+    await flowLaunchTarget(page, backend)
   } catch {
     failed = true
   } finally {

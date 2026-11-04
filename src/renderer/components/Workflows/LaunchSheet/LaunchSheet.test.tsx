@@ -5,20 +5,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LaunchSheet } from './LaunchSheet'
 import { validateWorkflowDefinition } from '../../../../shared/workflow-def'
 import type { HooksConsent } from '../../../../shared/state/hooks'
-import type { WorkflowDefinitionDetail, WorkflowDefinitionSummary } from '../../../../shared/state/workflows'
+import type {
+  WorkflowDefinitionDetail,
+  WorkflowDefinitionSummary,
+  WorkflowRun
+} from '../../../../shared/state/workflows'
+import type { Worktree } from '../../../../shared/state/worktrees'
 
 const { backendApi, storeState } = vi.hoisted(() => {
   const backendApi = {
     getWorkflowDefinition: vi.fn(),
     startWorkflowRun: vi.fn(),
     acceptHooks: vi.fn(),
-    trustWorkflowDefinition: vi.fn()
+    trustWorkflowDefinition: vi.fn(),
+    runPendingWorktree: vi.fn(),
+    dismissPendingWorktree: vi.fn()
   }
   const storeState: {
     definitions: Record<string, WorkflowDefinitionSummary>
     consent: HooksConsent
     trust: Record<string, string>
-  } = { definitions: {}, consent: 'accepted', trust: {} }
+    repoRoots: string[]
+    worktrees: Worktree[]
+    runs: Record<string, WorkflowRun>
+  } = { definitions: {}, consent: 'accepted', trust: {}, repoRoots: [], worktrees: [], runs: {} }
   return { backendApi, storeState }
 })
 
@@ -28,7 +38,13 @@ vi.mock('../../../backend', () => ({ useBackend: () => backendApi }))
 vi.mock('../../../store', () => ({
   useWorkflowDefinitions: () => storeState.definitions,
   useHooks: () => ({ consent: storeState.consent, codexTrust: null }),
-  useWorkflowTrust: (id: string | null) => (id === null ? undefined : storeState.trust[id])
+  useWorkflowTrust: (id: string | null) => (id === null ? undefined : storeState.trust[id]),
+  useWorktreeRepoRoot: (path: string | null) => storeState.worktrees.find((w) => w.path === path)?.repoRoot ?? null,
+  useAppState: <T,>(selector: (s: unknown) => T): T =>
+    selector({
+      worktrees: { repoRoots: storeState.repoRoots, list: storeState.worktrees },
+      workflows: { runs: storeState.runs }
+    })
 }))
 
 const SOURCES: Record<string, string> = {
@@ -96,9 +112,14 @@ function detail(id: string): WorkflowDefinitionDetail | null {
   }
 }
 
+function worktree(path: string, repoRoot: string, branch: string, isMain = false): Worktree {
+  return { path, branch, head: 'abc', isBare: false, isMain, createdAt: 0, repoRoot }
+}
+
 let container: HTMLDivElement
 let root: Root
 let onClose: ReturnType<typeof vi.fn<() => void>>
+let onStarted: ReturnType<typeof vi.fn<(path: string) => void>>
 
 beforeEach(() => {
   storeState.definitions = {
@@ -109,6 +130,20 @@ beforeEach(() => {
   }
   storeState.consent = 'accepted'
   storeState.trust = {}
+  storeState.repoRoots = ['/repo', '/other']
+  storeState.worktrees = [
+    worktree('/repo', '/repo', 'main', true),
+    worktree('/wt/feature', '/repo', 'feature'),
+    worktree('/wt/busy', '/repo', 'busy'),
+    worktree('/other', '/other', 'main', true)
+  ]
+  storeState.runs = {
+    live: { defId: 'personal:plan', defHash: 'h', worktreePath: '/wt/busy', status: 'running', startedAt: 1, steps: {} }
+  }
+  backendApi.runPendingWorktree
+    .mockReset()
+    .mockImplementation(async ({ id }: { id: string }) => ({ id, outcome: 'success', createdPath: '/wts/new' }))
+  backendApi.dismissPendingWorktree.mockReset().mockResolvedValue(true)
   backendApi.trustWorkflowDefinition.mockReset().mockResolvedValue({ ok: true })
   backendApi.getWorkflowDefinition.mockReset().mockImplementation(async (id: string) => detail(id))
   backendApi.startWorkflowRun.mockReset().mockResolvedValue({ runId: 'run-1' })
@@ -117,6 +152,7 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   onClose = vi.fn<() => void>()
+  onStarted = vi.fn<(path: string) => void>()
 })
 
 afterEach(() => {
@@ -126,7 +162,13 @@ afterEach(() => {
 
 async function mount(): Promise<void> {
   await act(async () => {
-    root.render(<LaunchSheet worktreePath="/wt/feature" onClose={onClose} />)
+    root.render(<LaunchSheet worktreePath="/wt/feature" onClose={onClose} onStarted={onStarted} />)
+  })
+}
+
+async function mountUnset(): Promise<void> {
+  await act(async () => {
+    root.render(<LaunchSheet onClose={onClose} onStarted={onStarted} />)
   })
 }
 
@@ -164,6 +206,39 @@ async function click(el: HTMLElement): Promise<void> {
   await act(async () => {
     el.click()
   })
+}
+
+function byLabel<T extends HTMLElement>(text: string): T {
+  const label = [...container.querySelectorAll('label[for]')].find((l) => l.textContent?.trim() === text)
+  const el = label ? document.getElementById((label as HTMLLabelElement).htmlFor) : null
+  if (!el) throw new Error(`missing control labelled ${text}`)
+  return el as T
+}
+
+async function choose(el: HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    el.value = value
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function optionValues(el: HTMLSelectElement): string[] {
+  return [...el.options].map((o) => o.value)
+}
+
+function radio(label: string): HTMLInputElement {
+  const wrapper = [...container.querySelectorAll('label')].find((l) => l.textContent?.trim() === label)
+  const input = wrapper?.querySelector<HTMLInputElement>('input[type="radio"]')
+  if (!input) throw new Error(`missing radio ${label}`)
+  return input
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
 }
 
 async function fillPlan(): Promise<void> {
@@ -331,5 +406,179 @@ describe('LaunchSheet', () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onStarted with the preset worktree after a successful start', async () => {
+    await mount()
+    await select('personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(onStarted).toHaveBeenCalledWith('/wt/feature')
+    expect(backendApi.runPendingWorktree).not.toHaveBeenCalled()
+  })
+})
+
+describe('LaunchSheet target', () => {
+  const uuid = vi.spyOn(crypto, 'randomUUID')
+
+  beforeEach(() => {
+    uuid.mockReset().mockReturnValue('12345678-aaaa-bbbb-cccc-dddddddddddd')
+  })
+
+  it('shows a preset target read-only and lists personal plus that repo’s definitions', async () => {
+    await mount()
+    expect(container.querySelector('fieldset')).toBeNull()
+    expect(container.textContent).toContain('in feature')
+    expect(optionValues(q<HTMLSelectElement>('select'))).toContain(REPO_ID)
+
+    storeState.worktrees = [...storeState.worktrees, worktree('/wt/other-feature', '/other', 'other-feature')]
+    await act(async () => {
+      root.render(<LaunchSheet worktreePath="/wt/other-feature" onClose={onClose} />)
+    })
+    expect(optionValues(q<HTMLSelectElement>('select'))).not.toContain(REPO_ID)
+  })
+
+  it('opens without a preset on the repository select with a New worktree default branch name', async () => {
+    await mountUnset()
+    const repo = byLabel<HTMLSelectElement>('Repository')
+    expect(document.activeElement).toBe(repo)
+    expect(optionValues(repo)).toEqual(['/repo', '/other'])
+    expect(radio('New worktree').checked).toBe(true)
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:plan')
+    expect(byLabel<HTMLInputElement>('Branch name').value).toBe('wf/plan/12345678')
+  })
+
+  it('filters definitions by the chosen repository', async () => {
+    await mountUnset()
+    expect(optionValues(byLabel<HTMLSelectElement>('Workflow'))).toContain(REPO_ID)
+    await choose(byLabel<HTMLSelectElement>('Repository'), '/other')
+    expect(optionValues(byLabel<HTMLSelectElement>('Workflow'))).not.toContain(REPO_ID)
+  })
+
+  it('creates the worktree, then starts the run on the created path and reports it', async () => {
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(backendApi.runPendingWorktree).toHaveBeenCalledWith({
+      id: 'pending:12345678-aaaa-bbbb-cccc-dddddddddddd',
+      repoRoot: '/repo',
+      branchName: 'wf/full/12345678'
+    })
+    expect(backendApi.startWorkflowRun).toHaveBeenCalledWith({
+      defId: 'personal:full',
+      worktreePath: '/wts/new',
+      inputs: {},
+      allowFull: true
+    })
+    expect(backendApi.runPendingWorktree.mock.invocationCallOrder[0]).toBeLessThan(
+      backendApi.startWorkflowRun.mock.invocationCallOrder[0]
+    )
+    expect(backendApi.dismissPendingWorktree).not.toHaveBeenCalled()
+    expect(onStarted).toHaveBeenCalledWith('/wts/new')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the edited branch name and blocks Start on an invalid one', async () => {
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    const branch = byLabel<HTMLInputElement>('Branch name')
+    await type(branch, 'my work')
+    expect(branch.value).toBe('my-work')
+    await type(branch, 'wip.lock')
+    expect(startButton().disabled).toBe(true)
+    expect(branch.getAttribute('aria-invalid')).toBe('true')
+    await type(branch, '')
+    expect(container.textContent).toContain('Enter a branch name')
+    await type(branch, 'my-work')
+    await click(startButton())
+    expect(backendApi.runPendingWorktree).toHaveBeenCalledWith(expect.objectContaining({ branchName: 'my-work' }))
+  })
+
+  it('starts on a setup-failed worktree and dismisses its pending entry', async () => {
+    backendApi.runPendingWorktree.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      outcome: 'setup-failed',
+      createdPath: '/wts/new'
+    }))
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(backendApi.dismissPendingWorktree).toHaveBeenCalledWith('pending:12345678-aaaa-bbbb-cccc-dddddddddddd')
+    expect(backendApi.startWorkflowRun).toHaveBeenCalledWith(expect.objectContaining({ worktreePath: '/wts/new' }))
+    expect(onStarted).toHaveBeenCalledWith('/wts/new')
+  })
+
+  it('shows a creation error inline, dismisses the pending entry and does not start', async () => {
+    backendApi.runPendingWorktree.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      outcome: 'error',
+      error: 'fatal: a branch named wf/full/12345678 already exists'
+    }))
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(q('[role="alert"]').textContent).toBe('fatal: a branch named wf/full/12345678 already exists')
+    expect(backendApi.dismissPendingWorktree).toHaveBeenCalledWith('pending:12345678-aaaa-bbbb-cccc-dddddddddddd')
+    expect(backendApi.startWorkflowRun).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(startButton().disabled).toBe(false)
+  })
+
+  it('keeps the sheet open on a start refusal and retries on the created worktree', async () => {
+    backendApi.runPendingWorktree.mockImplementation(async ({ id }: { id: string }) => {
+      storeState.worktrees = [...storeState.worktrees, worktree('/wts/new', '/repo', 'wf/full/12345678')]
+      return { id, outcome: 'success', createdPath: '/wts/new' }
+    })
+    backendApi.startWorkflowRun.mockResolvedValueOnce({ error: 'Install hooks to start a workflow' })
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(q('[role="alert"]').textContent).toBe('Install hooks to start a workflow')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(radio('Existing worktree').checked).toBe(true)
+    expect(byLabel<HTMLSelectElement>('Worktree').value).toBe('/wts/new')
+
+    await click(startButton())
+    expect(backendApi.runPendingWorktree).toHaveBeenCalledTimes(1)
+    expect(backendApi.startWorkflowRun).toHaveBeenLastCalledWith(expect.objectContaining({ worktreePath: '/wts/new' }))
+    expect(onStarted).toHaveBeenCalledWith('/wts/new')
+  })
+
+  it('lists only the repo’s worktrees without a live run and starts on the chosen one', async () => {
+    await mountUnset()
+    await click(radio('Existing worktree'))
+    const existing = byLabel<HTMLSelectElement>('Worktree')
+    expect(optionValues(existing)).toEqual(['/repo', '/wt/feature'])
+    await choose(existing, '/wt/feature')
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(backendApi.runPendingWorktree).not.toHaveBeenCalled()
+    expect(backendApi.startWorkflowRun).toHaveBeenCalledWith(expect.objectContaining({ worktreePath: '/wt/feature' }))
+    expect(onStarted).toHaveBeenCalledWith('/wt/feature')
+  })
+
+  it('stays submitting across creation and start, and does nothing after closing mid-creation', async () => {
+    const creation = deferred<{ id: string; outcome: 'success'; createdPath: string }>()
+    backendApi.runPendingWorktree.mockReturnValue(creation.promise)
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(startButton().disabled).toBe(true)
+    expect(container.textContent).toContain('Starting…')
+    await act(async () => {
+      root.render(<></>)
+    })
+    await act(async () => {
+      creation.resolve({ id: 'pending:12345678-aaaa-bbbb-cccc-dddddddddddd', outcome: 'success', createdPath: '/wts/new' })
+    })
+    expect(backendApi.startWorkflowRun).not.toHaveBeenCalled()
+    expect(onStarted).not.toHaveBeenCalled()
   })
 })

@@ -24,6 +24,10 @@ per active run, then recent finished and cancelled runs.
   `Workflow steps: …`), the run status (`Running`, `Paused · <reason>`), and
   `Step <id> · <agent>`, `Elapsed` (ticks every second) and `Cost` (`—`
   when no attempt reported a cost) as `dt`/`dd` pairs.
+- **Run workflow…**: a button at the top of the Runs tab opens the launch
+  sheet with no preset target (Repository, New or Existing worktree; see
+  workflow-run.md). A successful Start closes the section and selects the
+  target worktree.
 - **Recent runs**: region `Recent runs`, done, failed and cancelled runs in
   the slice (up to 50), newest finish first; elapsed stops at `finishedAt`.
 
@@ -52,6 +56,18 @@ per active run, then recent finished and cancelled runs.
     palette step is the positive control for "the section hides the
     workspace".
 
+  - `launch-target` (last scenario): sidebar `Workflows` -> section
+    `Run workflow…` -> dialog `Run workflow` with focus on `Repository` and
+    `New worktree` checked -> Tab and Shift+Tab (focusables + 3 each) keep
+    focus inside the dialog -> pick `browser-hang` -> `Branch name` matches
+    `wf/browser-hang/<8 hex>` -> Start -> dialog and section gone -> the
+    sidebar row with `aria-current="true"` shows that branch and the strip
+    `hang running`, and the tab bar shows the step tab `⚙ hang · Claude` -> state has the new worktree and no pending entries ->
+    `$HARNESS_DATA_DIR/workflow-runs/<runId>.json` names the new worktree
+    and `personal:browser-hang` -> `cancelRun` in `finally`, then the scratch
+    repo row is selected again. `workflow-flows.sh` passes `DATA_DIR` as
+    `HARNESS_DATA_DIR`.
+
 End state that proves it: `workflows-section-*.png` in
 `$EVIDENCE/workflow-flows/`, the `active card` line in the journal, and the
 cancelled run record in `workflow-runs/`.
@@ -73,5 +89,9 @@ cancelled run record in `workflow-runs/`.
 - The hotkey matcher compares `e.key`. Playwright's `Meta+Alt+w` sends key
   `w`, so the drive proves the binding and handler, not how a physical macOS
   Option key maps `e.key` (same for the existing Cmd+Alt+P / Cmd+Alt+R).
+- `launch-target` uses `browser-hang` because a done run has no strip; a
+  shell definition would finish before the strip assertion.
+- It runs after `repo-trust`: earlier scenarios find the scratch repo by its
+  row and assume it is the active worktree.
 - The collapsed-sidebar button is covered by `CollapsedSidebar.test.tsx`
   (jsdom), not by the drive.

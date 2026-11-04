@@ -104,7 +104,11 @@ node .claude/skills/verify/scripts/journeys/workflow-run.mjs "$STATE" [smoke|smo
 ```
 
 `workflow-flows.sh` runs `scripts/browser-smoke.mjs`, the smoke's browser leg,
-against this instance, so the verify drive and CI share one flow file. Both
+against this instance, so the verify drive and CI share one flow file. It
+passes the instance's `DATA_DIR` as `HARNESS_DATA_DIR` so the last scenario
+(`launch-target`) can read its run record from disk; that scenario creates a
+`wf/browser-hang/<hex>` worktree next to the scratch repo, cancels its run and
+reselects the scratch repo. Both
 flows leave the worktree free (cancelled / done runs), but `workflow-run.mjs`
 and `workflow-flows.sh` each need the worktree without a live run when they
 start.
@@ -180,7 +184,7 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
 | `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record -> step tab per agent step; exit 0 on PASS |
-| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Cancel-via-close-tab and Mark-done flows; exit 0 on PASS |
+| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, repo trust, launch target); exit 0 on PASS |
 
 ## Not covered
 
