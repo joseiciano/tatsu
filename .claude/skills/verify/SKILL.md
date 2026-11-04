@@ -35,7 +35,7 @@ this matters:
   hooks and `trust_level` for the repo, as if `/hooks` had been run; it
   refuses a `CODEX_HOME` outside the scratch dir. The fake agent reads a
   `FAKE_AGENT_MODE=<mode>` marker from the step prompt (`hang`,
-  `exit-no-complete`; no marker = complete the step);
+  `exit-no-complete`, `multi-turn`; no marker = complete the step);
   `FAKE_AGENT_MODE_<KIND>=<mode>` (`CLAUDE`, `CODEX`, `OPENCODE`) applies to
   that kind only and wins over the plain marker.
 - Not isolated: `/tmp/harness-status` (status NDJSON) is shared with any
@@ -67,6 +67,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `smoke-codex` | `plan` (codex, `read-only`, `model: fake-codex-model`) then `echo` (shell) | codex mode: SessionStart + Stop through `$CODEX_HOME/harness-hook.sh`, calls `complete_step` |
 | `smoke-opencode` | `plan` (opencode, `read-only`, `model: fake/opencode-model`) then `echo` (shell) | opencode mode: needs `--agent harness-step`, loads the installed plugin, root `session.idle` -> `promptAsync` to `harness-step`, calls `complete_step` through the bridge in `OPENCODE_CONFIG_CONTENT` |
 | `smoke-diamond` | `plan` (claude, `read-only`) -> `left` and `right` (claude, `read-only`, both `needs: [plan]`) -> `join` (shell, `needs: [left, right]`, echoes both summaries) | default: calls `complete_step`; the branches run one at a time in definition order |
+| `smoke-gate` | `plan` (claude, `read-only`, `gate: approve`) then `echo` (shell) | `FAKE_AGENT_MODE=multi-turn`: stays alive after each turn and reads the next prompt (Request changes feedback) from the tab; the run pauses `gate` after every `plan` done |
 | `smoke-retry` | `check` (shell `test -f flag`) | none |
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
