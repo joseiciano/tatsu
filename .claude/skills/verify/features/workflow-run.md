@@ -9,6 +9,35 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
 - **Launch sheet**: right-click a worktree row -> `Run workflow here…` ->
   dialog `Run workflow` with a `Workflow` select and `Start`. Shown only with
   Labs workflows on and no live (queued, running, paused) run on that path.
+  The sheet also opens from the Workflows section's `Run workflow…` button
+  (see workflows-section.md). After a successful Start the sheet closes,
+  Tatsu selects the target worktree (`aria-current="true"` on its sidebar
+  row) and closes the Workflows section.
+- **Target**: depends on how the sheet opened.
+  - Preset (`Run workflow here…`): the target is that worktree, shown
+    read-only in the header (`in <worktree>`), with no Target controls.
+    Focus starts on the `Workflow` select.
+  - No preset (`Run workflow…`): the header reads `Choose where it runs` and
+    a fieldset `Target` holds a `Repository` select (registered repos), a
+    radio group `Where to run` (`New worktree`, the default, or
+    `Existing worktree`), then either a `Branch name` input (default
+    `wf/<definition>/<8 hex>`, live-sanitized, `aria-invalid` and Start
+    disabled when the name breaks the branch rules) or a `Worktree` select
+    (that repo's worktrees without a live run). Focus starts on
+    `Repository`.
+  - The `Workflow` select lists personal definitions plus the target repo's
+    definitions only.
+  - New worktree: Start creates the worktree through `worktrees:runPending`
+    (no agent, no initial prompt), then starts the run on the created path.
+    A creation error shows inline and nothing starts. A start refusal after
+    creation shows inline and switches the target to `Existing worktree` on
+    the created worktree, so the next Start does not create another one.
+    The pending sidebar entry is dismissed for `setup-failed` and `error`
+    while the sheet is open.
+  - The server refuses `worktrees:runPending` for a repoRoot that is not
+    registered and for a branch name that fails `git check-ref-format
+    --branch` or the shared rules (leading `-`, `..`, backslash, `@{`,
+    empty, over 200 chars).
 - **Step strip**: `role="img"` under the branch name, `aria-label`
   `Workflow steps: <id> <status>, …`. Only for a live run; it disappears when
   the run is done, failed or cancelled.
@@ -72,6 +101,7 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     with a summary -> overlay shows Status `done`, Completed by
     `you (Mark done)` and the summary; form, row and strip gone -> run record
     `done`, last `exit` attempt completed by `user`.
+  - `launch-target` (runs last): see workflows-section.md.
   - `repo-trust`: append a nonce comment to the committed
     `.harness/workflows/browser-repo.yaml` (fresh bytes, so it is untrusted on
     every run) -> open the launch sheet -> pick `browser-repo (repo)` ->
@@ -110,5 +140,16 @@ lines in `journal.log`, and the run record in `workflow-runs/`.
 - Trust is per definition id and keeps only the latest hash. Trusting the
   nonce bytes in `repo-trust` makes the committed bytes untrusted again,
   so the scenario can run again on the same instance.
+- A new worktree gets the usual default panes (default agent tab plus
+  Shell) from `ensureInitialized`, because creation runs through the same
+  FSM as the New worktree screen. In the sandbox the default `claude` tab
+  runs the fake agent in default mode once the worktree is selected; it logs
+  `FAIL: Stop hook did not return a block` to `fake-agent.log` (as the
+  scratch repo's own default tab does at boot). That line is not a step
+  failure.
+- New worktrees land under `<repo>/../repo-worktrees/<branch>`; they are not
+  removed after the drive. Claude folder trust covers them through the
+  repo's git common dir, so the scratch `.claude.json` entry for the repo is
+  enough.
 - `exit-mark-done` needs curl: without it the Stop hook fails open and the
   step completes by fallback instead of failing.
