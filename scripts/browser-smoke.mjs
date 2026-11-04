@@ -671,6 +671,84 @@ async function flowGate(page, backend) {
   })
 }
 
+async function waitForLoopCap(backend, runId) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const record = await backend.request('workflows:getRun', runId)
+    const reviews = record?.attempts.filter((a) => a.stepId === 'review') ?? []
+    if (record?.status === 'paused' && record.pausedReason === 'loop-cap' && reviews.every((a) => a.status !== 'running')) return record
+    if (Date.now() > deadline) throw new Error(`run ${runId} is ${record?.status}/${record?.pausedReason}, expected paused at its loop cap`)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+async function flowLoopCap(page, backend) {
+  await scenario(page, 'loop-cap', async (shot) => {
+    let runId = null
+    try {
+      await startFromLaunchSheet(page, 'browser-loop-cap', shot)
+      const row = needsYouRow(page, 'browser-loop-cap').filter({ hasText: 'Loop limit reached · review' })
+      await row.waitFor()
+      runId = await liveRunId(backend, 'browser-loop-cap')
+      await waitForLoopCap(backend, runId)
+      const again = row.getByRole('button', { name: 'Loop again: review, browser-loop-cap on repo', exact: true })
+      const proceed = row.getByRole('button', { name: 'Continue anyway: review, browser-loop-cap on repo', exact: true })
+      await again.waitFor()
+      await proceed.waitFor()
+      await row.getByRole('button', { name: 'Cancel run: browser-loop-cap on repo', exact: true }).waitFor()
+      await shot('needs-you-loop-cap')
+
+      await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+      const section = page.getByRole('region', { name: 'Workflows', exact: true })
+      await section.waitFor()
+      const card = section.getByRole('region', { name: 'Active runs' }).getByRole('article', { name: 'browser-loop-cap on repo', exact: true })
+      await card.getByRole('button', { name: 'Open run: browser-loop-cap on repo', exact: true }).click()
+      const detail = section.getByRole('region', { name: 'browser-loop-cap', exact: true })
+      await detail.waitFor()
+      await detail.getByRole('group', { name: 'Workflow graph', exact: true }).getByRole('listitem', { name: 'review: done, needs you', exact: true }).waitFor()
+      await detail.getByRole('button', { name: 'Loop again: review', exact: true }).waitFor()
+      await detail.getByRole('button', { name: 'Continue anyway: review', exact: true }).waitFor()
+      await shot('detail-loop-cap')
+      await detail.getByRole('button', { name: 'All runs', exact: true }).click()
+      await detail.waitFor({ state: 'detached' })
+      await section.getByRole('button', { name: 'Back', exact: true }).click()
+      await section.waitFor({ state: 'detached' })
+
+      await proceed.click()
+      const record = await waitForRunStatus(backend, runId, 'done')
+      const count = (stepId) => record.attempts.filter((a) => a.stepId === stepId).length
+      const publish = record.attempts.filter((a) => a.stepId === 'publish').map((a) => a.status)
+      if (record.steps.review !== 'done' || count('build') !== 1 || count('review') !== 1 || publish.join(',') !== 'done') {
+        throw new Error(
+          `after Continue anyway review is ${record.steps.review}, build/review attempts ${count('build')}/${count('review')}, publish attempts ${JSON.stringify(publish)}`
+        )
+      }
+      await row.waitFor({ state: 'detached' })
+      log(`loop-cap: run ${runId} done after Continue anyway from Needs you; review ran once, publish ran once`)
+      await shot('run-done')
+    } finally {
+      if (runId) {
+        const record = await backend.request('workflows:getRun', runId)
+        if (record && ['queued', 'running', 'paused'].includes(record.status)) {
+          await backend.request('workflows:cancelRun', runId)
+          await waitForRunStatus(backend, runId, 'cancelled')
+        }
+      }
+      const tabs = page.getByRole('button', { name: /^Close tab ⚙ review/ })
+      const before = await tabs.count()
+      if (before > 0) {
+        await tabs.last().click()
+        const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+        while ((await tabs.count()) >= before) {
+          if (Date.now() > deadline) throw new Error('the review step tab did not close')
+          await new Promise((resolve) => setTimeout(resolve, 200))
+        }
+        log('loop-cap: closed the review step tab')
+      }
+    }
+  })
+}
+
 const BROWSER_REPO_FILE = '.harness/workflows/browser-repo.yaml'
 
 async function newestRepoRunId(backend, name) {
@@ -1266,6 +1344,7 @@ async function main() {
     await flowAttemptDiff(page, backend)
     await flowSwapStep(page, backend)
     await flowGate(page, backend)
+    await flowLoopCap(page, backend)
     await flowRepoTrust(page, backend)
     await flowInputPickers(page, backend)
     await flowLaunchOverrides(page, backend)

@@ -241,6 +241,23 @@ steps:
     kind: shell
     run: echo {{steps.draft.summary}}
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/browser-loop-cap.yaml" <<'YAML'
+name: browser-loop-cap
+steps:
+  - id: build
+    kind: shell
+    run: echo built
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: 'FAKE_AGENT_DATA={"verdict":"fail"} Review the build and call complete_step.'
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 1 }
+  - id: publish
+    kind: shell
+    run: echo published
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/browser-diff.yaml" <<'YAML'
 name: browser-diff
 steps:
