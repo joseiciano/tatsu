@@ -141,3 +141,36 @@ export interface MergePRResult {
 }
 
 export type ParentInfo = { owner: string; repo: string } | 'self'
+export interface CreatePullRequestInput {
+  owner: string
+  repo: string
+  head: string
+  base: string
+  title: string
+  body: string
+  draft: boolean
+}
+
+export interface UpdatePullRequestBaseInput {
+  owner: string
+  repo: string
+  number: number
+  base: string
+}
+
+export interface PullRequestRef {
+  number: number
+  url: string
+  draft: boolean
+}
+
+export type GitHubApiError =
+  | { kind: 'no-token' }
+  | { kind: 'invalid-input'; message: string }
+  | { kind: 'network'; message: string }
+  | { kind: 'http'; status: number; message: string; errors: string[] }
+  | { kind: 'bad-response' }
+
+export type PullRequestResult =
+  | { ok: true; pr: PullRequestRef }
+  | { ok: false; error: GitHubApiError }

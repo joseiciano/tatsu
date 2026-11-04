@@ -3,6 +3,7 @@ import { promisify } from 'util'
 import { log, formatErr } from '../debug'
 import { getCachedToken, invalidateTokenCache, resolveGitHubToken } from '../github-auth'
 import { trackedFetch } from '../github-recorder'
+import { GITHUB_API_BASE, githubApiUrl } from '../github-api-base'
 import type { CheckStatus, PRReview, PRStatus } from '../../shared/state/prs'
 import type { IssueSummary, PRSummary, PRMetadata, RepoIssuesResult } from '../../shared/github-types'
 import {
@@ -20,7 +21,12 @@ import {
   type GraphQLBatchResponse,
   type GitHubMergeMethod,
   type MergePRResult,
-  type ParentInfo
+  type ParentInfo,
+  type CreatePullRequestInput,
+  type UpdatePullRequestBaseInput,
+  type PullRequestRef,
+  type GitHubApiError,
+  type PullRequestResult
 } from './types'
 import { PR_FRAGMENT } from './constants'
 
@@ -64,29 +70,46 @@ async function getFirstTagContaining(worktreePath: string, sha: string): Promise
   }
 }
 
-async function doFetch(url: string, token: string | null): Promise<Response> {
+interface GitHubRequest {
+  method?: 'POST' | 'PATCH'
+  body?: string
+  requireToken?: boolean
+}
+
+async function doFetch(url: string, token: string | null, request: GitHubRequest = {}): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
     'User-Agent': 'Harness',
     'X-GitHub-Api-Version': '2022-11-28'
   }
   if (token) headers.Authorization = `Bearer ${token}`
-  return trackedFetch(url, { headers })
+  const init: RequestInit = { headers }
+  if (request.method) init.method = request.method
+  if (request.body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    init.body = request.body
+  }
+  return trackedFetch(url, init)
 }
 
-async function githubResponse(url: string, initialToken: string | null): Promise<Response> {
-  const res = await doFetch(url, initialToken)
+async function githubResponse(
+  url: string,
+  initialToken: string | null,
+  request: GitHubRequest = {}
+): Promise<Response> {
+  const res = await doFetch(url, initialToken, request)
   if (res.status !== 401) return res
   log('github', '401 from GitHub, re-resolving token')
   invalidateTokenCache()
-  const resolved = await resolveGitHubToken()
-  return doFetch(url, resolved?.token ?? null)
+  const retryToken = (await resolveGitHubToken())?.token ?? null
+  if (!retryToken && request.requireToken) return res
+  return doFetch(url, retryToken, request)
 }
 
 async function githubFetch(url: string): Promise<unknown> {
   const res = await githubResponse(url, getCachedToken())
   if (!res.ok) {
-    const path = url.replace(/^https:\/\/api\.github\.com/, '')
+    const path = url.startsWith(GITHUB_API_BASE) ? url.slice(GITHUB_API_BASE.length) : url
     throw new Error(`GitHub API ${res.status} ${res.statusText} for ${path}`)
   }
   return res.json()
@@ -110,7 +133,7 @@ async function resolveQueryRepo(
   if (cached) return cached
   try {
     const data = (await githubFetch(
-      `https://api.github.com/repos/${origin.owner}/${origin.repo}`
+      githubApiUrl(`/repos/${origin.owner}/${origin.repo}`)
     )) as { fork?: boolean; parent?: { owner: { login: string }; name: string } }
     if (data.fork && data.parent) {
       const parent = { owner: data.parent.owner.login, repo: data.parent.name }
@@ -134,7 +157,7 @@ async function fetchBehindBy(
 ): Promise<number | null> {
   try {
     const data = (await githubFetch(
-      `https://api.github.com/repos/${owner}/${repo}/compare/${encodeURIComponent(baseRef)}...${encodeURIComponent(headSha)}`
+      githubApiUrl(`/repos/${owner}/${repo}/compare/${encodeURIComponent(baseRef)}...${encodeURIComponent(headSha)}`)
     )) as { behind_by?: number } | null
     if (!data || typeof data.behind_by !== 'number') return null
     return data.behind_by
@@ -238,7 +261,7 @@ export async function fetchPRStatusesForRepo(
 }
 ${PR_FRAGMENT}`
 
-  const res = await trackedFetch('https://api.github.com/graphql', {
+  const res = await trackedFetch(githubApiUrl('/graphql'), {
     method: 'POST',
     headers: {
       Accept: 'application/vnd.github+json',
@@ -451,7 +474,7 @@ function buildPRStatus(
 
 export async function isRepoStarred(token: string, owner: string, repo: string): Promise<boolean | null> {
   try {
-    const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
+    const res = await trackedFetch(githubApiUrl(`/user/starred/${owner}/${repo}`), {
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'Harness',
@@ -468,7 +491,7 @@ export async function isRepoStarred(token: string, owner: string, repo: string):
 
 export async function unstarRepo(token: string, owner: string, repo: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
+    const res = await trackedFetch(githubApiUrl(`/user/starred/${owner}/${repo}`), {
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.github+json',
@@ -486,7 +509,7 @@ export async function unstarRepo(token: string, owner: string, repo: string): Pr
 
 export async function starRepo(token: string, owner: string, repo: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const res = await trackedFetch(`https://api.github.com/user/starred/${owner}/${repo}`, {
+    const res = await trackedFetch(githubApiUrl(`/user/starred/${owner}/${repo}`), {
       method: 'PUT',
       headers: {
         Accept: 'application/vnd.github+json',
@@ -517,7 +540,7 @@ export async function mergePR(
 
   let res: Response
   try {
-    res = await trackedFetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${number}/merge`, {
+    res = await trackedFetch(githubApiUrl(`/repos/${owner}/${repo}/pulls/${number}/merge`), {
       method: 'PUT',
       headers: {
         Accept: 'application/vnd.github+json',
@@ -585,6 +608,96 @@ export async function mergePR(
   }
 }
 
+function errorMessages(errors: unknown): string[] {
+  if (!Array.isArray(errors)) return []
+  const messages: string[] = []
+  for (const entry of errors) {
+    if (typeof entry !== 'object' || entry === null) continue
+    if ('message' in entry && typeof entry.message === 'string') {
+      messages.push(entry.message)
+      continue
+    }
+    const field = 'field' in entry && typeof entry.field === 'string' ? entry.field : ''
+    const code = 'code' in entry && typeof entry.code === 'string' ? entry.code : ''
+    const text = [field, code].filter(Boolean).join(' ')
+    if (text) messages.push(text)
+  }
+  return messages
+}
+
+async function httpError(res: Response): Promise<GitHubApiError> {
+  let data: unknown = null
+  try {
+    data = await res.json()
+  } catch {
+    data = null
+  }
+  const fallback = `${res.status} ${res.statusText}`
+  if (typeof data !== 'object' || data === null) {
+    return { kind: 'http', status: res.status, message: fallback, errors: [] }
+  }
+  const message = 'message' in data && typeof data.message === 'string' && data.message ? data.message : fallback
+  const errors = 'errors' in data ? errorMessages(data.errors) : []
+  return { kind: 'http', status: res.status, message, errors }
+}
+
+function toPullRequestRef(data: unknown): PullRequestRef | null {
+  if (typeof data !== 'object' || data === null) return null
+  const number = 'number' in data ? data.number : undefined
+  const url = 'html_url' in data ? data.html_url : undefined
+  const draft = 'draft' in data ? data.draft : undefined
+  if (typeof number !== 'number' || !Number.isSafeInteger(number)) return null
+  if (typeof url !== 'string' || typeof draft !== 'boolean') return null
+  return { number, url, draft }
+}
+
+async function writePullRequest(
+  url: string,
+  method: 'POST' | 'PATCH',
+  payload: Record<string, unknown>
+): Promise<PullRequestResult> {
+  const token = (await resolveGitHubToken())?.token ?? null
+  if (!token) return { ok: false, error: { kind: 'no-token' } }
+  let res: Response
+  try {
+    res = await githubResponse(url, token, { method, body: JSON.stringify(payload), requireToken: true })
+  } catch (err) {
+    log('github', `${method} pull request failed`, formatErr(err))
+    return { ok: false, error: { kind: 'network', message: err instanceof Error ? err.message : String(err) } }
+  }
+  if (!res.ok) {
+    const error = await httpError(res)
+    log('github', `${method} pull request returned ${res.status}`)
+    return { ok: false, error }
+  }
+  let data: unknown
+  try {
+    data = await res.json()
+  } catch {
+    return { ok: false, error: { kind: 'bad-response' } }
+  }
+  const pr = toPullRequestRef(data)
+  if (!pr) return { ok: false, error: { kind: 'bad-response' } }
+  return { ok: true, pr }
+}
+
+function pullsPath(owner: string, repo: string): string {
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`
+}
+
+export async function createPullRequest(input: CreatePullRequestInput): Promise<PullRequestResult> {
+  const { owner, repo, head, base, title, body, draft } = input
+  return writePullRequest(githubApiUrl(pullsPath(owner, repo)), 'POST', { head, base, title, body, draft })
+}
+
+export async function updatePullRequestBase(input: UpdatePullRequestBaseInput): Promise<PullRequestResult> {
+  const { owner, repo, number, base } = input
+  if (!Number.isSafeInteger(number) || number < 1) {
+    return { ok: false, error: { kind: 'invalid-input', message: 'PR number must be a positive integer' } }
+  }
+  return writePullRequest(githubApiUrl(`${pullsPath(owner, repo)}/${number}`), 'PATCH', { base })
+}
+
 function toPRSummary(pr: ApiPRListItem): PRSummary {
   const baseRepo = pr.base?.repo?.full_name ?? null
   const headRepo = pr.head?.repo?.full_name ?? null
@@ -615,7 +728,7 @@ export async function listOpenPRs(
   try {
     if (requireToken && !(await resolveGitHubToken())?.token) return null
     const list = (await githubFetch(
-      `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=50&sort=updated&direction=desc`
+      githubApiUrl(`/repos/${owner}/${repo}/pulls?state=open&per_page=50&sort=updated&direction=desc`)
     )) as ApiPRListItem[]
     if (!Array.isArray(list)) return null
     return list.map(toPRSummary)
@@ -666,7 +779,7 @@ export async function listRepoIssues(repoRoot: string, query = ''): Promise<Repo
     const text = issueSearchText(query)
     const q = [`repo:${owner}/${repo}`, 'is:issue', 'is:open', text].filter(Boolean).join(' ')
     const res = await githubResponse(
-      `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&per_page=${ISSUE_LIST_LIMIT}&sort=updated&order=desc`,
+      githubApiUrl(`/search/issues?q=${encodeURIComponent(q)}&per_page=${ISSUE_LIST_LIMIT}&sort=updated&order=desc`),
       token
     )
     if (res.status === 401) return { status: 'no-token' }
@@ -713,7 +826,7 @@ export async function inputAuthorTrust(
   const repo = encodeURIComponent(repoInfo.repo)
   const kind = type === 'pr' ? 'pulls' : 'issues'
   try {
-    const association = await authorAssociation(`https://api.github.com/repos/${owner}/${repo}/${kind}/${number}`)
+    const association = await authorAssociation(githubApiUrl(`/repos/${owner}/${repo}/${kind}/${number}`))
     return typeof association === 'string' && TRUSTED_ASSOCIATIONS.has(association) ? 'trusted' : 'untrusted'
   } catch (err) {
     log('github', `inputAuthorTrust failed for ${type} ${number}`, formatErr(err))
@@ -730,7 +843,7 @@ export async function getPRMetadata(
   const { owner, repo } = repoInfo
   try {
     const pr = (await githubFetch(
-      `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`
+      githubApiUrl(`/repos/${owner}/${repo}/pulls/${prNumber}`)
     )) as ApiPRListItem
     if (!pr || typeof pr.number !== 'number') return null
     return toPRSummary(pr)
@@ -742,7 +855,7 @@ export async function getPRMetadata(
 
 export async function testToken(token: string): Promise<{ ok: boolean; username?: string; error?: string }> {
   try {
-    const res = await trackedFetch('https://api.github.com/user', {
+    const res = await trackedFetch(githubApiUrl('/user'), {
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'Harness',
