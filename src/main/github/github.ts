@@ -4,7 +4,7 @@ import { log, formatErr } from '../debug'
 import { getCachedToken, invalidateTokenCache, resolveGitHubToken } from '../github-auth'
 import { trackedFetch } from '../github-recorder'
 import type { CheckStatus, PRReview, PRStatus } from '../../shared/state/prs'
-import type { PRSummary, PRMetadata } from '../../shared/github-types'
+import type { IssueSummary, PRSummary, PRMetadata, RepoIssuesResult } from '../../shared/github-types'
 import {
   type RepoContext,
   type PRStatusRequest,
@@ -19,7 +19,7 @@ import {
 } from './types'
 import { PR_FRAGMENT } from './constants'
 
-export type { CheckStatus, PRReview, PRStatus, PRSummary, PRMetadata }
+export type { CheckStatus, PRReview, PRStatus, PRSummary, PRMetadata, IssueSummary, RepoIssuesResult }
 
 const execFileAsync = promisify(execFile)
 
@@ -69,16 +69,17 @@ async function doFetch(url: string, token: string | null): Promise<Response> {
   return trackedFetch(url, { headers })
 }
 
+async function githubResponse(url: string, initialToken: string | null): Promise<Response> {
+  const res = await doFetch(url, initialToken)
+  if (res.status !== 401) return res
+  log('github', '401 from GitHub, re-resolving token')
+  invalidateTokenCache()
+  const resolved = await resolveGitHubToken()
+  return doFetch(url, resolved?.token ?? null)
+}
+
 async function githubFetch(url: string): Promise<unknown> {
-  let token = getCachedToken()
-  let res = await doFetch(url, token)
-  if (res.status === 401) {
-    log('github', '401 from GitHub, re-resolving token')
-    invalidateTokenCache()
-    const resolved = await resolveGitHubToken()
-    token = resolved?.token ?? null
-    res = await doFetch(url, token)
-  }
+  const res = await githubResponse(url, getCachedToken())
   if (!res.ok) {
     const path = url.replace(/^https:\/\/api\.github\.com/, '')
     throw new Error(`GitHub API ${res.status} ${res.statusText} for ${path}`)
@@ -599,11 +600,15 @@ function toPRSummary(pr: ApiPRListItem): PRSummary {
   }
 }
 
-export async function listOpenPRs(repoRoot: string): Promise<PRSummary[] | null> {
+export async function listOpenPRs(
+  repoRoot: string,
+  { requireToken = false }: { requireToken?: boolean } = {}
+): Promise<PRSummary[] | null> {
   const repoInfo = await getRepoInfo(repoRoot)
   if (!repoInfo) return null
   const { owner, repo } = repoInfo
   try {
+    if (requireToken && !(await resolveGitHubToken())?.token) return null
     const list = (await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=50&sort=updated&direction=desc`
     )) as ApiPRListItem[]
@@ -612,6 +617,66 @@ export async function listOpenPRs(repoRoot: string): Promise<PRSummary[] | null>
   } catch (err) {
     log('github', `listOpenPRs failed for ${owner}/${repo}`, formatErr(err))
     return null
+  }
+}
+
+const ISSUE_LIST_LIMIT = 50
+const ISSUE_QUERY_MAX_CHARS = 200
+
+function toIssueSummary(item: unknown): IssueSummary | null {
+  if (typeof item !== 'object' || item === null) return null
+  if ('pull_request' in item && item.pull_request != null) return null
+  const number = 'number' in item ? item.number : undefined
+  const title = 'title' in item ? item.title : undefined
+  if (typeof number !== 'number' || !Number.isSafeInteger(number) || typeof title !== 'string') return null
+  const user = 'user' in item ? item.user : undefined
+  const login = typeof user === 'object' && user !== null && 'login' in user ? user.login : undefined
+  const updatedAt = 'updated_at' in item ? item.updated_at : undefined
+  return {
+    number,
+    title,
+    author: typeof login === 'string' ? login : null,
+    updatedAt: typeof updatedAt === 'string' ? updatedAt : ''
+  }
+}
+
+const SEARCH_OPERATORS = new Set(['AND', 'OR', 'NOT'])
+
+function issueSearchText(query: string): string {
+  return query
+    .slice(0, ISSUE_QUERY_MAX_CHARS)
+    .replace(/["']/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token !== '' && !token.includes(':') && !SEARCH_OPERATORS.has(token))
+    .join(' ')
+}
+
+export async function listRepoIssues(repoRoot: string, query = ''): Promise<RepoIssuesResult> {
+  const repoInfo = await getRepoInfo(repoRoot)
+  if (!repoInfo) return { status: 'no-repo' }
+  const { owner, repo } = repoInfo
+  try {
+    const token = (await resolveGitHubToken())?.token ?? null
+    if (!token) return { status: 'no-token' }
+    const text = issueSearchText(query)
+    const q = [`repo:${owner}/${repo}`, 'is:issue', 'is:open', text].filter(Boolean).join(' ')
+    const res = await githubResponse(
+      `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&per_page=${ISSUE_LIST_LIMIT}&sort=updated&order=desc`,
+      token
+    )
+    if (res.status === 401) return { status: 'no-token' }
+    if (!res.ok) {
+      log('github', `listRepoIssues failed for ${owner}/${repo}: ${res.status} ${res.statusText}`)
+      return { status: 'error' }
+    }
+    const body: unknown = await res.json()
+    const items = typeof body === 'object' && body !== null && 'items' in body ? body.items : undefined
+    if (!Array.isArray(items)) return { status: 'error' }
+    const issues = items.map(toIssueSummary).filter((i): i is IssueSummary => i !== null)
+    return { status: 'ok', issues: issues.slice(0, ISSUE_LIST_LIMIT) }
+  } catch (err) {
+    log('github', `listRepoIssues failed for ${owner}/${repo}`, formatErr(err))
+    return { status: 'error' }
   }
 }
 
