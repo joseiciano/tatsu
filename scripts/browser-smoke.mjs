@@ -738,6 +738,123 @@ async function flowLibrary(page, backend) {
   })
 }
 
+const EDITOR_DEF_NAME = 'zz-editor-smoke'
+
+function editorSource(stepId, run) {
+  return `name: ${EDITOR_DEF_NAME}\nsteps:\n  - id: ${stepId}\n    kind: shell\n    run: ${run}\n`
+}
+
+async function replaceEditorText(page, editor, text) {
+  await editor.locator('.view-lines').click()
+  await page.keyboard.press('ControlOrMeta+a')
+  const pasted = await page.evaluate((value) => {
+    const target = document.activeElement
+    if (!target?.closest('.monaco-editor')) return false
+    const data = new DataTransfer()
+    data.setData('text/plain', value)
+    target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+    return true
+  }, text)
+  if (!pasted) throw new Error('focus is not inside the Monaco editor')
+}
+
+async function saveFromEditor(section) {
+  await section.getByRole('button', { name: 'Save', exact: true }).click()
+  const alert = section.getByRole('alert')
+  await alert.or(section.getByRole('status').filter({ hasText: /^Saved to/ })).first().waitFor()
+  if (await alert.count()) throw new Error(`Save refused: ${await alert.first().textContent()}`)
+}
+
+async function waitForFileText(file, needle) {
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    if (existsSync(file) && readFileSync(file, 'utf8').includes(needle)) return
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error(`${file} never contained ${JSON.stringify(needle)}`)
+}
+
+async function flowDefinitionEditor(page, backend) {
+  await scenario(page, 'definition-editor', async (shot) => {
+    const dataDir = process.env.HARNESS_DATA_DIR
+    if (!dataDir) throw new Error('definition-editor needs HARNESS_DATA_DIR to check the saved file on disk')
+    const file = join(dataDir, 'workflows', `${EDITOR_DEF_NAME}.yaml`)
+    if (existsSync(file)) throw new Error(`${file} exists before the definition-editor scenario`)
+    const section = page.getByRole('region', { name: 'Workflows', exact: true })
+    const editor = section.locator('.monaco-editor').first()
+    const personal = section.getByRole('region', { name: /^Personal/ })
+    const row = personal.getByRole('listitem').filter({ has: page.getByRole('button', { name: `Run ${EDITOR_DEF_NAME}`, exact: true }) })
+    let savedId = null
+    try {
+      await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+      await section.waitFor()
+      await section.getByRole('tab', { name: 'Library', exact: true }).click()
+      await section.getByRole('button', { name: 'New workflow', exact: true }).click()
+      await editor.locator('.view-lines').waitFor()
+      await section.getByRole('heading', { name: 'New workflow', exact: true }).waitFor()
+      await shot('new')
+
+      await replaceEditorText(page, editor, editorSource('draft', 'echo draft'))
+      await section.locator('.monaco-editor .view-lines').filter({ hasText: 'echo draft' }).waitFor()
+      await shot('drafted')
+      await saveFromEditor(section)
+      await waitForFileText(file, 'id: draft')
+      await section.getByRole('heading', { name: `Edit ${EDITOR_DEF_NAME}`, exact: true }).waitFor()
+      const { state } = await backend.snapshot()
+      const saved = Object.values(state.workflows.definitions).filter((d) => d.name === EDITOR_DEF_NAME)
+      if (saved.length !== 1 || saved[0].scope !== 'personal') throw new Error(`saved summaries ${JSON.stringify(saved)}`)
+      savedId = saved[0].id
+      log(`definition-editor: New saved as ${savedId} at ${file}`)
+      await section.getByRole('button', { name: 'Back to Library', exact: true }).click()
+      if (await page.getByRole('alertdialog').count()) throw new Error('a saved New draft asked to discard')
+      await row.getByText('1 step: draft', { exact: true }).waitFor()
+      await shot('saved-new')
+
+      await row.getByRole('button', { name: `Edit ${EDITOR_DEF_NAME}`, exact: true }).click()
+      await section.getByRole('heading', { name: `Edit ${EDITOR_DEF_NAME}`, exact: true }).waitFor()
+      await section.locator('.monaco-editor .view-lines').filter({ hasText: 'echo draft' }).waitFor()
+      log(`definition-editor: Edit opened ${savedId} with its saved source`)
+      await replaceEditorText(page, editor, editorSource('edited', 'echo {{steps.bogus.summary}}'))
+      await editor.locator('.squiggly-error').first().waitFor()
+      const problems = section.getByRole('region', { name: 'Problems', exact: true })
+      const problemText = (await problems.textContent()) ?? ''
+      if (!problemText.includes('"bogus", which is not a step in this workflow')) throw new Error(`problems list: ${problemText}`)
+      log(`definition-editor: unknown step ref marked (.squiggly-error) with "${problemText.slice(0, 160)}"`)
+      await shot('marker')
+
+      await replaceEditorText(page, editor, editorSource('edited', 'echo edited'))
+      await editor.locator('.squiggly-error').first().waitFor({ state: 'detached' })
+      await problems.getByText('No problems', { exact: true }).waitFor()
+      log('definition-editor: marker cleared after the fix')
+      await shot('fixed')
+
+      await saveFromEditor(section)
+      await waitForFileText(file, 'id: edited')
+      if (readFileSync(file, 'utf8').includes('id: draft')) throw new Error(`${file} still holds the first draft`)
+      await section.getByText('Unsaved changes').waitFor({ state: 'detached' })
+      await section.getByRole('button', { name: 'Back to Library', exact: true }).click()
+      if (await page.getByRole('alertdialog').count()) throw new Error('a saved draft asked to discard')
+      await row.getByText('1 step: edited', { exact: true }).waitFor()
+      const after = (await backend.snapshot()).state.workflows.definitions
+      const named = Object.values(after).filter((d) => d.name === EDITOR_DEF_NAME)
+      if (named.length !== 1 || named[0].id !== savedId || named[0].stepIds.join(',') !== 'edited') {
+        throw new Error(`after the second save: ${JSON.stringify(named)}`)
+      }
+      log(`definition-editor: Save from Edit overwrote ${savedId}; Library row reads "1 step: edited" and ${file} holds id: edited`)
+      await shot('library-updated')
+    } finally {
+      if (savedId) await backend.request('workflows:deleteDefinition', savedId).catch(() => rmSync(file, { force: true }))
+      else rmSync(file, { force: true })
+      if (await section.count()) {
+        await section.getByRole('button', { name: 'Back', exact: true }).click()
+        const discard = page.getByRole('alertdialog', { name: 'Discard unsaved changes?', exact: true })
+        if (await discard.count()) await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
+      }
+      await section.waitFor({ state: 'detached' })
+    }
+  })
+}
+
 async function flowLaunchTarget(page, backend) {
   await scenario(page, 'launch-target', async (shot) => {
     const dataDir = process.env.HARNESS_DATA_DIR
@@ -826,6 +943,7 @@ async function main() {
     await flowInputPickers(page, backend)
     await flowLaunchOverrides(page, backend)
     await flowLibrary(page, backend)
+    await flowDefinitionEditor(page, backend)
     await flowLaunchTarget(page, backend)
   } catch {
     failed = true
