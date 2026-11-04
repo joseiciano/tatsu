@@ -28,11 +28,14 @@ selected attempt's full result and the files that attempt changed.
   attempt's tab is open), `Swap harness/model` (agent step whose latest
   attempt is failed, cancelled or interrupted on a paused run), and at a gate
   `Approve` and `Request changes` (agent steps only; opens the Request
-  changes dialog, see [workflow-gates.md](workflow-gates.md)). Step actions
+  changes dialog, see [workflow-gates.md](workflow-gates.md)), and at a loop
+  cap `Loop again` and `Continue anyway` (see
+  [workflow-loops.md](workflow-loops.md)). Step actions
   are named `<label>: <step id>`.
 - **Paused step in the graph**: while the run is paused, the graph node of
   the cursor step gets a warning ring and its name gains `, needs you`
-  (`exit: failed, needs you`, `draft: waiting at gate, needs you`). A
+  (`exit: failed, needs you`, `draft: waiting at gate, needs you`,
+  `review: done, needs you` at a loop cap). A
   cancelled run never shows the ring, and a step it left `awaiting-gate`
   reads `cancelled` in the graph and the step strip.
 - **Swap harness/model**: modal `dialog` `Swap harness or model for

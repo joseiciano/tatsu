@@ -72,6 +72,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `browser-gate` | `draft` (claude, `read-only`, `gate: approve`) then `publish` (shell `echo {{steps.draft.summary}}`) | `FAKE_AGENT_MODE=multi-turn`, like `smoke-gate`; the gate scenario closes the `⚙ draft · Claude` tab at the end so the agent exits |
 | `smoke-retry` | `check` (shell `test -f flag`) | none |
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
+| `browser-loop-cap` | `build` (shell `echo built`), `review` (claude, `read-only`, output `verdict` pass/fail, `loop: {back_to: build, until: verdict == pass, max: 1}`), then `publish` (shell `echo published`) | `FAKE_AGENT_DATA={"verdict":"fail"}` in default mode: `review` always fails its `until` and exits after one turn, so the run pauses `loop-cap` after one pass |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
 | `browser-exit` | `exit` (claude) | `FAKE_AGENT_MODE=exit-no-complete`: exits non-zero |
 | `browser-diff` | `write` (shell `echo smoke > smoke.txt`) | none; the attempt-diff scenario deletes `smoke.txt` afterwards |
@@ -192,7 +193,7 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
 | `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record -> step tab per agent step; exit 0 on PASS |
-| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, gate, repo trust, input pickers, launch overrides, library, definition editor, launch target); exit 0 on PASS |
+| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, gate, loop cap, repo trust, input pickers, launch overrides, library, definition editor, launch target); exit 0 on PASS |
 
 ## Not covered
 
