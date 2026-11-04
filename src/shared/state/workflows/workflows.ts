@@ -1,5 +1,5 @@
-import type { ResolvedWorkflowStep } from '../../workflow-def'
-import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX } from './constants'
+import type { ResolvedAgentStep, ResolvedDefinition, ResolvedWorkflowStep } from '../../workflow-def'
+import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX, isStepHarnessAgent, isWorkflowStepModel } from './constants'
 import type {
   WorkflowAttempt,
   WorkflowDefinitionsGroup,
@@ -9,6 +9,7 @@ import type {
   WorkflowRunRecord,
   WorkflowRunStatus,
   WorkflowRunStep,
+  WorkflowStepHarness,
   WorkflowStepStatus,
   WorkflowsEvent,
   WorkflowsState
@@ -110,6 +111,57 @@ export function runStepFacts(step: ResolvedWorkflowStep): Pick<WorkflowRunStep, 
   if (step.kind === 'agent') return { kind: 'agent', agent: step.agent }
   if (step.kind === 'shell') return { kind: 'shell' }
   return {}
+}
+
+export interface StepOverrideInput {
+  agent?: string
+  model?: string
+}
+
+export type StepOverrideResult =
+  | { ok: true; step: ResolvedAgentStep }
+  | { ok: false; reason: 'unsupported-agent' | 'invalid-override' }
+
+export type AppliedStepOverrides =
+  | { ok: true; definition: ResolvedDefinition; overriddenFrom?: Record<string, WorkflowStepHarness> }
+  | { ok: false; reason: 'invalid-overrides' | 'unsupported-agent' }
+
+export function harnessOf(step: ResolvedAgentStep): WorkflowStepHarness {
+  return { agent: step.agent, ...(step.model === undefined ? {} : { model: step.model }) }
+}
+
+export function overriddenStep(step: ResolvedAgentStep, override: StepOverrideInput): StepOverrideResult {
+  const agent = override.agent ?? step.agent
+  if (!isStepHarnessAgent(agent)) return { ok: false, reason: 'unsupported-agent' }
+  if (override.model !== undefined && !isWorkflowStepModel(override.model)) return { ok: false, reason: 'invalid-override' }
+  const model = override.model ?? (agent === step.agent ? step.model : undefined)
+  const next: ResolvedAgentStep = { ...step, agent }
+  if (model === undefined) delete next.model
+  else next.model = model
+  return { ok: true, step: next }
+}
+
+export function applyOverrides(
+  definition: ResolvedDefinition,
+  overrides: Record<string, StepOverrideInput> | undefined
+): AppliedStepOverrides {
+  const ids = overrides ? Object.keys(overrides) : []
+  if (!overrides || ids.length === 0) return { ok: true, definition }
+  const agentStepIds = new Set(definition.steps.filter((step) => step.kind === 'agent').map((step) => step.id))
+  if (!ids.every((id) => agentStepIds.has(id))) return { ok: false, reason: 'invalid-overrides' }
+  const overriddenFrom: Record<string, WorkflowStepHarness> = {}
+  const steps: ResolvedWorkflowStep[] = []
+  for (const step of definition.steps) {
+    if (step.kind !== 'agent' || !Object.hasOwn(overrides, step.id)) {
+      steps.push(step)
+      continue
+    }
+    const result = overriddenStep(step, overrides[step.id])
+    if (!result.ok) return { ok: false, reason: result.reason === 'unsupported-agent' ? result.reason : 'invalid-overrides' }
+    overriddenFrom[step.id] = harnessOf(step)
+    steps.push(result.step)
+  }
+  return { ok: true, definition: { ...definition, steps }, overriddenFrom }
 }
 
 export function projectRunRecord(record: WorkflowRunRecord): {
