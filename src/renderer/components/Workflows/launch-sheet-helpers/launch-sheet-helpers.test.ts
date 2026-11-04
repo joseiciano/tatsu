@@ -4,6 +4,7 @@ import {
   canStart,
   definitionsForRepo,
   existingWorktreeOptions,
+  hasGate,
   inputTrustChecks,
   inputTrustKey,
   isWorktreeBusy,
@@ -132,6 +133,29 @@ describe('needsFull', () => {
     expect(needsFull(EDIT_AGENT)).toBe(false)
     expect(needsFull(SHELL_ONLY)).toBe(false)
     expect(needsFull(null)).toBe(false)
+  })
+})
+
+describe('hasGate', () => {
+  it('is true when any step, agent or shell, has an approve gate', () => {
+    expect(
+      hasGate(resolve(`name: g
+steps:
+  - id: build
+    kind: shell
+    run: "true"
+  - id: test
+    kind: shell
+    run: "true"
+    gate: approve
+`))
+    ).toBe(true)
+  })
+
+  it('is false for a definition without gates and for a missing definition', () => {
+    expect(hasGate(EDIT_AGENT)).toBe(false)
+    expect(hasGate(SHELL_ONLY)).toBe(false)
+    expect(hasGate(null)).toBe(false)
   })
 })
 

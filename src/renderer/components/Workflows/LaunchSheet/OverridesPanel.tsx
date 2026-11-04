@@ -1,9 +1,14 @@
 import { useId } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react'
 import { agentDisplayName } from '../../../../shared/agent-registry'
 import { STEP_HARNESS_AGENTS, WORKFLOW_STEP_MODEL_MAX_CHARS } from '../../../../shared/state/workflows'
 import type { WorkflowAgent } from '../../../../shared/workflow-def'
-import type { OverrideDraft, OverrideRow } from '../launch-sheet-helpers'
+import { AUTOPILOT_UNTRUSTED_NOTICE, type OverrideDraft, type OverrideRow } from '../launch-sheet-helpers'
+
+export interface AutopilotView {
+  checked: boolean
+  blocked: boolean
+}
 
 export interface OverridesPanelProps {
   rows: OverrideRow[]
@@ -13,9 +18,11 @@ export interface OverridesPanelProps {
   disabled: boolean
   invalidStep: string | null
   reasonId: string
+  autopilot: AutopilotView | null
   onToggle: () => void
   onAgentChange: (stepId: string, agent: WorkflowAgent) => void
   onModelChange: (stepId: string, model: string) => void
+  onAutopilotChange: (checked: boolean) => void
 }
 
 const FIELD_CLASS =
@@ -40,12 +47,15 @@ export function OverridesPanel({
   disabled,
   invalidStep,
   reasonId,
+  autopilot,
   onToggle,
   onAgentChange,
-  onModelChange
+  onModelChange,
+  onAutopilotChange
 }: OverridesPanelProps): JSX.Element {
   const baseId = useId()
   const bodyId = `${baseId}-body`
+  const autopilotNoticeId = `${baseId}-autopilot-notice`
   const Chevron = expanded ? ChevronDown : ChevronRight
   return (
     <div className="rounded border border-border">
@@ -113,6 +123,27 @@ export function OverridesPanel({
             </div>
           )
         })}
+        {autopilot !== null && (
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-xs text-fg cursor-pointer has-[:disabled]:cursor-default">
+              <input
+                type="checkbox"
+                checked={autopilot.checked}
+                disabled={disabled || autopilot.blocked}
+                aria-describedby={autopilot.blocked ? autopilotNoticeId : undefined}
+                onChange={(e) => onAutopilotChange(e.target.checked)}
+                className="icon-base cursor-pointer disabled:opacity-50 disabled:cursor-default"
+              />
+              Autopilot (approve gates automatically)
+            </label>
+            {autopilot.blocked && (
+              <p id={autopilotNoticeId} className="flex items-start gap-1.5 text-xs text-warning">
+                <ShieldAlert className="icon-xs mt-0.5 shrink-0" />
+                {AUTOPILOT_UNTRUSTED_NOTICE}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

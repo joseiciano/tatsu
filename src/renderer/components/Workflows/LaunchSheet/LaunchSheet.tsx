@@ -13,6 +13,7 @@ import {
   buildInputFields,
   definitionsForRepo,
   existingWorktreeOptions,
+  hasGate,
   inputTrustChecks,
   inputTrustKey,
   needsFull as definitionNeedsFull,
@@ -88,6 +89,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
   const [loaded, setLoaded] = useState<LoadedDefinition | null>(null)
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [allowFullFor, setAllowFullFor] = useState<string | null>(null)
+  const [autopilotFor, setAutopilotFor] = useState<string | null>(null)
   const [overrideDrafts, setOverrideDrafts] = useState<OverrideDrafts | null>(null)
   const [overridesOpen, setOverridesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -199,6 +201,9 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
   const capped = capsFull && effective !== null ? capPermissions(effective) : effective
   const needsFull = definitionNeedsFull(capped)
   const fullHidden = capsFull && definitionNeedsFull(effective)
+  const gated = hasGate(effective)
+  const autopilotBlocked = untrusted.length > 0
+  const autopilot = gated && !autopilotBlocked && confirmKey !== null && autopilotFor === confirmKey
   const needsTrust =
     loaded !== null && definition !== null
       ? trustNeeded({ scope: loaded.scope, hash: loaded.detailHash, trustedHash })
@@ -244,6 +249,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
     setChosenId(id)
     setInputs({})
     setAllowFullFor(null)
+    setAutopilotFor(null)
     setOverrideDrafts(null)
     setError(null)
   }, [])
@@ -338,7 +344,8 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
         worktreePath: path,
         inputs: declared,
         ...(needsFull && allowFull ? { allowFull: true } : {}),
-        ...(overrides ? { overrides } : {})
+        ...(overrides ? { overrides } : {}),
+        ...(autopilot ? { autopilot: true } : {})
       })
       if (!mounted.current) return
       if ('runId' in response) {
@@ -370,6 +377,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
     fullHidden,
     confirmKey,
     overrides,
+    autopilot,
     onStarted,
     onClose
   ])
@@ -405,14 +413,15 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
       trust={trust}
       untrustedInputs={untrusted.map(({ name, type }) => ({ name, type }))}
       overrides={
-        overrideList.length === 0
+        overrideList.length === 0 && !gated
           ? null
           : {
               rows: overrideList,
               drafts,
-              changedCount: overrides ? Object.keys(overrides).length : 0,
+              changedCount: (overrides ? Object.keys(overrides).length : 0) + (autopilot ? 1 : 0),
               expanded: overridesOpen,
-              invalidStep: resolved?.invalidStep ?? null
+              invalidStep: resolved?.invalidStep ?? null,
+              autopilot: gated ? { checked: autopilot, blocked: autopilotBlocked } : null
             }
       }
       blockReason={blockReason}
@@ -437,6 +446,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
       onToggleOverrides={() => setOverridesOpen((open) => !open)}
       onOverrideAgentChange={handleOverrideAgent}
       onOverrideModelChange={handleOverrideModel}
+      onAutopilotChange={(checked) => setAutopilotFor(checked ? confirmKey : null)}
       onStart={() => void handleStart()}
       onClose={onClose}
     />

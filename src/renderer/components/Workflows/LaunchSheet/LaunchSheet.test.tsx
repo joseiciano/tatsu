@@ -111,6 +111,28 @@ steps:
     run: test -f {{inputs.target}}
 `
 
+SOURCES['personal:gated'] = `name: gated
+inputs:
+  ticket: { type: issue }
+steps:
+  - id: draft
+    agent: claude
+    prompt: "draft {{inputs.ticket}}"
+    gate: approve
+  - id: publish
+    kind: shell
+    needs: [draft]
+    run: "true"
+`
+
+SOURCES['personal:gatedshell'] = `name: gatedshell
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+    gate: approve
+`
+
 const REPO_ID = 'repo:abcdefabcdef:ship'
 const DISK_HASH = 'd'.repeat(64)
 
@@ -964,5 +986,127 @@ describe('LaunchSheet untrusted input authors', () => {
     await settleTrust()
     expect(container.textContent).not.toContain(ISSUE_NOTICE)
     expect(container.querySelector('input[type="checkbox"]')).not.toBeNull()
+  })
+})
+
+describe('LaunchSheet autopilot', () => {
+  const AUTOPILOT = 'Autopilot (approve gates automatically)'
+  const NOTICE = 'Autopilot is off: an issue or pull request input is not from a collaborator'
+  const toggle = (): HTMLButtonElement => q<HTMLButtonElement>('button[aria-controls]')
+
+  function autopilotBox(): HTMLInputElement | null {
+    const label = [...container.querySelectorAll('label')].find((l) => l.textContent?.trim() === AUTOPILOT)
+    return label?.querySelector<HTMLInputElement>('input[type="checkbox"]') ?? null
+  }
+
+  function requireAutopilotBox(): HTMLInputElement {
+    const box = autopilotBox()
+    if (!box) throw new Error('missing autopilot checkbox')
+    return box
+  }
+
+  async function settleTrust(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+  }
+
+  function startPayload(): Record<string, unknown> {
+    const call = backendApi.startWorkflowRun.mock.calls.at(-1)
+    if (!call) throw new Error('startWorkflowRun was not called')
+    return call[0] as Record<string, unknown>
+  }
+
+  beforeEach(() => {
+    storeState.definitions = {
+      ...storeState.definitions,
+      'personal:gated': summary('personal:gated'),
+      'personal:gatedshell': summary('personal:gatedshell'),
+      'personal:shell': summary('personal:shell')
+    }
+  })
+
+  async function openGated(): Promise<void> {
+    await mount()
+    await select('personal:gated')
+    await click(toggle())
+  }
+
+  it('sends autopilot true when checked and counts it as a change', async () => {
+    await openGated()
+    expect(requireAutopilotBox().checked).toBe(false)
+    await click(requireAutopilotBox())
+    expect(toggle().textContent?.trim()).toBe('Overrides (1 changed)')
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    await settleTrust()
+    expect(requireAutopilotBox().disabled).toBe(false)
+    await click(startButton())
+    expect(startPayload()).toStrictEqual({
+      defId: 'personal:gated',
+      worktreePath: '/wt/feature',
+      inputs: { ticket: '7' },
+      autopilot: true
+    })
+  })
+
+  it('sends no autopilot key when the box is left unchecked', async () => {
+    await openGated()
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    await settleTrust()
+    await click(startButton())
+    expect(Object.hasOwn(startPayload(), 'autopilot')).toBe(false)
+  })
+
+  it('disables the box with a linked notice when an input author is untrusted', async () => {
+    backendApi.checkWorkflowInputTrust.mockResolvedValue({ trusted: false })
+    await openGated()
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    expect(container.textContent).not.toContain(NOTICE)
+    await settleTrust()
+    const box = requireAutopilotBox()
+    expect(box.disabled).toBe(true)
+    expect(box.checked).toBe(false)
+    const noticeId = box.getAttribute('aria-describedby')
+    expect(noticeId).not.toBeNull()
+    expect(document.getElementById(noticeId ?? '')?.textContent).toBe(NOTICE)
+  })
+
+  it.each<[string, () => void]>([
+    ['an untrusted verdict', () => backendApi.checkWorkflowInputTrust.mockResolvedValue({ trusted: false })],
+    ['a failed trust check', () => backendApi.checkWorkflowInputTrust.mockRejectedValue(new Error('offline'))]
+  ])('sends no autopilot when the box was checked before %s', async (_name, arrange) => {
+    arrange()
+    await openGated()
+    await click(requireAutopilotBox())
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    await settleTrust()
+    expect(requireAutopilotBox().disabled).toBe(true)
+    expect(requireAutopilotBox().checked).toBe(false)
+    expect(toggle().textContent?.trim()).toBe('Overrides')
+    await click(startButton())
+    expect(Object.hasOwn(startPayload(), 'autopilot')).toBe(false)
+  })
+
+  it('hides the box for a definition without gates and shows it for a gated shell-only one', async () => {
+    await mount()
+    await select('personal:plan')
+    expect(autopilotBox()).toBeNull()
+    await select('personal:shell')
+    expect(container.querySelector('button[aria-controls]')).toBeNull()
+    await select('personal:gatedshell')
+    await click(toggle())
+    expect(requireAutopilotBox()).not.toBeNull()
+    expect(container.textContent).not.toContain('Agent for test')
+    await click(requireAutopilotBox())
+    await click(startButton())
+    expect(startPayload()).toMatchObject({ defId: 'personal:gatedshell', autopilot: true })
+  })
+
+  it('resets the box when the selected definition changes', async () => {
+    await openGated()
+    await click(requireAutopilotBox())
+    await select('personal:gatedshell')
+    await select('personal:gated')
+    expect(requireAutopilotBox().checked).toBe(false)
   })
 })
