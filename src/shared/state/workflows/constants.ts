@@ -49,7 +49,8 @@ export const PAUSED_REASON_LABELS: Record<WorkflowPausedReason, string> = {
   budget: 'Budget reached',
   'loop-cap': 'Loop limit reached',
   timeout: 'Timed out',
-  'restack-conflict': 'Restack conflict'
+  'restack-conflict': 'Restack conflict',
+  'publish-failed': 'Pull request failed'
 }
 
 export function pausedReasonLabel(reason: WorkflowPausedReason, stepStatus: WorkflowStepStatus | null): string {

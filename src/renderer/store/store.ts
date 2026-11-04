@@ -44,6 +44,7 @@ import {
   LOCAL_BACKEND_ID
 } from './constants'
 import {
+  createChainIdsSelector,
   createPausedRunIdsSelector,
   createRunAttemptsSelector,
   findWorkflowStepTab,
@@ -628,6 +629,7 @@ export function readWorkflowAttempt(id: string) {
 }
 
 const selectPausedWorkflowRunIds = createPausedRunIdsSelector()
+const selectWorkflowChainIds = createChainIdsSelector()
 const selectWorkflowRunAttempts = createRunAttemptsSelector()
 
 export function useWorkflowRunAttempts(runId: string) {
@@ -644,6 +646,14 @@ export function useWorktreeRepoRoot(worktreePath: string | null): string | null 
 
 export function usePausedWorkflowRunIds(): readonly string[] {
   return useAppState((s) => selectPausedWorkflowRunIds(s.workflows))
+}
+
+export function useWorkflowChain(id: string | null) {
+  return useAppState((s) => (id && Object.hasOwn(s.workflows.chains, id) ? s.workflows.chains[id] : null))
+}
+
+export function useWorkflowChainIds(): readonly string[] {
+  return useAppState((s) => selectWorkflowChainIds(s.workflows))
 }
 
 export function useWorkflowRunForWorktree(worktreePath: string): string | null {

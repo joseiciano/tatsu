@@ -2,10 +2,15 @@ import type { ResolvedAgentStep, ResolvedDefinition, ResolvedWorkflowStep } from
 import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX, isBudgetUsd, isStepHarnessAgent, isWorkflowStepModel } from './constants'
 import type {
   WorkflowAttempt,
+  WorkflowChain,
+  WorkflowChainItem,
+  WorkflowChainItemPatch,
+  WorkflowChainStatusResult,
   WorkflowDefinitionsGroup,
   WorkflowDefinitionsGroupPayload,
   WorkflowDefinitionSummary,
   WorkflowRun,
+  WorkflowRunPr,
   WorkflowRunRecord,
   WorkflowRunStatus,
   WorkflowRunStep,
@@ -19,7 +24,8 @@ export const initialWorkflows: WorkflowsState = {
   definitions: {},
   runs: {},
   attempts: {},
-  trust: {}
+  trust: {},
+  chains: {}
 }
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
@@ -265,6 +271,80 @@ function evictRuns(state: WorkflowsState, runIds: string[]): WorkflowsState {
   return { ...state, runs, attempts }
 }
 
+function patchChain(state: WorkflowsState, chain: WorkflowChain): WorkflowsState {
+  return { ...state, chains: { ...state.chains, [chain.chainId]: chain } }
+}
+
+function chainOf(state: WorkflowsState, chainId: string): WorkflowChain | undefined {
+  return Object.hasOwn(state.chains, chainId) ? state.chains[chainId] : undefined
+}
+
+type ChainItemPatchField = Exclude<keyof WorkflowChainItem, 'id'>
+
+const CHAIN_ITEM_PATCH_FIELDS: { [K in ChainItemPatchField]: K } = {
+  title: 'title',
+  branch: 'branch',
+  baseBranch: 'baseBranch',
+  prNumber: 'prNumber',
+  prevItemId: 'prevItemId',
+  skipped: 'skipped'
+}
+
+function withItemField<K extends ChainItemPatchField>(
+  item: WorkflowChainItem,
+  field: K,
+  value: WorkflowChainItem[K] | undefined
+): WorkflowChainItem {
+  return value === undefined || item[field] === value ? item : { ...item, [field]: value }
+}
+
+function patchedItem(item: WorkflowChainItem, patch: WorkflowChainItemPatch): WorkflowChainItem {
+  let next = item
+  for (const field of Object.values(CHAIN_ITEM_PATCH_FIELDS)) next = withItemField(next, field, patch[field])
+  return next
+}
+
+function chainItemsChanged(state: WorkflowsState, chainId: string, patches: WorkflowChainItemPatch[]): WorkflowsState {
+  const chain = chainOf(state, chainId)
+  if (!chain) return state
+  let items = chain.items
+  for (const patch of patches) {
+    const i = items.findIndex((item) => item.id === patch.id)
+    if (i === -1) continue
+    const next = patchedItem(items[i], patch)
+    if (next !== items[i]) items = [...items.slice(0, i), next, ...items.slice(i + 1)]
+  }
+  if (items === chain.items) return state
+  return patchChain(state, { ...chain, items })
+}
+
+function samePr(a: WorkflowRunPr | undefined, b: WorkflowRunPr): boolean {
+  return a !== undefined && a.number === b.number && a.url === b.url && a.draft === b.draft
+}
+
+const LIVE_CHILD_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['queued', 'running', 'paused'])
+
+export function deriveChainStatus(chain: WorkflowChain, runs: WorkflowsState['runs']): WorkflowChainStatusResult {
+  const children: Array<{ runId: string; run: WorkflowRun | undefined }> = []
+  let allDone = true
+  for (const item of chain.items) {
+    if (item.skipped) continue
+    const runId = Object.hasOwn(chain.childRunIds, item.id) ? chain.childRunIds[item.id] : undefined
+    const run = runId !== undefined && Object.hasOwn(runs, runId) ? runs[runId] : undefined
+    if (run?.status !== 'done') allDone = false
+    if (runId !== undefined) children.push({ runId, run })
+  }
+  if (allDone) return { status: 'done' }
+  const paused = children.find(({ run }) => run?.status === 'paused')
+  if (paused) return { status: 'paused', runId: paused.runId }
+  if (children.some(({ run }) => run?.status === 'running')) return { status: 'running' }
+  if (!children.some(({ run }) => run !== undefined && LIVE_CHILD_STATUSES.has(run.status))) {
+    if (children.some(({ run }) => run?.status === 'failed')) return { status: 'failed' }
+    if (children.some(({ run }) => run?.status === 'cancelled')) return { status: 'cancelled' }
+  }
+  return { status: 'queued' }
+}
+
 function setStepStatus(
   state: WorkflowsState,
   runId: string,
@@ -430,6 +510,32 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       const { runId, stepId, decision } = event.payload
       if (state.runs[runId]?.steps[stepId]?.status !== 'awaiting-gate') return state
       return setStepStatus(state, runId, stepId, decision === 'changes-requested' ? 'pending' : 'done')
+    }
+    case 'workflows/chainStarted': {
+      const { chain } = event.payload
+      if (Object.hasOwn(state.chains, chain.chainId)) return state
+      return patchChain(state, chain)
+    }
+    case 'workflows/chainItemsChanged':
+      return chainItemsChanged(state, event.payload.chainId, event.payload.items)
+    case 'workflows/chainChildRunLinked': {
+      const { chainId, itemId, runId } = event.payload
+      const chain = chainOf(state, chainId)
+      if (!chain || !chain.items.some((item) => item.id === itemId)) return state
+      if (Object.hasOwn(chain.childRunIds, itemId) && chain.childRunIds[itemId] === runId) return state
+      return patchChain(state, { ...chain, childRunIds: { ...chain.childRunIds, [itemId]: runId } })
+    }
+    case 'workflows/chainFinished': {
+      const { chainId, finishedAt } = event.payload
+      const chain = chainOf(state, chainId)
+      if (!chain || chain.finishedAt !== undefined) return state
+      return patchChain(state, { ...chain, finishedAt })
+    }
+    case 'workflows/prRecorded': {
+      const { runId, pr } = event.payload
+      const run = Object.hasOwn(state.runs, runId) ? state.runs[runId] : undefined
+      if (!run || samePr(run.pr, pr)) return state
+      return patchRun(state, runId, { ...run, pr: { number: pr.number, url: pr.url, draft: pr.draft } })
     }
     default: {
       const _exhaustive: never = event

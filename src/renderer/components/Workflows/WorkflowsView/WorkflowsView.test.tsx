@@ -97,7 +97,7 @@ function setState(runs: Record<string, WorkflowRun>, attempts: Record<string, Wo
       ...initialState.worktrees,
       list: [{ path: '/repos/app/feature', branch: 'feature', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repos/app' }]
     },
-    workflows: { definitions: { [SUMMARY.id]: SUMMARY }, runs, attempts, trust: {} }
+    workflows: { definitions: { [SUMMARY.id]: SUMMARY }, runs, attempts, trust: {}, chains: {} }
   }
 }
 

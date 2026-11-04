@@ -169,7 +169,7 @@ function setState(run: WorkflowRun, attempts: Record<string, WorkflowAttempt>, p
   storeState.current = {
     ...initialState,
     terminals: { ...initialState.terminals, panes },
-    workflows: { definitions: { [SUMMARY.id]: SUMMARY }, runs: { r1: run }, attempts, trust: {} }
+    workflows: { definitions: { [SUMMARY.id]: SUMMARY }, runs: { r1: run }, attempts, trust: {}, chains: {} }
   }
 }
 

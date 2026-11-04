@@ -3,6 +3,8 @@ import type { PaneLeaf, PaneNode } from '../../shared/state/terminals'
 
 export type PausedRunIdsSelector = (workflows: WorkflowsState) => readonly string[]
 
+export type ChainIdsSelector = (workflows: WorkflowsState) => readonly string[]
+
 export type RunAttemptsSelector = (workflows: WorkflowsState, runId: string) => readonly WorkflowAttempt[]
 
 export interface WorkflowStepTabRef {
@@ -46,6 +48,20 @@ export function createPausedRunIdsSelector(): PausedRunIdsSelector {
       .map(([id, run]) => ({ id, at: pausedAt(run, attempts) }))
       .sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       .map(({ id }) => id)
+    if (!sameIds(ids, lastIds)) lastIds = ids
+    return lastIds
+  }
+}
+
+export function createChainIdsSelector(): ChainIdsSelector {
+  let lastChains: WorkflowsState['chains'] | null = null
+  let lastIds: readonly string[] = []
+  return ({ chains }) => {
+    if (chains === lastChains) return lastIds
+    lastChains = chains
+    const ids = Object.values(chains)
+      .sort((a, b) => a.startedAt - b.startedAt || (a.chainId < b.chainId ? -1 : a.chainId > b.chainId ? 1 : 0))
+      .map((chain) => chain.chainId)
     if (!sameIds(ids, lastIds)) lastIds = ids
     return lastIds
   }

@@ -176,6 +176,7 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
     case 'budget':
       return ['raise-budget', 'cancel']
     case 'restack-conflict':
+    case 'publish-failed':
       return ['cancel', ...jump]
     default: {
       const _exhaustive: never = reason

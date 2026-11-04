@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createChainIdsSelector,
   createPausedRunIdsSelector,
   createRunAttemptsSelector,
   findWorkflowStepTab,
   selectWorkflowRunIdForWorktree,
   workflowRunRecordKey
 } from '.'
-import type { WorkflowAttempt, WorkflowRun, WorkflowRunStatus, WorkflowsState } from '../../shared/state/workflows'
+import type { WorkflowAttempt, WorkflowChain, WorkflowRun, WorkflowRunStatus, WorkflowsState } from '../../shared/state/workflows'
 import type { PaneLeaf, PaneNode, TerminalTab } from '../../shared/state/terminals'
 
 function run(status: WorkflowRunStatus, overrides: Partial<WorkflowRun> = {}): WorkflowRun {
@@ -26,7 +27,7 @@ function attempt(runId: string, startedAt: number, endedAt?: number): WorkflowAt
 }
 
 function state(runs: Record<string, WorkflowRun>, attempts: Record<string, WorkflowAttempt> = {}): WorkflowsState {
-  return { definitions: {}, runs, attempts, trust: {} }
+  return { definitions: {}, runs, attempts, trust: {}, chains: {} }
 }
 
 describe('createPausedRunIdsSelector', () => {
@@ -187,5 +188,51 @@ describe('workflowRunRecordKey', () => {
 
   it('is null for an unknown run', () => {
     expect(workflowRunRecordKey(state({}), 'missing')).toBeNull()
+  })
+})
+
+function chain(chainId: string, startedAt: number, overrides: Partial<WorkflowChain> = {}): WorkflowChain {
+  return {
+    chainId,
+    defId: 'personal:wf',
+    repoRoot: '/repo',
+    mode: 'independent',
+    items: [{ id: 'i1', title: 'One' }],
+    draftPrs: false,
+    childRunIds: {},
+    startedAt,
+    ...overrides
+  }
+}
+
+function chainsState(chains: WorkflowChain[]): WorkflowsState {
+  return { ...state({}), chains: Object.fromEntries(chains.map((c) => [c.chainId, c])) }
+}
+
+describe('createChainIdsSelector', () => {
+  it('orders chain ids by start time, then by id', () => {
+    const select = createChainIdsSelector()
+    expect(select(chainsState([chain('c', 20), chain('b', 10), chain('a', 20)]))).toEqual(['b', 'a', 'c'])
+  })
+
+  it('returns the same array while the chains map is unchanged or keeps the same ids', () => {
+    const select = createChainIdsSelector()
+    const first = chainsState([chain('a', 1), chain('b', 2)])
+    const ids = select(first)
+    expect(select(first)).toBe(ids)
+    const patched = chainsState([chain('a', 1, { childRunIds: { i1: 'r1' } }), chain('b', 2)])
+    expect(patched.chains).not.toBe(first.chains)
+    expect(select(patched)).toBe(ids)
+  })
+
+  it('returns a new array when a chain is added', () => {
+    const select = createChainIdsSelector()
+    const ids = select(chainsState([chain('a', 1)]))
+    expect(select(chainsState([chain('a', 1), chain('b', 2)]))).toEqual(['a', 'b'])
+    expect(ids).toEqual(['a'])
+  })
+
+  it('returns an empty list without chains', () => {
+    expect(createChainIdsSelector()(state({}))).toEqual([])
   })
 })
