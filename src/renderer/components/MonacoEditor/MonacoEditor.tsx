@@ -1,6 +1,16 @@
 import { useEffect, useRef } from 'react'
 import * as monaco from 'monaco-editor'
 import { detectMonacoLanguage } from '../../monaco-setup'
+import type { EditorMarker } from './types'
+
+export const MARKER_OWNER = 'tatsu'
+
+function toMonacoMarker(marker: EditorMarker): monaco.editor.IMarkerData {
+  return {
+    ...marker,
+    severity: marker.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning
+  }
+}
 
 interface MonacoEditorProps {
   value: string
@@ -11,6 +21,8 @@ interface MonacoEditorProps {
   onChange?: (value: string) => void
   onSave?: () => void
   onReferenceLine?: (lineNumber: number) => void
+  markers?: readonly EditorMarker[]
+  ariaLabel?: string
 }
 
 export function MonacoEditor({
@@ -21,7 +33,9 @@ export function MonacoEditor({
   fontSize,
   onChange,
   onSave,
-  onReferenceLine
+  onReferenceLine,
+  markers,
+  ariaLabel
 }: MonacoEditorProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -41,6 +55,7 @@ export function MonacoEditor({
       value,
       language: detectMonacoLanguage(filePath),
       readOnly,
+      ariaLabel,
       theme: 'harness',
       fontFamily: fontFamily || undefined,
       fontSize: fontSize || 13,
@@ -110,6 +125,7 @@ export function MonacoEditor({
       // Dispose the editor before its model — reversing this order fires
       // "TextModel got disposed before ..." from Monaco's listeners.
       const model = editor.getModel()
+      if (model) monaco.editor.setModelMarkers(model, MARKER_OWNER, [])
       editor.dispose()
       model?.dispose()
       editorRef.current = null
@@ -139,6 +155,12 @@ export function MonacoEditor({
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly })
   }, [readOnly])
+
+  useEffect(() => {
+    const model = editorRef.current?.getModel()
+    if (!model) return
+    monaco.editor.setModelMarkers(model, MARKER_OWNER, (markers ?? []).map(toMonacoMarker))
+  }, [markers])
 
   useEffect(() => {
     editorRef.current?.updateOptions({

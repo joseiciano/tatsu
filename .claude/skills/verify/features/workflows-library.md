@@ -30,7 +30,9 @@ duplicate or delete one.
   shows the file path; for a repo definition it says the file is a
   committed file in the primary checkout. `Delete file` removes only that
   file; a refusal stays in the dialog as an alert.
-- Edit and New workflow are not shown yet (ticket 320).
+- **Edit / New workflow**: button `Edit <name>` per row and a `New workflow`
+  button above the groups open the definition editor in place of the list;
+  see [workflow-definition-editor.md](workflow-definition-editor.md).
 
 ## How to get to it (user POV)
 
@@ -66,6 +68,6 @@ the `library: duplicated …` and `library: deleted …` journal lines, and no
 - Duplicate goes through `workflows:duplicateDefinition(defId)`; main reads
   the source and checks trust itself, so the browser cannot copy an
   untrusted repo definition. `workflows:saveDefinition` writes arbitrary
-  YAML (for the 320 editor) and is not driven by the browser leg yet.
+  YAML; the `definition-editor` scenario drives it from the editor's Save.
 - Repo saves need an existing `.harness/workflows` in the primary checkout;
   main never creates it.

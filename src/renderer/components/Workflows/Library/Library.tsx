@@ -8,13 +8,15 @@ import { LibraryList } from './LibraryList'
 export interface LibraryProps {
   activeRepoRoot: string | null
   onRun?: (defId: string) => void
+  onEdit?: (defId: string) => void
+  onNew?: () => void
 }
 
 function failure(err: unknown): string {
   return err instanceof Error && err.message ? err.message : 'The request failed'
 }
 
-export function Library({ activeRepoRoot, onRun }: LibraryProps): JSX.Element {
+export function Library({ activeRepoRoot, onRun, onEdit, onNew }: LibraryProps): JSX.Element {
   const backend = useBackend()
   const definitions = useWorkflowDefinitions()
   const repoRoots = useAppState((s) => s.worktrees.repoRoots)
@@ -111,6 +113,8 @@ export function Library({ activeRepoRoot, onRun }: LibraryProps): JSX.Element {
         onRun={(defId) => onRun?.(defId)}
         onDuplicate={duplicate}
         onDelete={openDelete}
+        onEdit={onEdit}
+        onNew={onNew}
       />
       {pendingDelete && (
         <DeleteDefinitionDialog

@@ -32,7 +32,7 @@ import { AgentIcon } from '../components/AgentIcon'
 import { InterfaceToggle } from '../components/InterfaceToggle'
 import { Activity, type ActivityTab } from '../components/Activity'
 import { Cleanup } from '../components/Cleanup'
-import { WorkflowsView } from '../components/Workflows/WorkflowsView'
+import { WorkflowsView, type WorkflowsExitGuard } from '../components/Workflows/WorkflowsView'
 import { ReviewScreen } from '../components/ReviewScreen'
 import { CommandPalette, type PaletteMode } from '../components/CommandPalette'
 import { HotkeyCheatsheet } from '../components/HotkeyCheatsheet'
@@ -240,6 +240,7 @@ function DesktopApp(): JSX.Element {
   const [activityTab, setActivityTab] = useState<ActivityTab>('command')
   const [showCleanup, setShowCleanup] = useState(false)
   const [showWorkflows, setShowWorkflows] = useState(false)
+  const workflowsExitGuard = useRef<WorkflowsExitGuard | null>(null)
   const [showReview, setShowReview] = useState(false)
   const [reviewMode, setReviewMode] = useState<'working' | 'branch'>('branch')
   const [reviewCommit, setReviewCommit] = useState<{ hash: string; shortHash: string; subject: string } | undefined>(undefined)
@@ -619,7 +620,9 @@ const setQuestStep = useCallback((next: QuestStep) => {
 
   const toggleWorkflows = useCallback(() => {
     if (showWorkflows) {
-      setShowWorkflows(false)
+      const guard = workflowsExitGuard.current
+      if (guard) guard(() => setShowWorkflows(false))
+      else setShowWorkflows(false)
     } else {
       closeFullscreenViews()
       setShowWorkflows(true)
@@ -1630,6 +1633,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
               onRunWorkflow={openRunWorkflow}
               onRunDefinition={openRunDefinition}
               activeWorktreePath={activeWorktreeId}
+              exitGuardRef={workflowsExitGuard}
             />
           </div>
         )}

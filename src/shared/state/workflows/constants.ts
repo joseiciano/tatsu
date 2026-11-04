@@ -2,6 +2,7 @@ import type { AgentKind } from '../terminals'
 import { WORKFLOW_FEATURES, type WorkflowAgent } from '../../workflow-def'
 
 export const SUMMARY_PREVIEW_MAX = 200
+export const WORKFLOW_NO_REPO_DIR_ERROR = 'The repository has no usable .harness/workflows folder in its primary checkout'
 export const RECENT_RUNS_MAX = 50
 export const WORKFLOW_RUN_RECORD_VERSION = 1
 export const RESUMABLE_AGENTS: ReadonlySet<AgentKind> = new Set<AgentKind>(['claude', 'codex', 'opencode'])
