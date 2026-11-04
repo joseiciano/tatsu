@@ -1237,3 +1237,77 @@ describe('WorkflowRunner step timeouts after a restart', () => {
     expect(ctx.runner.keepWaiting('run-t', 'b')).toEqual({ ok: false, reason: 'not-timed-out' })
   })
 })
+
+describe('WorkflowRunner budget after a restart', () => {
+  function budgetRecord(patch: Partial<WorkflowRunRecord> = {}): WorkflowRunRecord {
+    return record('run-b', {
+      definition: definitionOf(TWO_AGENT),
+      status: 'paused',
+      pausedReason: 'budget',
+      budgetUsd: 0.05,
+      cursor: 1,
+      steps: { plan: 'done', build: 'pending' },
+      attempts: [
+        attempt('att-1', {
+          status: 'done',
+          endedAt: 6,
+          executionId: 'pty-gone',
+          result: { status: 'done', summary: 'planned', completedBy: 'tool' },
+          metrics: { continuations: 0, pauses: [], costUsd: 0.06 }
+        })
+      ],
+      ...patch
+    })
+  }
+
+  it('keeps a budget-paused record paused after boot, then Raise budget resumes it and starts the next step', async () => {
+    const onDisk = budgetRecord()
+    const ctx = boot([onDisk])
+    expect(ctx.wf().runs['run-b']).toMatchObject({ status: 'paused', pausedReason: 'budget', budgetUsd: 0.05 })
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.logs).toContain('[workflow] run reconciled paused {"runId":"run-b"}')
+    expect(ctx.runner.getRunRecord('run-b')).toEqual(onDisk)
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.runner.retryStep('run-b', 'build')).toEqual({ ok: false, reason: 'not-paused' })
+
+    expect(ctx.runner.setBudget('run-b', 0.06)).toEqual({ ok: true })
+    expect(ctx.wf().runs['run-b']).toMatchObject({ status: 'paused', pausedReason: 'budget', budgetUsd: 0.06 })
+    expect(ctx.agent.started).toEqual([])
+
+    expect(ctx.runner.setBudget('run-b', 1)).toEqual({ ok: true })
+    await flush()
+    expect(ctx.wf().runs['run-b']).toMatchObject({ status: 'running', budgetUsd: 1 })
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['build'])
+    expect(ctx.lastPersisted('run-b')).toMatchObject({ status: 'running', budgetUsd: 1, steps: { build: 'running' } })
+  })
+
+  it('re-seeds a budget pause behind a gate when the recorded total reaches the cap', async () => {
+    const GATED = TWO_AGENT.replace('    prompt: "plan"\n', '    prompt: "plan"\n    gate: approve\n')
+    const ctx = boot([
+      budgetRecord({
+        definition: definitionOf(GATED),
+        pausedReason: 'gate',
+        cursor: 0,
+        steps: { plan: 'awaiting-gate', build: 'pending' }
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.approveGate('run-b', 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.wf().runs['run-b']).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.runner.setBudget('run-b', 1)).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['build'])
+  })
+
+  it('finishes a settled budget-paused record once Raise budget lifts the cap', async () => {
+    const ctx = boot([budgetRecord({ definition: definitionOf(ONE_AGENT), cursor: 1, steps: { plan: 'done' } })])
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.wf().runs['run-b'].status).toBe('paused')
+    expect(ctx.runner.setBudget('run-b', 1)).toEqual({ ok: true })
+    expect(ctx.wf().runs['run-b'].status).toBe('done')
+    expect(ctx.lastPersisted('run-b')).toMatchObject({ status: 'done', budgetUsd: 1 })
+  })
+})

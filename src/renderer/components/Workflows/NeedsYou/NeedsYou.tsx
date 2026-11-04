@@ -7,9 +7,11 @@ import {
   useWorkflowAttempt,
   useWorkflowDefinition,
   useWorkflowRun,
+  useWorkflowRunAttempts,
   useWorkflowStepTabLeaf
 } from '../../../store'
 import { findWorkflowStepTab } from '../../../workflow-selectors'
+import { formatCost, runCostUsd } from '../run-card-model'
 import {
   confirmRetryFromClean,
   currentStepId,
@@ -25,6 +27,7 @@ import {
 import type { WorkflowActionResponse, WorkflowRequestChangesPayload } from '../../../../shared/state/workflows'
 import { RequestChangesDialog } from './RequestChangesDialog'
 import { RetryFromCleanDialog } from './RetryFromCleanDialog'
+import { RaiseBudgetForm } from './RaiseBudgetForm'
 
 export type JumpToTabHandler = (worktreePath: string, paneId: string, tabId: string) => void
 
@@ -35,6 +38,7 @@ const ACTION_LABELS: Record<NeedsYouActionKind, string> = {
   'loop-again': 'Loop again',
   'loop-continue': 'Continue anyway',
   'keep-waiting': 'Keep waiting',
+  'raise-budget': 'Raise budget',
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',
@@ -82,16 +86,18 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
   const backend = useBackend()
   const run = useWorkflowRun(runId)
   const summary = useWorkflowDefinition(run?.defId ?? null)
-  const sliceStepId = run ? run.cursorStepId ?? currentStepId(run, stepOrderFor(run, summary)) : null
+  const runAttempts = useWorkflowRunAttempts(runId)
+  const budgetPaused = run?.status === 'paused' && run.pausedReason === 'budget'
+  const sliceStepId = run && !budgetPaused ? run.cursorStepId ?? currentStepId(run, stepOrderFor(run, summary)) : null
   const lastAttemptId = (sliceStepId && run?.steps[sliceStepId]?.attemptIds.at(-1)) || null
   const lastAttempt = useWorkflowAttempt(lastAttemptId)
   const sliceContext = run ? sliceStepContext(run, lastAttempt) : null
   const fetched = useRecordStepContext(
     runId,
     `${run?.pausedReason}|${lastAttemptId}|${lastAttempt?.status ?? null}`,
-    run !== null && (sliceContext === null || run.pausedReason === 'step-failed')
+    run !== null && !budgetPaused && (sliceContext === null || run.pausedReason === 'step-failed')
   )
-  const context = fetched ?? sliceContext
+  const context = budgetPaused ? null : fetched ?? sliceContext
   const stepId = context?.stepId ?? sliceStepId
   const tabRef = { runId, stepId: stepId ?? '', attemptId: lastAttemptId }
   const leaf = useWorkflowStepTabLeaf(run && stepId ? run.worktreePath : null, tabRef)
@@ -141,7 +147,11 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
       if (tab && onJumpToTab) onJumpToTab(run.worktreePath, tab.leaf.id, tab.tabId)
       return
     }
-    if (!stepId) return
+    if (kind === 'cancel') {
+      void settle(() => backend.cancelWorkflowRun(runId))
+      return
+    }
+    if (!stepId || kind === 'raise-budget') return
     if (kind === 'retry-from-clean') {
       setConfirming(true)
       return
@@ -169,6 +179,11 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
     }
   }
 
+  const totalUsd = runCostUsd(run, runAttempts) ?? 0
+  const where = `${workflowName} on ${worktreeName}`
+  const spend =
+    budgetPaused && run.budgetUsd !== undefined ? `Spent ${formatCost(totalUsd)} of ${formatCost(run.budgetUsd)}` : null
+
   return (
     <li className="px-3 py-1.5 flex flex-col gap-1 min-w-0">
       <div className="flex items-center gap-1.5 min-w-0">
@@ -181,22 +196,35 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
         {worktreeName} · <span className="text-warning">{pausedReasonLabel(reason, stepId ? run.steps[stepId]?.status ?? null : null)}</span>
         {stepId ? ` · ${stepId}` : ''}
       </div>
-      <div className="flex flex-wrap gap-1">
-        {actions.map((kind) => (
-          <button
-            key={kind}
-            type="button"
-            disabled={pending || (kind !== 'jump' && !stepId)}
-            onClick={() => onAction(kind)}
-            aria-label={actionAriaLabel(kind, stepId, workflowName, worktreeName)}
-            aria-haspopup={kind === 'request-changes' ? 'dialog' : undefined}
-            className={`text-xs px-1.5 py-0.5 rounded border border-border-strong hover:bg-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-              kind === 'cancel' || kind === 'retry-from-clean' ? 'text-danger' : 'text-fg'
-            }`}
-          >
-            {ACTION_LABELS[kind]}
-          </button>
-        ))}
+      {spend && <div className="text-xs text-faint tabular-nums">{spend}</div>}
+      <div className="flex flex-wrap items-center gap-1">
+        {actions.map((kind) =>
+          kind === 'raise-budget' ? (
+            <RaiseBudgetForm
+              key={kind}
+              totalUsd={totalUsd}
+              budgetUsd={run.budgetUsd}
+              busy={pending}
+              inputLabel={`New budget in USD: ${where}`}
+              buttonLabel={actionAriaLabel(kind, null, workflowName, worktreeName)}
+              onSubmit={(usd) => void settle(() => backend.setWorkflowRunBudget(runId, usd))}
+            />
+          ) : (
+            <button
+              key={kind}
+              type="button"
+              disabled={pending || (kind !== 'jump' && kind !== 'cancel' && !stepId)}
+              onClick={() => onAction(kind)}
+              aria-label={actionAriaLabel(kind, stepId, workflowName, worktreeName)}
+              aria-haspopup={kind === 'request-changes' ? 'dialog' : undefined}
+              className={`text-xs px-1.5 py-0.5 rounded border border-border-strong hover:bg-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                kind === 'cancel' || kind === 'retry-from-clean' ? 'text-danger' : 'text-fg'
+              }`}
+            >
+              {ACTION_LABELS[kind]}
+            </button>
+          )
+        )}
       </div>
       {error && (
         <div role="alert" className="text-xs text-danger break-words">

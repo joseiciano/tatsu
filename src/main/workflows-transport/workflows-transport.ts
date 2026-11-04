@@ -23,6 +23,7 @@ import {
 } from '../workflow-runner'
 import {
   GATE_FEEDBACK_MAX_CHARS,
+  isBudgetUsd,
   isWorkflowInputNumber,
   isWorkflowStepModel,
   WORKFLOW_NO_REPO_DIR_ERROR,
@@ -54,6 +55,7 @@ export type WorkflowActionsRunner = Pick<
   | 'requestChanges'
   | 'resolveLoopCap'
   | 'keepWaiting'
+  | 'setBudget'
 >
 
 export interface RegisterWorkflowsRequestHandlersDeps {
@@ -80,7 +82,7 @@ const OVERRIDES_MAX = 64
 const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
 const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
-const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides', 'autopilot'] as const
+const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides', 'autopilot', 'budgetUsd'] as const
 const REQUEST_CHANGES_KEYS = ['feedback', 'fresh'] as const
 const SAVE_DEFINITION_KEYS = ['scope', 'repoRoot', 'defId', 'name', 'source'] as const
 const DEFINITION_NAME_MAX_CHARS = 200
@@ -222,8 +224,10 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
   const allowFull = ownValue(payload, 'allowFull')
   const rawOverrides = ownValue(payload, 'overrides')
   const autopilot = ownValue(payload, 'autopilot')
+  const budgetUsd = ownValue(payload, 'budgetUsd')
   if (allowFull !== undefined && typeof allowFull !== 'boolean') return null
   if (autopilot !== undefined && typeof autopilot !== 'boolean') return null
+  if (budgetUsd !== undefined && !isBudgetUsd(budgetUsd)) return null
   const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
   if (overrides === null) return null
   if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(worktreePath, WORKTREE_PATH_MAX_CHARS)) return null
@@ -241,7 +245,8 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
     inputs,
     ...(allowFull === true ? { allowFull } : {}),
     ...(overrides === undefined ? {} : { overrides }),
-    ...(autopilot === true ? { autopilot } : {})
+    ...(autopilot === true ? { autopilot } : {}),
+    ...(budgetUsd === undefined ? {} : { budgetUsd })
   }
 }
 
@@ -427,6 +432,10 @@ export function registerWorkflowsRequestHandlers({
     return actionResponse(runner.resolveLoopCap(runId, stepId, action))
   })
   stepAction('workflows:keepWaiting', (runId, stepId) => runner.keepWaiting(runId, stepId))
+  guarded('workflows:setBudget', ([runId, budgetUsd]): WorkflowActionResponse => {
+    if (!isRunId(runId) || !isBudgetUsd(budgetUsd)) return INVALID_REQUEST
+    return actionResponse(runner.setBudget(runId, budgetUsd))
+  })
   guarded('workflows:markDone', ([runId, stepId, payload]): WorkflowActionResponse => {
     const request = parseMarkDone(payload)
     if (!isRunId(runId) || !isStepId(stepId) || !request) return INVALID_REQUEST

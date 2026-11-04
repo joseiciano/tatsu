@@ -230,6 +230,24 @@ describe('runDetailModel actions', () => {
     expect(actionsFor(rec, true)).toEqual(['loop-again', 'loop-continue', 'cancel-run', 'jump'])
   })
 
+  it('offers Raise budget and keeps Cancel step for the live step of a budget-paused run', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'running', endedAt: undefined })], {
+      pausedReason: 'budget',
+      steps: { plan: 'done', exit: 'running' }
+    })
+    expect(actionsFor(rec)).toEqual(['raise-budget', 'cancel-step', 'cancel-run'])
+  })
+
+  it('offers Raise budget on a budget-paused run whose steps are all settled', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
+      pausedReason: 'budget',
+      cursor: 2,
+      steps: { plan: 'done', exit: 'done' }
+    })
+    expect(actionsFor(rec)).toEqual(['raise-budget', 'cancel-run'])
+    expect(runDetailModel({ record: rec, run: sliceRun(rec), tabExists: false, now: NOW }).actionStepId).toBeNull()
+  })
+
   it('offers nothing but Jump to tab once a run cancelled at its gate', () => {
     const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
       status: 'cancelled',
@@ -263,7 +281,7 @@ describe('runDetailModel actions', () => {
   })
 
   it('drops step actions when the cursor names no step', () => {
-    const rec = record([PLAN_DONE], { pausedReason: 'budget', cursor: 2 })
+    const rec = record([PLAN_DONE], { pausedReason: 'restack-conflict', cursor: 2 })
     expect(actionsFor(rec)).toEqual(['cancel-run'])
   })
 })

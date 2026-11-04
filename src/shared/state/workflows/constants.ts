@@ -9,6 +9,7 @@ export const WORKFLOW_RUN_RECORD_VERSION = 1
 export const RESUMABLE_AGENTS: ReadonlySet<AgentKind> = new Set<AgentKind>(['claude', 'codex', 'opencode'])
 export const WORKFLOW_STEP_MODEL_MAX_CHARS = 200
 export const GATE_FEEDBACK_MAX_CHARS = 16384
+export const WORKFLOW_BUDGET_MAX_USD = 10000
 export const STEP_HARNESS_AGENTS: readonly WorkflowAgent[] = [
   'claude',
   ...(WORKFLOW_FEATURES['agent-codex'].supported ? (['codex'] as const) : []),
@@ -17,6 +18,10 @@ export const STEP_HARNESS_AGENTS: readonly WorkflowAgent[] = [
 
 export function isStepHarnessAgent(value: unknown): value is WorkflowAgent {
   return typeof value === 'string' && STEP_HARNESS_AGENTS.some((agent) => agent === value)
+}
+
+export function isBudgetUsd(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= WORKFLOW_BUDGET_MAX_USD
 }
 
 const WORKFLOW_INPUT_NUMBER_PATTERN = /^[1-9]\d{0,9}$/

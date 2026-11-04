@@ -10,6 +10,7 @@ import { COMPLETED_BY_LABELS, stepTabOverlayMode } from '../StepTab'
 import { needsYouActions, recordStepContext, STEP_STATUS_LABELS, type NeedsYouActionKind } from '../workflow-run-helpers'
 
 export type RunDetailActionKind =
+  | 'raise-budget'
   | 'approve'
   | 'request-changes'
   | 'loop-again'
@@ -52,6 +53,7 @@ export interface RunDetailModelArgs {
 }
 
 export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
+  'raise-budget',
   'approve',
   'request-changes',
   'loop-again',
@@ -117,6 +119,7 @@ function runActions(record: WorkflowRunRecord, run: WorkflowRun, tabExists: bool
   if (tabExists) actions.add('jump')
   if (isTerminalRun(run)) return actions
   actions.add('cancel-run')
+  if (run.status === 'paused' && run.pausedReason === 'budget') actions.add('raise-budget')
   const context = recordStepContext(record)
   if (!context) return actions
   const latest = record.attempts.filter((a) => a.stepId === context.stepId).at(-1) ?? null

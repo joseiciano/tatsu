@@ -138,6 +138,7 @@ describe('runCardModel status', () => {
     ['queued', {}, 'Queued'],
     ['running', {}, 'Running'],
     ['paused', { pausedReason: 'needs-input' }, 'Paused · Needs input'],
+    ['paused', { pausedReason: 'budget' }, 'Paused · Budget reached'],
     ['done', {}, 'Done'],
     ['failed', {}, 'Failed'],
     ['cancelled', {}, 'Cancelled']
@@ -169,7 +170,10 @@ describe('runCardModel cost', () => {
     ['the run total wins over attempt costs', { costUsd: 1.5 }, [attempt(0.2)], '$1.50'],
     ['an active run sums the attempts that report cost', {}, [attempt(0.25), attempt(), attempt(0.5)], '$0.75'],
     ['a zero cost is a value, not a dash', {}, [attempt(0)], '$0.00'],
-    ['a cost under a cent shows <$0.01', {}, [attempt(0.004)], '<$0.01']
+    ['a cost under a cent shows <$0.01', {}, [attempt(0.004)], '<$0.01'],
+    ['a budgeted run shows its total of the budget', { budgetUsd: 1 }, [attempt(0.06), attempt(0.03)], '$0.09 of $1.00'],
+    ['a budgeted run with no cost yet shows zero of the budget', { budgetUsd: 0.5 }, [attempt()], '$0.00 of $0.50'],
+    ['a budget under a cent keeps the <$0.01 form', { budgetUsd: 0.005 }, [attempt(0.06)], '$0.06 of <$0.01']
   ])('%s', (_name, overrides, attempts, cost) => {
     expect(runCardModel(run(overrides), attempts, SUMMARY, 1_000).cost).toBe(cost)
   })

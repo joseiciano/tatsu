@@ -68,6 +68,7 @@ export interface WorkflowRun {
   startedAt: number
   finishedAt?: number
   costUsd?: number
+  budgetUsd?: number
   cursorStepId?: string
   steps: Record<string, WorkflowRunStep>
 }
@@ -140,6 +141,7 @@ export type WorkflowsEvent =
   | { type: 'workflows/cursorChanged'; payload: { runId: string; stepId: string } }
   | { type: 'workflows/attemptSessionRecorded'; payload: { attemptId: string } }
   | { type: 'workflows/attemptCostChanged'; payload: { attemptId: string; costUsd: number } }
+  | { type: 'workflows/runBudgetChanged'; payload: { runId: string; budgetUsd: number } }
   | { type: 'workflows/trustGranted'; payload: { defId: string; hash: string } }
   | { type: 'workflows/gateResolved'; payload: { runId: string; stepId: string; decision: WorkflowGateDecision } }
 
@@ -210,6 +212,7 @@ export interface WorkflowRunRecord {
   overriddenFrom?: Record<string, WorkflowStepHarness>
   inputsUntrusted?: boolean
   autopilot?: true
+  budgetUsd?: number
   continuations?: Record<string, WorkflowContinuation>
 }
 
@@ -239,6 +242,7 @@ export interface WorkflowStartRunPayload {
   allowFull?: boolean
   overrides?: Record<string, WorkflowStepOverride>
   autopilot?: boolean
+  budgetUsd?: number
 }
 
 export interface WorkflowMarkDonePayload {

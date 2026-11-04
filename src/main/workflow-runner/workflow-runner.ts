@@ -55,6 +55,7 @@ import {
   applyOverrides,
   capPermissions,
   harnessOf,
+  isBudgetUsd,
   isWorkflowInputNumber,
   overriddenStep,
   runStepFacts,
@@ -78,6 +79,7 @@ const ENDED_EXECUTIONS_MAX = 256
 const CONTINUATION_PROMPT_MAX_CHARS = 1024 * 1024
 const INPUT_TRUST_TIMEOUT_MS = 10_000
 const MAX_TIMER_MS = 2 ** 31 - 1
+const BUDGET_PAUSE = '$budget'
 export const RUN_INPUTS_MAX = 64
 export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
 
@@ -231,6 +233,16 @@ function adoptedPause(record: WorkflowRunRecord, stepId: string): WorkflowPaused
   if (status !== 'failed' && status !== 'cancelled' && status !== 'interrupted') return undefined
   const last = record.attempts.filter((attempt) => attempt.stepId === stepId).at(-1)
   return last?.metrics.pauses.at(-1)?.reason ?? (status === 'interrupted' ? 'interrupted' : 'step-failed')
+}
+
+function runCostUsd(record: WorkflowRunRecord): number {
+  let total = 0
+  for (const attempt of record.attempts) total += attempt.metrics.costUsd ?? 0
+  return total
+}
+
+function overBudget(record: WorkflowRunRecord): boolean {
+  return record.budgetUsd !== undefined && runCostUsd(record) >= record.budgetUsd
 }
 
 function untilMet(loop: WorkflowLoop, result: StepResult): boolean {
@@ -443,6 +455,7 @@ export class WorkflowRunner {
     const needsFull = definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
     if (needsFull && request.allowFull !== true) return this.refuse('full-permission-unconfirmed')
     const autopilot = request.autopilot === true && !inputsUntrusted
+    const budget = isBudgetUsd(request.budgetUsd) ? { budgetUsd: request.budgetUsd } : {}
 
     const runId = newId()
     const steps: Record<string, WorkflowRunStep> = {}
@@ -459,6 +472,7 @@ export class WorkflowRunner {
       status: 'running',
       startedAt: now(),
       ...(cursorStepId === undefined ? {} : { cursorStepId }),
+      ...budget,
       steps
     }
     const state: RunState = {
@@ -478,7 +492,8 @@ export class WorkflowRunner {
         attempts: [],
         ...(overriddenFrom === undefined ? {} : { overriddenFrom }),
         ...(inputsUntrusted ? { inputsUntrusted } : {}),
-        ...(autopilot ? { autopilot } : {})
+        ...(autopilot ? { autopilot } : {}),
+        ...budget
       },
       stepStatus,
       live: new Map(),
@@ -792,7 +807,7 @@ export class WorkflowRunner {
     const stepId = step.id
     const ids = { runId, stepId }
     this.resume(state, stepId)
-    if (this.hasLaunchableEntry() || this.agentSlots.size >= this.agentCap()) {
+    if (state.pauses.has(BUDGET_PAUSE) || this.hasLaunchableEntry() || this.agentSlots.size >= this.agentCap()) {
       this.queue.push({ runId, stepId, continuation })
       state.record.continuations = { ...state.record.continuations, [stepId]: continuation }
       this.setStep(state, stepId, 'queued')
@@ -863,6 +878,26 @@ export class WorkflowRunner {
     this.log('step keep waiting', ids)
     this.resume(state, stepId)
     this.schedule(state)
+    this.settle(state)
+    return ACTION_OK
+  }
+
+  setBudget(runId: string, budgetUsd: number): StepActionResult {
+    const ids = { runId }
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
+    if (!this.ready) return this.refuseAction('starting', ids)
+    if (!this.labsOn()) return this.refuseAction('labs-off', ids)
+    if (state.busy) return this.refuseAction('busy', ids)
+    state.record.budgetUsd = budgetUsd
+    this.deps.store.dispatch({ type: 'workflows/runBudgetChanged', payload: { runId, budgetUsd } })
+    this.log('run budget set', ids)
+    if (overBudget(state.record)) {
+      this.pause(state, BUDGET_PAUSE, 'budget')
+    } else if (state.pauses.has(BUDGET_PAUSE)) {
+      this.resume(state, BUDGET_PAUSE)
+      this.schedule(state)
+    }
     this.settle(state)
     return ACTION_OK
   }
@@ -1062,7 +1097,9 @@ export class WorkflowRunner {
     this.adoptContinuations(record)
     const { steps } = record.definition
     const pausedStep = steps[record.cursor] ?? steps.at(-1)
-    if (record.status === 'paused' && record.pausedReason !== undefined && pausedStep) {
+    if (record.status === 'paused' && record.pausedReason === 'budget') {
+      state.pauses.set(BUDGET_PAUSE, 'budget')
+    } else if (record.status === 'paused' && record.pausedReason !== undefined && pausedStep) {
       state.pauses.set(pausedStep.id, record.pausedReason)
     }
     if (record.status === 'paused') {
@@ -1071,6 +1108,7 @@ export class WorkflowRunner {
         const reason = adoptedPause(record, step.id)
         if (reason) state.pauses.set(step.id, reason)
       }
+      if (!state.pauses.has(BUDGET_PAUSE) && overBudget(record)) state.pauses.set(BUDGET_PAUSE, 'budget')
     }
     for (const attempt of record.attempts) {
       const snapshot = attempt.headSnapshot ?? attempt.baseSnapshot
@@ -1205,9 +1243,10 @@ export class WorkflowRunner {
 
   private cursorIndex(state: RunState): number {
     const { steps } = state.record.definition
-    const head = state.pauses.keys().next()
-    const paused = head.done ? -1 : steps.findIndex((step) => step.id === head.value)
-    if (paused >= 0) return paused
+    for (const stepId of state.pauses.keys()) {
+      const paused = steps.findIndex((step) => step.id === stepId)
+      if (paused >= 0) return paused
+    }
     const earliest = steps.findIndex((step) => !this.settled(state, step.id))
     return earliest < 0 ? steps.length : earliest
   }
@@ -1791,6 +1830,15 @@ export class WorkflowRunner {
     attempt.metrics.costUsd = costUsd
     this.persist(run)
     this.deps.store.dispatch({ type: 'workflows/attemptCostChanged', payload: { attemptId: attempt.attemptId, costUsd } })
+    this.checkBudget(run.runId)
+  }
+
+  private checkBudget(runId: string): void {
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return
+    if (state.pauses.has(BUDGET_PAUSE) || !overBudget(state.record)) return
+    this.pause(state, BUDGET_PAUSE, 'budget')
+    this.persist(state.record)
   }
 
   private sessionBaseline(target: CostTarget, sessionId: string): number {
@@ -1842,7 +1890,8 @@ export class WorkflowRunner {
     if (attempt) attempt.metrics.pauses.push({ reason, at: this.deps.now() })
     this.syncCursor(state)
     if (head === before) {
-      this.log(`step paused ${reason}`, { runId: record.runId, stepId })
+      if (stepId === BUDGET_PAUSE) this.log('run budget reached', { runId: record.runId })
+      else this.log(`step paused ${reason}`, { runId: record.runId, stepId })
       return
     }
     this.deps.store.dispatch({ type: 'workflows/runPaused', payload: { runId: record.runId, reason: head } })
@@ -1914,7 +1963,9 @@ export class WorkflowRunner {
     if (!state || !step || !isRunnable(step) || state.stepStatus[step.id] !== 'queued' || state.live.has(step.id)) {
       return 'stale'
     }
-    const passesPause = (entry.continuation !== undefined || entry.targeted === true) && !state.pauses.has(step.id)
+    const passesPause =
+      (entry.targeted === true || (entry.continuation !== undefined && !state.pauses.has(BUDGET_PAUSE))) &&
+      !state.pauses.has(step.id)
     if (state.busy || (state.pauses.size > 0 && !passesPause)) return 'blocked'
     return { state, step }
   }

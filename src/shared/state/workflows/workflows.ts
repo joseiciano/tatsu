@@ -1,5 +1,5 @@
 import type { ResolvedAgentStep, ResolvedDefinition, ResolvedWorkflowStep } from '../../workflow-def'
-import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX, isStepHarnessAgent, isWorkflowStepModel } from './constants'
+import { RECENT_RUNS_MAX, SUMMARY_PREVIEW_MAX, isBudgetUsd, isStepHarnessAgent, isWorkflowStepModel } from './constants'
 import type {
   WorkflowAttempt,
   WorkflowDefinitionsGroup,
@@ -232,6 +232,7 @@ export function projectRunRecord(record: WorkflowRunRecord): {
     startedAt: record.startedAt,
     ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
     ...(cursorStepId === undefined ? {} : { cursorStepId }),
+    ...(isBudgetUsd(record.budgetUsd) ? { budgetUsd: record.budgetUsd } : {}),
     steps
   }
   return { run, attempts }
@@ -413,6 +414,12 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       const attempt = state.attempts[attemptId]
       if (!attempt || attempt.costUsd === costUsd || !isCostUsd(costUsd)) return state
       return { ...state, attempts: { ...state.attempts, [attemptId]: { ...attempt, costUsd } } }
+    }
+    case 'workflows/runBudgetChanged': {
+      const { runId, budgetUsd } = event.payload
+      const run = state.runs[runId]
+      if (!run || TERMINAL_RUN_STATUSES.has(run.status) || run.budgetUsd === budgetUsd || !isBudgetUsd(budgetUsd)) return state
+      return patchRun(state, runId, { ...run, budgetUsd })
     }
     case 'workflows/trustGranted': {
       const { defId, hash } = event.payload

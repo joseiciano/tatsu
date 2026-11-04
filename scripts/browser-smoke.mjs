@@ -838,6 +838,106 @@ async function flowLoopCap(page, backend) {
   })
 }
 
+async function startBudgetRun(backend) {
+  const started = await backend.request('workflows:startRun', {
+    defId: 'personal:smoke-budget',
+    worktreePath,
+    inputs: {},
+    budgetUsd: 0.01
+  })
+  if (typeof started?.runId !== 'string') throw new Error(`smoke-budget start refused: ${JSON.stringify(started)}`)
+  return started.runId
+}
+
+async function waitForBudgetPause(backend, runId) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const record = await backend.request('workflows:getRun', runId)
+    if (record && ['done', 'failed', 'cancelled'].includes(record.status)) {
+      throw new Error(`smoke-budget run ${runId} ended ${record.status} before pausing at its budget`)
+    }
+    if (record?.status === 'paused' && record.steps.spend === 'done') {
+      if (record.pausedReason !== 'budget' || record.steps.settle !== 'pending') {
+        throw new Error(`smoke-budget run paused ${record.pausedReason} with settle ${record.steps.settle}, expected budget/pending`)
+      }
+      return record
+    }
+    if (Date.now() > deadline) throw new Error(`smoke-budget run ${runId} is ${record?.status}, expected paused budget`)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+async function waitForDiskRecord(runId, check) {
+  const file = join(process.env.HARNESS_DATA_DIR ?? '', 'workflow-runs', `${runId}.json`)
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const disk = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null
+    if (disk && check(disk)) return disk
+    if (Date.now() > deadline) throw new Error(`run record ${runId} on disk is ${disk?.status} with budget ${disk?.budgetUsd}`)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+async function flowBudget(page, backend) {
+  await scenario(page, 'budget', async (shot) => {
+    let runId = null
+    try {
+      runId = await startBudgetRun(backend)
+      const paused = await waitForBudgetPause(backend, runId)
+      const spent = paused.attempts.find((a) => a.stepId === 'spend')?.metrics.costUsd ?? 0
+      const row = needsYouRow(page, 'smoke-budget').filter({ hasText: 'Budget reached' })
+      await row.waitFor()
+      await row.filter({ hasText: /Spent \$0\.0\d of \$0\.01/ }).waitFor()
+      await page.getByRole('img', { name: 'Workflow steps: spend done, settle pending', exact: true }).waitFor()
+      await row.getByRole('button', { name: 'Cancel run: smoke-budget on repo', exact: true }).waitFor()
+      if ((await row.getByRole('button', { name: /^Jump to tab/ }).count()) > 0) throw new Error('the budget row offers Jump to tab')
+      const field = row.getByRole('spinbutton', { name: 'New budget in USD: smoke-budget on repo', exact: true })
+      const raise = row.getByRole('button', { name: 'Raise budget: smoke-budget on repo', exact: true })
+      const suggested = Number(await field.inputValue())
+      if (!(suggested > spent) || !(await raise.isEnabled())) {
+        throw new Error(`the untouched suggestion ${suggested} is not a usable amount above the spend ${spent}`)
+      }
+      await field.fill('0.01')
+      if (await raise.isEnabled()) throw new Error('Raise budget is enabled for an amount at or below the spend')
+      await field.fill('1')
+      if (!(await raise.isEnabled())) throw new Error('Raise budget is disabled for $1')
+      log(`budget: run ${runId} paused budget at $${spent.toFixed(4)} of $0.01 with spend done and settle pending; Raise budget enabled at the suggested $${suggested}, disabled at $0.01`)
+      await shot('needs-you-budget')
+
+      await raise.click()
+      const record = await waitForRunStatus(backend, runId, 'done')
+      const settle = record.attempts.filter((a) => a.stepId === 'settle').map((a) => a.status)
+      if (record.budgetUsd !== 1 || record.steps.spend !== 'done' || settle.join(',') !== 'done') {
+        throw new Error(`after Raise budget budget ${record.budgetUsd}, spend ${record.steps.spend}, settle attempts ${JSON.stringify(settle)}`)
+      }
+      await row.waitFor({ state: 'detached' })
+      await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+      await waitForDiskRecord(runId, (disk) => disk.status === 'done' && disk.budgetUsd === 1)
+      log(`budget: run ${runId} done after Raise budget to $1 from Needs you; settle ran once; record budgetUsd 1`)
+      await shot('run-done')
+    } finally {
+      if (runId) {
+        const record = await backend.request('workflows:getRun', runId)
+        if (record && ['queued', 'running', 'paused'].includes(record.status)) {
+          await backend.request('workflows:cancelRun', runId)
+          await waitForRunStatus(backend, runId, 'cancelled')
+        }
+      }
+      const tabs = page.getByRole('button', { name: /^Close tab ⚙ spend/ })
+      const before = await tabs.count()
+      if (before > 0) {
+        await tabs.last().click()
+        const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+        while ((await tabs.count()) >= before) {
+          if (Date.now() > deadline) throw new Error('the spend step tab did not close')
+          await new Promise((resolve) => setTimeout(resolve, 200))
+        }
+        log('budget: closed the spend step tab')
+      }
+    }
+  })
+}
+
 const BROWSER_REPO_FILE = '.harness/workflows/browser-repo.yaml'
 
 async function newestRepoRunId(backend, name) {
@@ -1434,6 +1534,7 @@ async function main() {
     await flowSwapStep(page, backend)
     await flowGate(page, backend)
     await flowLoopCap(page, backend)
+    await flowBudget(page, backend)
     await flowRepoTrust(page, backend)
     await flowInputPickers(page, backend)
     await flowLaunchOverrides(page, backend)

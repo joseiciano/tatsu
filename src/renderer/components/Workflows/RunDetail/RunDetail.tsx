@@ -9,6 +9,7 @@ import { AttemptResult, type AttemptResultState } from './AttemptResult'
 import { AttemptTimeline } from './AttemptTimeline'
 
 export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
+  'raise-budget': 'Raise budget',
   approve: 'Approve',
   'request-changes': 'Request changes',
   'loop-again': 'Loop again',
@@ -25,7 +26,7 @@ export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
   jump: 'Jump to tab'
 }
 
-const RUN_LEVEL_ACTIONS: ReadonlySet<RunDetailActionKind> = new Set(['cancel-run', 'jump'])
+const RUN_LEVEL_ACTIONS: ReadonlySet<RunDetailActionKind> = new Set(['raise-budget', 'cancel-run', 'jump'])
 
 const DANGER_ACTIONS: ReadonlySet<RunDetailActionKind> = new Set(['cancel-run', 'cancel-step', 'retry-from-clean'])
 
@@ -58,6 +59,7 @@ export interface RunDetailProps {
   onAction: (kind: RunDetailActionKind) => void
   onBack: () => void
   markDoneForm: ReactNode
+  budgetForm?: ReactNode
 }
 
 function actionLabel(kind: RunDetailActionKind, stepId: string | null): string {
@@ -71,12 +73,14 @@ function RunActions({
   actionError,
   markDoneOpen,
   onAction,
-  markDoneForm
-}: Pick<RunDetailProps, 'busy' | 'actionError' | 'markDoneOpen' | 'onAction' | 'markDoneForm'> & {
+  markDoneForm,
+  budgetForm
+}: Pick<RunDetailProps, 'busy' | 'actionError' | 'markDoneOpen' | 'onAction' | 'markDoneForm' | 'budgetForm'> & {
   model: RunDetailModel
 }): JSX.Element {
   const headingId = useId()
   const stepId = model.actionStepId
+  const buttons = model.actions.filter((kind) => kind !== 'raise-budget')
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2">
       <h3 id={headingId} className="text-xs font-medium text-dim">
@@ -85,8 +89,9 @@ function RunActions({
       {model.actions.length === 0 ? (
         <p className="text-xs text-faint">Nothing to do on this run right now.</p>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {model.actions.map((kind) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {model.actions.includes('raise-budget') ? budgetForm : null}
+          {buttons.map((kind) => (
             <button
               key={kind}
               type="button"
@@ -133,7 +138,8 @@ export function RunDetail({
   markDoneOpen,
   onAction,
   onBack,
-  markDoneForm
+  markDoneForm,
+  budgetForm
 }: RunDetailProps): JSX.Element {
   const titleId = useId()
   const titleRef = useRef<HTMLHeadingElement | null>(null)
@@ -196,6 +202,7 @@ export function RunDetail({
             markDoneOpen={markDoneOpen}
             onAction={onAction}
             markDoneForm={markDoneForm}
+            budgetForm={budgetForm}
           />
           <div className="grid gap-5 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
             <AttemptTimeline rows={model.timeline} selectedAttemptId={selectedAttemptId} onSelect={onSelectAttempt} />

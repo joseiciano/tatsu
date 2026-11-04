@@ -25,7 +25,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     approveWorkflowGate: vi.fn(),
     requestWorkflowChanges: vi.fn(),
     resolveWorkflowLoopCap: vi.fn(),
-    keepWaitingWorkflowStep: vi.fn()
+    keepWaitingWorkflowStep: vi.fn(),
+    setWorkflowRunBudget: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -45,6 +46,8 @@ vi.mock('../../../store', async () => {
     usePausedWorkflowRunIds: () => useAppState((s) => selectPaused(s.workflows)),
     useWorkflowRun: (id: string | null) => useAppState((s) => (id ? s.workflows.runs[id] ?? null : null)),
     useWorkflowAttempt: (id: string | null) => useAppState((s) => (id ? s.workflows.attempts[id] ?? null : null)),
+    useWorkflowRunAttempts: (runId: string) =>
+      useAppState((s) => Object.values(s.workflows.attempts).filter((attempt) => attempt.runId === runId)),
     useWorkflowDefinition: (id: string | null) => useAppState((s) => (id ? s.workflows.definitions[id] ?? null : null)),
     useWorkflowStepTabLeaf: (path: string | null, ref: { runId: string; stepId: string; attemptId: string | null }) =>
       useAppState((s) => (path ? selectors.findWorkflowStepTab(s.terminals.panes[path], ref)?.leaf ?? null : null))
@@ -161,7 +164,8 @@ beforeEach(() => {
     backendApi.approveWorkflowGate,
     backendApi.requestWorkflowChanges,
     backendApi.resolveWorkflowLoopCap,
-    backendApi.keepWaitingWorkflowStep
+    backendApi.keepWaitingWorkflowStep,
+    backendApi.setWorkflowRunBudget
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -593,5 +597,108 @@ describe('NeedsYouGroup after a step timeout', () => {
     await render()
     await click(button('Keep waiting'))
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('This step has not timed out')
+  })
+})
+
+describe('NeedsYouGroup at the run budget', () => {
+  function budgetRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
+    const base = pausedRun('budget', ['a1'], 'running')
+    return {
+      ...base,
+      cursorStepId: 'build',
+      budgetUsd: 0.05,
+      steps: {
+        plan: { ...base.steps.plan, status: 'done', kind: 'shell' },
+        build: { status: 'running', attemptIds: ['a1'], kind: 'agent', agent: 'claude' }
+      },
+      ...overrides
+    }
+  }
+
+  const costed = (stepId: string, costUsd: number): WorkflowAttempt => ({ ...attempt(stepId, 'done'), costUsd })
+  const budgetInput = (): HTMLInputElement => {
+    const input = container.querySelector<HTMLInputElement>('li input[type="number"]')
+    if (!input) throw new Error('no budget input')
+    return input
+  }
+  async function typeBudget(value: string): Promise<void> {
+    const input = budgetInput()
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+
+  it('shows Budget reached with the spend and no step, and offers Raise budget and Cancel run but no Jump', async () => {
+    setState({
+      runs: { r1: budgetRun() },
+      attempts: { a0: costed('plan', 0.04), a1: { ...costed('build', 0.02), status: 'running' } },
+      panes: { '/wt/feature': STEP_TAB_PANE }
+    })
+    await render()
+    expect(container.textContent).toContain('feature · Budget reached')
+    expect(container.textContent).toContain('Spent $0.06 of $0.05')
+    expect(container.textContent).not.toContain('· build')
+    expect(buttonLabels()).toEqual(['Raise budget', 'Cancel run'])
+    expect(button('Raise budget').getAttribute('aria-label')).toBe('Raise budget: Ship it on feature')
+    expect(budgetInput().getAttribute('aria-label')).toBe('New budget in USD: Ship it on feature')
+    expect(budgetInput()).toMatchObject({ min: '0.07', max: '10000', value: '0.12' })
+    expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+  })
+
+  it('sends the typed budget and keeps Cancel run usable without a step', async () => {
+    setState({ runs: { r1: budgetRun() }, attempts: { a1: costed('build', 0.06) } })
+    await render()
+    await typeBudget('2.5')
+    await click(button('Raise budget'))
+    expect(backendApi.setWorkflowRunBudget).toHaveBeenCalledExactlyOnceWith('r1', 2.5)
+    expect(button('Cancel run').disabled).toBe(false)
+    await click(button('Cancel run'))
+    expect(backendApi.cancelWorkflowRun).toHaveBeenCalledExactlyOnceWith('r1')
+  })
+
+  it('disables Raise budget for an amount at or below the spend, or above the maximum', async () => {
+    setState({ runs: { r1: budgetRun() }, attempts: { a1: costed('build', 0.06) } })
+    await render()
+    for (const value of ['0.06', '0.01', '', '10001', '-3']) {
+      await typeBudget(value)
+      expect(button('Raise budget').disabled).toBe(true)
+    }
+    await typeBudget('0.07')
+    expect(button('Raise budget').disabled).toBe(false)
+  })
+
+  it('handles a budget-paused run whose steps are all settled', async () => {
+    const base = budgetRun()
+    setState({
+      runs: { r1: { ...base, cursorStepId: undefined, steps: { ...base.steps, build: { ...base.steps.build, status: 'done' } } } },
+      attempts: { a1: costed('build', 0.06) }
+    })
+    await render()
+    expect(container.textContent).toContain('Spent $0.06 of $0.05')
+    expect(buttonLabels()).toEqual(['Raise budget', 'Cancel run'])
+  })
+
+  it('moves the untouched suggestion above a spend that grows while the row is shown, but keeps a typed amount', async () => {
+    setState({ runs: { r1: budgetRun() }, attempts: { a1: costed('build', 0.06) } })
+    await render()
+    expect(budgetInput().value).toBe('0.12')
+    setState({ runs: { r1: budgetRun() }, attempts: { a1: costed('build', 0.09) } })
+    await render()
+    expect(budgetInput().value).toBe('0.18')
+    expect(budgetInput().min).toBe('0.1')
+    expect(button('Raise budget').disabled).toBe(false)
+    await typeBudget('5')
+    setState({ runs: { r1: budgetRun() }, attempts: { a1: costed('build', 0.2) } })
+    await render()
+    expect(budgetInput().value).toBe('5')
+  })
+
+  it('shows the refusal from a Raise budget on a finished run', async () => {
+    backendApi.setWorkflowRunBudget.mockResolvedValue({ error: 'Unknown or finished run' })
+    setState({ runs: { r1: budgetRun() }, attempts: { a1: costed('build', 0.06) } })
+    await render()
+    await click(button('Raise budget'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Unknown or finished run')
   })
 })
