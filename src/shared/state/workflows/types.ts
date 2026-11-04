@@ -1,4 +1,4 @@
-import type { ResolvedDefinition, WorkflowValidationResult } from '../../workflow-def'
+import type { ResolvedDefinition, WorkflowAgent, WorkflowValidationResult } from '../../workflow-def'
 import type { AgentKind } from '../terminals'
 
 export type WorkflowScope = 'personal' | 'repo'
@@ -114,6 +114,7 @@ export type WorkflowsEvent =
   | { type: 'workflows/stepQueued'; payload: { runId: string; stepId: string } }
   | { type: 'workflows/stepStarted'; payload: { runId: string; stepId: string } }
   | { type: 'workflows/stepSkipped'; payload: { runId: string; stepId: string } }
+  | { type: 'workflows/stepAgentChanged'; payload: { runId: string; stepId: string; agent: AgentKind } }
   | {
       type: 'workflows/stepStatusChanged'
       payload: { runId: string; stepId: string; status: WorkflowStepStatus }
@@ -174,6 +175,8 @@ export interface WorkflowAttemptRecord {
   endedAt?: number
   executionId?: string
   sessionId?: string
+  agent?: WorkflowAgent
+  model?: string
   result?: StepResult
   baseSnapshot?: WorkflowSnapshotRef
   headSnapshot?: WorkflowSnapshotRef
@@ -197,6 +200,21 @@ export interface WorkflowRunRecord {
   finishedAt?: number
   timeToFirstDoneMs?: number
   attempts: WorkflowAttemptRecord[]
+  overriddenFrom?: Record<string, WorkflowStepHarness>
+}
+
+export interface WorkflowStepHarness {
+  agent: WorkflowAgent
+  model?: string
+}
+
+export interface WorkflowStepOverride {
+  agent?: WorkflowAgent
+  model?: string
+}
+
+export interface WorkflowSwapStepPayload extends WorkflowStepOverride {
+  allowFull?: boolean
 }
 
 export interface WorkflowStartRunPayload {
@@ -204,6 +222,7 @@ export interface WorkflowStartRunPayload {
   worktreePath: string
   inputs: Record<string, string>
   allowFull?: boolean
+  overrides?: Record<string, WorkflowStepOverride>
 }
 
 export interface WorkflowMarkDonePayload {

@@ -248,6 +248,13 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       return setStepStatus(state, event.payload.runId, event.payload.stepId, 'running')
     case 'workflows/stepSkipped':
       return setStepStatus(state, event.payload.runId, event.payload.stepId, 'skipped')
+    case 'workflows/stepAgentChanged': {
+      const { runId, stepId, agent } = event.payload
+      const run = state.runs[runId]
+      const step = run?.steps[stepId]
+      if (!step || step.kind !== 'agent' || step.agent === agent || TERMINAL_RUN_STATUSES.has(run.status)) return state
+      return patchRun(state, runId, patchStep(run, stepId, { ...step, agent }))
+    }
     case 'workflows/stepStatusChanged':
       return setStepStatus(
         state,

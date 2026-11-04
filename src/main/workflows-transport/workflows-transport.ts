@@ -7,10 +7,16 @@ import {
   type StartRefusal,
   type StartRunRequest,
   type StepActionResult,
+  type StepOverrideRequest,
+  type SwapStepRequest,
   type WorkflowLog,
   type WorkflowRunner
 } from '../workflow-runner'
-import type { WorkflowActionResponse, WorkflowStartRunResponse } from '../../shared/state/workflows'
+import {
+  isWorkflowStepModel,
+  type WorkflowActionResponse,
+  type WorkflowStartRunResponse
+} from '../../shared/state/workflows'
 import type { PersistedWorkflowTrust } from '../persistence'
 import type { Store } from '../store'
 
@@ -20,7 +26,15 @@ export interface WorkflowsTransportLike {
 
 export type WorkflowActionsRunner = Pick<
   WorkflowRunner,
-  'start' | 'cancelRun' | 'cancelStep' | 'retryStep' | 'retryFromClean' | 'skipStep' | 'markDone' | 'resumeStep'
+  | 'start'
+  | 'cancelRun'
+  | 'cancelStep'
+  | 'retryStep'
+  | 'retryFromClean'
+  | 'skipStep'
+  | 'markDone'
+  | 'resumeStep'
+  | 'swapStep'
 >
 
 export interface RegisterWorkflowsRequestHandlersDeps {
@@ -37,6 +51,8 @@ const DEF_ID_MAX_CHARS = 256
 const WORKTREE_PATH_MAX_CHARS = 4096
 const OUTPUT_ERRORS_SHOWN = 5
 const ERROR_MAX_CHARS = 1000
+const AGENT_MAX_CHARS = 32
+const OVERRIDES_MAX = 64
 
 const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
@@ -48,6 +64,8 @@ const START_ERRORS: Record<StartRefusal, string> = {
   'untrusted-definition': 'Trust this definition before running it',
   'invalid-definition': 'The workflow definition is invalid',
   'unsupported-step': 'The workflow uses a step kind this version cannot run',
+  'invalid-overrides': 'A step override names a step that is not an agent step, or has an invalid model',
+  'unsupported-agent': 'A step override names an agent that cannot run workflow steps',
   'full-permission-unconfirmed': 'This workflow has a full-access step; confirm full access to start it',
   'worktree-busy': 'A workflow is already running in this worktree',
   'unknown-worktree': 'Unknown worktree',
@@ -73,6 +91,13 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   'no-session': 'The attempt has no stored session to resume; use Retry instead',
   'nothing-to-cancel': 'The step is not running or queued',
   'not-completable': 'This step cannot be marked done now',
+  'not-agent-step': 'Only agent steps can switch harness or model',
+  'not-swappable': 'Only a failed, cancelled or interrupted step can switch harness or model',
+  'unsupported-agent': 'That agent cannot run workflow steps',
+  'invalid-override': 'The model name is invalid',
+  'hooks-consent': 'Accept the hooks install before running agent steps',
+  'codex-hooks-untrusted': 'Open a Codex tab and run /hooks',
+  'full-permission-unconfirmed': 'This step has full access; confirm full access for the new agent',
   starting: 'Tatsu is still starting; try again',
   'invalid-output': 'Invalid step output'
 }
@@ -95,13 +120,58 @@ function boundedString(value: unknown, max: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= max
 }
 
+function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(record).every((key) => allowed.includes(key))
+}
+
+function parseStepOverride(value: unknown): StepOverrideRequest | null {
+  if (!isPlainObject(value) || !hasOnlyKeys(value, ['agent', 'model'])) return null
+  const agent = ownValue(value, 'agent')
+  const model = ownValue(value, 'model')
+  if (agent === undefined && model === undefined) return null
+  if (agent !== undefined && !boundedString(agent, AGENT_MAX_CHARS)) return null
+  if (model !== undefined && !isWorkflowStepModel(model)) return null
+  return { ...(agent === undefined ? {} : { agent }), ...(model === undefined ? {} : { model }) }
+}
+
+function parseOverrides(value: unknown): Record<string, StepOverrideRequest> | null {
+  if (!isPlainObject(value)) return null
+  const entries = Object.entries(value)
+  if (entries.length > OVERRIDES_MAX) return null
+  const overrides: Record<string, StepOverrideRequest> = {}
+  for (const [stepId, raw] of entries) {
+    const override = parseStepOverride(raw)
+    if (!isStepId(stepId) || !override) return null
+    Object.defineProperty(overrides, stepId, { value: override, enumerable: true, writable: true, configurable: true })
+  }
+  return overrides
+}
+
+function parseSwapStep(payload: unknown): SwapStepRequest | null {
+  if (!isPlainObject(payload) || !hasOnlyKeys(payload, ['agent', 'model', 'allowFull'])) return null
+  const allowFull = ownValue(payload, 'allowFull')
+  if (allowFull !== undefined && typeof allowFull !== 'boolean') return null
+  const override = parseStepOverride(pick(payload, ['agent', 'model']))
+  if (!override) return null
+  return allowFull === true ? { ...override, allowFull } : override
+}
+
+function pick(record: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of keys) if (Object.hasOwn(record, key)) out[key] = record[key]
+  return out
+}
+
 function parseStartRun(payload: unknown): StartRunRequest | null {
   if (!isPlainObject(payload)) return null
   const defId = ownValue(payload, 'defId')
   const worktreePath = ownValue(payload, 'worktreePath')
   const rawInputs = ownValue(payload, 'inputs', {})
   const allowFull = ownValue(payload, 'allowFull')
+  const rawOverrides = ownValue(payload, 'overrides')
   if (allowFull !== undefined && typeof allowFull !== 'boolean') return null
+  const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
+  if (overrides === null) return null
   if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(worktreePath, WORKTREE_PATH_MAX_CHARS)) return null
   if (!isPlainObject(rawInputs)) return null
   const entries = Object.entries(rawInputs)
@@ -111,7 +181,13 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
     if (typeof value !== 'string') return null
     Object.defineProperty(inputs, key, { value, enumerable: true, writable: true, configurable: true })
   }
-  return allowFull === true ? { defId, worktreePath, inputs, allowFull } : { defId, worktreePath, inputs }
+  return {
+    defId,
+    worktreePath,
+    inputs,
+    ...(allowFull === true ? { allowFull } : {}),
+    ...(overrides === undefined ? {} : { overrides })
+  }
 }
 
 function parseMarkDone(payload: unknown): MarkDoneRequest | null {
@@ -210,6 +286,11 @@ export function registerWorkflowsRequestHandlers({
     if (!isRunId(runId) || !isStepId(stepId)) return INVALID_REQUEST
     if (!isConfirmed(confirmation)) return { error: 'Retry from clean needs explicit confirmation' }
     return actionResponse(await runner.retryFromClean(runId, stepId))
+  })
+  guarded('workflows:swapStep', ([runId, stepId, payload]): WorkflowActionResponse => {
+    const request = parseSwapStep(payload)
+    if (!isRunId(runId) || !isStepId(stepId) || !request) return INVALID_REQUEST
+    return actionResponse(runner.swapStep(runId, stepId, request))
   })
   guarded('workflows:markDone', ([runId, stepId, payload]): WorkflowActionResponse => {
     const request = parseMarkDone(payload)

@@ -848,6 +848,45 @@ describe('workflowsReducer cursorChanged', () => {
   })
 })
 
+describe('workflowsReducer stepAgentChanged', () => {
+  const agentRun = (status: WorkflowRun['status'] = 'paused'): WorkflowsState =>
+    fixture({
+      status,
+      steps: {
+        plan: { status: 'failed', attemptIds: ['att-a1'], kind: 'agent', agent: 'claude' },
+        build: { status: 'pending', attemptIds: [], kind: 'shell' }
+      }
+    })
+
+  it('sets the agent of the named step and keeps other references', () => {
+    const start = agentRun()
+    const next = workflowsReducer(start, {
+      type: 'workflows/stepAgentChanged',
+      payload: { runId: 'run-a', stepId: 'plan', agent: 'codex' }
+    })
+    expect(next.runs['run-a'].steps.plan).toEqual({ ...start.runs['run-a'].steps.plan, agent: 'codex' })
+    expect(next.runs['run-a'].steps.build).toBe(start.runs['run-a'].steps.build)
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+    expect(next.attempts).toBe(start.attempts)
+  })
+
+  it('returns the same state for the same agent, a non-agent or unknown step, an unknown run, or a terminal run', () => {
+    const start = agentRun()
+    const done = agentRun('done')
+    const cases: Array<[WorkflowsState, string, string]> = [
+      [start, 'run-a', 'plan'],
+      [start, 'run-a', 'build'],
+      [start, 'run-a', 'ship'],
+      [start, 'run-x', 'plan'],
+      [done, 'run-a', 'plan']
+    ]
+    for (const [state, runId, stepId] of cases) {
+      const agent = state === start && stepId === 'plan' ? 'claude' : 'codex'
+      expect(workflowsReducer(state, { type: 'workflows/stepAgentChanged', payload: { runId, stepId, agent } })).toBe(state)
+    }
+  })
+})
+
 describe('workflowsReducer attemptSessionRecorded', () => {
   it('marks the attempt resumable once and keeps other references', () => {
     const start = fixture()

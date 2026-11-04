@@ -11,6 +11,7 @@ import {
   WorkflowRunner,
   type MarkDoneRequest,
   type StartRunRequest,
+  type SwapStepRequest,
   type StartRunResult,
   type StepActionResult,
   type StepDriver
@@ -129,6 +130,11 @@ class FakeRunner implements WorkflowActionsRunner {
 
   markDone(runId: string, stepId: string, request: MarkDoneRequest): StepActionResult {
     this.record('markDone', runId, stepId, request)
+    return this.actionResult
+  }
+
+  swapStep(runId: string, stepId: string, request: SwapStepRequest): StepActionResult {
+    this.record('swapStep', runId, stepId, request)
     return this.actionResult
   }
 
@@ -514,7 +520,17 @@ describe('workflow action requests', () => {
       [RUN, STEP, { summary: 'by hand', fields: { verdict: 'pass' } }],
       ['markDone', RUN, STEP, { summary: 'by hand', fields: { verdict: 'pass' } }]
     ],
-    ['workflows:resumeStep', [RUN, STEP], ['resumeStep', RUN, STEP]]
+    ['workflows:resumeStep', [RUN, STEP], ['resumeStep', RUN, STEP]],
+    [
+      'workflows:swapStep',
+      [RUN, STEP, { agent: 'codex', model: 'gpt-5', allowFull: true }],
+      ['swapStep', RUN, STEP, { agent: 'codex', model: 'gpt-5', allowFull: true }]
+    ],
+    [
+      'workflows:startRun',
+      [{ defId: 'personal:plan', worktreePath: '/wt/a', inputs: {}, overrides: { plan: { agent: 'codex', model: 'm' } } }],
+      ['start', { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {}, overrides: { plan: { agent: 'codex', model: 'm' } } }]
+    ]
   ])('%s parses a valid payload and calls the runner', async (name, args, expected) => {
     const response = await transport.call(name, ...args)
     expect(response).toEqual(name === 'workflows:startRun' ? { runId: 'run-new' } : { ok: true })
@@ -570,6 +586,73 @@ describe('workflow action requests', () => {
     { summary: 's', fields: null },
     Object.create({ summary: 's' })
   ]
+
+  const badOverrides: unknown[] = [
+    null,
+    [],
+    'codex',
+    { plan: null },
+    { plan: {} },
+    { plan: 'codex' },
+    { plan: { agent: 7 } },
+    { plan: { agent: '' } },
+    { plan: { agent: 'x'.repeat(33) } },
+    { plan: { model: '' } },
+    { plan: { model: '   ' } },
+    { plan: { model: 'm'.repeat(201) } },
+    { plan: { model: 'a\nb' } },
+    { plan: { agent: 'codex', permissions: 'full' } },
+    { plan: { agent: 'codex', allow: ['Bash(*)'] } },
+    { '../plan': { agent: 'codex' } },
+    Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`s${i}`, { agent: 'codex' }])),
+    Object.create({ plan: { agent: 'codex' } })
+  ]
+
+  it.each(badOverrides)('rejects startRun overrides %#', async (overrides) => {
+    const payload = { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {}, overrides }
+    expect(await transport.call('workflows:startRun', payload)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  const badSwapPayloads: unknown[] = [
+    undefined,
+    null,
+    'codex',
+    [],
+    {},
+    { allowFull: true },
+    { agent: 7 },
+    { agent: '' },
+    { model: '' },
+    { model: 'm'.repeat(201) },
+    { model: 'a\u0007b' },
+    { agent: 'codex', allowFull: 'true' },
+    { agent: 'codex', permissions: 'full' },
+    { agent: 'codex', allow: [] },
+    Object.create({ agent: 'codex' })
+  ]
+
+  it.each(badSwapPayloads)('rejects swapStep payload %#', async (payload) => {
+    expect(await transport.call('workflows:swapStep', RUN, STEP, payload)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it.each(badIds)('rejects swapStep ids %#', async (id) => {
+    expect(await transport.call('workflows:swapStep', id, STEP, { agent: 'codex' })).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:swapStep', RUN, id, { agent: 'codex' })).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('maps swapStep refusals to their messages', async () => {
+    runner.actionResult = { ok: false, reason: 'codex-hooks-untrusted' }
+    expect(await transport.call('workflows:swapStep', RUN, STEP, { agent: 'codex' })).toEqual({
+      error: 'Open a Codex tab and run /hooks'
+    })
+    runner.actionResult = { ok: false, reason: 'full-permission-unconfirmed' }
+    expect(await transport.call('workflows:swapStep', RUN, STEP, { model: 'm' })).toEqual({
+      error: 'This step has full access; confirm full access for the new agent'
+    })
+  })
 
   it.each(badStartPayloads)('rejects startRun payload %#', async (payload) => {
     expect(await transport.call('workflows:startRun', payload)).toEqual({ error: 'invalid request' })
@@ -777,6 +860,19 @@ describe('workflows:startRun against the runner', () => {
     expect(await realRunner({ yaml: CODEX_YAML, codexTrust: ok }).call('workflows:startRun', payload)).toEqual({
       runId: 'id-1'
     })
+  })
+
+  it('checks Codex hooks trust on an override and refuses unknown override steps and agents', async () => {
+    const codex = { ...payload, overrides: { plan: { agent: 'codex', model: 'gpt-test' } } }
+    expect(await realRunner().call('workflows:startRun', codex)).toEqual({ error: 'Open a Codex tab and run /hooks' })
+    expect(await realRunner().call('workflows:startRun', { ...payload, overrides: { ship: { agent: 'codex' } } })).toEqual({
+      error: 'A step override names a step that is not an agent step, or has an invalid model'
+    })
+    expect(await realRunner().call('workflows:startRun', { ...payload, overrides: { plan: { agent: 'pi' } } })).toEqual({
+      error: 'A step override names an agent that cannot run workflow steps'
+    })
+    const ok: CodexHookTrustSummary = { state: 'ok', reviewEvents: [] }
+    expect(await realRunner({ codexTrust: ok }).call('workflows:startRun', codex)).toEqual({ runId: 'id-1' })
   })
 
   it('returns the busy worktree error for a second run', async () => {
