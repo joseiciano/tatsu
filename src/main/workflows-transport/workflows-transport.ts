@@ -10,7 +10,9 @@ import { RUN_ID_PATTERN, isRunId, type WorkflowRunLookup } from '../workflow-run
 import {
   RUN_INPUTS_MAX,
   type InputTrustFetcher,
+  sanitizePasteText,
   type MarkDoneRequest,
+  type RequestChangesRequest,
   type StartRefusal,
   type StartRunRequest,
   type StepActionResult,
@@ -20,6 +22,7 @@ import {
   type WorkflowRunner
 } from '../workflow-runner'
 import {
+  GATE_FEEDBACK_MAX_CHARS,
   isWorkflowInputNumber,
   isWorkflowStepModel,
   WORKFLOW_NO_REPO_DIR_ERROR,
@@ -46,6 +49,8 @@ export type WorkflowActionsRunner = Pick<
   | 'markDone'
   | 'resumeStep'
   | 'swapStep'
+  | 'approveGate'
+  | 'requestChanges'
 >
 
 export interface RegisterWorkflowsRequestHandlersDeps {
@@ -73,6 +78,7 @@ const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
 const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
 const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides'] as const
+const REQUEST_CHANGES_KEYS = ['feedback', 'fresh'] as const
 const SAVE_DEFINITION_KEYS = ['scope', 'repoRoot', 'defId', 'name', 'source'] as const
 const DEFINITION_NAME_MAX_CHARS = 200
 
@@ -135,6 +141,7 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   starting: 'Tatsu is still starting; try again',
   'not-continuable-step': 'Only agent steps can continue their session',
   'nothing-to-continue': 'This step has no earlier attempt to continue',
+  'not-awaiting-gate': 'This step is not waiting at its gate',
   'invalid-output': 'Invalid step output'
 }
 
@@ -251,6 +258,15 @@ function parseMarkDone(payload: unknown): MarkDoneRequest | null {
   const fields = ownValue(payload, 'fields', {})
   if (typeof summary !== 'string' || !isPlainObject(fields)) return null
   return { summary, fields }
+}
+
+function parseRequestChanges(payload: unknown): RequestChangesRequest | null {
+  if (!isPlainObject(payload) || !hasOnlyKeys(payload, REQUEST_CHANGES_KEYS)) return null
+  const feedback = ownValue(payload, 'feedback')
+  const fresh = ownValue(payload, 'fresh')
+  if (typeof fresh !== 'boolean' || typeof feedback !== 'string' || feedback.length > GATE_FEEDBACK_MAX_CHARS) return null
+  if (sanitizePasteText(feedback).trim() === '') return null
+  return { feedback, fresh }
 }
 
 function isConfirmed(payload: unknown): boolean {
@@ -387,6 +403,12 @@ export function registerWorkflowsRequestHandlers({
     const request = parseSwapStep(payload)
     if (!isRunId(runId) || !isStepId(stepId) || !request) return INVALID_REQUEST
     return actionResponse(runner.swapStep(runId, stepId, request))
+  })
+  stepAction('workflows:approveGate', (runId, stepId) => runner.approveGate(runId, stepId))
+  guarded('workflows:requestChanges', ([runId, stepId, payload]): WorkflowActionResponse => {
+    const request = parseRequestChanges(payload)
+    if (!isRunId(runId) || !isStepId(stepId) || !request) return INVALID_REQUEST
+    return actionResponse(runner.requestChanges(runId, stepId, request))
   })
   guarded('workflows:markDone', ([runId, stepId, payload]): WorkflowActionResponse => {
     const request = parseMarkDone(payload)

@@ -16,6 +16,7 @@ import type {
   WorkflowDefinitionSaveResponse,
   WorkflowSaveDefinitionPayload,
   WorkflowMarkDonePayload,
+  WorkflowRequestChangesPayload,
   WorkflowRunRecord,
   WorkflowStartRunPayload,
   WorkflowStartRunResponse,
@@ -439,6 +440,8 @@ export interface ElectronAPI {
   markWorkflowStepDone(runId: string, stepId: string, payload: WorkflowMarkDonePayload): Promise<WorkflowActionResponse>
   resumeWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   swapWorkflowStep(runId: string, stepId: string, payload: WorkflowSwapStepPayload): Promise<WorkflowActionResponse>
+  approveWorkflowGate(runId: string, stepId: string): Promise<WorkflowActionResponse>
+  requestWorkflowChanges(runId: string, stepId: string, payload: WorkflowRequestChangesPayload): Promise<WorkflowActionResponse>
   /** Reveal the themes directory in the OS file browser (Electron only).
    *  Always returns the absolute directory path so the web client can
    *  surface it manually. */

@@ -11,6 +11,7 @@ import {
   WorkflowRunner,
   type InputTrustFetcher,
   type MarkDoneRequest,
+  type RequestChangesRequest,
   type StartRunRequest,
   type SwapStepRequest,
   type StartRunResult,
@@ -21,11 +22,12 @@ import { initialState } from '../../shared/state'
 import type { CodexHookTrustSummary } from '../../shared/state/hooks'
 import { createWorkflowDefsLoader, repoKeyOf, type WorkflowDefsLoader, type WorkflowWatchFn } from '../workflow-defs-loader'
 import { createWorkflowRunLookup, createWorkflowRunRecords, type WorkflowRunRecords } from '../workflow-run-records'
-import type {
-  WorkflowAttemptRecord,
-  WorkflowDefinitionDetail,
-  WorkflowRunRecord,
-  WorkflowsEvent
+import {
+  GATE_FEEDBACK_MAX_CHARS,
+  type WorkflowAttemptRecord,
+  type WorkflowDefinitionDetail,
+  type WorkflowRunRecord,
+  type WorkflowsEvent
 } from '../../shared/state/workflows'
 import { validateWorkflowDefinition } from '../../shared/workflow-def'
 import { takeSnapshot } from '../workflow-snapshots'
@@ -153,6 +155,16 @@ class FakeRunner implements WorkflowActionsRunner {
 
   resumeStep(runId: string, stepId: string): StepActionResult {
     this.record('resumeStep', runId, stepId)
+    return this.actionResult
+  }
+
+  approveGate(runId: string, stepId: string): StepActionResult {
+    this.record('approveGate', runId, stepId)
+    return this.actionResult
+  }
+
+  requestChanges(runId: string, stepId: string, request: RequestChangesRequest): StepActionResult {
+    this.record('requestChanges', runId, stepId, request)
     return this.actionResult
   }
 }
@@ -545,6 +557,17 @@ describe('workflow action requests', () => {
       ['markDone', RUN, STEP, { summary: 'by hand', fields: { verdict: 'pass' } }]
     ],
     ['workflows:resumeStep', [RUN, STEP], ['resumeStep', RUN, STEP]],
+    ['workflows:approveGate', [RUN, STEP], ['approveGate', RUN, STEP]],
+    [
+      'workflows:requestChanges',
+      [RUN, STEP, { feedback: 'tighten the plan', fresh: false }],
+      ['requestChanges', RUN, STEP, { feedback: 'tighten the plan', fresh: false }]
+    ],
+    [
+      'workflows:requestChanges',
+      [RUN, STEP, { feedback: 'é'.repeat(GATE_FEEDBACK_MAX_CHARS), fresh: true }],
+      ['requestChanges', RUN, STEP, { feedback: 'é'.repeat(GATE_FEEDBACK_MAX_CHARS), fresh: true }]
+    ],
     [
       'workflows:swapStep',
       [RUN, STEP, { agent: 'codex', model: 'gpt-5', allowFull: true }],
@@ -707,6 +730,57 @@ describe('workflow action requests', () => {
       error: 'invalid request'
     })
     expect(runner.calls).toEqual([])
+  })
+
+  const badRequestChanges: unknown[] = [
+    undefined,
+    null,
+    'fix it',
+    [],
+    {},
+    { feedback: 'fix it' },
+    { fresh: false },
+    { feedback: 'fix it', fresh: 'false' },
+    { feedback: 'fix it', fresh: 0 },
+    { feedback: 'fix it', fresh: null },
+    { feedback: 7, fresh: false },
+    { feedback: '', fresh: false },
+    { feedback: '  \n\t ', fresh: false },
+    { feedback: '\x1b\x07\x9b', fresh: false },
+    { feedback: 'x'.repeat(GATE_FEEDBACK_MAX_CHARS + 1), fresh: false },
+    { feedback: 'fix it', fresh: false, prompt: 'other' },
+    { feedback: 'fix it', fresh: false, allowFull: true },
+    Object.create({ feedback: 'fix it', fresh: false }),
+    new Map([['feedback', 'fix it']])
+  ]
+
+  it.each(badRequestChanges)('rejects requestChanges payload %#', async (payload) => {
+    expect(await transport.call('workflows:requestChanges', RUN, STEP, payload)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it.each(badIds)('rejects gate request ids %#', async (id) => {
+    const changes = { feedback: 'fix it', fresh: false }
+    expect(await transport.call('workflows:approveGate', id, STEP)).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:approveGate', RUN, id)).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:requestChanges', id, STEP, changes)).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:requestChanges', RUN, id, changes)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('maps gate refusals to fixed messages', async () => {
+    const changes = { feedback: 'fix it', fresh: false }
+    runner.actionResult = { ok: false, reason: 'not-awaiting-gate' }
+    expect(await transport.call('workflows:approveGate', RUN, STEP)).toEqual({ error: 'This step is not waiting at its gate' })
+    expect(await transport.call('workflows:requestChanges', RUN, STEP, changes)).toEqual({
+      error: 'This step is not waiting at its gate'
+    })
+    runner.actionResult = { ok: false, reason: 'not-continuable-step' }
+    expect(await transport.call('workflows:requestChanges', RUN, STEP, changes)).toEqual({
+      error: 'Only agent steps can continue their session'
+    })
+    runner.actionResult = { ok: false, reason: 'labs-off' }
+    expect(await transport.call('workflows:approveGate', RUN, STEP)).toEqual({ error: 'Workflows are turned off in Labs' })
   })
 
   it.each(badMarkDone)('rejects markDone payload %#', async (payload) => {
@@ -894,9 +968,33 @@ describe('workflows:startRun against the runner', () => {
       inputTrust: options.inputTrust ?? (async () => 'untrusted'),
       log: () => {}
     })
-    return own
+    return Object.assign(own, { runner: live, store })
   }
   const payload = { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {} }
+
+  it('approves a gated step and requests changes on it through the real runner', async () => {
+    const yaml = `${VALID_YAML}    gate: approve\n  - id: check\n    kind: shell\n    run: "true"\n`
+    const own = realRunner({ yaml })
+    const { runId } = (await own.call('workflows:startRun', payload)) as { runId: string }
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const changes = { feedback: 'add tests', fresh: false }
+    expect(await own.call('workflows:approveGate', runId, 'plan')).toEqual({ error: 'This step is not waiting at its gate' })
+    const steps = () => own.store.getSnapshot().state.workflows.runs[runId].steps
+    own.runner.complete(steps().plan.attemptIds[0], { status: 'done', summary: 'p', completedBy: 'tool' })
+    expect(steps().plan.status).toBe('awaiting-gate')
+
+    expect(await own.call('workflows:requestChanges', runId, 'plan', changes)).toEqual({ ok: true })
+    expect(steps().plan.status).toBe('running')
+    own.runner.complete(steps().plan.attemptIds[1], { status: 'done', summary: 'p2', completedBy: 'tool' })
+    expect(steps().plan.status).toBe('awaiting-gate')
+    expect(await own.call('workflows:approveGate', runId, 'plan')).toEqual({ ok: true })
+    expect(steps().plan.status).toBe('done')
+    expect(steps().check.status).toBe('running')
+    expect(await own.call('workflows:approveGate', runId, 'plan')).toEqual({ error: 'This step is not waiting at its gate' })
+    expect(await own.call('workflows:requestChanges', runId, 'check', changes)).toEqual({
+      error: 'This step is not waiting at its gate'
+    })
+  })
 
   it('ignores no client trust claim: the server lookup caps an untrusted issue run', async () => {
     const lookup = vi.fn<InputTrustFetcher>(async () => 'untrusted')

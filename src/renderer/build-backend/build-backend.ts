@@ -45,6 +45,7 @@ import type {
   WorkflowInputTrustType,
   WorkflowSaveDefinitionPayload,
   WorkflowMarkDonePayload,
+  WorkflowRequestChangesPayload,
   WorkflowStartRunPayload,
   WorkflowSwapStepPayload
 } from '../../shared/state/workflows'
@@ -323,6 +324,9 @@ export function buildBackend(
     resumeWorkflowStep: (runId: string, stepId: string) => req('workflows:resumeStep', runId, stepId),
     swapWorkflowStep: (runId: string, stepId: string, payload: WorkflowSwapStepPayload) =>
       req('workflows:swapStep', runId, stepId, payload),
+    approveWorkflowGate: (runId: string, stepId: string) => req('workflows:approveGate', runId, stepId),
+    requestWorkflowChanges: (runId: string, stepId: string, payload: WorkflowRequestChangesPayload) =>
+      req('workflows:requestChanges', runId, stepId, payload),
     openThemesFolder: () => reqLocal('config:openThemesFolder'),
     setCostsInterest: (expanded: boolean) => req('costs:setInterest', expanded),
     getAllSessionCosts: (sinceMs?: number) => req('costs:getAllSessions', sinceMs),
