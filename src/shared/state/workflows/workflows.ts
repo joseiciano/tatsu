@@ -239,6 +239,7 @@ export function projectRunRecord(record: WorkflowRunRecord): {
     ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
     ...(cursorStepId === undefined ? {} : { cursorStepId }),
     ...(isBudgetUsd(record.budgetUsd) ? { budgetUsd: record.budgetUsd } : {}),
+    ...(record.chain === undefined ? {} : { chainId: record.chain.chainId, itemId: record.chain.item.id }),
     steps
   }
   return { run, attempts }

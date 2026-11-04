@@ -219,6 +219,34 @@ describe('loadRunRecordsSync', () => {
     expect(await records.read('budgeted')).toEqual(budgeted)
   })
 
+  it('keeps a chain through a persist and reload, loads records without one and skips a malformed chain', async () => {
+    const runsDir = join(dir, 'workflow-runs')
+    const chained = record('chained', {
+      chain: {
+        chainId: 'chain-1',
+        item: { id: 'i1', title: 'Fix login', value: 'Fix login', branch: 'wf/x/fix-login-0123abcd', baseBranch: 'main', number: 42 },
+        origin: { kind: 'issue', number: 42 }
+      }
+    })
+    const plain = record('plain')
+    records.persist(chained)
+    records.persist(plain)
+    await records.flush()
+    for (const [name, value] of [
+      ['nullchain', null],
+      ['strchain', 'chain-1'],
+      ['noitem', { chainId: 'c' }],
+      ['badorigin', { ...chained.chain, origin: { kind: 'commit', number: 1 } }],
+      ['badnumber', { ...chained.chain, item: { ...chained.chain?.item, number: '42' } }]
+    ] as const) {
+      writeFileSync(join(runsDir, `${name}.json`), JSON.stringify({ ...record(name), chain: value }))
+    }
+
+    expect(loadRunRecordsSync(runsDir)).toEqual([chained, plain])
+    expect(await records.read('chained')).toEqual(chained)
+    expect(await records.read('badorigin')).toBeNull()
+  })
+
   it('returns no records when the directory does not exist yet', () => {
     expect(loadRunRecordsSync(join(dir, 'missing'))).toEqual([])
   })

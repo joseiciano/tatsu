@@ -7,6 +7,7 @@ import {
   WORKFLOW_RUN_RECORD_VERSION,
   isBudgetUsd,
   isCostUsd,
+  parseWorkflowRunChain,
   type WorkflowAttemptRecord,
   type WorkflowRunRecord
 } from '../../shared/state/workflows'
@@ -78,6 +79,7 @@ function isRecordFor(value: unknown, runId: string): value is WorkflowRunRecord 
     (candidate.inputsUntrusted === undefined || typeof candidate.inputsUntrusted === 'boolean') &&
     (candidate.autopilot === undefined || candidate.autopilot === true) &&
     (candidate.budgetUsd === undefined || isBudgetUsd(candidate.budgetUsd)) &&
+    (candidate.chain === undefined || parseWorkflowRunChain(candidate.chain) !== null) &&
     typeof candidate.steps === 'object' &&
     candidate.steps !== null &&
     Array.isArray(candidate.definition?.steps) &&

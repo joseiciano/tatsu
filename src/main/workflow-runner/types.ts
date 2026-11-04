@@ -5,6 +5,7 @@ import type {
   WorkflowInputTrustType,
   WorkflowMarkDonePayload,
   WorkflowRequestChangesPayload,
+  WorkflowRunChain,
   WorkflowRunRecord,
   WorkflowSnapshotRef
 } from '../../shared/state/workflows'
@@ -29,6 +30,7 @@ export interface StartRunRequest {
   overrides?: Record<string, StepOverrideRequest>
   autopilot?: boolean
   budgetUsd?: number
+  chain?: WorkflowRunChain
 }
 
 export interface StepOverrideRequest {

@@ -244,6 +244,29 @@ export interface WorkflowAttemptRecord {
   metrics: WorkflowAttemptMetrics
 }
 
+export type WorkflowRunChainOriginKind = 'issue' | 'pr'
+
+export interface WorkflowRunChainItem {
+  id: string
+  title: string
+  value: string
+  branch: string
+  baseBranch: string
+  number?: number
+  url?: string
+}
+
+export interface WorkflowRunChainOrigin {
+  kind: WorkflowRunChainOriginKind
+  number: number
+}
+
+export interface WorkflowRunChain {
+  chainId: string
+  item: WorkflowRunChainItem
+  origin?: WorkflowRunChainOrigin
+}
+
 export interface WorkflowRunRecord {
   version: 1
   runId: string
@@ -266,6 +289,7 @@ export interface WorkflowRunRecord {
   autopilot?: true
   budgetUsd?: number
   continuations?: Record<string, WorkflowContinuation>
+  chain?: WorkflowRunChain
 }
 
 export interface WorkflowContinuation {

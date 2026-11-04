@@ -231,6 +231,43 @@ describe('boot hydration plus reconcile', () => {
   })
 })
 
+describe('boot reconcile of a chain item run', () => {
+  const CHAIN_ITEM = `name: chain-item
+inputs:
+  task: { type: text }
+item_input: task
+steps:
+  - id: plan
+    agent: claude
+    prompt: "Do {{item.title}}"
+`
+
+  it('keeps the chain tags through hydration and re-renders item fields on the resumed step', async () => {
+    const chain = {
+      chainId: 'chain-1',
+      item: { id: 'item-1', title: 'Fix login', value: 'Fix login body', branch: 'wf/chain-item/fix-login-0123abcd', baseBranch: 'main' }
+    }
+    const ctx = boot([
+      record('run-i', {
+        defId: 'personal:chain-item',
+        definition: definitionOf(CHAIN_ITEM),
+        inputs: { task: 'Fix login body' },
+        steps: { plan: 'queued' },
+        chain
+      })
+    ])
+    expect(ctx.wf().runs['run-i']).toMatchObject({ chainId: 'chain-1', itemId: 'item-1' })
+
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.agent.started[0].scope.item).toEqual(chain.item)
+    expect(ctx.agent.started[0].scope.inputs).toEqual({ task: 'Fix login body' })
+    expect(ctx.lastPersisted('run-i')?.chain).toEqual(chain)
+  })
+})
+
 describe('WorkflowRunner.reconcile', () => {
   it('treats a running attempt without an execution id as interrupted without probing', () => {
     const ctx = boot([record('run-a', { steps: { plan: 'running' }, attempts: [attempt('att-1')] })])
