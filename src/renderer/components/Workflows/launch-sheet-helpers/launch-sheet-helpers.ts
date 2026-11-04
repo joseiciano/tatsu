@@ -16,6 +16,7 @@ import {
 } from '../../../../shared/state/workflows'
 import type { Worktree } from '../../../../shared/state/worktrees'
 import { branchNameProblem } from '../../../../shared/branch-name-rules'
+export { workflowBranchName } from '../../../../shared/workflow-branch'
 import type { ResolvedDefinition, WorkflowAgent, WorkflowInputType } from '../../../../shared/workflow-def'
 
 export type LaunchInputControl = 'textarea' | 'picker'
@@ -94,8 +95,6 @@ export interface ResolvedOverrides {
   reason: string | null
   invalidStep: string | null
 }
-
-const BRANCH_DEFINITION_MAX_CHARS = 40
 
 const BUSY_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['queued', 'running', 'paused'])
 
@@ -231,17 +230,6 @@ export function existingWorktreeOptions({ worktrees, repoRoot, runs }: ExistingW
   return worktrees
     .filter((wt) => wt.repoRoot === repoRoot && !wt.isBare && !isWorktreeBusy(runs, wt.path))
     .map((wt) => ({ path: wt.path, label: wt.branch || (wt.path.split('/').filter(Boolean).pop() ?? wt.path) }))
-}
-
-export function workflowBranchName(definitionName: string, suffix: string): string {
-  const slug = definitionName
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, BRANCH_DEFINITION_MAX_CHARS)
-    .replace(/-+$/, '')
-  return `wf/${slug || 'workflow'}/${suffix}`
 }
 
 export function targetBlockReason({ target, repoRoots, worktrees, runs }: TargetBlockReasonArgs): string | null {
