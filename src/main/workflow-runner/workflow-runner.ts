@@ -1156,8 +1156,21 @@ export class WorkflowRunner {
     if (state.pauses.size > 0 || state.live.size > 0) return
     if (Object.values(state.stepStatus).includes('queued')) return
     const next = this.firstReady(state)
-    if (next) this.enterStep(state, next, {}, this.loopContinuation(state, next))
+    if (next && !this.whenHolds(state, next)) {
+      this.log('step condition unmet', { runId: state.record.runId, stepId: next.id })
+      this.setStep(state, next.id, 'skipped')
+      this.schedule(state)
+    } else if (next) this.enterStep(state, next, {}, this.loopContinuation(state, next))
     else if (this.allSettled(state)) this.finish(state)
+  }
+
+  private whenHolds(state: RunState, step: RunnableStep): boolean {
+    if (step.when === undefined) return true
+    const { steps } = state.record.definition
+    const [need] = needsOf(steps, steps.indexOf(step))
+    if (need === undefined || state.stepStatus[need] === 'skipped') return evaluateCondition(step.when, { status: 'skipped' })
+    const result = this.lastAttempt(state, need)?.result
+    return result !== undefined && evaluateCondition(step.when, { status: result.status, data: result.data, exitCode: result.exitCode })
   }
 
   private finish(state: RunState): void {

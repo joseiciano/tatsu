@@ -277,6 +277,73 @@ steps:
     kind: shell
     run: "true"
 `,
+  'when-verdict': `name: when-verdict
+steps:
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+  - id: fix
+    agent: claude
+    prompt: "fix"
+    when: { field: verdict, equals: fail }
+  - id: join
+    kind: shell
+    run: "echo [{{steps.fix.summary}}]"
+`,
+  'when-exit': `name: when-exit
+steps:
+  - id: test
+    kind: shell
+    run: "true"
+  - id: fix
+    agent: claude
+    prompt: "fix"
+    when: { exit: 1 }
+`,
+  'when-loop': `name: when-loop
+steps:
+  - id: build
+    agent: claude
+    prompt: "build"
+  - id: check
+    agent: claude
+    permissions: read-only
+    prompt: "check"
+    output:
+      verdict: { enum: [pass, fail] }
+  - id: fix
+    agent: claude
+    prompt: "fix"
+    when: { field: verdict, equals: fail }
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    output:
+      ok: { enum: [yes, no] }
+    loop: { back_to: build, until: { field: ok, equals: "yes" }, max: 3 }
+`,
+  'when-chain': `name: when-chain
+steps:
+  - id: a
+    agent: claude
+    permissions: read-only
+    prompt: "a"
+    output:
+      verdict: { enum: [pass, fail] }
+  - id: b
+    agent: claude
+    permissions: read-only
+    prompt: "b"
+    when: { field: verdict, equals: fail }
+  - id: c
+    agent: claude
+    prompt: "c"
+    when: { field: x, not: y }
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -3130,5 +3197,83 @@ describe('WorkflowRunner loops', () => {
     expect(ctx.runner.approveGate(runId, 'review')).toEqual({ ok: true })
     await flush()
     expect(ctx.stepStatus(runId, 'after')).toBe('running')
+  })
+})
+
+describe('WorkflowRunner when conditions', () => {
+  const withData = (data: Record<string, string>, summary = 'out'): StepResult => ({ ...done(summary), data })
+
+  async function whenRun(slug: DefSlug) {
+    const ctx = setup({ deps: { hasExecution: () => true } })
+    const runId = await ctx.startRun(slug)
+    await flush()
+    const finish = async (stepId: string, result: StepResult = done(`${stepId}-out`)) => {
+      expect(ctx.runner.complete(ctx.attemptOf(runId, stepId), result)).toBe(true)
+      await flush()
+    }
+    return { ctx, runId, finish }
+  }
+
+  it('skips a step whose condition on its need is false and runs the join with the skipped step rendered empty', async () => {
+    const { ctx, runId, finish } = await whenRun('when-verdict')
+    await finish('review', withData({ verdict: 'pass' }))
+    expect(ctx.stepStatus(runId, 'fix')).toBe('skipped')
+    expect(ctx.stepStatus(runId, 'join')).toBe('running')
+    expect(ctx.agent.started.map((attempt) => attempt.stepId)).toEqual(['review'])
+    const [join] = ctx.shell.started
+    expect(join.step.kind === 'shell' && renderTemplate(join.step.run, join.scope).text).toBe('echo []')
+    ctx.runner.complete(ctx.attemptOf(runId, 'join'), done())
+    await flush()
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.logs).toContain(`[workflow] step skipped ${JSON.stringify({ runId, stepId: 'fix' })}`)
+  })
+
+  it('runs a step whose condition on its need is true', async () => {
+    const { ctx, runId, finish } = await whenRun('when-verdict')
+    await finish('review', withData({ verdict: 'fail' }))
+    expect(ctx.stepStatus(runId, 'fix')).toBe('running')
+    await finish('fix', done('fixed'))
+    expect(ctx.stepStatus(runId, 'join')).toBe('running')
+  })
+
+  it('skips the step when its need reported no value for the field', async () => {
+    const { ctx, runId, finish } = await whenRun('when-verdict')
+    await finish('review', done('no data'))
+    expect(ctx.stepStatus(runId, 'fix')).toBe('skipped')
+    expect(ctx.stepStatus(runId, 'join')).toBe('running')
+  })
+
+  it('reads the exit code of a shell need and finishes the run when the only remaining step is skipped', async () => {
+    const { ctx, runId } = await whenRun('when-exit')
+    ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(ctx.attemptOf(runId, 'test')), code: 0 })
+    await flush()
+    expect(ctx.stepStatus(runId, 'fix')).toBe('skipped')
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('skips a step whose need was skipped, even for a not condition', async () => {
+    const { ctx, runId, finish } = await whenRun('when-chain')
+    await finish('a', withData({ verdict: 'pass' }))
+    expect(ctx.stepStatus(runId, 'b')).toBe('skipped')
+    expect(ctx.stepStatus(runId, 'c')).toBe('skipped')
+    expect(ctx.agent.started.map((attempt) => attempt.stepId)).toEqual(['a'])
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('re-evaluates the condition each time a loop re-enters the step', async () => {
+    const { ctx, runId, finish } = await whenRun('when-loop')
+    await finish('build')
+    await finish('check', withData({ verdict: 'pass' }))
+    expect(ctx.stepStatus(runId, 'fix')).toBe('skipped')
+    await finish('review', withData({ ok: 'no' }))
+    expect(ctx.stepStatus(runId, 'fix')).toBe('pending')
+    await finish('build')
+    await finish('check', withData({ verdict: 'fail' }))
+    expect(ctx.stepStatus(runId, 'fix')).toBe('running')
+    await finish('fix')
+    await finish('review', withData({ ok: 'yes' }))
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.wf().runs[runId].steps.fix.attemptIds).toHaveLength(1)
   })
 })
