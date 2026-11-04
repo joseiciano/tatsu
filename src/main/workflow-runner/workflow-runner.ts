@@ -10,8 +10,10 @@ import type {
   StartRefusal,
   StartRunRequest,
   StartRunResult,
+  StepOverrideRequest,
   StepResult,
-  StopCheckDecision
+  StopCheckDecision,
+  SwapStepRequest
 } from './types'
 import {
   isAgentSessionId,
@@ -26,6 +28,7 @@ import { runContextPath } from './run-artifacts'
 import {
   STEP_SUMMARY_MAX_CHARS,
   validateStepOutput,
+  type ResolvedAgentStep,
   type ResolvedDefinition,
   type ResolvedWorkflowStep,
   type StepOutputValidation,
@@ -38,8 +41,11 @@ import {
   RECENT_RUNS_MAX,
   RESUMABLE_AGENTS,
   WORKFLOW_RUN_RECORD_VERSION,
+  isStepHarnessAgent,
+  isWorkflowStepModel,
   runStepFacts,
   runsToEvict,
+  type WorkflowStepHarness,
   type WorkflowAttemptStatus,
   type WorkflowPausedReason,
   type WorkflowRun,
@@ -56,6 +62,8 @@ export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
 const ACTION_OK: StepActionResult = { ok: true }
 
 const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
+
+const SWAPPABLE_ATTEMPT_STATUSES: ReadonlySet<WorkflowAttemptStatus> = new Set(['failed', 'cancelled', 'interrupted'])
 
 interface LiveAttempt {
   record: WorkflowAttemptRecord
@@ -106,6 +114,52 @@ function inputsRefusal(definition: ResolvedDefinition, inputs: Record<string, un
     if (typeof value !== 'string' || value.trim() === '') return 'missing-input'
   }
   return null
+}
+
+type OverrideResult =
+  | { ok: true; step: ResolvedAgentStep }
+  | { ok: false; reason: 'unsupported-agent' | 'invalid-override' }
+
+function harnessOf(step: ResolvedAgentStep): WorkflowStepHarness {
+  return { agent: step.agent, ...(step.model === undefined ? {} : { model: step.model }) }
+}
+
+function overriddenStep(step: ResolvedAgentStep, override: StepOverrideRequest): OverrideResult {
+  const agent = override.agent ?? step.agent
+  if (!isStepHarnessAgent(agent)) return { ok: false, reason: 'unsupported-agent' }
+  if (override.model !== undefined && !isWorkflowStepModel(override.model)) return { ok: false, reason: 'invalid-override' }
+  const model = override.model ?? (agent === step.agent ? step.model : undefined)
+  const next: ResolvedAgentStep = { ...step, agent }
+  if (model === undefined) delete next.model
+  else next.model = model
+  return { ok: true, step: next }
+}
+
+type AppliedOverrides =
+  | { ok: true; definition: ResolvedDefinition; overriddenFrom?: Record<string, WorkflowStepHarness> }
+  | { ok: false; reason: 'invalid-overrides' | 'unsupported-agent' }
+
+function applyOverrides(
+  definition: ResolvedDefinition,
+  overrides: Record<string, StepOverrideRequest> | undefined
+): AppliedOverrides {
+  const ids = overrides ? Object.keys(overrides) : []
+  if (!overrides || ids.length === 0) return { ok: true, definition }
+  const agentStepIds = new Set(definition.steps.filter((step) => step.kind === 'agent').map((step) => step.id))
+  if (!ids.every((id) => agentStepIds.has(id))) return { ok: false, reason: 'invalid-overrides' }
+  const overriddenFrom: Record<string, WorkflowStepHarness> = {}
+  const steps: ResolvedWorkflowStep[] = []
+  for (const step of definition.steps) {
+    if (step.kind !== 'agent' || !Object.hasOwn(overrides, step.id)) {
+      steps.push(step)
+      continue
+    }
+    const result = overriddenStep(step, overrides[step.id])
+    if (!result.ok) return { ok: false, reason: result.reason === 'unsupported-agent' ? result.reason : 'invalid-overrides' }
+    overriddenFrom[step.id] = harnessOf(step)
+    steps.push(result.step)
+  }
+  return { ok: true, definition: { ...definition, steps }, overriddenFrom }
 }
 
 function userOutput(step: RunnableStep, request: MarkDoneRequest): StepOutputValidation {
@@ -268,19 +322,18 @@ export class WorkflowRunner {
     if (detail.summary.scope === 'repo' && !this.trusted(detail.summary.id, detail.summary.hash)) {
       return this.refuse('untrusted-definition')
     }
-    const definition = detail.definition
-    if (!definition) return this.refuse('invalid-definition')
-    if (!definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
+    if (!detail.definition) return this.refuse('invalid-definition')
+    if (!detail.definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
+    const applied = applyOverrides(detail.definition, request.overrides)
+    if (!applied.ok) return this.refuse(applied.reason)
+    const { definition, overriddenFrom } = applied
     const needsFull = definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
     if (needsFull && request.allowFull !== true) return this.refuse('full-permission-unconfirmed')
     if (!this.knownWorktree(request.worktreePath)) return this.refuse('unknown-worktree')
     const badInputs = inputsRefusal(definition, request.inputs)
     if (badInputs) return this.refuse(badInputs)
-    const needsConsent = definition.steps.some((step) => step.kind === 'agent')
-    const hooks = store.getSnapshot().state.hooks
-    if (needsConsent && hooks.consent !== 'accepted') return this.refuse('hooks-consent')
-    const needsCodexHooks = definition.steps.some((step) => step.kind === 'agent' && step.agent === 'codex')
-    if (needsCodexHooks && hooks.codexTrust?.state !== 'ok') return this.refuse('codex-hooks-untrusted')
+    const hooksRefusal = this.agentHooksRefusal(definition.steps)
+    if (hooksRefusal) return this.refuse(hooksRefusal)
     if (this.worktreeBusy(request.worktreePath)) return this.refuse('worktree-busy')
 
     const runId = newId()
@@ -314,7 +367,8 @@ export class WorkflowRunner {
         cursor: 0,
         steps: stepStatus,
         startedAt: run.startedAt,
-        attempts: []
+        attempts: [],
+        ...(overriddenFrom === undefined ? {} : { overriddenFrom })
       },
       stepStatus,
       live: null,
@@ -323,6 +377,7 @@ export class WorkflowRunner {
     this.runs.set(runId, state)
     store.dispatch({ type: 'workflows/runStarted', payload: { runId, run } })
     this.log('run started', { runId })
+    for (const stepId of Object.keys(overriddenFrom ?? {})) this.logHarness('step overridden', state, stepId)
     this.enterStep(state)
     this.settle(state)
     return { ok: true, runId }
@@ -452,6 +507,39 @@ export class WorkflowRunner {
     }
     this.resume(state)
     this.enterStep(state, last.sessionId)
+    this.settle(state)
+    return ACTION_OK
+  }
+
+  swapStep(runId: string, stepId: string, request: SwapStepRequest): StepActionResult {
+    const ids = { runId, stepId }
+    const target = this.retryTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, ids)
+    const { state, step } = target
+    if (step.kind !== 'agent') return this.refuseAction('not-agent-step', ids)
+    if (state.live) return this.refuseAction('live-attempt', ids)
+    const last = this.lastAttempt(state, stepId)
+    if (!last || !SWAPPABLE_ATTEMPT_STATUSES.has(last.status)) return this.refuseAction('not-swappable', ids)
+    const override = overriddenStep(step, request)
+    if (!override.ok) return this.refuseAction(override.reason, ids)
+    const effective = override.step
+    const hooksRefusal = this.agentHooksRefusal([effective])
+    if (hooksRefusal) return this.refuseAction(hooksRefusal, ids)
+    if (effective.permissions === 'full' && request.allowFull !== true) {
+      return this.refuseAction('full-permission-unconfirmed', ids)
+    }
+    const { record } = state
+    const steps = [...record.definition.steps]
+    steps[record.cursor] = effective
+    record.definition = { ...record.definition, steps }
+    const overriddenFrom = record.overriddenFrom ?? {}
+    if (!Object.hasOwn(overriddenFrom, stepId)) record.overriddenFrom = { ...overriddenFrom, [stepId]: harnessOf(step) }
+    if (effective.agent !== step.agent) {
+      this.deps.store.dispatch({ type: 'workflows/stepAgentChanged', payload: { runId, stepId, agent: effective.agent } })
+    }
+    this.logHarness('step swapped', state, stepId)
+    this.resume(state)
+    this.enterStep(state)
     this.settle(state)
     return ACTION_OK
   }
@@ -595,6 +683,26 @@ export class WorkflowRunner {
     this.log('attempt ended interrupted', { runId, stepId, attemptId })
     this.setStep(state, stepId, 'interrupted')
     this.pause(state, 'interrupted')
+  }
+
+  private agentHooksRefusal(steps: readonly ResolvedWorkflowStep[]): 'hooks-consent' | 'codex-hooks-untrusted' | null {
+    const agents = steps.filter((step): step is ResolvedAgentStep => step.kind === 'agent')
+    if (agents.length === 0) return null
+    const hooks = this.deps.store.getSnapshot().state.hooks
+    if (hooks.consent !== 'accepted') return 'hooks-consent'
+    if (agents.some((step) => step.agent === 'codex') && hooks.codexTrust?.state !== 'ok') return 'codex-hooks-untrusted'
+    return null
+  }
+
+  private logHarness(message: string, state: RunState, stepId: string): void {
+    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
+    if (step?.kind !== 'agent') return
+    this.log(message, {
+      runId: state.record.runId,
+      stepId,
+      agent: step.agent,
+      ...(step.model === undefined ? {} : { model: step.model })
+    })
   }
 
   private refuse(reason: StartRefusal): StartRunResult {
@@ -813,6 +921,7 @@ export class WorkflowRunner {
       n,
       status: 'running',
       startedAt,
+      ...(step.kind === 'agent' ? harnessOf(step) : {}),
       metrics: { continuations: 0, pauses: [] }
     }
     state.record.attempts.push(record)

@@ -12,6 +12,7 @@ export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',
+  swap: 'Swap harness/model',
   'mark-done': 'Mark done',
   skip: 'Skip',
   'cancel-step': 'Cancel step',
@@ -87,6 +88,7 @@ function RunActions({
               onClick={() => onAction(kind)}
               aria-label={actionLabel(kind, stepId)}
               aria-expanded={kind === 'mark-done' ? markDoneOpen : undefined}
+              aria-haspopup={kind === 'swap' ? 'dialog' : undefined}
               className={`text-xs px-2 py-1 rounded border border-border-strong hover:bg-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                 DANGER_ACTIONS.has(kind) ? 'text-danger' : 'text-fg'
               }`}

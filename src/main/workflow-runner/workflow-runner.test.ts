@@ -693,6 +693,37 @@ function exitingPty(code: number, history: string, signal?: number) {
   return { driver, tabs }
 }
 
+describe('WorkflowRunner.swapStep refusals', () => {
+  it('refuses a failed shell step as not an agent step', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-shell')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'test')
+    ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(attemptId), code: 1 })
+    expect(ctx.runner.swapStep(runId, 'test', { agent: 'codex' })).toEqual({ ok: false, reason: 'not-agent-step' })
+  })
+
+  it('refuses while the agent attempt is still live in a needs-input pause', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), { status: 'needs-input', summary: 'q', completedBy: 'tool' })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-input' })
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex' })).toEqual({ ok: false, reason: 'live-attempt' })
+    expect(ctx.logs.some((line) => line.includes(PROMPT_SECRET))).toBe(false)
+  })
+
+  it('logs the swap with the agent and no prompt text', async () => {
+    const ctx = setup()
+    const runId = ctx.startRun('one-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'opencode', model: 'm/x' })).toEqual({ ok: true })
+    expect(ctx.logs.some((line) => line.includes('step swapped') && line.includes('"agent":"opencode"'))).toBe(true)
+    expect(ctx.logs.some((line) => line.includes(PROMPT_SECRET))).toBe(false)
+  })
+})
+
 describe('WorkflowRunner with the shell driver', () => {
   it.each([
     [0, 'done', 'done', undefined],

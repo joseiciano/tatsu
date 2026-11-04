@@ -35,7 +35,9 @@ this matters:
   hooks and `trust_level` for the repo, as if `/hooks` had been run; it
   refuses a `CODEX_HOME` outside the scratch dir. The fake agent reads a
   `FAKE_AGENT_MODE=<mode>` marker from the step prompt (`hang`,
-  `exit-no-complete`; no marker = complete the step).
+  `exit-no-complete`; no marker = complete the step);
+  `FAKE_AGENT_MODE_<KIND>=<mode>` (`CLAUDE`, `CODEX`, `OPENCODE`) applies to
+  that kind only and wins over the plain marker.
 - Not isolated: `/tmp/harness-status` (status NDJSON) is shared with any
   running Tatsu.
 - `home-guard.sh` fingerprints the real `~/.claude/settings.json`,
@@ -69,6 +71,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
 | `browser-exit` | `exit` (claude) | `FAKE_AGENT_MODE=exit-no-complete`: exits non-zero |
 | `browser-diff` | `write` (shell `echo smoke > smoke.txt`) | none; the attempt-diff scenario deletes `smoke.txt` afterwards |
+| `browser-swap` | `swap` (claude, `read-only`) | `FAKE_AGENT_MODE_CLAUDE=exit-no-complete`: fails on Claude; after a swap to Codex (`fake-codex-model`) the codex mode ignores the Claude-scoped marker and completes |
 | `smoke-repo` (repo) | `check` (shell `echo REPO-TRUSTED`) | none; needs trust before Start |
 | `browser-repo` (repo) | `check` (shell `sleep 3`) | none; needs trust before Start (launch sheet label `browser-repo (repo)`) |
 

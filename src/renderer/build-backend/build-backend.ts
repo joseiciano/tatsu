@@ -41,7 +41,11 @@ import type {
 import type { ElectronAPI, TerminalSpawnSpec } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
 import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
-import type { WorkflowMarkDonePayload, WorkflowStartRunPayload } from '../../shared/state/workflows'
+import type {
+  WorkflowMarkDonePayload,
+  WorkflowStartRunPayload,
+  WorkflowSwapStepPayload
+} from '../../shared/state/workflows'
 import type {
   HarnessConfigApplyRequest,
   HarnessConfigConversionRequest,
@@ -308,6 +312,8 @@ export function buildBackend(
     markWorkflowStepDone: (runId: string, stepId: string, payload: WorkflowMarkDonePayload) =>
       req('workflows:markDone', runId, stepId, payload),
     resumeWorkflowStep: (runId: string, stepId: string) => req('workflows:resumeStep', runId, stepId),
+    swapWorkflowStep: (runId: string, stepId: string, payload: WorkflowSwapStepPayload) =>
+      req('workflows:swapStep', runId, stepId, payload),
     openThemesFolder: () => reqLocal('config:openThemesFolder'),
     setCostsInterest: (expanded: boolean) => req('costs:setInterest', expanded),
     getAllSessionCosts: (sinceMs?: number) => req('costs:getAllSessions', sinceMs),

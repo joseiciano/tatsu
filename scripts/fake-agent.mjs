@@ -17,6 +17,9 @@
 //                     SIGHUP (agent cancel) ends it, a 5 min cap bounds leaks
 //   exit-no-complete  run the Stop hook once (expects a block), then exit 1
 //                     without complete_step, so the step fails by exit
+// `FAKE_AGENT_MODE_<KIND>=<mode>` (KIND = CLAUDE, CODEX or OPENCODE) applies
+// only to that kind and wins over the plain marker, so one prompt can fail on
+// one harness and complete on another.
 //
 // FAKE_AGENT_KIND=codex (set by the `codex` shim) stands in for the `codex`
 // CLI instead: it reads the harness-control MCP server from the
@@ -83,8 +86,9 @@ function parseArgs(argv) {
   return out
 }
 
-function modeFrom(prompt) {
-  const match = /FAKE_AGENT_MODE=([a-z-]+)/.exec(prompt ?? '')
+function modeFrom(prompt, kind) {
+  const scoped = new RegExp(`FAKE_AGENT_MODE_${kind.toUpperCase()}=([a-z-]+)`).exec(prompt ?? '')
+  const match = scoped ?? /FAKE_AGENT_MODE=([a-z-]+)/.exec(prompt ?? '')
   const mode = match ? match[1] : 'default'
   if (!MODES.has(mode)) fail(`unknown FAKE_AGENT_MODE ${mode}`)
   return mode
@@ -255,7 +259,7 @@ function codexHookCommand(codexHome, event) {
 
 async function mainCodex() {
   const args = parseCodexArgs(process.argv.slice(2))
-  const mode = modeFrom(args.prompt)
+  const mode = modeFrom(args.prompt, 'codex')
   if (mode !== 'default') fail(`codex supports only the default mode, got ${mode}`)
   if (!args.prompt) fail('missing prompt')
   if (args.sandbox !== 'read-only') fail(`--sandbox ${args.sandbox}, expected read-only`)
@@ -348,7 +352,7 @@ async function loadOpencodePlugin() {
 
 async function mainOpencode() {
   const args = parseOpencodeArgs(process.argv.slice(2))
-  const mode = modeFrom(args.prompt)
+  const mode = modeFrom(args.prompt, 'opencode')
   if (mode !== 'default') fail(`opencode supports only the default mode, got ${mode}`)
   if (!args.prompt) fail('missing --prompt')
   if (args.agent !== OPENCODE_STEP_AGENT) fail(`--agent ${args.agent}, expected ${OPENCODE_STEP_AGENT}`)
@@ -407,7 +411,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (!args.mcpConfig) fail('missing --mcp-config')
   if (!args.sessionId) fail('missing --session-id')
-  const mode = modeFrom(args.prompt)
+  const mode = modeFrom(args.prompt, 'claude')
   log(`start session=${args.sessionId} terminal=${process.env.HARNESS_TERMINAL_ID ?? ''} mode=${mode}`)
 
   if (mode === 'hang') {

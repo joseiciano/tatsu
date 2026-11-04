@@ -18,6 +18,16 @@ export interface StartRunRequest {
   worktreePath: string
   inputs: Record<string, string>
   allowFull?: boolean
+  overrides?: Record<string, StepOverrideRequest>
+}
+
+export interface StepOverrideRequest {
+  agent?: string
+  model?: string
+}
+
+export interface SwapStepRequest extends StepOverrideRequest {
+  allowFull?: boolean
 }
 
 export type StartRefusal =
@@ -26,6 +36,8 @@ export type StartRefusal =
   | 'untrusted-definition'
   | 'invalid-definition'
   | 'unsupported-step'
+  | 'invalid-overrides'
+  | 'unsupported-agent'
   | 'full-permission-unconfirmed'
   | 'worktree-busy'
   | 'unknown-worktree'
@@ -92,6 +104,13 @@ export type StepActionRefusal =
   | 'no-session'
   | 'nothing-to-cancel'
   | 'not-completable'
+  | 'not-agent-step'
+  | 'not-swappable'
+  | 'unsupported-agent'
+  | 'invalid-override'
+  | 'hooks-consent'
+  | 'codex-hooks-untrusted'
+  | 'full-permission-unconfirmed'
   | 'starting'
 
 export type StepActionResult =

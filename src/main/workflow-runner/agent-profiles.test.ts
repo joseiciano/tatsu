@@ -28,12 +28,12 @@ vi.mock('../perf-log', () => ({
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-function detail(agent: WorkflowAgent): WorkflowDefinitionDetail {
+function detail(agent: WorkflowAgent, permissions: 'edit' | 'full' = 'edit'): WorkflowDefinitionDetail {
   const source = `name: ${agent}-def
 steps:
   - id: plan
     agent: claude
-    permissions: edit
+    permissions: ${permissions}
     model: gpt-test
     prompt: "plan"
 `
@@ -45,7 +45,7 @@ steps:
     definition: { ...result.definition, steps },
     source,
     summary: {
-      id: `personal:${agent}`,
+      id: `personal:${agent}${permissions === 'full' ? '-full' : ''}`,
       name: agent,
       scope: 'personal',
       path: `/defs/${agent}.yaml`,
@@ -130,8 +130,11 @@ function twoProfileRunner({
     store,
     loader: {
       getDefinition: (id: string) => {
-        const agent = id.replace(/^personal:/, '')
-        return agent === 'claude' || agent === 'codex' || agent === 'opencode' ? detail(agent) : null
+        const [agent, full] = id.replace(/^personal:/, '').split('-')
+        if (full !== undefined && full !== 'full') return null
+        return agent === 'claude' || agent === 'codex' || agent === 'opencode'
+          ? detail(agent, full === 'full' ? 'full' : 'edit')
+          : null
       }
     },
     drivers: { agent: driver, shell: new FakeStepDriver('shell') },
@@ -538,5 +541,176 @@ describe('resume after a restart', () => {
 
     expect(resumed.runner.resumeStep(record.runId, 'plan')).toEqual({ ok: false, reason: 'no-session' })
     expect(resumed.tabs).toEqual([])
+  })
+})
+
+describe('step harness overrides at start', () => {
+  it('spawns the overridden agent and model and records the original step', async () => {
+    const ctx = twoProfileRunner()
+    const result = ctx.runner.start({
+      defId: 'personal:claude',
+      worktreePath: '/wt/claude',
+      inputs: {},
+      overrides: { plan: { agent: 'codex', model: 'gpt-override' } }
+    })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['codex'])
+    expect(ctx.tabFor('codex').spawn).toMatchObject({ permissionLevel: 'edit', model: 'gpt-override' })
+    const record = ctx.runner.getRunRecord(result.runId)
+    expect(record?.definition.steps[0]).toMatchObject({
+      agent: 'codex',
+      model: 'gpt-override',
+      permissions: 'edit'
+    })
+    expect(record?.overriddenFrom).toEqual({ plan: { agent: 'claude', model: 'gpt-test' } })
+    expect(record?.attempts[0]).toMatchObject({ agent: 'codex', model: 'gpt-override' })
+    expect(ctx.wf().runs[result.runId].steps.plan.agent).toBe('codex')
+  })
+
+  it('drops the definition model when only the agent is overridden', async () => {
+    const ctx = twoProfileRunner()
+    const result = ctx.runner.start({
+      defId: 'personal:claude',
+      worktreePath: '/wt/claude',
+      inputs: {},
+      overrides: { plan: { agent: 'opencode' } }
+    })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    expect(ctx.tabFor('opencode').spawn).not.toHaveProperty('model')
+  })
+
+  it('runs the Codex hooks check on the overridden agent', () => {
+    const ctx = twoProfileRunner({ codexTrust: { state: 'needs-review', reviewEvents: ['Stop'] } })
+    const request = { defId: 'personal:claude', worktreePath: '/wt/claude', inputs: {} }
+    expect(ctx.runner.start({ ...request, overrides: { plan: { agent: 'codex' } } })).toEqual({
+      ok: false,
+      reason: 'codex-hooks-untrusted'
+    })
+    expect(ctx.runner.start({ ...request, overrides: { plan: { agent: 'opencode' } } }).ok).toBe(true)
+  })
+
+  it.each([
+    ['an unknown step', { ship: { agent: 'codex' } }, 'invalid-overrides'],
+    ['a prototype key', { constructor: { agent: 'codex' } }, 'invalid-overrides'],
+    ['an unsupported agent', { plan: { agent: 'pi' } }, 'unsupported-agent'],
+    ['an empty model', { plan: { model: ' ' } }, 'invalid-overrides'],
+    ['an over-long model', { plan: { model: 'm'.repeat(201) } }, 'invalid-overrides']
+  ])('refuses %s and starts nothing', (_name, overrides, reason) => {
+    const ctx = twoProfileRunner()
+    const overridesRecord: Record<string, { agent?: string; model?: string }> = Object.fromEntries(Object.entries(overrides))
+    expect(
+      ctx.runner.start({ defId: 'personal:claude', worktreePath: '/wt/claude', inputs: {}, overrides: overridesRecord })
+    ).toEqual({ ok: false, reason })
+    expect(Object.keys(ctx.wf().runs)).toHaveLength(0)
+  })
+})
+
+describe('swapStep', () => {
+  async function failedClaudeRun(ctx: ReturnType<typeof twoProfileRunner>, defId = 'personal:claude') {
+    const result = ctx.runner.start({ defId, worktreePath: '/wt/claude', inputs: {}, allowFull: true })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    ctx.exit(ctx.tabFor('claude').tab.id, 1)
+    expect(ctx.wf().runs[result.runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+    return result.runId
+  }
+
+  it('retries a failed step with the new agent and model, records it and keeps permissions', async () => {
+    const ctx = twoProfileRunner()
+    const runId = await failedClaudeRun(ctx)
+    const before = ctx.runner.getRunRecord(runId)?.definition.steps[0]
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({ ok: true })
+    await flush()
+    expect(ctx.tabFor('codex').spawn).toMatchObject({ permissionLevel: 'edit', model: 'gpt-swap' })
+    const record = ctx.runner.getRunRecord(runId)
+    const after = record?.definition.steps[0]
+    if (before?.kind !== 'agent' || after?.kind !== 'agent') throw new Error('not agent steps')
+    expect({ permissions: after.permissions, allow: after.allow, prompt: after.prompt }).toEqual({
+      permissions: before.permissions,
+      allow: before.allow,
+      prompt: before.prompt
+    })
+    expect(after).toMatchObject({ agent: 'codex', model: 'gpt-swap' })
+    expect(record?.overriddenFrom).toEqual({ plan: { agent: 'claude', model: 'gpt-test' } })
+    expect(record?.attempts.map((a) => [a.n, a.agent, a.status])).toEqual([
+      [1, 'claude', 'failed'],
+      [2, 'codex', 'running']
+    ])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'running' })
+    expect(ctx.wf().runs[runId].steps.plan).toMatchObject({ status: 'running', agent: 'codex' })
+    expect(ctx.persisted.at(-1)?.definition.steps[0]).toMatchObject({ agent: 'codex' })
+  })
+
+  it('keeps the first original in overriddenFrom across two swaps', async () => {
+    const ctx = twoProfileRunner()
+    const runId = await failedClaudeRun(ctx)
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'opencode', model: 'm/one' })).toEqual({ ok: true })
+    await flush()
+    ctx.exit(ctx.tabFor('opencode').tab.id, 1)
+    expect(ctx.runner.swapStep(runId, 'plan', { model: 'm/two' })).toEqual({ ok: true })
+    await flush()
+    expect(ctx.tabFor('opencode').spawn).toMatchObject({ model: 'm/two' })
+    expect(ctx.runner.getRunRecord(runId)?.overriddenFrom).toEqual({ plan: { agent: 'claude', model: 'gpt-test' } })
+  })
+
+  it('refuses a swap to Codex while Codex hooks are untrusted and leaves the run unchanged', async () => {
+    const ctx = twoProfileRunner({ codexTrust: { state: 'needs-review', reviewEvents: ['Stop'] } })
+    const runId = await failedClaudeRun(ctx)
+    const before = ctx.runner.getRunRecord(runId)
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({
+      ok: false,
+      reason: 'codex-hooks-untrusted'
+    })
+    await flush()
+    expect(ctx.runner.getRunRecord(runId)).toEqual(before)
+    expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['claude'])
+    expect(ctx.wf().runs[runId].steps.plan).toMatchObject({ status: 'failed', agent: 'claude' })
+  })
+
+  it('refuses a swap on a running step', async () => {
+    const ctx = twoProfileRunner()
+    const runId = ctx.start('claude')
+    await flush()
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({
+      ok: false,
+      reason: 'not-paused'
+    })
+    expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['claude'])
+  })
+
+  it('needs the full-access confirmation again for a full step', async () => {
+    const ctx = twoProfileRunner()
+    const runId = await failedClaudeRun(ctx, 'personal:claude-full')
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({
+      ok: false,
+      reason: 'full-permission-unconfirmed'
+    })
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap', allowFull: true })).toEqual({
+      ok: true
+    })
+    await flush()
+    expect(ctx.tabFor('codex').spawn).toMatchObject({ permissionLevel: 'full' })
+  })
+
+  it.each<[string, string, { agent?: string; model?: string }, string]>([
+    ['an unsupported agent', 'plan', { agent: 'pi' }, 'unsupported-agent'],
+    ['an invalid model', 'plan', { model: 'a\nb' }, 'invalid-override'],
+    ['an unknown step', 'ship', { agent: 'codex' }, 'wrong-step']
+  ])('refuses %s', async (_name, stepId, request, reason) => {
+    const ctx = twoProfileRunner()
+    const runId = await failedClaudeRun(ctx)
+    expect(ctx.runner.swapStep(runId, stepId, request)).toEqual({ ok: false, reason })
+  })
+
+  it('refuses while Labs workflows are off', async () => {
+    const ctx = twoProfileRunner()
+    const runId = await failedClaudeRun(ctx)
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({
+      ok: false,
+      reason: 'labs-off'
+    })
   })
 })

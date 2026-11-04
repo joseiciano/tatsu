@@ -157,6 +157,14 @@ steps:
     permissions: read-only
     prompt: "FAKE_AGENT_MODE=exit-no-complete Exit without calling complete_step."
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/browser-swap.yaml" <<'YAML'
+name: browser-swap
+steps:
+  - id: swap
+    agent: claude
+    permissions: read-only
+    prompt: "FAKE_AGENT_MODE_CLAUDE=exit-no-complete Fail on Claude, complete after a swap to Codex."
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/browser-diff.yaml" <<'YAML'
 name: browser-diff
 steps:
