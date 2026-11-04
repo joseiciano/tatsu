@@ -62,7 +62,7 @@ export type StartRunResult = { ok: true; runId: string } | { ok: false; reason: 
 export type WorkflowLog = (category: string, message: string, data?: Record<string, string>) => void
 
 export interface WorkflowRunnerDeps {
-  store: Pick<Store, 'dispatch' | 'getSnapshot'>
+  store: Pick<Store, 'dispatch' | 'getSnapshot' | 'subscribe'>
   loader: Pick<WorkflowDefsLoader, 'getDefinition'>
   drivers: Record<StepDriverKind, StepDriver>
   now: () => number
@@ -76,6 +76,12 @@ export interface WorkflowRunnerDeps {
   inputTrustTimeoutMs?: number
   setTimer?: (fn: () => void, ms: number) => TimerHandle
   clearTimer?: (handle: TimerHandle) => void
+  costInterest?: CostInterest
+}
+
+export interface CostInterest {
+  hold(terminalId: string): void
+  release(terminalId: string): void
 }
 
 export type InputTrustFetcher = (

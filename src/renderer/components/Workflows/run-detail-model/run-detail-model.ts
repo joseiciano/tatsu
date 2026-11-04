@@ -1,4 +1,5 @@
 import type {
+  WorkflowAttempt,
   WorkflowAttemptRecord,
   WorkflowAttemptStatus,
   WorkflowRun,
@@ -45,6 +46,7 @@ export interface RunDetailModel {
 export interface RunDetailModelArgs {
   record: WorkflowRunRecord
   run: WorkflowRun
+  attempts?: readonly WorkflowAttempt[]
   tabExists: boolean
   now: number
 }
@@ -79,7 +81,7 @@ function attemptDuration(attempt: WorkflowAttemptRecord, now: number): string {
   return attempt.status === 'running' ? formatElapsed(now - attempt.startedAt) : NO_VALUE
 }
 
-function timelineRow(attempt: WorkflowAttemptRecord, now: number): RunDetailTimelineRow {
+function timelineRow(attempt: WorkflowAttemptRecord, now: number, liveCostUsd: number | undefined): RunDetailTimelineRow {
   const completedBy = attempt.metrics.completedBy ?? attempt.result?.completedBy
   return {
     attemptId: attempt.attemptId,
@@ -89,7 +91,7 @@ function timelineRow(attempt: WorkflowAttemptRecord, now: number): RunDetailTime
     statusLabel: STEP_STATUS_LABELS[attempt.status],
     completedBy: completedBy ? COMPLETED_BY_LABELS[completedBy] : null,
     duration: attemptDuration(attempt, now),
-    cost: formatCost(attempt.metrics.costUsd ?? attempt.result?.costUsd)
+    cost: formatCost(liveCostUsd ?? attempt.metrics.costUsd ?? attempt.result?.costUsd)
   }
 }
 
@@ -129,11 +131,14 @@ function runActions(record: WorkflowRunRecord, run: WorkflowRun, tabExists: bool
   return actions
 }
 
-export function runDetailModel({ record, run, tabExists, now }: RunDetailModelArgs): RunDetailModel {
+export function runDetailModel({ record, run, attempts = [], tabExists, now }: RunDetailModelArgs): RunDetailModel {
   const context = recordStepContext(record)
   const actions = runActions(record, run, tabExists)
+  const liveCosts = new Map(attempts.map((attempt) => [`${attempt.stepId}#${attempt.n}`, attempt.costUsd]))
   return {
-    timeline: orderedAttempts(record).map((attempt) => timelineRow(attempt, now)),
+    timeline: orderedAttempts(record).map((attempt) =>
+      timelineRow(attempt, now, liveCosts.get(`${attempt.stepId}#${attempt.n}`))
+    ),
     latestAttemptId: latestAttemptId(record),
     actionStepId: context?.stepId ?? null,
     actions: RUN_DETAIL_ACTION_ORDER.filter((kind) => actions.has(kind))

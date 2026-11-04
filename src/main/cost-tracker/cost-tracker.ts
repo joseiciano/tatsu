@@ -79,6 +79,7 @@ export class CostTracker {
   // next 0→positive transition without waiting for another turn.
   private interestedClients = new Set<string>()
   private lastStops = new Map<string, StopEvent>()
+  private heldTerminals = new Set<string>()
 
   constructor(private store: Store) {}
 
@@ -107,10 +108,20 @@ export class CostTracker {
     this.interestedClients.delete(clientId)
   }
 
+  holdInterest(terminalId: string): void {
+    this.heldTerminals.add(terminalId)
+  }
+
+  releaseInterest(terminalId: string): void {
+    if (!this.heldTerminals.delete(terminalId) || this.interestedClients.size > 0) return
+    if (!(terminalId in this.store.getSnapshot().state.costs.byTerminal)) return
+    this.store.dispatch({ type: 'costs/terminalCleared', payload: { terminalId } })
+  }
+
   private handleStop(ev: StopEvent): void {
     if (ev.transcriptPath === null) return
     this.lastStops.set(ev.terminalId, ev)
-    if (this.interestedClients.size === 0) return
+    if (this.interestedClients.size === 0 && !this.heldTerminals.has(ev.terminalId)) return
     this.parseAndDispatchStop(ev)
   }
 

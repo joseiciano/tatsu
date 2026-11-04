@@ -17,7 +17,7 @@ function json(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
-function startControl({ stepStatus = 200 } = {}) {
+function startControl({ stepStatus = 200, onComplete = () => {} } = {}) {
   return new Promise((resolve) => {
     const captured = []
     const server = createServer((req, res) => {
@@ -31,7 +31,10 @@ function startControl({ stepStatus = 200 } = {}) {
           if (stepStatus === 200) return json(res, 200, { attemptId: 'att-1', stepId: 'plan', inputSchema: STEP_SCHEMA })
           return json(res, 404, { error: 'not a workflow step' })
         }
-        if (req.url === '/workflow/complete') return json(res, 200, { ok: true })
+        if (req.url === '/workflow/complete') {
+          onComplete()
+          return json(res, 200, { ok: true })
+        }
         json(res, 404, { error: 'not found' })
       })
     })
@@ -99,8 +102,8 @@ describe('fake-agent', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  async function setup({ firstReply = BLOCK, stepStatus = 200 } = {}) {
-    control = await startControl({ stepStatus })
+  async function setup({ firstReply = BLOCK, stepStatus = 200, onComplete } = {}) {
+    control = await startControl({ stepStatus, onComplete })
     writeFileSync(
       join(dir, '.claude', 'settings.json'),
       JSON.stringify({
@@ -143,6 +146,37 @@ describe('fake-agent', () => {
       expect.objectContaining({ method: 'POST', terminalId: 'term-1', body: { summary: 'PLAN-OK sess-42' } })
     ])
     expect(payload(2).stop_hook_active).toBe(true)
+  })
+
+  it('writes a priced transcript under the given dir and passes it to both Stop hooks, growing it after complete_step', async () => {
+    const transcriptDir = join(dir, '.claude', 'projects', 'fake')
+    const transcript = join(transcriptDir, 'sess-cost.jsonl')
+    let linesAtComplete = 0
+    const mcpConfig = await setup({
+      onComplete: () => {
+        linesAtComplete = readFileSync(transcript, 'utf-8').split('\n').filter(Boolean).length
+      }
+    })
+
+    const { code, stderr } = await runAgent({
+      home: dir,
+      mcpConfig,
+      sessionId: 'sess-cost',
+      env: { FAKE_AGENT_TRANSCRIPT_DIR: transcriptDir }
+    })
+
+    if (code !== 0) throw new Error(stderr)
+    expect(linesAtComplete).toBe(1)
+    expect(payload(1).transcript_path).toBe(transcript)
+    expect(payload(2).transcript_path).toBe(transcript)
+    const lines = readFileSync(transcript, 'utf-8').split('\n')
+    expect(lines.at(-1)).toBe('')
+    const usages = lines.filter(Boolean).map((line) => JSON.parse(line))
+    expect(usages).toHaveLength(2)
+    for (const line of usages) {
+      expect(line).toMatchObject({ type: 'assistant', message: { model: 'claude-sonnet-4-5' } })
+      expect(line.message.usage.input_tokens).toBeGreaterThan(0)
+    }
   })
 
   it('fails without completing when the Stop hook does not block and curl is present', async () => {

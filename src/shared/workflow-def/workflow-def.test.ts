@@ -171,6 +171,16 @@ describe('validateWorkflowDefinition: positioned errors', () => {
       expected: { code: 'bad-value', path: 'steps[0].timeout', line: 4, col: 14 }
     },
     {
+      name: 'timeout beyond 30 days',
+      text: minimal('    timeout: 2592001\n'),
+      expected: { code: 'bad-value', path: 'steps[0].timeout', line: 4, col: 14 }
+    },
+    {
+      name: 'timeout too large to represent',
+      text: minimal('    timeout: 1e308\n'),
+      expected: { code: 'bad-value', path: 'steps[0].timeout', line: 4, col: 14 }
+    },
+    {
       name: 'bad gate value',
       text: minimal('    gate: yes\n'),
       expected: { code: 'bad-value', path: 'steps[0].gate', line: 4, col: 11 }
@@ -314,6 +324,12 @@ describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
     expect(result.parsed?.steps[0].output).toEqual({ fields: { tasks: { type: 'array', items: { type: 'string' } } }, required: ['tasks'] })
     expect(result.parsed?.steps[1]).toEqual({ id: 'each', kind: 'foreach', over: 'steps.split.data.tasks', mode: 'stacked' })
     expect(result.parsed?.steps[2].timeout).toBe(600)
+  })
+
+  it('accepts a timeout of exactly 30 days', () => {
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    timeout: 2592000\n', ALL)
+    expect(result.diagnostics).toEqual([])
+    expect(result.parsed?.steps[0].timeout).toBe(2_592_000)
   })
 
   it('leaves agent names to the graph stage', () => {

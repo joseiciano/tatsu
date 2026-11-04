@@ -103,6 +103,27 @@ describe('runDetailModel timeline', () => {
     ])
   })
 
+  it('shows the live slice cost of an attempt over the fetched record cost', () => {
+    const rec = record(
+      [
+        PLAN_DONE,
+        attempt({
+          attemptId: 'a-exit-1',
+          stepId: 'exit',
+          n: 1,
+          status: 'done',
+          startedAt: NOW - 40_000,
+          endedAt: NOW - 25_000,
+          metrics: { continuations: 0, pauses: [], costUsd: 0.125 }
+        })
+      ],
+      { status: 'done', cursor: 2, steps: { plan: 'done', exit: 'done' } }
+    )
+    const live = { runId: rec.runId, stepId: 'exit', n: 1, status: 'done' as const, summaryPreview: '', startedAt: NOW - 40_000, costUsd: 0.5 }
+    const { timeline } = runDetailModel({ record: rec, run: sliceRun(rec), attempts: [live], tabExists: false, now: NOW })
+    expect(timeline.map((row) => row.cost)).toEqual(['—', '$0.50'])
+  })
+
   it('times a running attempt up to now and leaves an unfinished, stopped attempt without a duration', () => {
     const rec = record(
       [

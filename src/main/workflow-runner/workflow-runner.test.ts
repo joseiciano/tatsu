@@ -15,6 +15,8 @@ import {
 } from '.'
 import { currentStepId, fakeTimers, FakeStepDriver, worktreeFixture, type FakeStartBehavior } from './fake-step-driver'
 import { initialState, type StateEvent } from '../../shared/state'
+import { emptyBreakdown, type SessionUsage } from '../../shared/state/costs'
+import { CostTracker } from '../cost-tracker'
 import type { PtyStatus, TerminalTab } from '../../shared/state/terminals'
 import type { StepSpawnExtras } from '../agent-spawn'
 import type { TrustStatus } from '../folder-trust'
@@ -51,6 +53,14 @@ steps:
 steps:
   - id: plan
     agent: claude
+    prompt: "${PROMPT_SECRET} plan"
+`,
+  'one-opencode': `name: one-opencode
+steps:
+  - id: plan
+    agent: opencode
+    model: fake/opencode-model
+    permissions: read-only
     prompt: "${PROMPT_SECRET} plan"
 `,
   'one-shell': `name: one-shell
@@ -396,14 +406,7 @@ steps:
   - id: plan
     agent: claude
     prompt: "plan"
-    timeout: 3000000
-`,
-  'timed-huge': `name: timed-huge
-steps:
-  - id: plan
-    agent: claude
-    prompt: "plan"
-    timeout: 1e308
+    timeout: 2500000
 `,
   broken: `name: broken
 steps:
@@ -3603,7 +3606,7 @@ describe('WorkflowRunner step timeouts', () => {
     const runId = await ctx.startRun('timed-long')
     expect(timers.delays()).toEqual([2 ** 31 - 1])
     timers.fire()
-    expect(timers.delays()).toEqual([3_000_000_000 - (2 ** 31 - 1)])
+    expect(timers.delays()).toEqual([2_500_000_000 - (2 ** 31 - 1)])
     expect(ctx.wf().runs[runId].status).toBe('running')
     timers.fire()
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
@@ -3727,12 +3730,19 @@ describe('WorkflowRunner step timeouts', () => {
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
   })
 
-  it('treats a timeout too large to represent as no timeout', async () => {
+  it('treats an adopted timeout too large to represent as no timeout', async () => {
+    const { ctx, runId } = await timedRun({ deps: { hasExecution: () => true } })
+    const saved = ctx.records.filter((record) => record.runId === runId).at(-1)
+    if (!saved) throw new Error('no record')
+    const huge = structuredClone(saved)
+    huge.definition.steps[0] = { ...huge.definition.steps[0], timeout: 1e308 }
+    delete huge.attempts[0].timeoutAt
     const timers = fakeTimers()
-    const ctx = setup({ deps: { setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
-    const runId = await ctx.startRun('timed-huge')
+    const after = setup({ deps: { hasExecution: () => true, setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
+    after.runner.reconcile([huge])
+    await flush()
+    expect(after.runner.getRunRecord(runId)?.attempts[0].status).toBe('running')
     expect(timers.delays()).toEqual([])
-    expect(ctx.runner.getRunRecord(runId)?.attempts[0].timeoutAt).toBeUndefined()
   })
 
   it('refuses keep waiting on unknown runs and steps, a step that has not timed out, labs off and a cancelled run', async () => {
@@ -3749,5 +3759,301 @@ describe('WorkflowRunner step timeouts', () => {
     expect(ctx.logs).toContain(`[workflow] step action refused not-timed-out ${JSON.stringify({ runId, stepId: 'test' })}`)
     expect(ctx.runner.cancelRun(runId)).toEqual({ ok: true })
     expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+  })
+})
+
+describe('WorkflowRunner step cost', () => {
+  const COST_SESSION = '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+
+  function sessionUsage(sessionId: string, costUsd: number): SessionUsage {
+    return {
+      sessionId,
+      transcriptPath: `/tmp/${sessionId}.jsonl`,
+      byModel: {
+        'claude-sonnet-4-5': { messages: 1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: costUsd }
+      },
+      breakdown: { ...emptyBreakdown, toolResults: {} },
+      currentModel: 'claude-sonnet-4-5',
+      updatedAt: 0
+    }
+  }
+
+  function costSetup(options: { alive?: boolean; sessionId?: string } = {}) {
+    const held = new Set<string>()
+    const holds: string[] = []
+    const releases: string[] = []
+    const ctx = setup({
+      deps: {
+        hasExecution: () => options.alive ?? true,
+        costInterest: {
+          hold: (terminalId) => {
+            held.add(terminalId)
+            holds.push(terminalId)
+          },
+          release: (terminalId) => {
+            held.delete(terminalId)
+            releases.push(terminalId)
+          }
+        }
+      }
+    })
+    ctx.agent.sessionId = options.sessionId ?? COST_SESSION
+    const usage = (terminalId: string, costUsd: number, sessionId = options.sessionId ?? COST_SESSION): void => {
+      ctx.store.dispatch({ type: 'costs/usageUpdated', payload: { terminalId, usage: sessionUsage(sessionId, costUsd) } })
+    }
+    const costEvents = () =>
+      ctx.events.filter(
+        (event): event is Extract<StateEvent, { type: 'workflows/attemptCostChanged' }> =>
+          event.type === 'workflows/attemptCostChanged'
+      )
+    const recordedCost = (runId: string, attemptId: string) =>
+      ctx.records.filter((record) => record.runId === runId).at(-1)?.attempts.find((a) => a.attemptId === attemptId)
+        ?.metrics.costUsd
+    return { ctx, held, holds, releases, usage, costEvents, recordedCost }
+  }
+
+  it('holds cost interest for the agent terminal it binds and attributes its usage to the live attempt', async () => {
+    const { ctx, held, usage, costEvents, recordedCost } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    expect(held).toEqual(new Set([execution]))
+
+    usage(execution, 0.12)
+    expect(ctx.wf().attempts[attemptId].costUsd).toBe(0.12)
+    expect(recordedCost(runId, attemptId)).toBe(0.12)
+    expect(costEvents().map((event) => event.payload)).toEqual([{ attemptId, costUsd: 0.12 }])
+  })
+
+  it('does not dispatch when the attempt cost is unchanged', async () => {
+    const { ctx, usage, costEvents } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const execution = ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))
+    usage(execution, 0.12)
+    usage(execution, 0.12)
+    expect(costEvents()).toHaveLength(1)
+  })
+
+  it('ignores usage of terminals it does not own', async () => {
+    const { ctx, usage, costEvents } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const before = ctx.wf()
+    usage('someone-elses-terminal', 0.5)
+    expect(costEvents()).toEqual([])
+    expect(ctx.wf()).toBe(before)
+  })
+
+  it('leaves the cost unset when no usage arrives', async () => {
+    const { ctx } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const ended = ctx.eventsSince(() => {
+      ctx.runner.completeExecution(ctx.agent.executionFor(attemptId), { status: 'done', summary: 'ok' })
+    })
+    expect(ended).toContain('attemptEnded')
+    expect(ctx.wf().attempts[attemptId].costUsd).toBeUndefined()
+    expect(ctx.events.find((event) => event.type === 'workflows/attemptEnded')?.payload).not.toHaveProperty('costUsd')
+  })
+
+  it('carries the cost known at the end on attemptEnded', async () => {
+    const { ctx, usage } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    usage(execution, 0.2)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    const ended = ctx.events.find((event) => event.type === 'workflows/attemptEnded')
+    expect(ended?.payload).toMatchObject({ attemptId, costUsd: 0.2 })
+  })
+
+  it('attributes the Stop that lands after complete_step to the ended attempt, then releases the terminal', async () => {
+    const { ctx, held, releases, usage, recordedCost } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    await flush()
+    expect(held.has(execution)).toBe(true)
+
+    usage(execution, 0.3)
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ status: 'done', costUsd: 0.3 })
+    expect(recordedCost(runId, attemptId)).toBe(0.3)
+    expect(releases).toContain(execution)
+    expect(held.has(execution)).toBe(false)
+
+    usage(execution, 0.9)
+    expect(ctx.wf().attempts[attemptId].costUsd).toBe(0.3)
+  })
+
+  it('captures the post-complete Stop of the last step after the run has finished', async () => {
+    const { ctx, usage, recordedCost } = costSetup()
+    const runId = await ctx.startRun('one-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+
+    usage(execution, 0.05)
+    expect(ctx.wf().attempts[attemptId].costUsd).toBe(0.05)
+    expect(recordedCost(runId, attemptId)).toBe(0.05)
+  })
+
+  it('releases right away when a turn end completes the attempt', async () => {
+    const { ctx, held, usage } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    usage(execution, 0.1)
+    ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'done' })
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ completedBy: 'fallback', costUsd: 0.1 })
+    expect(held.has(execution)).toBe(false)
+
+    usage(execution, 0.4)
+    expect(ctx.wf().attempts[attemptId].costUsd).toBe(0.1)
+  })
+
+  it('releases right away when the attempt is cancelled or its process exits', async () => {
+    const { ctx, held } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const execution = ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))
+    ctx.agent.emit({ type: 'exited', executionId: execution, code: 1 })
+    expect(held.size).toBe(0)
+
+    const other = await ctx.startRun('one-agent')
+    await flush()
+    expect(held.size).toBe(1)
+    ctx.runner.cancelRun(other)
+    expect(held.size).toBe(0)
+  })
+
+  it('charges a continued attempt only the session usage since it started', async () => {
+    const { ctx, usage } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const planAttempt = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(planAttempt)
+    usage(execution, 0.1)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    usage(execution, 0.3)
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), failed())
+    await flush()
+
+    expect(ctx.runner.continueStep(runId, 'plan', 'fix it')).toEqual({ ok: true })
+    await flush()
+    const continued = ctx.attemptOf(runId, 'plan')
+    expect(continued).not.toBe(planAttempt)
+    usage(execution, 0.5)
+    expect(ctx.wf().attempts[continued].costUsd).toBeCloseTo(0.2)
+    expect(ctx.wf().attempts[planAttempt].costUsd).toBe(0.3)
+  })
+
+  it('charges a resumed attempt in a new terminal only the session usage since it started', async () => {
+    const { ctx, usage, held } = costSetup({ alive: false })
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const planAttempt = ctx.attemptOf(runId, 'plan')
+    const first = ctx.agent.executionFor(planAttempt)
+    usage(first, 0.3)
+    ctx.agent.emit({ type: 'turnEnded', executionId: first, lastMessage: 'done' })
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), failed())
+    await flush()
+
+    expect(ctx.runner.continueStep(runId, 'plan', 'fix it')).toEqual({ ok: true })
+    await flush()
+    const resumed = ctx.attemptOf(runId, 'plan')
+    const second = ctx.agent.executionFor(resumed)
+    expect(second).not.toBe(first)
+    expect(held.has(second)).toBe(true)
+    usage(second, 0.45)
+    expect(ctx.wf().attempts[resumed].costUsd).toBeCloseTo(0.15)
+  })
+
+  it('charges a resumed attempt after a restart only the usage beyond the recorded attempts of its session', async () => {
+    const { ctx, usage } = costSetup({ alive: false })
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const first = ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))
+    usage(first, 0.3)
+    ctx.agent.emit({ type: 'turnEnded', executionId: first, lastMessage: 'done' })
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), failed())
+    await flush()
+    const onDisk = ctx.records.filter((record) => record.runId === runId).at(-1)
+    if (!onDisk) throw new Error('no record')
+
+    const after = costSetup({ alive: false })
+    after.ctx.runner.reconcile([onDisk])
+    await flush()
+    expect(after.ctx.runner.continueStep(runId, 'plan', 'fix it')).toEqual({ ok: true })
+    await flush()
+    const resumed = after.ctx.runner.getRunRecord(runId)?.attempts.at(-1)
+    if (!resumed) throw new Error('no resumed attempt')
+    after.usage(after.ctx.agent.executionFor(resumed.attemptId), 0.5)
+    expect(after.recordedCost(runId, resumed.attemptId)).toBeCloseTo(0.2)
+  })
+
+  it('releases a terminal waiting for its post-complete Stop when the terminal goes away', async () => {
+    const { ctx, held, usage } = costSetup()
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    expect(held.has(execution)).toBe(true)
+    ctx.store.dispatch({ type: 'terminals/removed', payload: execution })
+    expect(held.has(execution)).toBe(false)
+    usage(execution, 0.3)
+    expect(ctx.wf().attempts[attemptId].costUsd).toBeUndefined()
+  })
+
+  it('never holds an opencode step terminal, which has no transcript', async () => {
+    const { ctx, holds } = costSetup()
+    const runId = await ctx.startRun('one-opencode')
+    await flush()
+    expect(ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))).toBeDefined()
+    expect(holds).toEqual([])
+  })
+
+  it('drops the step terminal usage from the costs slice once the runner stops holding it', async () => {
+    let tracker: CostTracker | undefined
+    const ctx = setup({
+      deps: {
+        hasExecution: () => true,
+        costInterest: {
+          hold: (terminalId) => tracker?.holdInterest(terminalId),
+          release: (terminalId) => tracker?.releaseInterest(terminalId)
+        }
+      }
+    })
+    tracker = new CostTracker(ctx.store)
+    ctx.agent.sessionId = COST_SESSION
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(attemptId)
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    ctx.store.dispatch({ type: 'costs/usageUpdated', payload: { terminalId: execution, usage: sessionUsage(COST_SESSION, 0.3) } })
+    expect(ctx.wf().attempts[attemptId].costUsd).toBe(0.3)
+    expect(ctx.store.getSnapshot().state.costs.byTerminal[execution]).toBeUndefined()
+  })
+
+  it('releases every held terminal on dispose', async () => {
+    const { ctx, held } = costSetup()
+    await ctx.startRun('two-agent')
+    await flush()
+    expect(held.size).toBe(1)
+    ctx.runner.dispose()
+    expect(held.size).toBe(0)
   })
 })

@@ -47,6 +47,7 @@ import {
   type WorkflowLoop
 } from '../../shared/workflow-def'
 import type { StateEvent } from '../../shared/state'
+import { totalForSession, type SessionUsage } from '../../shared/state/costs'
 import {
   RECENT_RUNS_MAX,
   RESUMABLE_AGENTS,
@@ -96,6 +97,13 @@ interface LiveAttempt {
   continuedThisTurn?: boolean
   staleStops?: boolean
   timer?: TimerHandle
+}
+
+interface CostTarget {
+  run: WorkflowRunRecord
+  attempt: WorkflowAttemptRecord
+  sessions: Map<string, { base: number; usd: number }>
+  awaitingTail: boolean
 }
 
 interface RunState {
@@ -241,6 +249,8 @@ export class WorkflowRunner {
   private readonly persist: (run: WorkflowRunRecord) => void
   private readonly setTimer: (fn: () => void, ms: number) => TimerHandle
   private readonly clearTimer: (handle: TimerHandle) => void
+  private readonly costTargets = new Map<string, CostTarget>()
+  private readonly sessionUsd = new Map<string, number>()
 
   constructor(private readonly deps: WorkflowRunnerDeps) {
     this.persist = deps.persist ?? (() => {})
@@ -249,6 +259,12 @@ export class WorkflowRunner {
     this.unsubscribers = (['agent', 'shell'] as const).map((kind) =>
       deps.drivers[kind].onEvent((event) => this.onDriverEvent(kind, event))
     )
+    this.unsubscribers.push(
+      deps.store.subscribe((event) => {
+        if (event.type === 'costs/usageUpdated') this.onUsage(event.payload.terminalId, event.payload.usage)
+        else if (event.type === 'terminals/removed') this.unwatchCost(event.payload)
+      })
+    )
   }
 
   dispose(): void {
@@ -256,6 +272,7 @@ export class WorkflowRunner {
     for (const state of this.runs.values()) {
       for (const live of state.live.values()) this.disarm(live)
     }
+    for (const terminalId of [...this.costTargets.keys()]) this.unwatchCost(terminalId)
   }
 
   getRunRecord(runId: string): WorkflowRunRecord | null {
@@ -1071,6 +1088,7 @@ export class WorkflowRunner {
       this.liveAttempts.set(running.attemptId, runId)
       this.executions.set(executionId, running.attemptId)
       if (step.kind === 'agent') this.agentSlots.add(running.attemptId)
+      this.watchCost(state, live, executionId)
       this.armRemaining(state, live, step)
     }
     return state
@@ -1539,6 +1557,7 @@ export class WorkflowRunner {
     live.record.executionId = executionId
     if (sessionId !== undefined) live.record.sessionId = sessionId
     this.executions.set(executionId, attemptId)
+    this.watchCost(state, live, executionId)
     this.persist(state.record)
     if (sessionId !== undefined) {
       this.deps.store.dispatch({ type: 'workflows/attemptSessionRecorded', payload: { attemptId } })
@@ -1691,8 +1710,11 @@ export class WorkflowRunner {
     if (result) {
       live.record.result = result
       live.record.metrics.completedBy = result.completedBy
-      if (result.costUsd !== undefined) live.record.metrics.costUsd = result.costUsd
+      if (result.costUsd !== undefined && live.record.metrics.costUsd === undefined) {
+        live.record.metrics.costUsd = result.costUsd
+      }
     }
+    const { costUsd } = live.record.metrics
     if (status === 'done' && state.record.timeToFirstDoneMs === undefined) {
       state.record.timeToFirstDoneMs = endedAt - state.record.startedAt
     }
@@ -1704,6 +1726,7 @@ export class WorkflowRunner {
       const driver = this.deps.drivers[live.kind]
       if (cancelExecution) driver.cancel(live.executionId)
       driver.release?.(live.executionId)
+      this.endCostWatch(live, !cancelExecution && result?.completedBy === 'tool')
     }
     this.deps.store.dispatch({
       type: 'workflows/attemptEnded',
@@ -1713,12 +1736,80 @@ export class WorkflowRunner {
         endedAt,
         summary: result?.summary ?? '',
         ...(result ? { completedBy: result.completedBy } : {}),
-        ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd })
+        ...(costUsd === undefined ? {} : { costUsd })
       }
     })
     this.log(`attempt ended ${status}`, { runId: state.record.runId, stepId, attemptId })
     void this.snapshotAttempt(state, live.record, 'headSnapshot')
     this.appendContext(state, live.record)
+  }
+
+  private watchCost(state: RunState, live: LiveAttempt, executionId: string): void {
+    if (live.kind !== 'agent' || live.record.agent === 'opencode') return
+    this.costTargets.set(executionId, { run: state.record, attempt: live.record, sessions: new Map(), awaitingTail: false })
+    this.deps.costInterest?.hold(executionId)
+  }
+
+  private unwatchCost(terminalId: string): void {
+    if (!this.costTargets.delete(terminalId)) return
+    this.deps.costInterest?.release(terminalId)
+  }
+
+  private endCostWatch(live: LiveAttempt, awaitTail: boolean): void {
+    const { executionId } = live
+    const target = executionId === undefined ? undefined : this.costTargets.get(executionId)
+    if (executionId === undefined || target?.attempt !== live.record) return
+    if (!awaitTail) {
+      this.unwatchCost(executionId)
+      return
+    }
+    target.awaitingTail = true
+    let tails = 0
+    for (const candidate of this.costTargets.values()) {
+      if (candidate.awaitingTail) tails += 1
+    }
+    if (tails <= ENDED_EXECUTIONS_MAX) return
+    for (const [terminalId, candidate] of this.costTargets) {
+      if (!candidate.awaitingTail) continue
+      this.unwatchCost(terminalId)
+      return
+    }
+  }
+
+  private onUsage(terminalId: string, usage: SessionUsage): void {
+    const target = this.costTargets.get(terminalId)
+    if (!target) return
+    const usd = totalForSession(usage).cost
+    const known = target.sessions.get(usage.sessionId)
+    target.sessions.set(usage.sessionId, { base: known?.base ?? this.sessionBaseline(target, usage.sessionId), usd })
+    this.rememberSessionUsd(usage.sessionId, usd)
+    if (target.awaitingTail) this.unwatchCost(terminalId)
+    let costUsd = 0
+    for (const session of target.sessions.values()) costUsd += Math.max(0, session.usd - session.base)
+    const { attempt, run } = target
+    if (!Number.isFinite(costUsd) || attempt.metrics.costUsd === costUsd) return
+    attempt.metrics.costUsd = costUsd
+    this.persist(run)
+    this.deps.store.dispatch({ type: 'workflows/attemptCostChanged', payload: { attemptId: attempt.attemptId, costUsd } })
+  }
+
+  private sessionBaseline(target: CostTarget, sessionId: string): number {
+    const seen = this.sessionUsd.get(sessionId)
+    if (seen !== undefined) return seen
+    let recorded = 0
+    for (const attempt of target.run.attempts) {
+      if (attempt === target.attempt || attempt.sessionId !== sessionId) continue
+      recorded += attempt.metrics.costUsd ?? 0
+    }
+    return recorded
+  }
+
+  private rememberSessionUsd(sessionId: string, usd: number): void {
+    this.sessionUsd.delete(sessionId)
+    this.sessionUsd.set(sessionId, usd)
+    if (this.sessionUsd.size <= ENDED_EXECUTIONS_MAX) return
+    const oldest = this.sessionUsd.keys().next()
+    if (!oldest.done) this.sessionUsd.delete(oldest.value)
   }
 
   private setStep(state: RunState, stepId: string, status: WorkflowStepStatus): void {

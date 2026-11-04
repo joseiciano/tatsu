@@ -5,6 +5,7 @@ import { join } from 'path'
 import { userDataDir } from '../paths'
 import {
   WORKFLOW_RUN_RECORD_VERSION,
+  isCostUsd,
   type WorkflowAttemptRecord,
   type WorkflowRunRecord
 } from '../../shared/state/workflows'
@@ -57,7 +58,8 @@ function isAttemptRecord(value: unknown): boolean {
     isOptionalString(value.executionId) &&
     isOptionalString(value.sessionId) &&
     isObject(value.metrics) &&
-    Array.isArray(value.metrics.pauses)
+    Array.isArray(value.metrics.pauses) &&
+    (value.metrics.costUsd === undefined || isCostUsd(value.metrics.costUsd))
   )
 }
 

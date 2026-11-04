@@ -37,6 +37,7 @@ const STARTING_ERROR = 'Tatsu is still starting; try again'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const OPENCODE_SESSION = /^ses_[0-9A-Za-z]{1,64}$/
 const sessionRecorded = []
+const costChanged = new Map()
 
 const ws = new WebSocket(`ws://127.0.0.1:${Number(portArg)}?token=${encodeURIComponent(token)}`)
 let state = null
@@ -50,6 +51,7 @@ function applyEvent(event) {
   else if (event.type === 'hooks/consentChanged') state.hooks.consent = event.payload
   else if (event.type === 'hooks/codexTrustChanged') state.hooks.codexTrust = event.payload
   else if (event.type === 'workflows/attemptSessionRecorded') sessionRecorded.push(event.payload.attemptId)
+  else if (event.type === 'workflows/attemptCostChanged') costChanged.set(event.payload.attemptId, event.payload.costUsd)
   else if (event.type === 'terminals/panesReplaced') state.terminals.panes = event.payload
   else if (event.type === 'terminals/panesForWorktreeChanged') {
     state.terminals.panes = { ...state.terminals.panes, [event.payload.worktreePath]: event.payload.panes }
@@ -182,6 +184,22 @@ async function scenarioFullRefused(worktreePath) {
   console.log('scenario 0 OK: full-access start without allowFull refused')
 }
 
+// No client of this server ever calls costs:setInterest, so any cost here
+// comes from the runner holding interest in its own step terminal. The fake
+// agent's transcript prices to $0.06 before complete_step and $0.09 after the
+// post-complete Stop, which lands after the run settles, so the cost is polled.
+const FAKE_STEP_COST_USD = '0.0900'
+
+function planCost(runId, attemptId) {
+  return waitFor(`plan attempt ${attemptId} to carry the full fake-agent cost`, async () => {
+    const record = await request('workflows:getRun', runId)
+    const costUsd = record?.attempts.find((attempt) => attempt.attemptId === attemptId)?.metrics.costUsd
+    const sliceCost = costChanged.get(attemptId)
+    if (typeof costUsd !== 'number' || costUsd.toFixed(4) !== FAKE_STEP_COST_USD || sliceCost !== costUsd) return undefined
+    return costUsd
+  })
+}
+
 async function scenarioAgentThenShell(worktreePath) {
   const runId = await startRun('personal:smoke', worktreePath)
   const record = await runSettled(runId)
@@ -198,14 +216,16 @@ async function scenarioAgentThenShell(worktreePath) {
     record
   )
   if (!curlPresent) console.log('::warning::curl is missing; the Stop hook failed open and no continuation was asked for')
+  const costUsd = await planCost(runId, plan.attemptId)
   expectThat(echo?.status === 'done', 'scenario 1 echo attempt is not done', record)
   expectThat(echo.result?.summary?.includes(plan.result.summary), 'echo summary lacks the plan summary', record)
   console.log(
-    'scenario 1 OK: run=%s done; plan completedBy=%s continuations=%d summary=%j; echo summary contains it',
+    'scenario 1 OK: run=%s done; plan completedBy=%s continuations=%d summary=%j cost=$%s with no cost interest; echo summary contains it',
     runId,
     plan.metrics.completedBy,
     plan.metrics.continuations,
-    plan.result.summary
+    plan.result.summary,
+    costUsd.toFixed(4)
   )
 }
 
@@ -255,6 +275,8 @@ async function scenarioOpencodeThenShell(worktreePath) {
   expectThat(plan.result?.summary === `PLAN-OK ${plan.sessionId}`, 'opencode plan summary does not carry its session id', record)
   const recorded = sessionRecorded.filter((attemptId) => attemptId === plan.attemptId).length
   expectThat(recorded === 1, `attemptSessionRecorded dispatched ${recorded} times for the opencode plan`, record)
+  expectThat(plan.metrics.costUsd === undefined, `opencode plan has a cost ${plan.metrics.costUsd}`, record)
+  expectThat(!costChanged.has(plan.attemptId), 'opencode plan dispatched a cost', record)
   expectThat(echo?.status === 'done', 'opencode scenario echo attempt is not done', record)
   expectThat(echo.result?.summary?.includes(plan.result.summary), 'opencode echo summary lacks the plan summary', record)
   console.log(

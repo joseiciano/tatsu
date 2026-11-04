@@ -832,7 +832,11 @@ const workflowRunner = new WorkflowRunner({
   retagStepTab: (wtPath, tabId, workflow) => {
     panesFSM.setTabWorkflow(wtPath, tabId, workflow)
   },
-  inputTrust: inputAuthorTrust
+  inputTrust: inputAuthorTrust,
+  costInterest: {
+    hold: (terminalId) => costTracker.holdInterest(terminalId),
+    release: (terminalId) => costTracker.releaseInterest(terminalId)
+  }
 })
 registerWorkflowsRequestHandlers({
   transport,
