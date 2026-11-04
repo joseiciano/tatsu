@@ -31,7 +31,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     approveWorkflowGate: vi.fn(),
     requestWorkflowChanges: vi.fn(),
     resolveWorkflowLoopCap: vi.fn(),
-    keepWaitingWorkflowStep: vi.fn()
+    keepWaitingWorkflowStep: vi.fn(),
+    setWorkflowRunBudget: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -581,6 +582,54 @@ describe('RunDetailContainer', () => {
       expect(actionButton('Keep waiting').getAttribute('aria-label')).toBe('Keep waiting: exit')
       await click(actionButton('Keep waiting'))
       expect(backendApi.keepWaitingWorkflowStep).toHaveBeenCalledExactlyOnceWith('r1', 'exit')
+      expect(backendApi.cancelWorkflowStep).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('at the run budget', () => {
+    const EXIT_RUNNING = attemptRecord({ attemptId: 'a-exit', stepId: 'exit', status: 'running', startedAt: NOW - 40_000, endedAt: undefined })
+    const budgetRun = () =>
+      pausedRun({
+        pausedReason: 'budget',
+        budgetUsd: 0.05,
+        cursorStepId: 'exit',
+        steps: {
+          plan: { status: 'done', attemptIds: ['a-plan'], kind: 'shell' },
+          exit: { status: 'running', attemptIds: ['a-exit'], kind: 'agent', agent: 'claude' }
+        }
+      })
+    const budgetAttempts = {
+      'a-plan': { ...sliceAttempt('plan', 'done'), costUsd: 0.02 },
+      'a-exit': { ...sliceAttempt('exit', 'running'), costUsd: 0.04 }
+    }
+
+    beforeEach(() => {
+      backendApi.setWorkflowRunBudget.mockResolvedValue({ ok: true })
+      backendApi.getWorkflowRun.mockResolvedValue(
+        record([PLAN_ATTEMPT, EXIT_RUNNING], { pausedReason: 'budget', budgetUsd: 0.05, steps: { plan: 'done', exit: 'running' } })
+      )
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => [PLAN_ATTEMPT, EXIT_RUNNING].find((a) => a.attemptId === id) ?? null)
+    })
+
+    it('offers Raise budget with a number field, shows the spend of the budget and marks no step as needing you', async () => {
+      setState(budgetRun(), budgetAttempts)
+      await render()
+      expect(actionButtons()).toEqual(['Raise budget', 'Cancel step', 'Cancel run'])
+      expect(actionButton('Raise budget').getAttribute('aria-label')).toBe('Raise budget')
+      expect(container.textContent).toContain('$0.06 of $0.05')
+      const graph = container.querySelector('[role="group"][aria-label="Workflow graph"]')
+      const nodes = [...(graph?.querySelectorAll('[role="listitem"]') ?? [])].map((n) => n.getAttribute('aria-label'))
+      expect(nodes).toEqual(['plan: done', 'exit: running'])
+
+      const input = section('Actions').querySelector<HTMLInputElement>('input[type="number"]')
+      if (!input) throw new Error('no budget input')
+      expect(input.getAttribute('aria-label')).toBe('New budget in USD')
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '3')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      await click(actionButton('Raise budget'))
+      expect(backendApi.setWorkflowRunBudget).toHaveBeenCalledExactlyOnceWith('r1', 3)
       expect(backendApi.cancelWorkflowStep).not.toHaveBeenCalled()
     })
   })

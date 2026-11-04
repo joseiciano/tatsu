@@ -58,13 +58,19 @@ export function formatCost(usd: number | undefined): string {
   return `$${usd.toFixed(2)}`
 }
 
-function runCost(run: WorkflowRun, attempts: readonly WorkflowAttempt[]): number | undefined {
+export function runCostUsd(run: WorkflowRun, attempts: readonly WorkflowAttempt[]): number | undefined {
   if (run.costUsd !== undefined) return run.costUsd
   let total: number | undefined
   for (const attempt of attempts) {
     if (attempt.costUsd !== undefined) total = (total ?? 0) + attempt.costUsd
   }
   return total
+}
+
+function costLabel(run: WorkflowRun, attempts: readonly WorkflowAttempt[]): string {
+  const cost = runCostUsd(run, attempts)
+  if (run.budgetUsd === undefined) return formatCost(cost)
+  return `${formatCost(cost ?? 0)} of ${formatCost(run.budgetUsd)}`
 }
 
 function cardStepId(run: WorkflowRun, summary: WorkflowDefinitionSummary | null): string | null {
@@ -105,7 +111,7 @@ export function runCardModel(
     agent: stepAgent(run, stepId),
     status: statusLabel(run, stepId),
     elapsed: formatElapsed(end - run.startedAt),
-    cost: formatCost(runCost(run, attempts))
+    cost: costLabel(run, attempts)
   }
 }
 

@@ -19,8 +19,8 @@ import type {
   WorkflowStepStatus,
   WorkflowSwapStepPayload
 } from '../../../../shared/state/workflows'
-import { RequestChangesDialog, RetryFromCleanDialog, type JumpToTabHandler } from '../NeedsYou'
-import { runCardModel } from '../run-card-model'
+import { RaiseBudgetForm, RequestChangesDialog, RetryFromCleanDialog, type JumpToTabHandler } from '../NeedsYou'
+import { runCardModel, runCostUsd } from '../run-card-model'
 import { latestAttemptId, runDetailModel, type RunDetailActionKind } from '../run-detail-model'
 import { CancelStepDialog, MarkDoneForm } from '../StepTab'
 import { confirmRetryFromClean, displayStepStatus, runNeedsYouAction } from '../workflow-run-helpers'
@@ -226,6 +226,8 @@ export function RunDetailContainer({
       case 'cancel-run':
         void settle(() => backend.cancelWorkflowRun(runId))
         return
+      case 'raise-budget':
+        return
       case 'mark-done':
         setMarkDoneOpen((open) => !open)
         return
@@ -310,7 +312,7 @@ export function RunDetailContainer({
         worktreePath={run.worktreePath}
         steps={record?.definition.steps ?? null}
         statusByStep={statusByStep}
-        pausedStepId={run.status === 'paused' ? run.cursorStepId : undefined}
+        pausedStepId={run.status === 'paused' && run.pausedReason !== 'budget' ? run.cursorStepId : undefined}
         model={model}
         loadError={loaded !== null && (loaded.error || loaded.record === null)}
         selectedAttemptId={effectiveAttemptId}
@@ -328,6 +330,16 @@ export function RunDetailContainer({
         markDoneOpen={showMarkDone}
         onAction={onAction}
         onBack={onBack}
+        budgetForm={
+          <RaiseBudgetForm
+            totalUsd={runCostUsd(run, attempts) ?? 0}
+            budgetUsd={run.budgetUsd}
+            busy={busy}
+            inputLabel="New budget in USD"
+            buttonLabel="Raise budget"
+            onSubmit={(usd) => void settle(() => backend.setWorkflowRunBudget(runId, usd))}
+          />
+        }
         markDoneForm={
           showMarkDone ? (
             <MarkDoneForm key={`${stepId}:${latestId}`} step={markDoneStep} active onSubmit={markDone} />

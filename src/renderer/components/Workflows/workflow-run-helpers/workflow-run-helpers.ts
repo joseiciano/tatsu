@@ -9,7 +9,7 @@ import type {
   WorkflowRunStatus,
   WorkflowStepStatus
 } from '../../../../shared/state/workflows'
-import { RESUMABLE_AGENTS } from '../../../../shared/state/workflows'
+import { RESUMABLE_AGENTS, WORKFLOW_BUDGET_MAX_USD, isBudgetUsd } from '../../../../shared/state/workflows'
 export { PAUSED_REASON_LABELS, pausedReasonLabel } from '../../../../shared/state/workflows'
 import type { ElectronAPI } from '../../../types'
 import type { AgentKind } from '../../../../shared/state/terminals'
@@ -30,6 +30,7 @@ export type NeedsYouActionKind =
   | 'loop-again'
   | 'loop-continue'
   | 'keep-waiting'
+  | 'raise-budget'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -60,7 +61,7 @@ export interface RecordStepContext {
   attempt: NeedsYouAttemptInfo | null
 }
 
-export type BackendNeedsYouAction = Exclude<NeedsYouActionKind, 'jump' | 'retry-from-clean' | 'request-changes'>
+export type BackendNeedsYouAction = Exclude<NeedsYouActionKind, 'jump' | 'retry-from-clean' | 'request-changes' | 'raise-budget'>
 
 export type NeedsYouActionsApi = Pick<
   ElectronAPI,
@@ -130,7 +131,7 @@ export function currentStepId(run: WorkflowRun, stepOrder: readonly string[]): s
 
 export function deriveStepStrip(run: WorkflowRun, stepOrder: readonly string[]): StepStripEntry[] {
   const cursor = run.cursorStepId !== undefined && stepOrder.includes(run.cursorStepId) ? run.cursorStepId : null
-  const pausedId = run.status === 'paused' ? cursor ?? currentStepId(run, stepOrder) : null
+  const pausedId = run.status === 'paused' && run.pausedReason !== 'budget' ? cursor ?? currentStepId(run, stepOrder) : null
   const entries: StepStripEntry[] = []
   for (const id of stepOrder) {
     const step = run.steps[id]
@@ -173,6 +174,7 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
     case 'timeout':
       return ['keep-waiting', 'cancel', ...jump]
     case 'budget':
+      return ['raise-budget', 'cancel']
     case 'restack-conflict':
       return ['cancel', ...jump]
     default: {
@@ -180,6 +182,22 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
       return _exhaustive
     }
   }
+}
+
+export function budgetFloorUsd(totalUsd: number): number {
+  return Math.min(WORKFLOW_BUDGET_MAX_USD, (Math.floor(Math.max(0, totalUsd) * 100) + 1) / 100)
+}
+
+export function suggestedBudgetUsd(totalUsd: number, budgetUsd: number | undefined): number {
+  const doubled = Math.ceil(Math.max(totalUsd, budgetUsd ?? 0) * 200) / 100
+  return Math.min(WORKFLOW_BUDGET_MAX_USD, Math.max(budgetFloorUsd(totalUsd), doubled))
+}
+
+export function parseBudgetInput(text: string, totalUsd: number): number | null {
+  const trimmed = text.trim()
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null
+  const value = Number(trimmed)
+  return isBudgetUsd(value) && value > totalUsd ? value : null
 }
 
 export function recordStepContext(record: WorkflowRunRecord): RecordStepContext | null {

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   pausedReasonLabel,
+  budgetFloorUsd,
+  parseBudgetInput,
+  suggestedBudgetUsd,
   confirmRetryFromClean,
   currentStepId,
   recordStepContext,
@@ -103,6 +106,17 @@ describe('deriveStepStrip', () => {
     expect(strip.map((s) => s.paused)).toEqual([false, true, false])
   })
 
+  it('marks no step of a budget-paused run as needing you, even the cursor step that is still running', () => {
+    const strip = deriveStepStrip(
+      { ...run({ plan: 'running', build: 'pending' }, 'paused', 'budget'), cursorStepId: 'plan' },
+      ['plan', 'build']
+    )
+    expect(strip.map((s) => [s.glyph, s.paused])).toEqual([
+      ['●', false],
+      ['○', false]
+    ])
+  })
+
   it('shows a gated step of a cancelled run as cancelled, not waiting at its gate', () => {
     const strip = deriveStepStrip(run({ plan: 'awaiting-gate', test: 'pending' }, 'cancelled'), ['plan', 'test'])
     expect(strip.map((s) => [s.status, s.glyph, s.paused])).toEqual([
@@ -202,7 +216,8 @@ describe('needsYouActions', () => {
     ['gate on an agent step without a tab', 'gate', CODEX, DONE, false, ['approve', 'request-changes', 'cancel']],
     ['gate on a shell step', 'gate', SHELL, DONE, false, ['approve', 'cancel']],
     ['gate before the step loaded', 'gate', null, null, true, ['approve', 'cancel', 'jump']],
-    ['budget', 'budget', null, null, false, ['cancel']],
+    ['budget', 'budget', null, null, false, ['raise-budget', 'cancel']],
+    ['budget with a live step tab', 'budget', CLAUDE, null, true, ['raise-budget', 'cancel']],
     ['loop-cap with a tab', 'loop-cap', CLAUDE, DONE, true, ['loop-again', 'loop-continue', 'cancel', 'jump']],
     ['loop-cap on a shell step', 'loop-cap', SHELL, DONE, false, ['loop-again', 'loop-continue', 'cancel']],
     ['loop-cap before the step loaded', 'loop-cap', null, null, false, ['loop-again', 'loop-continue', 'cancel']],
@@ -353,5 +368,31 @@ describe('runNeedsYouAction', () => {
     const backend = api()
     await confirmRetryFromClean(backend, 'r', 's')
     expect(backend.retryWorkflowStepFromClean).toHaveBeenCalledWith('r', 's', { confirmed: true })
+  })
+})
+
+describe('budget input helpers', () => {
+  it('floors the new budget one cent above the total, capped at the maximum', () => {
+    expect(budgetFloorUsd(0)).toBe(0.01)
+    expect(budgetFloorUsd(0.06)).toBe(0.07)
+    expect(budgetFloorUsd(0.0649)).toBe(0.07)
+    expect(budgetFloorUsd(20000)).toBe(10000)
+  })
+
+  it('suggests double the larger of the spend and the budget, never below the floor nor above the maximum', () => {
+    expect(suggestedBudgetUsd(0.06, 0.01)).toBe(0.12)
+    expect(suggestedBudgetUsd(0.09, 0.01)).toBe(0.18)
+    expect(suggestedBudgetUsd(0.06, 1)).toBe(2)
+    expect(suggestedBudgetUsd(0, undefined)).toBe(0.01)
+    expect(suggestedBudgetUsd(1, 8000)).toBe(10000)
+  })
+
+  it('accepts only a plain amount above the total and at most the maximum', () => {
+    expect(parseBudgetInput('1', 0.06)).toBe(1)
+    expect(parseBudgetInput(' 0.07 ', 0.06)).toBe(0.07)
+    expect(parseBudgetInput('10000', 0.06)).toBe(10000)
+    for (const text of ['', '0.06', '0.05', '0', '-1', '10000.01', 'abc', '1e2', 'Infinity', '0x10', '1,5']) {
+      expect(parseBudgetInput(text, 0.06)).toBeNull()
+    }
   })
 })
