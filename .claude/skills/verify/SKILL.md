@@ -68,6 +68,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
 | `browser-exit` | `exit` (claude) | `FAKE_AGENT_MODE=exit-no-complete`: exits non-zero |
+| `browser-diff` | `write` (shell `echo smoke > smoke.txt`) | none; the attempt-diff scenario deletes `smoke.txt` afterwards |
 | `smoke-repo` (repo) | `check` (shell `echo REPO-TRUSTED`) | none; needs trust before Start |
 | `browser-repo` (repo) | `check` (shell `sleep 3`) | none; needs trust before Start (launch sheet label `browser-repo (repo)`) |
 

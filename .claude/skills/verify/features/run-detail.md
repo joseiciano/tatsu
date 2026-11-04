@@ -2,8 +2,8 @@
 
 Clicking a run card in the Workflows section's Runs tab opens that run's
 detail in place of the run lists: the step graph with live statuses, the
-actions the run allows right now, a timeline of every attempt and the
-selected attempt's full result.
+actions the run allows right now, a timeline of every attempt, the
+selected attempt's full result and the files that attempt changed.
 
 ## Sub-features
 
@@ -34,6 +34,20 @@ selected attempt's full result.
   (`Attempt summary`), and one `pre` per output field (strings as is,
   everything else as JSON). Fetched with `getWorkflowAttemptResult` when an
   attempt is selected and again when it ends.
+- **Attempt changes**: region `Changed files` below the timeline. It diffs
+  the attempt's base and head snapshots, so it also covers work the agent
+  never committed. Each changed file is an `aria-pressed` button named
+  `<path>, <added|modified|deleted>, +<a> −<d>` (`binary` in place of the
+  counts). The first file is selected by default. The selected file's diff
+  is a read-only side-by-side Monaco diff in region `File diff · <path>`.
+  States: `Loading changed files…`; `No snapshot for this attempt` (running,
+  interrupted or Mark-done attempts with no base or head snapshot; nothing
+  is fetched); `No changes in this attempt`; an alert with the server error
+  (`snapshot missing` after the snapshot refs are deleted, `File too large
+  to show` past 1 MiB, `Binary file; no text diff to show`). The list stops
+  at 500 files and says so. Backed by `workflows:getAttemptChangedFiles` and
+  `workflows:getAttemptFileDiff`. Main resolves the commits and the worktree
+  from the run record and only diffs a path from that attempt's list.
 
 ## How to get to it (user POV)
 
@@ -53,12 +67,23 @@ selected attempt's full result.
     with exactly two rows: `exit #1: failed, completed by process
     exit, …` then `exit #2: done, completed by you (Mark done), …` ->
     click row 1 (Completed by `process exit`) -> click row 2 -> `Attempt
-    summary` reads `Marked done from the browser smoke` -> `All runs` ->
-    `Back` closes the section.
+    summary` reads `Marked done from the browser smoke` -> region `Changed
+    files` reads `No snapshot for this attempt` -> `All runs` -> `Back`
+    closes the section.
+  - `attempt-diff` (right after `run-detail`, before `repo-trust`): launch
+    sheet -> `browser-diff` -> Start -> wait for the run to be `done` ->
+    sidebar `Workflows` -> `Recent runs` -> first `article` `browser-diff on
+    repo` -> `Open run: browser-diff on repo` -> region `Changed files` ->
+    button `smoke.txt, added, +1 −0` -> click it (`aria-pressed=true`) ->
+    region `File diff · smoke.txt` holds `.monaco-diff-editor` whose
+    modified side shows `smoke` -> `All runs` -> `Back`. Deletes
+    `smoke.txt` from the worktree afterwards.
 
-End state that proves it: `run-detail-01-detail-timeline.png` and
-`run-detail-02-detail-summary.png` in `$EVIDENCE/workflow-flows/`, and the
-`run-detail: timeline [...]` line in the journal.
+End state that proves it: `run-detail-01-detail-timeline.png`,
+`run-detail-02-detail-summary.png`, `attempt-diff-03-changed-files.png` and
+`attempt-diff-04-file-diff.png` in `$EVIDENCE/workflow-flows/`, and the
+`run-detail: timeline [...]`, `attempt-diff: changed files [...]` and
+`attempt-diff: smoke.txt diff renders side by side…` lines in the journal.
 
 ## Gotchas
 
@@ -74,3 +99,9 @@ End state that proves it: `run-detail-01-detail-timeline.png` and
 - The run record is refetched only when the run status, a step status or
   the attempt id/status set changes (`workflowRunRecordKey`), not per
   streamed summary update.
+- The head snapshot is written just after the attempt ends, so a freshly
+  ended attempt briefly reads `Loading changed files…` while the detail
+  refetches the attempt record (up to about 8 s in total) before it shows
+  the list or `No snapshot for this attempt`.
+- Leaving `smoke.txt` in the worktree puts it in every later attempt's base
+  snapshot; the attempt-diff scenario removes it in a `finally`.
