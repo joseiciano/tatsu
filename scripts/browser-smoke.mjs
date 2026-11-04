@@ -740,8 +740,20 @@ async function flowLibrary(page, backend) {
 
 const EDITOR_DEF_NAME = 'zz-editor-smoke'
 
-function editorSource(stepId, run) {
-  return `name: ${EDITOR_DEF_NAME}\nsteps:\n  - id: ${stepId}\n    kind: shell\n    run: ${run}\n`
+function editorSource(stepId, run, verifyRun = 'echo verify\n') {
+  return `name: ${EDITOR_DEF_NAME}\nsteps:\n  - id: ${stepId}\n    kind: shell\n    run: ${run}\n  - id: verify\n    kind: shell\n    run: ${verifyRun}`
+}
+
+async function waitForPreview(preview, expected) {
+  const nodes = preview.getByRole('group', { name: 'Workflow graph', exact: true }).getByRole('listitem')
+  const deadline = Date.now() + 15_000
+  let labels = []
+  while (Date.now() < deadline) {
+    labels = await nodes.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
+    if (labels.join(',') === expected.join(',')) return
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error(`graph preview nodes ${JSON.stringify(labels)}, expected ${JSON.stringify(expected)}`)
 }
 
 async function replaceEditorText(page, editor, text) {
@@ -782,6 +794,8 @@ async function flowDefinitionEditor(page, backend) {
     if (existsSync(file)) throw new Error(`${file} exists before the definition-editor scenario`)
     const section = page.getByRole('region', { name: 'Workflows', exact: true })
     const editor = section.locator('.monaco-editor').first()
+    const preview = section.getByRole('region', { name: 'Graph preview', exact: true })
+    const staleGraph = preview.getByText('Fix errors to update the graph', { exact: true })
     const personal = section.getByRole('region', { name: /^Personal/ })
     const row = personal.getByRole('listitem').filter({ has: page.getByRole('button', { name: `Run ${EDITOR_DEF_NAME}`, exact: true }) })
     let savedId = null
@@ -792,10 +806,27 @@ async function flowDefinitionEditor(page, backend) {
       await section.getByRole('button', { name: 'New workflow', exact: true }).click()
       await editor.locator('.view-lines').waitFor()
       await section.getByRole('heading', { name: 'New workflow', exact: true }).waitFor()
+      await waitForPreview(preview, ['hello'])
       await shot('new')
+
+      await replaceEditorText(page, editor, editorSource('draft', 'echo draft', 'echo {{steps.dr'))
+      await waitForPreview(preview, ['draft', 'verify'])
+      await page.keyboard.press('Control+Space')
+      const suggest = page.locator('.suggest-widget.visible')
+      await suggest.getByText('steps.draft.summary').first().waitFor()
+      const suggestRows = await suggest.locator('.monaco-list-row').allTextContents()
+      const suggestText = suggestRows.join(' | ')
+      if (!suggestText.includes('steps.draft.status') || suggestText.includes('inputs.')) throw new Error(`suggest widget: ${suggestText}`)
+      log(`definition-editor: {{steps.dr completes to steps.draft.summary / steps.draft.status (${JSON.stringify(suggestRows)})`)
+      await shot('autocomplete')
+      await page.keyboard.press('Escape')
+      await suggest.waitFor({ state: 'detached' }).catch(() => suggest.waitFor({ state: 'hidden' }))
 
       await replaceEditorText(page, editor, editorSource('draft', 'echo draft'))
       await section.locator('.monaco-editor .view-lines').filter({ hasText: 'echo draft' }).waitFor()
+      await waitForPreview(preview, ['draft', 'verify'])
+      if (await staleGraph.count()) throw new Error('a valid draft shows the stale graph message')
+      log('definition-editor: graph preview shows a node per step: draft, verify')
       await shot('drafted')
       await saveFromEditor(section)
       await waitForFileText(file, 'id: draft')
@@ -807,7 +838,7 @@ async function flowDefinitionEditor(page, backend) {
       log(`definition-editor: New saved as ${savedId} at ${file}`)
       await section.getByRole('button', { name: 'Back to Library', exact: true }).click()
       if (await page.getByRole('alertdialog').count()) throw new Error('a saved New draft asked to discard')
-      await row.getByText('1 step: draft', { exact: true }).waitFor()
+      await row.getByText('2 steps: draft, verify', { exact: true }).waitFor()
       await shot('saved-new')
 
       await row.getByRole('button', { name: `Edit ${EDITOR_DEF_NAME}`, exact: true }).click()
@@ -820,11 +851,19 @@ async function flowDefinitionEditor(page, backend) {
       const problemText = (await problems.textContent()) ?? ''
       if (!problemText.includes('"bogus", which is not a step in this workflow')) throw new Error(`problems list: ${problemText}`)
       log(`definition-editor: unknown step ref marked (.squiggly-error) with "${problemText.slice(0, 160)}"`)
+      await waitForPreview(preview, ['edited', 'verify'])
       await shot('marker')
+
+      await replaceEditorText(page, editor, `name: ${EDITOR_DEF_NAME}\nsteps:\n  - id: "broken\n`)
+      await staleGraph.waitFor()
+      await waitForPreview(preview, ['edited', 'verify'])
+      log('definition-editor: YAML syntax error keeps the last graph (edited, verify) with "Fix errors to update the graph"')
+      await shot('preview-stale')
 
       await replaceEditorText(page, editor, editorSource('edited', 'echo edited'))
       await editor.locator('.squiggly-error').first().waitFor({ state: 'detached' })
       await problems.getByText('No problems', { exact: true }).waitFor()
+      await staleGraph.waitFor({ state: 'detached' })
       log('definition-editor: marker cleared after the fix')
       await shot('fixed')
 
@@ -834,13 +873,13 @@ async function flowDefinitionEditor(page, backend) {
       await section.getByText('Unsaved changes').waitFor({ state: 'detached' })
       await section.getByRole('button', { name: 'Back to Library', exact: true }).click()
       if (await page.getByRole('alertdialog').count()) throw new Error('a saved draft asked to discard')
-      await row.getByText('1 step: edited', { exact: true }).waitFor()
+      await row.getByText('2 steps: edited, verify', { exact: true }).waitFor()
       const after = (await backend.snapshot()).state.workflows.definitions
       const named = Object.values(after).filter((d) => d.name === EDITOR_DEF_NAME)
-      if (named.length !== 1 || named[0].id !== savedId || named[0].stepIds.join(',') !== 'edited') {
+      if (named.length !== 1 || named[0].id !== savedId || named[0].stepIds.join(',') !== 'edited,verify') {
         throw new Error(`after the second save: ${JSON.stringify(named)}`)
       }
-      log(`definition-editor: Save from Edit overwrote ${savedId}; Library row reads "1 step: edited" and ${file} holds id: edited`)
+      log(`definition-editor: Save from Edit overwrote ${savedId}; Library row reads "2 steps: edited, verify" and ${file} holds id: edited`)
       await shot('library-updated')
     } finally {
       if (savedId) await backend.request('workflows:deleteDefinition', savedId).catch(() => rmSync(file, { force: true }))
