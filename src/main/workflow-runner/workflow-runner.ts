@@ -71,6 +71,8 @@ const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', '
 
 const SWAPPABLE_ATTEMPT_STATUSES: ReadonlySet<WorkflowAttemptStatus> = new Set(['failed', 'cancelled', 'interrupted'])
 
+const SETTLED_STEP_STATUSES: ReadonlySet<WorkflowStepStatus> = new Set(['done', 'skipped'])
+
 interface LiveAttempt {
   record: WorkflowAttemptRecord
   kind: StepDriverKind
@@ -82,7 +84,8 @@ interface LiveAttempt {
 interface RunState {
   record: WorkflowRunRecord
   stepStatus: Record<string, WorkflowStepStatus>
-  live: LiveAttempt | null
+  live: Map<string, LiveAttempt>
+  pauses: Map<string, WorkflowPausedReason>
   io: Promise<boolean>
   lastSnapshot?: string
   busy?: boolean
@@ -151,6 +154,17 @@ function isRunnable(step: ResolvedWorkflowStep): step is RunnableStep {
   return step.kind === 'agent' || step.kind === 'shell'
 }
 
+function needsOf(steps: readonly ResolvedWorkflowStep[], index: number): readonly string[] {
+  const { needs } = steps[index]
+  if (Array.isArray(needs)) return needs
+  return index === 0 ? [] : [steps[index - 1].id]
+}
+
+interface LiveStep {
+  state: RunState
+  live: LiveAttempt
+}
+
 export class WorkflowRunner {
   private readonly runs = new Map<string, RunState>()
   private readonly liveAttempts = new Map<string, string>()
@@ -189,7 +203,7 @@ export class WorkflowRunner {
     if (!this.labsOn()) return null
     const live = this.liveAgentStep(executionId)
     if (live) {
-      const { attemptId, stepId } = live.record
+      const { attemptId, stepId } = live.live.record
       const step = live.state.record.definition.steps.find((candidate) => candidate.id === stepId)
       if (step?.kind !== 'agent') return null
       return { attemptId, stepId, ...(step.output === undefined ? {} : { output: step.output }), ended: false }
@@ -204,21 +218,21 @@ export class WorkflowRunner {
     if (!live) {
       return { ok: false, reason: this.endedExecutions.has(executionId) ? 'already-completed' : 'not-a-step' }
     }
-    return this.complete(live.record.attemptId, { ...value, completedBy: 'tool' })
+    return this.complete(live.live.record.attemptId, { ...value, completedBy: 'tool' })
       ? { ok: true }
       : { ok: false, reason: 'already-completed' }
   }
 
   stopCheck(executionId: string, stopHookActive: boolean): StopCheckDecision {
     if (!this.labsOn()) return 'none'
-    const step = this.liveAgentStep(executionId)
-    const live = step?.state.live
-    if (!step || !live || stopHookActive || live.continuedThisTurn || this.awaitingInput(step.state)) return 'none'
-    const { state, record } = step
+    const found = this.liveAgentStep(executionId)
+    if (!found || stopHookActive || found.live.continuedThisTurn || this.awaitingInput(found.state, found.live)) return 'none'
+    const { state, live } = found
+    const { record } = live
     live.continuedThisTurn = true
     live.blockPending = true
     record.metrics.continuations += 1
-    if (state.record.pausedReason === 'needs-approval') this.resume(state)
+    if (state.pauses.get(record.stepId) === 'needs-approval') this.resume(state, record.stepId)
     this.log(`step continued ${record.metrics.continuations}`, {
       runId: state.record.runId,
       stepId: record.stepId,
@@ -251,30 +265,36 @@ export class WorkflowRunner {
       )
     const outcomes = new Map<RunState, string>()
     for (const state of adopted) {
-      const running = state.record.attempts.find((attempt) => attempt.status === 'running')
-      if (running && !state.live) {
-        this.interrupt(state, running)
+      const queued = state.record.definition.steps.filter(
+        (step): step is RunnableStep => isRunnable(step) && state.stepStatus[step.id] === 'queued'
+      )
+      const requeue = (): void => {
+        for (const step of queued) this.queue.push({ runId: state.record.runId, stepId: step.id })
+      }
+      const dead = state.record.attempts.filter(
+        (attempt) => attempt.status === 'running' && !this.liveAttempts.has(attempt.attemptId)
+      )
+      if (dead.length > 0) {
+        for (const attempt of dead) this.interrupt(state, attempt)
+        requeue()
         outcomes.set(state, 'interrupted')
         continue
       }
-      if (state.record.status === 'paused') {
-        outcomes.set(state, 'paused')
+      if (state.record.status === 'paused' || state.live.size > 0) {
+        requeue()
+        outcomes.set(state, state.record.status === 'paused' ? 'paused' : 'attached')
         continue
       }
-      if (state.live) {
-        outcomes.set(state, 'attached')
-        continue
-      }
-      const step = this.currentStep(state)
-      const status = step && state.stepStatus[step.id]
-      if (step && (status === 'queued' || status === 'pending') && !this.labsOn()) {
-        this.hold(state, step)
+      const ready = this.firstReady(state)
+      const waiting = queued.length > 0 ? queued : ready ? [ready] : []
+      if (waiting.length > 0 && !this.labsOn()) {
+        for (const step of waiting) this.hold(state, step)
         outcomes.set(state, 'held')
-      } else if (step && state.stepStatus[step.id] === 'queued') {
-        this.queue.push({ runId: state.record.runId, stepId: step.id })
+      } else if (queued.length > 0) {
+        requeue()
         outcomes.set(state, 'requeued')
-      } else if (!step || state.stepStatus[step.id] === 'pending') {
-        this.enterStep(state)
+      } else if (ready || this.allSettled(state)) {
+        this.schedule(state)
         outcomes.set(state, 'resumed')
       } else {
         outcomes.set(state, 'unchanged')
@@ -365,7 +385,8 @@ export class WorkflowRunner {
         ...(inputsUntrusted ? { inputsUntrusted } : {})
       },
       stepStatus,
-      live: null,
+      live: new Map(),
+      pauses: new Map(),
       io: this.prepare(runId, request.worktreePath)
     }
     this.runs.set(runId, state)
@@ -381,32 +402,33 @@ export class WorkflowRunner {
     )
     if (inputsUntrusted) this.log('run capped at edit permissions', { runId })
     for (const stepId of Object.keys(overriddenFrom ?? {})) this.logHarness('step overridden', state, stepId)
-    this.enterStep(state)
+    this.schedule(state)
     this.settle(state)
     return { ok: true, runId }
   }
 
   complete(attemptId: string, completion: StepResult): boolean {
     const result: StepResult = { ...completion }
-    const state = this.runForLiveAttempt(attemptId)
-    if (!state?.live) {
+    const found = this.liveFor(attemptId)
+    if (!found) {
       this.log('completion ignored', { attemptId })
       return false
     }
-    const { stepId } = state.live.record
+    const { state, live } = found
+    const { stepId } = live.record
     this.log(`completion received ${result.status}`, { runId: state.record.runId, stepId, attemptId })
     if (result.status === 'needs-input') {
-      state.live.record.result = result
-      this.pause(state, 'needs-input')
+      live.record.result = result
+      this.pause(state, stepId, 'needs-input')
     } else if (result.status === 'done') {
-      this.resume(state)
-      this.endAttempt(state, 'done', result, false)
+      this.resume(state, stepId)
+      this.endAttempt(state, live, 'done', result, false)
       this.setStep(state, stepId, 'done')
-      this.advance(state)
+      this.schedule(state)
     } else {
-      this.endAttempt(state, 'failed', result, false)
+      this.endAttempt(state, live, 'failed', result, false)
       this.setStep(state, stepId, 'failed')
-      this.pause(state, 'step-failed')
+      this.pause(state, stepId, 'step-failed')
     }
     this.settle(state)
     return true
@@ -416,16 +438,15 @@ export class WorkflowRunner {
     const state = this.runs.get(runId)
     if (!state) return this.refuseAction('unknown-run', { runId })
     if (state.busy) return this.refuseAction('busy', { runId })
-    const queuedStepId = this.dequeue(runId)
-    if (queuedStepId) this.setStep(state, queuedStepId, 'cancelled')
-    if (state.live) {
-      const { stepId } = state.live.record
-      this.endAttempt(state, 'cancelled', undefined, true)
-      this.setStep(state, stepId, 'cancelled')
+    for (const queuedStepId of this.dequeueRun(runId)) this.setStep(state, queuedStepId, 'cancelled')
+    for (const live of [...state.live.values()]) {
+      this.endAttempt(state, live, 'cancelled', undefined, true)
+      this.setStep(state, live.record.stepId, 'cancelled')
     }
     const finishedAt = this.deps.now()
     state.record.status = 'cancelled'
     state.record.finishedAt = finishedAt
+    state.pauses.clear()
     delete state.record.pausedReason
     this.deps.store.dispatch({ type: 'workflows/runCancelled', payload: { runId, finishedAt } })
     this.log('run cancelled', { runId })
@@ -439,15 +460,14 @@ export class WorkflowRunner {
     const target = this.actionTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
     const { state } = target
-    if (state.live) {
-      this.endAttempt(state, 'cancelled', undefined, true)
-      this.setStep(state, stepId, 'cancelled')
-    } else {
-      const queuedStepId = this.dequeue(runId)
-      if (!queuedStepId) return this.refuseAction('nothing-to-cancel', { runId, stepId })
-      this.setStep(state, queuedStepId, 'cancelled')
+    const live = state.live.get(stepId)
+    if (live) {
+      this.endAttempt(state, live, 'cancelled', undefined, true)
+    } else if (!this.dequeue(runId, stepId)) {
+      return this.refuseAction('nothing-to-cancel', { runId, stepId })
     }
-    this.pause(state, 'step-failed')
+    this.setStep(state, stepId, 'cancelled')
+    this.pause(state, stepId, 'step-failed')
     this.settle(state)
     return ACTION_OK
   }
@@ -455,10 +475,11 @@ export class WorkflowRunner {
   retryStep(runId: string, stepId: string): StepActionResult {
     const target = this.retryTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
-    const { state } = target
-    this.resume(state)
-    if (state.live) this.endAttempt(state, 'cancelled', undefined, true)
-    this.enterStep(state)
+    const { state, step } = target
+    this.resume(state, stepId)
+    const live = state.live.get(stepId)
+    if (live) this.endAttempt(state, live, 'cancelled', undefined, true)
+    this.enterStep(state, step)
     this.settle(state)
     return ACTION_OK
   }
@@ -468,7 +489,7 @@ export class WorkflowRunner {
     const target = this.retryTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, ids)
     const { state } = target
-    if (state.live) return this.refuseAction('live-attempt', ids)
+    if (state.live.has(stepId)) return this.refuseAction('live-attempt', ids)
     const { artifacts } = this.deps
     const commit = this.lastAttempt(state, stepId)?.baseSnapshot?.commit
     if (!artifacts || commit === undefined) return this.refuseAction('no-snapshot', ids)
@@ -489,9 +510,9 @@ export class WorkflowRunner {
     this.log('step restored to base snapshot', ids)
     const again = this.retryTarget(runId, stepId)
     if (typeof again === 'string') return this.refuseAction(again, ids)
-    if (again.state.live) return this.refuseAction('live-attempt', ids)
-    this.resume(again.state)
-    this.enterStep(again.state)
+    if (again.state.live.has(stepId)) return this.refuseAction('live-attempt', ids)
+    this.resume(again.state, stepId)
+    this.enterStep(again.state, again.step)
     this.settle(again.state)
     return ACTION_OK
   }
@@ -502,14 +523,14 @@ export class WorkflowRunner {
     if (typeof target === 'string') return this.refuseAction(target, ids)
     const { state, step } = target
     if (step.kind !== 'agent' || !RESUMABLE_AGENTS.has(step.agent)) return this.refuseAction('not-resumable-step', ids)
-    if (state.live) return this.refuseAction('live-attempt', ids)
+    if (state.live.has(stepId)) return this.refuseAction('live-attempt', ids)
     const last = this.lastAttempt(state, stepId)
     if (last?.status !== 'interrupted') return this.refuseAction('not-interrupted', ids)
     if (last.sessionId === undefined || !isAgentSessionId(step.agent, last.sessionId)) {
       return this.refuseAction('no-session', ids)
     }
-    this.resume(state)
-    this.enterStep(state, last.sessionId)
+    this.resume(state, stepId)
+    this.enterStep(state, step, last.sessionId)
     this.settle(state)
     return ACTION_OK
   }
@@ -520,7 +541,7 @@ export class WorkflowRunner {
     if (typeof target === 'string') return this.refuseAction(target, ids)
     const { state, step } = target
     if (step.kind !== 'agent') return this.refuseAction('not-agent-step', ids)
-    if (state.live) return this.refuseAction('live-attempt', ids)
+    if (state.live.has(stepId)) return this.refuseAction('live-attempt', ids)
     const last = this.lastAttempt(state, stepId)
     if (!last || !SWAPPABLE_ATTEMPT_STATUSES.has(last.status)) return this.refuseAction('not-swappable', ids)
     const override = overriddenStep(step, request)
@@ -533,7 +554,7 @@ export class WorkflowRunner {
     }
     const { record } = state
     const steps = [...record.definition.steps]
-    steps[record.cursor] = effective
+    steps[steps.findIndex((candidate) => candidate.id === stepId)] = effective
     record.definition = { ...record.definition, steps }
     const overriddenFrom = record.overriddenFrom ?? {}
     if (!Object.hasOwn(overriddenFrom, stepId)) record.overriddenFrom = { ...overriddenFrom, [stepId]: harnessOf(step) }
@@ -541,8 +562,8 @@ export class WorkflowRunner {
       this.deps.store.dispatch({ type: 'workflows/stepAgentChanged', payload: { runId, stepId, agent: effective.agent } })
     }
     this.logHarness('step swapped', state, stepId)
-    this.resume(state)
-    this.enterStep(state)
+    this.resume(state, stepId)
+    this.enterStep(state, effective)
     this.settle(state)
     return ACTION_OK
   }
@@ -551,11 +572,12 @@ export class WorkflowRunner {
     const target = this.launchTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
     const { state } = target
-    this.resume(state)
-    if (state.live) this.endAttempt(state, 'cancelled', undefined, true)
-    else this.dequeue(runId)
+    this.resume(state, stepId)
+    const live = state.live.get(stepId)
+    if (live) this.endAttempt(state, live, 'cancelled', undefined, true)
+    else this.dequeue(runId, stepId)
     this.setStep(state, stepId, 'skipped')
-    this.advance(state)
+    this.schedule(state)
     this.settle(state)
     return ACTION_OK
   }
@@ -567,8 +589,9 @@ export class WorkflowRunner {
     const { state, step } = target
     const status = state.stepStatus[stepId]
     const pausedEnded =
-      state.record.status === 'paused' && (status === 'failed' || status === 'cancelled' || status === 'interrupted')
-    if (!state.live && !pausedEnded) return this.refuseAction('not-completable', ids)
+      state.pauses.has(stepId) && (status === 'failed' || status === 'cancelled' || status === 'interrupted')
+    const live = state.live.get(stepId)
+    if (!live && !pausedEnded) return this.refuseAction('not-completable', ids)
     const output = userOutput(step, request)
     if (!output.ok) {
       this.log('step action refused invalid-output', ids)
@@ -576,12 +599,12 @@ export class WorkflowRunner {
     }
     const { summary, data } = output.value
     const result: StepResult = { status: 'done', summary, completedBy: 'user', ...(data === undefined ? {} : { data }) }
-    this.resume(state)
-    if (state.live) this.endAttempt(state, 'done', result, true)
+    this.resume(state, stepId)
+    if (live) this.endAttempt(state, live, 'done', result, true)
     else this.recordUserCompletion(state, step, result)
     this.setStep(state, stepId, 'done')
     this.log('step marked done', ids)
-    this.advance(state)
+    this.schedule(state)
     this.settle(state)
     return ACTION_OK
   }
@@ -593,8 +616,8 @@ export class WorkflowRunner {
   private actionTarget(runId: string, stepId: string): ActionTarget | StepActionRefusal {
     const state = this.runs.get(runId)
     if (!state) return 'unknown-run'
-    const step = this.currentStep(state)
-    if (!step || step.id !== stepId) return 'wrong-step'
+    const step = this.actionable(state, stepId)
+    if (!step) return 'wrong-step'
     if (state.busy) return 'busy'
     return { state, step }
   }
@@ -608,10 +631,10 @@ export class WorkflowRunner {
   private retryTarget(runId: string, stepId: string): ActionTarget | StepActionRefusal {
     const target = this.launchTarget(runId, stepId)
     if (typeof target === 'string') return target
-    const { record } = target.state
-    if (record.status !== 'paused') return 'not-paused'
+    const { state } = target
+    if (!state.pauses.has(stepId)) return 'not-paused'
     if (!this.labsOn()) return 'labs-off'
-    if (record.pausedReason === 'needs-approval' && target.state.live) return 'awaiting-approval'
+    if (state.pauses.get(stepId) === 'needs-approval' && state.live.has(stepId)) return 'awaiting-approval'
     return target
   }
 
@@ -642,8 +665,7 @@ export class WorkflowRunner {
       type: 'workflows/attemptStarted',
       payload: { attemptId, runId, stepId: step.id, n, startedAt }
     })
-    state.live = { record, kind: step.kind }
-    this.endAttempt(state, 'done', result, false)
+    this.endAttempt(state, { record, kind: step.kind }, 'done', result, false)
   }
 
   private adopt(record: WorkflowRunRecord): RunState {
@@ -651,20 +673,27 @@ export class WorkflowRunner {
     const state: RunState = {
       record,
       stepStatus: record.steps,
-      live: null,
+      live: new Map(),
+      pauses: new Map(),
       io: this.prepare(runId, worktreePath)
+    }
+    const { steps } = record.definition
+    const pausedStep = steps[record.cursor] ?? steps.at(-1)
+    if (record.status === 'paused' && record.pausedReason !== undefined && pausedStep) {
+      state.pauses.set(pausedStep.id, record.pausedReason)
     }
     for (const attempt of record.attempts) {
       const snapshot = attempt.headSnapshot ?? attempt.baseSnapshot
       if (snapshot) state.lastSnapshot = snapshot.commit
     }
     this.runs.set(runId, state)
-    const running = record.attempts.find((attempt) => attempt.status === 'running')
-    const step = record.definition.steps.find((candidate) => candidate.id === running?.stepId)
-    const executionId = running?.executionId
-    const alive = executionId !== undefined && (this.deps.hasExecution?.(executionId) ?? false)
-    if (running && executionId !== undefined && alive && step && isRunnable(step)) {
-      state.live = { record: running, kind: step.kind, executionId }
+    for (const running of record.attempts) {
+      if (running.status !== 'running') continue
+      const step = steps.find((candidate) => candidate.id === running.stepId)
+      const { executionId } = running
+      const alive = executionId !== undefined && (this.deps.hasExecution?.(executionId) ?? false)
+      if (!alive || !step || !isRunnable(step) || state.live.has(step.id)) continue
+      state.live.set(step.id, { record: running, kind: step.kind, executionId })
       this.liveAttempts.set(running.attemptId, runId)
       this.executions.set(executionId, running.attemptId)
       if (step.kind === 'agent') this.agentSlots.add(running.attemptId)
@@ -685,7 +714,7 @@ export class WorkflowRunner {
     })
     this.log('attempt ended interrupted', { runId, stepId, attemptId })
     this.setStep(state, stepId, 'interrupted')
-    this.pause(state, 'interrupted')
+    this.pause(state, stepId, 'interrupted')
   }
 
   private agentHooksRefusal(steps: readonly ResolvedWorkflowStep[]): 'hooks-consent' | 'codex-hooks-untrusted' | null {
@@ -751,15 +780,54 @@ export class WorkflowRunner {
     )
   }
 
-  private currentStep(state: RunState): RunnableStep | undefined {
-    const step = state.record.definition.steps[state.record.cursor]
-    return step && isRunnable(step) ? step : undefined
+  private settled(state: RunState, stepId: string): boolean {
+    return SETTLED_STEP_STATUSES.has(state.stepStatus[stepId])
   }
 
-  private liveAgentStep(executionId: string): { state: RunState; record: WorkflowAttemptRecord } | undefined {
+  private allSettled(state: RunState): boolean {
+    return state.record.definition.steps.every((step) => this.settled(state, step.id))
+  }
+
+  private actionable(state: RunState, stepId: string): RunnableStep | undefined {
+    const { steps } = state.record.definition
+    const index = steps.findIndex((candidate) => candidate.id === stepId)
+    const step = steps[index]
+    if (!step || !isRunnable(step) || this.settled(state, stepId)) return undefined
+    return needsOf(steps, index).every((dep) => this.settled(state, dep)) ? step : undefined
+  }
+
+  private firstReady(state: RunState): RunnableStep | undefined {
+    for (const step of state.record.definition.steps) {
+      if (state.stepStatus[step.id] !== 'pending') continue
+      const ready = this.actionable(state, step.id)
+      if (ready) return ready
+    }
+    return undefined
+  }
+
+  private cursorIndex(state: RunState): number {
+    const { steps } = state.record.definition
+    const head = state.pauses.keys().next()
+    const paused = head.done ? -1 : steps.findIndex((step) => step.id === head.value)
+    if (paused >= 0) return paused
+    const earliest = steps.findIndex((step) => !this.settled(state, step.id))
+    return earliest < 0 ? steps.length : earliest
+  }
+
+  private syncCursor(state: RunState): void {
+    const cursor = this.cursorIndex(state)
+    if (cursor === state.record.cursor) return
+    state.record.cursor = cursor
+    const step = state.record.definition.steps[cursor]
+    if (step) {
+      this.deps.store.dispatch({ type: 'workflows/cursorChanged', payload: { runId: state.record.runId, stepId: step.id } })
+    }
+  }
+
+  private liveAgentStep(executionId: string): LiveStep | undefined {
     const attemptId = this.executions.get(executionId)
-    const state = attemptId === undefined ? undefined : this.runForLiveAttempt(attemptId)
-    return state?.live?.kind === 'agent' ? { state, record: state.live.record } : undefined
+    const found = attemptId === undefined ? undefined : this.liveFor(attemptId)
+    return found?.live.kind === 'agent' ? found : undefined
   }
 
   private rememberEnded(executionId: string, attemptId: string, stepId: string): void {
@@ -769,10 +837,14 @@ export class WorkflowRunner {
     if (!oldest.done) this.endedExecutions.delete(oldest.value)
   }
 
-  private runForLiveAttempt(attemptId: string): RunState | undefined {
+  private liveFor(attemptId: string): LiveStep | undefined {
     const runId = this.liveAttempts.get(attemptId)
     const state = runId === undefined ? undefined : this.runs.get(runId)
-    return state?.live?.record.attemptId === attemptId ? state : undefined
+    if (!state) return undefined
+    for (const live of state.live.values()) {
+      if (live.record.attemptId === attemptId) return { state, live }
+    }
+    return undefined
   }
 
   private trusted(defId: string, hash: string): boolean {
@@ -786,7 +858,7 @@ export class WorkflowRunner {
 
   private hold(state: RunState, step: RunnableStep): void {
     this.setStep(state, step.id, 'pending')
-    this.pause(state, 'interrupted')
+    this.pause(state, step.id, 'interrupted')
     this.log('step held labs-off', { runId: state.record.runId, stepId: step.id })
   }
 
@@ -794,12 +866,7 @@ export class WorkflowRunner {
     return this.deps.store.getSnapshot().state.settings.workflows.maxConcurrentAgents
   }
 
-  private enterStep(state: RunState, resumeSessionId?: string): void {
-    const step = this.currentStep(state)
-    if (!step) {
-      this.finish(state)
-      return
-    }
+  private enterStep(state: RunState, step: RunnableStep, resumeSessionId?: string): void {
     if (step.kind === 'shell' || (this.queue.length === 0 && this.agentSlots.size < this.agentCap())) {
       this.launch(state, step, resumeSessionId)
       return
@@ -812,16 +879,13 @@ export class WorkflowRunner {
     this.setStep(state, step.id, 'queued')
   }
 
-  private advance(state: RunState): void {
-    state.record.cursor += 1
-    const next = state.record.definition.steps[state.record.cursor]
-    if (next) {
-      this.deps.store.dispatch({
-        type: 'workflows/cursorChanged',
-        payload: { runId: state.record.runId, stepId: next.id }
-      })
-    }
-    this.enterStep(state)
+  private schedule(state: RunState): void {
+    this.syncCursor(state)
+    if (state.pauses.size > 0 || state.live.size > 0) return
+    if (Object.values(state.stepStatus).includes('queued')) return
+    const next = this.firstReady(state)
+    if (next) this.enterStep(state, next)
+    else if (this.allSettled(state)) this.finish(state)
   }
 
   private finish(state: RunState): void {
@@ -953,7 +1017,7 @@ export class WorkflowRunner {
       metrics: { continuations: 0, pauses: [] }
     }
     state.record.attempts.push(record)
-    state.live = { record, kind: step.kind }
+    state.live.set(step.id, { record, kind: step.kind })
     this.liveAttempts.set(attemptId, runId)
     if (step.kind === 'agent') this.agentSlots.add(attemptId)
     this.setStep(state, step.id, 'running')
@@ -979,7 +1043,7 @@ export class WorkflowRunner {
       })
     const started: Promise<StepExecution | null> = this.deps.artifacts
       ? this.snapshotAttempt(state, record, 'baseSnapshot').then(() =>
-          this.runForLiveAttempt(attemptId) ? startDriver() : null
+          this.liveFor(attemptId) ? startDriver() : null
         )
       : Promise.resolve().then(startDriver)
     started
@@ -993,9 +1057,9 @@ export class WorkflowRunner {
   }
 
   private bind(attemptId: string, execution: StepExecution): boolean {
-    const state = this.runForLiveAttempt(attemptId)
-    const live = state?.live
-    if (!state || !live) return false
+    const found = this.liveFor(attemptId)
+    if (!found) return false
+    const { state, live } = found
     const { executionId, sessionId } = execution
     if (live.executionId !== undefined) {
       return live.executionId === executionId && (sessionId === undefined || live.record.sessionId === sessionId)
@@ -1019,9 +1083,10 @@ export class WorkflowRunner {
   }
 
   private onStartFailed(attemptId: string, err: unknown): void {
-    const state = this.runForLiveAttempt(attemptId)
-    if (!state?.live) return
-    const { stepId } = state.live.record
+    const found = this.liveFor(attemptId)
+    if (!found) return
+    const { state, live } = found
+    const { stepId } = live.record
     const paused = err instanceof StepPauseError ? err : undefined
     this.log(paused ? `attempt start paused ${paused.reason}` : 'attempt start failed', {
       runId: state.record.runId,
@@ -1031,16 +1096,18 @@ export class WorkflowRunner {
     const summary = err instanceof StepStartError || err instanceof StepPauseError ? err.summary : undefined
     const result: StepResult | undefined =
       summary === undefined ? undefined : { status: 'failed', summary, completedBy: 'exit' }
-    this.endAttempt(state, 'failed', result, false)
+    this.endAttempt(state, live, 'failed', result, false)
     this.setStep(state, stepId, 'failed')
-    this.pause(state, paused?.reason ?? 'step-failed')
+    this.pause(state, stepId, paused?.reason ?? 'step-failed')
     this.settle(state)
   }
 
   private onDriverEvent(kind: StepDriverKind, event: StepDriverEvent): void {
     const attemptId = this.executions.get(event.executionId)
-    const state = attemptId === undefined ? undefined : this.runForLiveAttempt(attemptId)
-    if (attemptId === undefined || !state?.live || state.live.kind !== kind) return
+    const found = attemptId === undefined ? undefined : this.liveFor(attemptId)
+    if (attemptId === undefined || !found || found.live.kind !== kind) return
+    const { state, live } = found
+    const { stepId } = live.record
     switch (event.type) {
       case 'exited': {
         this.complete(attemptId, {
@@ -1052,21 +1119,21 @@ export class WorkflowRunner {
         return
       }
       case 'turnEnded':
-        this.onTurnEnded(state, event.lastMessage, event.continued === true)
+        this.onTurnEnded(state, live, event.lastMessage, event.continued === true)
         return
       case 'promptSubmitted':
-        state.live.continuedThisTurn = false
-        if (state.record.pausedReason === 'needs-approval') {
-          this.resume(state)
+        live.continuedThisTurn = false
+        if (state.pauses.get(stepId) === 'needs-approval') {
+          this.resume(state, stepId)
           this.persist(state.record)
         }
         return
       case 'needsApproval':
-        this.pause(state, 'needs-approval')
+        this.pause(state, stepId, 'needs-approval')
         this.persist(state.record)
         return
       case 'sessionDiscovered':
-        this.onSessionDiscovered(state, event.sessionId)
+        this.onSessionDiscovered(state, live, event.sessionId)
         return
       default: {
         const _exhaustive: never = event
@@ -1075,9 +1142,8 @@ export class WorkflowRunner {
     }
   }
 
-  private onSessionDiscovered(state: RunState, sessionId: string): void {
-    const live = state.live
-    if (!live || live.kind !== 'agent') return
+  private onSessionDiscovered(state: RunState, live: LiveAttempt, sessionId: string): void {
+    if (live.kind !== 'agent') return
     const { attemptId, stepId } = live.record
     const ids = { runId: state.record.runId, stepId, attemptId }
     const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
@@ -1097,14 +1163,12 @@ export class WorkflowRunner {
     this.deps.store.dispatch({ type: 'workflows/attemptSessionRecorded', payload: { attemptId } })
   }
 
-  private awaitingInput(state: RunState): boolean {
-    const waiting = state.record.status === 'paused' && state.record.pausedReason === 'needs-input'
-    return waiting || state.live?.record.result?.status === 'needs-input'
+  private awaitingInput(state: RunState, live: LiveAttempt): boolean {
+    return state.pauses.get(live.record.stepId) === 'needs-input' || live.record.result?.status === 'needs-input'
   }
 
-  private onTurnEnded(state: RunState, lastMessage: string | undefined, continued: boolean): void {
-    const live = state.live
-    if (!live || live.kind !== 'agent') return
+  private onTurnEnded(state: RunState, live: LiveAttempt, lastMessage: string | undefined, continued: boolean): void {
+    if (live.kind !== 'agent') return
     const { attemptId, stepId } = live.record
     const ids = { runId: state.record.runId, stepId, attemptId }
     const blockPending = live.blockPending === true
@@ -1114,7 +1178,7 @@ export class WorkflowRunner {
       return
     }
     if (blockPending) this.log('continuation not delivered', ids)
-    if (this.awaitingInput(state)) {
+    if (this.awaitingInput(state, live)) {
       this.log('turn end ignored needs-input', ids)
       return
     }
@@ -1122,7 +1186,7 @@ export class WorkflowRunner {
     const required = step?.kind === 'agent' ? (step.output?.required?.length ?? 0) : 0
     if (required > 0) {
       this.log('turn ended without required outputs', ids)
-      this.pause(state, 'needs-input')
+      this.pause(state, stepId, 'needs-input')
       this.persist(state.record)
       return
     }
@@ -1132,14 +1196,13 @@ export class WorkflowRunner {
 
   private endAttempt(
     state: RunState,
+    live: LiveAttempt,
     status: Exclude<WorkflowAttemptStatus, 'running' | 'interrupted'>,
     result: StepResult | undefined,
     cancelExecution: boolean
   ): void {
-    const live = state.live
-    if (!live) return
-    state.live = null
     const { attemptId, stepId } = live.record
+    if (state.live.get(stepId) === live) state.live.delete(stepId)
     const endedAt = this.deps.now()
     live.record.status = status
     live.record.endedAt = endedAt
@@ -1190,42 +1253,77 @@ export class WorkflowRunner {
     this.log(`step ${status}`, { runId, stepId })
   }
 
-  private pause(state: RunState, reason: WorkflowPausedReason): void {
+  private headReason(state: RunState): WorkflowPausedReason | undefined {
+    const head = state.pauses.values().next()
+    return head.done ? undefined : head.value
+  }
+
+  private pause(state: RunState, stepId: string, reason: WorkflowPausedReason): void {
+    if (state.pauses.get(stepId) === reason) return
     const { record } = state
-    if (record.status === 'paused' && record.pausedReason === reason) return
+    const before = record.status === 'paused' ? record.pausedReason : undefined
+    state.pauses.set(stepId, reason)
+    const head = this.headReason(state) ?? reason
     record.status = 'paused'
-    record.pausedReason = reason
-    const attempt = state.live?.record ?? record.attempts.at(-1)
-    if (attempt && (state.live || attempt.stepId === this.currentStep(state)?.id)) {
-      attempt.metrics.pauses.push({ reason, at: this.deps.now() })
+    record.pausedReason = head
+    const attempt = state.live.get(stepId)?.record ?? this.lastAttempt(state, stepId)
+    if (attempt) attempt.metrics.pauses.push({ reason, at: this.deps.now() })
+    this.syncCursor(state)
+    if (head === before) {
+      this.log(`step paused ${reason}`, { runId: record.runId, stepId })
+      return
     }
-    this.deps.store.dispatch({ type: 'workflows/runPaused', payload: { runId: record.runId, reason } })
-    this.log(`run paused ${reason}`, { runId: record.runId })
+    this.deps.store.dispatch({ type: 'workflows/runPaused', payload: { runId: record.runId, reason: head } })
+    this.log(`run paused ${head}`, { runId: record.runId })
   }
 
-  private resume(state: RunState): void {
+  private resume(state: RunState, stepId: string): void {
     const { record } = state
-    if (record.status !== 'paused') return
-    record.status = 'running'
-    delete record.pausedReason
-    this.deps.store.dispatch({ type: 'workflows/runResumed', payload: { runId: record.runId } })
-    this.log('run resumed', { runId: record.runId })
+    const removed = state.pauses.delete(stepId)
+    if (record.status !== 'paused' || (!removed && state.pauses.size > 0)) return
+    const head = this.headReason(state)
+    this.syncCursor(state)
+    if (head === undefined) {
+      record.status = 'running'
+      delete record.pausedReason
+      this.deps.store.dispatch({ type: 'workflows/runResumed', payload: { runId: record.runId } })
+      this.log('run resumed', { runId: record.runId })
+      return
+    }
+    if (head === record.pausedReason) return
+    record.pausedReason = head
+    this.deps.store.dispatch({ type: 'workflows/runPaused', payload: { runId: record.runId, reason: head } })
+    this.log(`run paused ${head}`, { runId: record.runId })
   }
 
-  private dequeue(runId: string): string | undefined {
-    const entry = this.queue.find((queued) => queued.runId === runId)
-    if (!entry) return undefined
+  private dequeue(runId: string, stepId: string): boolean {
+    const before = this.queue.length
+    this.queue = this.queue.filter((queued) => queued.runId !== runId || queued.stepId !== stepId)
+    return this.queue.length < before
+  }
+
+  private dequeueRun(runId: string): string[] {
+    const removed = this.queue.filter((queued) => queued.runId === runId).map((queued) => queued.stepId)
     this.queue = this.queue.filter((queued) => queued.runId !== runId)
-    return entry.stepId
+    return removed
   }
 
   private drain(): RunState[] {
     const launched: RunState[] = []
-    while (this.queue.length > 0 && this.agentSlots.size < this.agentCap()) {
-      const entry = this.queue.shift()
-      const state = entry && this.runs.get(entry.runId)
-      const step = state && this.currentStep(state)
-      if (!state || !step || state.live || step.id !== entry.stepId) continue
+    let i = 0
+    while (i < this.queue.length && this.agentSlots.size < this.agentCap()) {
+      const entry = this.queue[i]
+      const state = this.runs.get(entry.runId)
+      const step = state?.record.definition.steps.find((candidate) => candidate.id === entry.stepId)
+      if (!state || !step || !isRunnable(step) || state.stepStatus[step.id] !== 'queued' || state.live.has(step.id)) {
+        this.queue.splice(i, 1)
+        continue
+      }
+      if (state.live.size > 0 || state.pauses.size > 0) {
+        i += 1
+        continue
+      }
+      this.queue.splice(i, 1)
       this.launch(state, step, entry.resumeSessionId)
       launched.push(state)
     }

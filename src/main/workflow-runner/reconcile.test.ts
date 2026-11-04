@@ -527,3 +527,249 @@ describe('WorkflowRunner.resumeStep', () => {
     expect([...shell.shell.started, ...failed.agent.started]).toEqual([])
   })
 })
+
+describe('v1 records keep their cursor meaning', () => {
+  it('reconciles paused, interrupted, queued and mid-run records with the cursor on the paused or earliest open step', async () => {
+    const twoAgent = definitionOf(TWO_AGENT)
+    const ctx = boot([
+      record('run-int', {
+        definition: twoAgent,
+        steps: { plan: 'done', build: 'running' },
+        cursor: 1,
+        startedAt: 10,
+        attempts: [
+          attempt('att-p', { status: 'done', endedAt: 6 }),
+          attempt('att-b', { stepId: 'build', executionId: 'pty-dead' })
+        ]
+      }),
+      record('run-q', { definition: twoAgent, steps: { plan: 'queued', build: 'pending' }, startedAt: 20 }),
+      record('run-p', {
+        definition: twoAgent,
+        status: 'paused',
+        pausedReason: 'step-failed',
+        steps: { plan: 'done', build: 'failed' },
+        cursor: 1,
+        startedAt: 30,
+        attempts: [
+          attempt('att-p2', { status: 'done', endedAt: 6 }),
+          attempt('att-b2', { stepId: 'build', status: 'failed', endedAt: 7 })
+        ]
+      }),
+      record('run-m', {
+        definition: twoAgent,
+        steps: { plan: 'done', build: 'pending' },
+        cursor: 1,
+        startedAt: 40,
+        attempts: [attempt('att-p3', { status: 'done', endedAt: 6 })]
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+
+    expect(ctx.wf().runs['run-int']).toMatchObject({ status: 'paused', pausedReason: 'interrupted', cursorStepId: 'build' })
+    expect(ctx.stepStatus('run-int', 'build')).toBe('interrupted')
+    expect(ctx.lastPersisted('run-int')?.cursor).toBe(1)
+
+    expect(ctx.wf().runs['run-q']).toMatchObject({ status: 'running', cursorStepId: 'plan' })
+    expect(ctx.stepStatus('run-q', 'plan')).toBe('running')
+    expect(ctx.lastPersisted('run-q')?.cursor).toBe(0)
+
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'paused', pausedReason: 'step-failed', cursorStepId: 'build' })
+    expect(ctx.runner.getRunRecord('run-p')?.cursor).toBe(1)
+
+    expect(ctx.wf().runs['run-m']).toMatchObject({ status: 'running', cursorStepId: 'build' })
+    expect(ctx.stepStatus('run-m', 'build')).toBe('running')
+    expect(ctx.agent.started.map((started) => `${started.runId}/${started.stepId}`)).toEqual(['run-q/plan', 'run-m/build'])
+
+    expect(ctx.runner.markDone('run-p', 'build', { summary: 'fixed', fields: {} })).toEqual({ ok: true })
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'done', cursorStepId: 'build' })
+    expect(ctx.lastPersisted('run-p')?.cursor).toBe(2)
+  })
+})
+
+const FAN_IN = `name: fan-in
+steps:
+  - id: a
+    agent: claude
+    prompt: "a"
+  - id: b
+    agent: claude
+    prompt: "b"
+    needs: []
+  - id: c
+    agent: claude
+    prompt: "c"
+    needs: [a, b]
+`
+
+function fanInDefinition(): ResolvedDefinition {
+  const { definition } = validateWorkflowDefinition(FAN_IN, { supportedFeatures: ['nonlinear-needs'] })
+  if (!definition) throw new Error('fan-in fixture invalid')
+  return definition
+}
+
+function fanInRecord(runId: string, patch: Partial<WorkflowRunRecord> = {}): WorkflowRunRecord {
+  return record(runId, { definition: fanInDefinition(), steps: { a: 'pending', b: 'pending', c: 'pending' }, ...patch })
+}
+
+function runEvents(ctx: ReturnType<typeof boot>): string[] {
+  const seen: string[] = []
+  ctx.store.subscribe((event) => {
+    if (event.type === 'workflows/runPaused') seen.push(`runPaused ${event.payload.reason}`)
+    else if (event.type === 'workflows/runResumed') seen.push('runResumed')
+    else if (event.type === 'workflows/cursorChanged') seen.push(`cursorChanged ${event.payload.stepId}`)
+  })
+  return seen
+}
+
+const userDone = { summary: 'by hand', fields: {} }
+
+describe('WorkflowRunner per-step scheduling', () => {
+  it('tracks and removes two queue entries of one run independently', async () => {
+    const ctx = boot(
+      [
+        record('run-x', {
+          steps: { plan: 'running' },
+          startedAt: 5,
+          attempts: [attempt('att-x', { executionId: 'pty-live' })]
+        }),
+        fanInRecord('run-q', { steps: { a: 'queued', b: 'queued', c: 'pending' }, startedAt: 10 })
+      ],
+      { cap: 1, alive: new Set(['pty-live']) }
+    )
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.agent.started).toEqual([])
+    expect([ctx.stepStatus('run-q', 'a'), ctx.stepStatus('run-q', 'b')]).toEqual(['queued', 'queued'])
+
+    expect(ctx.runner.cancelStep('run-q', 'b')).toEqual({ ok: true })
+    expect([ctx.stepStatus('run-q', 'a'), ctx.stepStatus('run-q', 'b')]).toEqual(['queued', 'cancelled'])
+    expect(ctx.runner.skipStep('run-q', 'b')).toEqual({ ok: true })
+    expect(ctx.wf().runs['run-q'].status).toBe('running')
+    expect(ctx.stepStatus('run-q', 'a')).toBe('queued')
+
+    ctx.agent.emit({ type: 'exited', executionId: 'pty-live', code: 1 })
+    await flush()
+    expect(ctx.agent.started.map((started) => `${started.runId}/${started.stepId}`)).toEqual(['run-q/a'])
+
+    ctx.runner.complete(ctx.wf().runs['run-q'].steps.a.attemptIds[0], { status: 'done', summary: 'ok', completedBy: 'tool' })
+    await flush()
+    expect(ctx.agent.started.map((started) => `${started.runId}/${started.stepId}`)).toEqual(['run-q/a', 'run-q/c'])
+    expect(ctx.wf().runs['run-q'].cursorStepId).toBe('c')
+  })
+
+  it('resumes a run with two step pauses only after both clear, acting on a non-first step first', async () => {
+    const ctx = boot([
+      fanInRecord('run-p', {
+        steps: { a: 'running', b: 'running', c: 'pending' },
+        attempts: [
+          attempt('att-a', { stepId: 'a', executionId: 'pty-a' }),
+          attempt('att-b', { stepId: 'b', executionId: 'pty-b' })
+        ]
+      })
+    ])
+    const seen = runEvents(ctx)
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'paused', pausedReason: 'interrupted', cursorStepId: 'a' })
+    expect([ctx.stepStatus('run-p', 'a'), ctx.stepStatus('run-p', 'b')]).toEqual(['interrupted', 'interrupted'])
+    expect(seen).toEqual(['runPaused interrupted'])
+    const persisted = ctx.lastPersisted('run-p')
+    expect(persisted?.attempts.map((a) => a.metrics.pauses.map((pause) => pause.reason))).toEqual([
+      ['interrupted'],
+      ['interrupted']
+    ])
+
+    expect(ctx.runner.markDone('run-p', 'c', userDone)).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(ctx.runner.markDone('run-p', 'b', userDone)).toEqual({ ok: true })
+    expect(ctx.stepStatus('run-p', 'b')).toBe('done')
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+    expect(ctx.agent.started).toEqual([])
+
+    expect(ctx.runner.markDone('run-p', 'a', userDone)).toEqual({ ok: true })
+    await flush()
+    expect(seen).toEqual(['runPaused interrupted', 'runResumed', 'cursorChanged c'])
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['c'])
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'running', cursorStepId: 'c' })
+  })
+
+  it('moves the run reason and cursor to the next pause when the head pause clears', async () => {
+    const ctx = boot([
+      fanInRecord('run-p', {
+        status: 'paused',
+        pausedReason: 'step-failed',
+        steps: { a: 'failed', b: 'running', c: 'pending' },
+        attempts: [
+          attempt('att-a', { stepId: 'a', status: 'failed', endedAt: 6 }),
+          attempt('att-b', { stepId: 'b', executionId: 'pty-b' })
+        ]
+      })
+    ])
+    const seen = runEvents(ctx)
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'paused', pausedReason: 'step-failed', cursorStepId: 'a' })
+    expect(seen).toEqual([])
+    expect(ctx.lastPersisted('run-p')?.attempts[1].metrics.pauses.map((pause) => pause.reason)).toEqual(['interrupted'])
+
+    expect(ctx.runner.retryStep('run-p', 'b')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['b'])
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+
+    expect(ctx.runner.skipStep('run-p', 'a')).toEqual({ ok: true })
+    expect(seen).toEqual(['runResumed', 'cursorChanged b'])
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'running', cursorStepId: 'b' })
+  })
+
+  it('requeues a queued step of a paused run so it launches once the run resumes', async () => {
+    const ctx = boot([
+      fanInRecord('run-p', {
+        status: 'paused',
+        pausedReason: 'step-failed',
+        steps: { a: 'queued', b: 'cancelled', c: 'pending' },
+        cursor: 1
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.logs).toContain('[workflow] run reconciled paused {"runId":"run-p"}')
+    expect(ctx.agent.started).toEqual([])
+
+    expect(ctx.runner.skipStep('run-p', 'b')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started.map((started) => `${started.runId}/${started.stepId}`)).toEqual(['run-p/a'])
+    expect(ctx.stepStatus('run-p', 'a')).toBe('running')
+  })
+
+  it('reattaches every live running attempt of a run and pauses each on its own', async () => {
+    const ctx = boot(
+      [
+        fanInRecord('run-l', {
+          steps: { a: 'running', b: 'running', c: 'pending' },
+          attempts: [
+            attempt('att-a', { stepId: 'a', executionId: 'pty-a' }),
+            attempt('att-b', { stepId: 'b', executionId: 'pty-b' })
+          ]
+        })
+      ],
+      { alive: new Set(['pty-a', 'pty-b']) }
+    )
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.logs).toContain('[workflow] run reconciled attached {"runId":"run-l"}')
+    expect(ctx.runner.liveExecutionIds().sort()).toEqual(['pty-a', 'pty-b'])
+
+    ctx.agent.emit({ type: 'needsApproval', executionId: 'pty-b' })
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'paused', pausedReason: 'needs-approval', cursorStepId: 'b' })
+    ctx.agent.emit({ type: 'exited', executionId: 'pty-a', code: 1 })
+    expect(ctx.stepStatus('run-l', 'a')).toBe('failed')
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+
+    ctx.agent.emit({ type: 'promptSubmitted', executionId: 'pty-b' })
+    expect(ctx.wf().runs['run-l']).toMatchObject({ status: 'paused', pausedReason: 'step-failed', cursorStepId: 'a' })
+    expect(ctx.runner.getRunRecord('run-l')?.attempts.map((a) => a.metrics.pauses.map((pause) => pause.reason))).toEqual([
+      ['step-failed'],
+      ['needs-approval']
+    ])
+  })
+})
