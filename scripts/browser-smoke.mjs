@@ -567,6 +567,110 @@ async function flowSwapStep(page, backend) {
   })
 }
 
+const GATE_FEEDBACK = 'Tighten the draft from the browser smoke.'
+
+async function waitForGateAttempts(backend, runId, count) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const record = await backend.request('workflows:getRun', runId)
+    const drafts = record?.attempts.filter((a) => a.stepId === 'draft') ?? []
+    const settled = drafts.length === count && drafts[count - 1].status !== 'running'
+    if (record?.status === 'paused' && record.pausedReason === 'gate' && settled) return record
+    if (Date.now() > deadline) {
+      throw new Error(`run ${runId} is ${record?.status}/${record?.pausedReason} with ${drafts.length} draft attempts, expected ${count} at the gate`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+async function flowGate(page, backend) {
+  await scenario(page, 'gate', async (shot) => {
+    let runId = null
+    try {
+      await startFromLaunchSheet(page, 'browser-gate', shot)
+      await needsYouRow(page, 'browser-gate').filter({ hasText: 'Waiting at gate · draft' }).waitFor()
+      runId = await liveRunId(backend, 'browser-gate')
+      await waitForGateAttempts(backend, runId, 1)
+      await shot('needs-you-gate')
+
+      await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+      const section = page.getByRole('region', { name: 'Workflows', exact: true })
+      await section.waitFor()
+      const card = section.getByRole('region', { name: 'Active runs' }).getByRole('article', { name: 'browser-gate on repo', exact: true })
+      await card.getByRole('button', { name: 'Open run: browser-gate on repo', exact: true }).click()
+      const detail = section.getByRole('region', { name: 'browser-gate', exact: true })
+      await detail.waitFor()
+      const graph = detail.getByRole('group', { name: 'Workflow graph', exact: true })
+      await graph.getByRole('listitem', { name: 'draft: waiting at gate, needs you', exact: true }).waitFor()
+      await shot('detail-gate')
+
+      const opener = detail.getByRole('button', { name: 'Request changes: draft', exact: true })
+      await opener.click()
+      const dialog = page.getByRole('dialog', { name: 'Request changes to “draft”', exact: true })
+      await dialog.waitFor()
+      if (!(await focusInside(dialog))) throw new Error('request changes dialog opened without focus inside it')
+      const submit = dialog.getByRole('button', { name: 'Request changes', exact: true })
+      if (await submit.isEnabled()) throw new Error('Request changes is enabled with blank feedback')
+      await page.keyboard.press('Escape')
+      await dialog.waitFor({ state: 'detached' })
+      if (!(await opener.evaluate((el) => el === document.activeElement))) throw new Error('Escape did not return focus to Request changes')
+      log('gate: dialog submit disabled while blank; Escape closed it and focus returned to Request changes: draft')
+
+      await opener.click()
+      await dialog.waitFor()
+      await dialog.getByLabel('Feedback', { exact: true }).fill(GATE_FEEDBACK)
+      await shot('request-changes-dialog')
+      await submit.click()
+      await dialog.waitFor({ state: 'detached' })
+
+      const second = await waitForGateAttempts(backend, runId, 2)
+      const drafts = second.attempts.filter((a) => a.stepId === 'draft').map((a) => `${a.n}:${a.status}`)
+      if (drafts.join(',') !== '1:done,2:done') throw new Error(`draft attempts ${JSON.stringify(drafts)}, expected 1:done,2:done`)
+      const rows = detail.getByRole('list', { name: 'Attempt timeline', exact: true }).getByRole('button')
+      const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+      while ((await rows.count()) !== 2) {
+        if (Date.now() > deadline) throw new Error(`timeline shows ${await rows.count()} attempts, expected 2`)
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      await graph.getByRole('listitem', { name: 'draft: waiting at gate, needs you', exact: true }).waitFor()
+      log(`gate: run ${runId} paused at the gate again after Request changes (${drafts.join(', ')})`)
+      await shot('detail-attempt-2')
+
+      await detail.getByRole('button', { name: 'All runs', exact: true }).click()
+      await detail.waitFor({ state: 'detached' })
+      await section.getByRole('button', { name: 'Back', exact: true }).click()
+      await section.waitFor({ state: 'detached' })
+
+      const row = needsYouRow(page, 'browser-gate').filter({ hasText: 'Waiting at gate · draft' })
+      await row.waitFor()
+      await shot('needs-you-approve')
+      await row.getByRole('button', { name: 'Approve: draft, browser-gate on repo', exact: true }).click()
+      const record = await waitForRunStatus(backend, runId, 'done')
+      const publish = record.attempts.filter((a) => a.stepId === 'publish').map((a) => a.status)
+      if (record.steps.draft !== 'done' || publish.join(',') !== 'done') {
+        throw new Error(`after approve draft is ${record.steps.draft} and publish attempts ${JSON.stringify(publish)}`)
+      }
+      await row.waitFor({ state: 'detached' })
+      log(`gate: run ${runId} done after Approve from Needs you; publish ran once`)
+      await shot('run-done')
+    } finally {
+      if (runId) {
+        const record = await backend.request('workflows:getRun', runId)
+        if (record && ['queued', 'running', 'paused'].includes(record.status)) {
+          await backend.request('workflows:cancelRun', runId)
+          await waitForRunStatus(backend, runId, 'cancelled')
+        }
+      }
+      const tab = page.getByRole('button', { name: /^Close tab ⚙ draft/ })
+      if (await tab.count()) {
+        await tab.first().click()
+        await tab.waitFor({ state: 'detached' })
+        log('gate: closed the draft step tab so the multi-turn agent exits')
+      }
+    }
+  })
+}
+
 const BROWSER_REPO_FILE = '.harness/workflows/browser-repo.yaml'
 
 async function newestRepoRunId(backend, name) {
@@ -1078,6 +1182,7 @@ async function main() {
     await flowRunDetail(page, backend)
     await flowAttemptDiff(page, backend)
     await flowSwapStep(page, backend)
+    await flowGate(page, backend)
     await flowRepoTrust(page, backend)
     await flowInputPickers(page, backend)
     await flowLaunchOverrides(page, backend)

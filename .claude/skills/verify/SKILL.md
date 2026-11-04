@@ -68,6 +68,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `smoke-opencode` | `plan` (opencode, `read-only`, `model: fake/opencode-model`) then `echo` (shell) | opencode mode: needs `--agent harness-step`, loads the installed plugin, root `session.idle` -> `promptAsync` to `harness-step`, calls `complete_step` through the bridge in `OPENCODE_CONFIG_CONTENT` |
 | `smoke-diamond` | `plan` (claude, `read-only`) -> `left` and `right` (claude, `read-only`, both `needs: [plan]`) -> `join` (shell, `needs: [left, right]`, echoes both summaries) | default: calls `complete_step`; the branches run one at a time in definition order |
 | `smoke-gate` | `plan` (claude, `read-only`, `gate: approve`) then `echo` (shell) | `FAKE_AGENT_MODE=multi-turn`: stays alive after each turn and reads the next prompt (Request changes feedback) from the tab; the run pauses `gate` after every `plan` done |
+| `browser-gate` | `draft` (claude, `read-only`, `gate: approve`) then `publish` (shell `echo {{steps.draft.summary}}`) | `FAKE_AGENT_MODE=multi-turn`, like `smoke-gate`; the gate scenario closes the `⚙ draft · Claude` tab at the end so the agent exits |
 | `smoke-retry` | `check` (shell `test -f flag`) | none |
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
@@ -136,7 +137,9 @@ Stable handles (no `data-testid` convention in this repo):
 - Needs you: `getByRole('region', { name: /^NEEDS YOU/ })`, rows are
   `listitem`s reading `<worktree> · <reason> · <stepId>` (`Step failed`,
   `Cancelled by user`, …); action buttons are named
-  `<Action>: <workflow> on <worktree>` (`Jump to tab: browser-exit on repo`).
+  `<Action>: <workflow> on <worktree>` (`Jump to tab: browser-exit on repo`);
+  gate actions also name the step: `Approve: <step>, <workflow> on
+  <worktree>`, `Request changes: <step>, <workflow> on <worktree>`.
 - Step tab: label `⚙ <stepId> · Claude` (`⚙ <stepId> · Codex` for a codex
   step, `⚙ <stepId> · opencode` for an opencode step); close button
   `getByRole('button', { name: 'Close tab ⚙ hang · Claude' })`. Closing a
@@ -188,7 +191,7 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
 | `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record -> step tab per agent step; exit 0 on PASS |
-| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, repo trust, input pickers, launch overrides, library, definition editor, launch target); exit 0 on PASS |
+| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, gate, repo trust, input pickers, launch overrides, library, definition editor, launch target); exit 0 on PASS |
 
 ## Not covered
 

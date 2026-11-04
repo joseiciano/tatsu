@@ -26,8 +26,15 @@ selected attempt's full result and the files that attempt changed.
   (opens the inline Mark done form), `Skip`, `Cancel step` (confirm dialog,
   running attempt only), `Cancel run`, `Jump to tab` (when the selected
   attempt's tab is open), `Swap harness/model` (agent step whose latest
-  attempt is failed, cancelled or interrupted on a paused run). Step actions
-  are named `<label>: <step id>`. No gate actions.
+  attempt is failed, cancelled or interrupted on a paused run), and at a gate
+  `Approve` and `Request changes` (agent steps only; opens the Request
+  changes dialog, see [workflow-gates.md](workflow-gates.md)). Step actions
+  are named `<label>: <step id>`.
+- **Paused step in the graph**: while the run is paused, the graph node of
+  the cursor step gets a warning ring and its name gains `, needs you`
+  (`exit: failed, needs you`, `draft: waiting at gate, needs you`). A
+  cancelled run never shows the ring, and a step it left `awaiting-gate`
+  reads `cancelled` in the graph and the step strip.
 - **Swap harness/model**: modal `dialog` `Swap harness or model for
   “<step>”` (focus trap, Escape closes): select `Agent` (Claude Code,
   Codex, Opencode; current one marked `(current)`), text field `Model`
