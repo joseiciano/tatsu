@@ -59,6 +59,9 @@ steps:
     output:
       verdict: { enum: [pass, fail] }
     loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3 }
+  - id: each
+    kind: foreach
+    over: inputs.task
 `
 
 interface LogLine {
@@ -173,10 +176,10 @@ describe('createWorkflowDefsLoader().reload', () => {
 
     const invalid = byId['personal:plan-example']
     expect(invalid.name).toBe('plan-build-review')
-    expect(invalid.stepIds).toEqual(['plan', 'build', 'test', 'review'])
+    expect(invalid.stepIds).toEqual(['plan', 'build', 'test', 'review', 'each'])
     expect(invalid.hash).toBe(sha256(PLAN_EXAMPLE_YAML))
     expect(invalid.issues).toHaveLength(1)
-    expect(invalid.issues[0]).toContain('item_input')
+    expect(invalid.issues[0]).toContain('foreach')
   })
 
   it('falls back to the filename stem and no steps when the file does not parse', () => {

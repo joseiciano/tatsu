@@ -757,10 +757,17 @@ describe('validateWorkflowDefinition: unsupported features', () => {
     ])
   })
 
-  it('supports loop and on_loop by default, leaving only item_input in the plan example', () => {
+  it('supports loop, on_loop and item_input by default, so the plan example validates', () => {
     expect(WORKFLOW_FEATURES.loop.supported).toBe(true)
     expect(WORKFLOW_FEATURES.on_loop.supported).toBe(true)
-    expect(featuresOf(PLAN_EXAMPLE).map((d) => d.feature)).toEqual(['item_input'])
+    expect(WORKFLOW_FEATURES.item_input.supported).toBe(true)
+    expect(featuresOf(PLAN_EXAMPLE)).toEqual([])
+    expect(validateWorkflowDefinition(PLAN_EXAMPLE).definition?.item_input).toBe('task')
+  })
+
+  it('still rejects item.* without item_input by default', () => {
+    const text = 'name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: "{{item.title}}"\n'
+    expect(errorsOf(text).map((d) => d.code)).toEqual(['template-scope'])
   })
 
   it.each(['codex', 'opencode'])('accepts a %s agent step by default', (agent) => {
@@ -776,7 +783,8 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it('keeps parsed but withholds the definition when only feature errors remain', () => {
-    const result = validateWorkflowDefinition(PLAN_EXAMPLE)
+    const supportedFeatures = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'item_input')
+    const result = validateWorkflowDefinition(PLAN_EXAMPLE, { supportedFeatures })
     expect(result.parsed?.name).toBe('plan-build-review')
     expect(result.definition).toBeUndefined()
   })
