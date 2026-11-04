@@ -3,13 +3,18 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DefinitionEditor, NEW_WORKFLOW_TEMPLATE, type DefinitionEditorTarget } from '.'
-import type { EditorMarker } from '../../MonacoEditor/types'
+import type { EditorCompletionProvider, EditorMarker } from '../../MonacoEditor/types'
 import { WORKFLOW_NO_REPO_DIR_ERROR, type WorkflowDefinitionDetail, type WorkflowDefinitionSummary } from '../../../../shared/state/workflows'
 import { validateWorkflowDefinition } from '../../../../shared/workflow-def'
 
 const { backendApi, editorProbe, storeState } = vi.hoisted(() => ({
   backendApi: { getWorkflowDefinition: vi.fn(), saveWorkflowDefinition: vi.fn() },
-  editorProbe: { markers: undefined as readonly EditorMarker[] | undefined, onSave: undefined as (() => void) | undefined, mounts: 0 },
+  editorProbe: {
+    markers: undefined as readonly EditorMarker[] | undefined,
+    onSave: undefined as (() => void) | undefined,
+    completionProvider: undefined as EditorCompletionProvider | undefined,
+    mounts: 0
+  },
   storeState: { definitions: {} as Record<string, WorkflowDefinitionSummary> }
 }))
 
@@ -28,9 +33,11 @@ vi.mock('../../MonacoEditor', async () => {
       markers?: readonly EditorMarker[]
       onChange?: (value: string) => void
       onSave?: () => void
+      completionProvider?: EditorCompletionProvider
     }) => {
       editorProbe.markers = props.markers
       editorProbe.onSave = props.onSave
+      editorProbe.completionProvider = props.completionProvider
       useEffect(() => {
         editorProbe.mounts += 1
       }, [])
@@ -42,6 +49,8 @@ vi.mock('../../MonacoEditor', async () => {
 const VALID = 'name: ship\nsteps:\n  - id: build\n    kind: shell\n    run: echo build\n'
 const BAD_REF = 'name: ship\nsteps:\n  - id: build\n    kind: shell\n    run: echo {{steps.bogus.summary}}\n'
 const BROKEN = 'steps:\n  - id: "build\n'
+const TWO_STEPS = 'name: ship\ninputs:\n  task: { type: text }\nsteps:\n  - id: plan\n    prompt: plan {{inputs.task}}\n  - id: build\n    kind: shell\n    run: echo build\n'
+const STALE = 'Fix errors to update the graph'
 const REPO = '/repos/app'
 
 function summary(overrides: Partial<WorkflowDefinitionSummary>): WorkflowDefinitionSummary {
@@ -62,6 +71,7 @@ beforeEach(() => {
   backendApi.saveWorkflowDefinition.mockReset().mockResolvedValue({ defId: 'personal:ship' })
   editorProbe.markers = undefined
   editorProbe.onSave = undefined
+  editorProbe.completionProvider = undefined
   editorProbe.mounts = 0
   storeState.definitions = {}
   onBack.mockReset()
@@ -106,6 +116,20 @@ function button(name: string, scope: ParentNode = document): HTMLButtonElement {
 
 function queryButton(name: string, scope: ParentNode = document): HTMLButtonElement | undefined {
   return [...scope.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent?.trim()) === name)
+}
+
+function previewNodes(): string[] {
+  const preview = document.querySelector('section[aria-label="Graph preview"]')
+  if (!preview) throw new Error('no graph preview')
+  return [...preview.querySelectorAll('[role="group"][aria-label="Workflow graph"] [role="listitem"]')].map((n) => n.getAttribute('aria-label') ?? '')
+}
+
+function previewText(): string {
+  return document.querySelector('section[aria-label="Graph preview"]')?.textContent ?? ''
+}
+
+function complete(lineBefore: string): string[] {
+  return editorProbe.completionProvider?.provide(lineBefore)?.items.map((i) => i.label) ?? []
 }
 
 async function click(el: HTMLElement): Promise<void> {
@@ -263,5 +287,53 @@ describe('DefinitionEditor', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('no longer exists')
     await click(button('Back to Library'))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('previews the steps of the last valid parse and keeps them through a parse error', async () => {
+    vi.useFakeTimers()
+    await render({ kind: 'new' })
+    expect(previewNodes()).toEqual(['hello'])
+    type(TWO_STEPS)
+    expect(previewNodes()).toEqual(['hello'])
+    act(() => vi.advanceTimersByTime(250))
+    expect(previewNodes()).toEqual(['plan', 'build'])
+    expect(previewText()).not.toContain(STALE)
+    type(BROKEN)
+    act(() => vi.advanceTimersByTime(250))
+    expect(previewNodes()).toEqual(['plan', 'build'])
+    expect(previewText()).toContain(STALE)
+    type(TWO_STEPS.replace('id: build', 'id: ship'))
+    act(() => vi.advanceTimersByTime(250))
+    expect(previewNodes()).toEqual(['plan', 'ship'])
+    expect(previewText()).not.toContain(STALE)
+  })
+
+  it('shows only the fix message when the opened source never parsed', async () => {
+    const s = summary({})
+    backendApi.getWorkflowDefinition.mockResolvedValue(detail(s, BROKEN))
+    await render({ kind: 'edit', defId: s.id })
+    expect(previewText()).toContain(STALE)
+    expect(previewNodes()).toEqual([])
+    expect(complete('run: {{')).toEqual(['run.id', 'run.worktree', 'run.contextPath'])
+  })
+
+  it('completes template references from the last valid parse', async () => {
+    vi.useFakeTimers()
+    await render({ kind: 'new' })
+    type(TWO_STEPS)
+    act(() => vi.advanceTimersByTime(250))
+    expect(editorProbe.completionProvider?.triggerCharacters).toEqual(['{', '.'])
+    expect(editorProbe.completionProvider?.provide('    run: echo {{steps.pl')).toEqual({
+      start: 16,
+      items: [
+        { label: 'steps.plan.summary', detail: 'Summary of step "plan"' },
+        { label: 'steps.plan.status', detail: 'Status of step "plan"' }
+      ]
+    })
+    expect(complete('prompt: {{in')).toEqual(['inputs.task'])
+    expect(editorProbe.completionProvider?.provide('run: echo build')).toBeNull()
+    type(BROKEN)
+    act(() => vi.advanceTimersByTime(250))
+    expect(complete('{{steps.b')).toEqual(['steps.build.summary', 'steps.build.status'])
   })
 })

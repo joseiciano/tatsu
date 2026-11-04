@@ -3,7 +3,8 @@
 From the Workflows section's `Library` tab, `Edit <name>` or `New workflow`
 replaces the list with a Monaco YAML editor. The renderer runs the shared
 workflow validator on the draft and shows its diagnostics as squiggles and
-as a problems list. Save writes the file through `workflows:saveDefinition`.
+as a problems list, completes `{{` template references, and previews the
+step graph beside the editor. Save writes the file through `workflows:saveDefinition`.
 
 ## Sub-features
 
@@ -21,6 +22,22 @@ as a problems list. Save writes the file through `workflows:saveDefinition`.
   the nearest non-blank line when the position is past the end. The region
   `Problems` reads `No problems` or `N problems · cannot be run` with
   `Line L: <message>` items.
+- **Autocomplete**: inside an open `{{` on the current line (whitespace
+  after `{{` allowed), a completion provider registered for the editor's
+  own model only (other Monaco editors get nothing; disposed with the
+  editor) offers `inputs.<name>`, `steps.<id>.summary|status`,
+  `steps.<id>.data.<field>` (only for steps declaring `output`),
+  `run.id|worktree|contextPath`, and a bare `item.` only when `item_input`
+  is set. Items come from the last parse that had steps, filtered by
+  case-sensitive prefix, and replace everything typed after `{{`. Trigger
+  characters `{` and `.`; Ctrl+Space opens it too.
+- **Graph preview**: region `Graph preview` beside the editor (stacked
+  below it under the `md` breakpoint) renders the `Workflow graph` group
+  with one `listitem` per step (aria-label = step id) from the last
+  validated parse that had steps. When the current text has no parsed steps
+  (YAML or shape errors) it keeps the last graph and shows `Fix errors to
+  update the graph`; a source that never parsed shows only the message.
+  Template errors keep the parse, so the graph still updates.
 - **Save** (personal or new definitions; also Cmd/Ctrl-S): personal
   definitions save back by id; a New draft saves into the personal folder
   under the YAML `name:` (or the `File name` field when filled, required
@@ -59,24 +76,35 @@ as a problems list. Save writes the file through `workflows:saveDefinition`.
 - `journeys/workflow-flows.sh <state>` (runs `scripts/browser-smoke.mjs`):
   - `definition-editor` (after `library`, before `launch-target`): sidebar
     `Workflows` -> tab `Library` -> `New workflow` -> paste a valid
-    `zz-editor-smoke` source with step `draft` -> `Save` -> status `Saved
+    `zz-editor-smoke` source with steps `draft`, `verify` whose last line
+    ends `run: echo {{steps.dr` -> preview nodes `draft, verify` ->
+    Ctrl+Space -> `.suggest-widget.visible` lists `steps.draft.summary` and
+    `steps.draft.status` (no `inputs.`) -> Escape -> paste the valid
+    two-step source -> preview nodes `draft, verify`, no stale message ->
+    `Save` -> status `Saved
     to your personal workflows`, `$HARNESS_DATA_DIR/workflows/zz-editor-smoke.yaml`
     holds `id: draft`, heading `Edit zz-editor-smoke` -> `Back to Library`
-    (no discard dialog), the Personal row reads `1 step: draft` -> `Edit
+    (no discard dialog), the Personal row reads `2 steps: draft, verify` -> `Edit
     zz-editor-smoke` loads the saved source -> paste step `edited` with
     `run: echo {{steps.bogus.summary}}` -> `.squiggly-error` appears and
-    `Problems` names `"bogus"` -> paste the fix -> squiggle gone, `No
-    problems` -> `Save` (overwrites by id) -> file holds `id: edited` ->
-    `Back to Library` -> the row reads `1 step: edited` and the slice holds
-    one `zz-editor-smoke` (same id). `finally` deletes the file over WS
+    `Problems` names `"bogus"`, preview nodes `edited, verify` -> paste a
+    YAML syntax error -> `Fix errors to update the graph` with nodes still
+    `edited, verify` -> paste the fix -> squiggle gone, `No
+    problems`, stale message gone -> `Save` (overwrites by id) -> file holds `id: edited` ->
+    `Back to Library` -> the row reads `2 steps: edited, verify` and the
+    slice holds one `zz-editor-smoke` (same id, steps `edited,verify`). `finally` deletes the file over WS
     (`workflows:deleteDefinition`) and closes the section, discarding a
     dirty draft if needed.
 
 End state that proves it: `definition-editor-0*.png` in
-`$EVIDENCE/workflow-flows/` (`04-marker` shows the squiggle), the journal
-lines `definition-editor: unknown step ref marked (.squiggly-error) …`,
-`marker cleared after the fix` and `Save from Edit overwrote … Library row
-reads "1 step: edited"`, and no `zz-editor-smoke.yaml` left in the data dir.
+`$EVIDENCE/workflow-flows/` (`02-autocomplete` shows the suggest widget,
+`03-drafted` the two-node preview, `05-marker` the squiggle,
+`06-preview-stale` the kept graph with the fix message), the journal lines
+`definition-editor: {{steps.dr completes to steps.draft.summary …`, `graph
+preview shows a node per step: draft, verify`, `unknown step ref marked
+(.squiggly-error) …`, `YAML syntax error keeps the last graph (edited,
+verify) …`, `marker cleared after the fix` and `Save from Edit overwrote …
+Library row reads "2 steps: edited, verify"`, and no `zz-editor-smoke.yaml` left in the data dir.
 
 ## Gotchas
 
@@ -94,5 +122,11 @@ reads "1 step: edited"`, and no `zz-editor-smoke.yaml` left in the data dir.
 - The `Saved to …` status is hidden while the draft is dirty and shows the
   same text after every save, so the scenario waits for the file content
   rather than the status after the second Save.
+- Monaco's default completion range stops at `.`, so the provider sets an
+  explicit range from just after `{{` (and its whitespace) to the cursor;
+  without it `{{steps.pl` would become `steps.steps.plan.summary`.
+- Completion providers register per language, not per model: the provider
+  checks `model === editor.getModel()` so the Settings/File view YAML
+  editors get nothing.
 - Saving new content to a trusted repo definition leaves trust on the old
   hash, so the saved version is untrusted for this user too.

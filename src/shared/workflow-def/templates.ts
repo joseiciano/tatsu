@@ -4,7 +4,7 @@ const OPEN = '{{'
 const CLOSE = '}}'
 const SEGMENT = /^[A-Za-z][A-Za-z0-9_-]*$/
 const ROOTS = ['inputs', 'steps', 'run', 'item'] as const
-const RUN_FIELDS: readonly TemplateRunField[] = ['id', 'worktree', 'contextPath']
+export const TEMPLATE_RUN_FIELDS: readonly TemplateRunField[] = ['id', 'worktree', 'contextPath']
 const STEP_PROPERTIES = ['summary', 'status', 'data'] as const
 const LITERAL_NOTE = 'a literal "{{" is not supported in v1'
 
@@ -32,7 +32,7 @@ function parseReference(raw: string): Parsed {
   }
   if (root === 'run') {
     const field = rest[0]
-    if (rest.length > 1 || !includes(RUN_FIELDS, field)) return { message: `Unknown run property "${rest.join('.')}"; use "id", "worktree" or "contextPath"` }
+    if (rest.length > 1 || !includes(TEMPLATE_RUN_FIELDS, field)) return { message: `Unknown run property "${rest.join('.')}"; use "id", "worktree" or "contextPath"` }
     return { ref: { root, field } }
   }
   const [step, property, field, ...extra] = rest

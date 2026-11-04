@@ -2,10 +2,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FolderGit2, Loader2, Save } from 'lucide-react'
 import { useBackend } from '../../../backend'
 import { useWorkflowDefinition } from '../../../store'
-import { MonacoEditor } from '../../MonacoEditor'
+import { MonacoEditor, type EditorCompletionProvider } from '../../MonacoEditor'
 import { WORKFLOW_NO_REPO_DIR_ERROR, type WorkflowSaveDefinitionPayload } from '../../../../shared/state/workflows'
-import { validateWorkflowDefinition, type WorkflowValidationResult } from '../../../../shared/workflow-def'
+import { validateWorkflowDefinition, type ParsedWorkflowDefinition, type WorkflowValidationResult } from '../../../../shared/workflow-def'
 import { diagnosticsToMarkers, splitLines } from '../diagnostics-to-markers'
+import { openTemplatePrefix, templateCompletions } from '../template-completions'
+import { WorkflowGraph } from '../WorkflowGraph'
 import { ConfirmDialog } from './ConfirmDialog'
 import {
   errorCount,
@@ -25,6 +27,19 @@ export interface DefinitionEditorFormProps {
   onBack: () => void
   onDirtyChange?: (dirty: boolean) => void
 }
+
+interface Validated {
+  source: string
+  result: WorkflowValidationResult
+  lastGood: ParsedWorkflowDefinition | undefined
+}
+
+function validate(source: string, previous: ParsedWorkflowDefinition | undefined): Validated {
+  const result = validateWorkflowDefinition(source)
+  return { source, result, lastGood: result.parsed && result.parsed.steps.length > 0 ? result.parsed : previous }
+}
+
+const TEMPLATE_TRIGGERS = ['{', '.'] as const
 
 interface PendingSave {
   payload: WorkflowSaveDefinitionPayload
@@ -64,10 +79,7 @@ export function DefinitionEditorForm({
   const [draft, setDraft] = useState(initialSource)
   const [baseline, setBaseline] = useState(initialSource)
   const [fileName, setFileName] = useState('')
-  const [validated, setValidated] = useState<{ source: string; result: WorkflowValidationResult }>(() => ({
-    source: initialSource,
-    result: validateWorkflowDefinition(initialSource)
-  }))
+  const [validated, setValidated] = useState<Validated>(() => validate(initialSource, undefined))
   const [pending, setPending] = useState<PendingSave | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,13 +102,25 @@ export function DefinitionEditorForm({
 
   useEffect(() => {
     if (validated.source === draft) return
-    const timer = setTimeout(() => setValidated({ source: draft, result: validateWorkflowDefinition(draft) }), VALIDATE_DEBOUNCE_MS)
+    const timer = setTimeout(() => setValidated((prev) => validate(draft, prev.lastGood)), VALIDATE_DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [draft, validated.source])
 
   const diagnostics = validated.result.diagnostics
   const markers = useMemo(() => diagnosticsToMarkers(diagnostics, splitLines(validated.source)), [diagnostics, validated.source])
   const parsedName = validated.result.parsed?.name ?? ''
+  const lastGood = validated.lastGood
+  const graphStale = !validated.result.parsed?.steps.length
+  const completionProvider = useMemo<EditorCompletionProvider>(
+    () => ({
+      triggerCharacters: TEMPLATE_TRIGGERS,
+      provide: (lineBefore) => {
+        const open = openTemplatePrefix(lineBefore)
+        return open ? { start: open.start, items: templateCompletions(lastGood, open.prefix) } : null
+      }
+    }),
+    [lastGood]
+  )
 
   const performSave = useCallback(
     (payload: WorkflowSaveDefinitionPayload) => {
@@ -236,15 +260,26 @@ export function DefinitionEditorForm({
       <p role="status" className="text-xs text-success">
         {dirty ? '' : status ?? ''}
       </p>
-      <div className="h-[60vh] min-h-64 rounded border border-border overflow-hidden">
-        <MonacoEditor
-          value={initialSource}
-          filePath="workflow.yaml"
-          markers={markers}
-          ariaLabel="Workflow definition YAML"
-          onChange={setDraft}
-          onSave={saveOwn}
-        />
+      <div className="flex flex-col gap-3 md:flex-row">
+        <div className="h-[60vh] min-h-64 min-w-0 flex-1 rounded border border-border overflow-hidden">
+          <MonacoEditor
+            value={initialSource}
+            filePath="workflow.yaml"
+            markers={markers}
+            ariaLabel="Workflow definition YAML"
+            completionProvider={completionProvider}
+            onChange={setDraft}
+            onSave={saveOwn}
+          />
+        </div>
+        <section
+          aria-label="Graph preview"
+          className="flex min-w-0 flex-col gap-1 rounded border border-border p-2 md:h-[60vh] md:w-72 md:shrink-0 lg:w-96 md:overflow-auto"
+        >
+          <h3 className="text-xs font-medium text-dim">Graph preview</h3>
+          {graphStale && <p className="text-xs text-warning">Fix errors to update the graph</p>}
+          {lastGood && <WorkflowGraph steps={lastGood.steps} />}
+        </section>
       </div>
       <section aria-label="Problems" className="flex flex-col gap-1">
         <h3 className="text-xs font-medium text-dim">
