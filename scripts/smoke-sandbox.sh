@@ -178,6 +178,17 @@ steps:
     timeout: 2
     prompt: "FAKE_AGENT_MODE=hang Stay alive past the step timeout."
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-budget.yaml" <<'YAML'
+name: smoke-budget
+steps:
+  - id: spend
+    agent: claude
+    permissions: read-only
+    prompt: "FAKE_AGENT_COMPLETE_DELAY_MS=500 Reply PLAN-OK and call complete_step."
+  - id: settle
+    kind: shell
+    run: echo PUBLISHED {{steps.spend.summary}}
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-gate.yaml" <<'YAML'
 name: smoke-gate
 steps:

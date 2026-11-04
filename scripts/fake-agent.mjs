@@ -61,6 +61,10 @@
 // server deletes a terminal's status file when its process exits, so a Stop
 // line written just before exit can go unread.
 //
+// `FAKE_AGENT_COMPLETE_DELAY_MS=<n>` (Claude kind only, n up to 5000) waits
+// n ms between the pre-complete Stop hook and complete_step, as a real model
+// takes time to issue its next tool call, so the server reads that Stop first.
+//
 // FAKE_AGENT_KIND=codex (set by the `codex` shim) stands in for the `codex`
 // CLI instead: it reads the harness-control MCP server from the
 // `-c mcp_servers.harness-control.*` TOML overrides, requires the sandbox,
@@ -282,6 +286,11 @@ function dataMarker(prompt, name) {
   } catch (err) {
     return fail(`${name} is not valid JSON: ${err.message}`)
   }
+}
+
+function completeDelayMs(prompt) {
+  const match = /FAKE_AGENT_COMPLETE_DELAY_MS=(\d{1,4})\b/.exec(prompt ?? '')
+  return match ? Math.min(Number(match[1]), 5000) : 0
 }
 
 function turnData(prompt, turn) {
@@ -586,6 +595,8 @@ async function main() {
       process.exit(1)
     }
 
+    const delay = completeDelayMs(prompt)
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
     await completeStep(server, summary, data)
 
     appendUsage(transcript, summary, POST_COMPLETE_USAGE)

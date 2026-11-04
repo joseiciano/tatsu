@@ -15,6 +15,8 @@
 // test, read-only multi-turn Claude review looping back to build until its
 // verdict is pass), `smoke-when` (read-only Claude review reporting verdict
 // pass, a Claude fix step conditioned on verdict fail, shell join),
+// `smoke-budget` (read-only Claude spend step that waits before
+// complete_step, then shell settle step),
 // `smoke-retry` (one
 // `test -f flag` shell step) and `smoke-full`, plus the committed repo
 // definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
@@ -143,10 +145,10 @@ function waitFor(label, check, timeoutMs = SCENARIO_TIMEOUT_MS) {
 
 // The runner refuses starts until its boot reconcile settles (up to 10 s);
 // no state event marks that, so `starting` is retried on a short backoff.
-async function startRun(defId, worktreePath) {
+async function startRun(defId, worktreePath, extra = {}) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   for (;;) {
-    const response = await request('workflows:startRun', { defId, worktreePath, inputs: {} })
+    const response = await request('workflows:startRun', { defId, worktreePath, inputs: {}, ...extra })
     if (response && typeof response.runId === 'string') return response.runId
     if (response?.error !== STARTING_ERROR || Date.now() > deadline) fail(`startRun ${defId} refused`, response)
     await new Promise((resolve) => setTimeout(resolve, 200))
@@ -407,6 +409,41 @@ async function scenarioTimeout(worktreePath) {
   }
 }
 
+async function scenarioBudget(worktreePath) {
+  const runId = await startRun('personal:smoke-budget', worktreePath, { budgetUsd: 0.01 })
+  let settled = false
+  try {
+    const paused = await waitFor(`run ${runId} to pause budget with spend done`, async () => {
+      const record = await request('workflows:getRun', runId)
+      if (!record) return undefined
+      if (['done', 'failed', 'cancelled'].includes(record.status)) fail(`budget scenario run ended ${record.status}`, record)
+      return record.status === 'paused' && record.steps.spend === 'done' ? record : undefined
+    })
+    expectThat(paused.pausedReason === 'budget', `budget scenario paused ${paused.pausedReason}`, paused)
+    expectThat(paused.budgetUsd === 0.01, `budget scenario record budget ${paused.budgetUsd}`, paused)
+    const [spend] = attemptsFor(paused, 'spend')
+    expectThat(spend?.status === 'done' && spend.metrics.completedBy === 'tool', 'budget spend attempt was not completed by the tool', paused)
+    expectThat((spend.metrics.costUsd ?? 0) >= 0.06, `budget spend cost ${spend.metrics.costUsd}`, paused)
+    expectThat(paused.steps.settle === 'pending' && attemptsFor(paused, 'settle').length === 0, 'budget settle step started past the cap', paused)
+
+    const raised = await request('workflows:setBudget', runId, 1)
+    expectThat(raised?.ok === true, 'setBudget refused', raised)
+    const record = await runSettled(runId)
+    expectThat(record.status === 'done', `budget scenario ended ${record.status}/${record.pausedReason ?? ''} after setBudget`, record)
+    settled = true
+    expectThat(record.budgetUsd === 1, `budget scenario final budget ${record.budgetUsd}`, record)
+    const [settle] = attemptsFor(record, 'settle')
+    expectThat(settle?.status === 'done' && settle.result?.summary?.includes('PUBLISHED'), 'budget settle did not run', record)
+    console.log(
+      'scenario budget OK: run=%s paused budget at $%s of $0.01 with spend done and settle pending, setBudget 1 finished it',
+      runId,
+      spend.metrics.costUsd.toFixed(4)
+    )
+  } finally {
+    if (!settled) await request('workflows:cancelRun', runId)
+  }
+}
+
 async function scenarioGate(worktreePath) {
   const runId = await startRun('personal:smoke-gate', worktreePath)
   const first = await runSettled(runId)
@@ -599,6 +636,7 @@ async function main() {
     'personal:smoke-diamond',
     'personal:smoke-parallel',
     'personal:smoke-timeout',
+    'personal:smoke-budget',
     'personal:smoke-gate',
     'personal:smoke-loop',
     'personal:smoke-when',
@@ -627,6 +665,7 @@ async function main() {
   await scenarioDiamond(worktreePath)
   await scenarioParallel(worktreePath)
   await scenarioTimeout(worktreePath)
+  await scenarioBudget(worktreePath)
   await scenarioGate(worktreePath)
   await scenarioLoop(worktreePath)
   await scenarioWhen(worktreePath)
