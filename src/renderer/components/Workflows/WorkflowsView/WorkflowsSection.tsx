@@ -1,7 +1,10 @@
 import { useId, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 
-export const WORKFLOWS_TABS = [{ id: 'runs', label: 'Runs' }] as const
+export const WORKFLOWS_TABS = [
+  { id: 'runs', label: 'Runs' },
+  { id: 'library', label: 'Library' }
+] as const
 
 export type WorkflowsTab = (typeof WORKFLOWS_TABS)[number]['id']
 
