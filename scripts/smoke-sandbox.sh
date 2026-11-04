@@ -56,6 +56,8 @@ smoke_sandbox() {
   mkdir -p "$scratch/repo/.harness/workflows"
   git -C "$scratch/repo" init -q -b main
   printf 'smoke\n' > "$scratch/repo/README.md"
+  mkdir -p "$scratch/repo/docs"
+  printf 'picker target\n' > "$scratch/repo/docs/picker-target.md"
   cat > "$scratch/repo/.harness/workflows/smoke-repo.yaml" <<'YAML'
 name: smoke-repo
 steps:
@@ -70,7 +72,7 @@ steps:
     kind: shell
     run: sleep 3
 YAML
-  git -C "$scratch/repo" add README.md .harness/workflows
+  git -C "$scratch/repo" add README.md docs .harness/workflows
   git -C "$scratch/repo" commit -q -m init
   WORKTREE="$(git -C "$scratch/repo" rev-parse --show-toplevel)"
 
@@ -164,6 +166,16 @@ steps:
     agent: claude
     permissions: read-only
     prompt: "FAKE_AGENT_MODE_CLAUDE=exit-no-complete Fail on Claude, complete after a swap to Codex."
+YAML
+  cat > "$HARNESS_DATA_DIR/workflows/browser-file.yaml" <<'YAML'
+name: browser-file
+inputs:
+  target: { type: file }
+  ticket: { type: issue }
+steps:
+  - id: check
+    kind: shell
+    run: test -f {{inputs.target}}
 YAML
   cat > "$HARNESS_DATA_DIR/workflows/browser-diff.yaml" <<'YAML'
 name: browser-diff
