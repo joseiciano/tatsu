@@ -455,6 +455,59 @@ describe('workflow step tab persistence', () => {
   })
 })
 
+describe('PanesFSM.setTabWorkflow', () => {
+  const workflow = { runId: 'run-1', stepId: 'plan', attemptId: 'att-1' }
+  const tree: PaneLeaf = {
+    type: 'leaf',
+    id: 'pane-1',
+    tabs: [
+      { id: 'step-agent', type: 'agent', agentKind: 'claude', label: 'Claude', workflow },
+      { id: 'user-shell', type: 'shell', label: 'Shell' }
+    ],
+    activeTabId: 'step-agent'
+  }
+
+  it('re-points a step tab at the live attempt, keeps other tabs and persists', () => {
+    const persist = vi.fn()
+    const { fsm, store } = buildFSM({ persist })
+    seedLeaf(store, '/wt/step', tree)
+    const events: StateEvent[] = []
+    store.subscribe((event) => events.push(event))
+
+    expect(fsm.setTabWorkflow('/wt/step', 'step-agent', { ...workflow, attemptId: 'att-2' })).toBe(true)
+
+    expect(events.map((event) => event.type)).toEqual(['terminals/panesForWorktreeChanged'])
+    const [agent, shell] = allTabs(store, '/wt/step')
+    expect(agent.workflow).toEqual({ ...workflow, attemptId: 'att-2' })
+    expect(shell).toBe(tree.tabs[1])
+    expect(persist).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['an unknown tab', '/wt/step', 'nope'],
+    ['a tab without a workflow tag', '/wt/step', 'user-shell'],
+    ['an unknown worktree', '/wt/other', 'step-agent']
+  ])('leaves the tree untouched for %s', (_name, wtPath, tabId) => {
+    const persist = vi.fn()
+    const { fsm, store } = buildFSM({ persist })
+    seedLeaf(store, '/wt/step', tree)
+    const before = store.getSnapshot().state.terminals.panes
+
+    expect(fsm.setTabWorkflow(wtPath, tabId, { ...workflow, attemptId: 'att-2' })).toBe(false)
+
+    expect(store.getSnapshot().state.terminals.panes).toBe(before)
+    expect(persist).not.toHaveBeenCalled()
+  })
+
+  it('does not dispatch when the tab already points at that attempt', () => {
+    const { fsm, store } = buildFSM()
+    seedLeaf(store, '/wt/step', tree)
+    const before = store.getSnapshot().state.terminals.panes
+    expect(fsm.setTabWorkflow('/wt/step', 'step-agent', { ...workflow })).toBe(true)
+    expect(store.getSnapshot().state.terminals.panes).toBe(before)
+  })
+})
+
 describe('PanesFSM.addTab', () => {
   it('adopts a sleeping tree instead of replacing it', async () => {
     const persisted: Record<string, PaneNode>[] = []
