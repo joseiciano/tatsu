@@ -1053,6 +1053,7 @@ async function flowInputPickers(page, backend) {
 }
 
 const OVERRIDE_MODEL = 'fake/opencode-model'
+const BUDGET_ALL_OPENCODE_NOTICE = "Every agent step runs on opencode, which reports no cost, so this run can't reach its budget."
 
 async function flowLaunchOverrides(page, backend) {
   await scenario(page, 'launch-overrides', async (shot) => {
@@ -1072,9 +1073,24 @@ async function flowLaunchOverrides(page, backend) {
     await sheet.getByLabel('Model for plan', { exact: true }).fill(OVERRIDE_MODEL)
     await sheet.getByRole('button', { name: 'Overrides (1 changed)', exact: true }).waitFor()
     await shot('overrides')
+    const budget = sheet.getByLabel('Budget (USD)', { exact: true })
+    if ((await budget.inputValue()) !== '') throw new Error('Budget (USD) is not blank by default')
+    await sheet.getByText(BUDGET_ALL_OPENCODE_NOTICE, { exact: true }).waitFor()
+    const start = sheet.getByRole('button', { name: 'Start', exact: true })
+    await budget.fill('0')
+    await sheet.getByText('Budget must be more than $0', { exact: true }).waitFor()
+    await sheet.getByText('Enter a valid budget', { exact: true }).waitFor()
+    if (!(await start.isDisabled())) throw new Error('Start is enabled with a budget of 0')
+    if ((await budget.getAttribute('aria-invalid')) !== 'true') throw new Error('Budget (USD) is not marked invalid at 0')
+    await sheet.getByRole('button', { name: 'Overrides (1 changed)', exact: true }).waitFor()
+    await shot('budget-invalid')
+    await budget.fill('5')
+    await sheet.getByRole('button', { name: 'Overrides (2 changed)', exact: true }).waitFor()
+    if (await start.isDisabled()) throw new Error('Start is disabled with a budget of 5')
+    await shot('budget')
     const opencodeTabs = page.getByRole('button', { name: 'Close tab ⚙ plan · opencode', exact: true })
     const before = await opencodeTabs.count()
-    await sheet.getByRole('button', { name: 'Start', exact: true }).click()
+    await start.click()
     await sheet.waitFor({ state: 'detached' })
 
     const deadline = Date.now() + SCENARIO_TIMEOUT_MS
@@ -1086,7 +1102,7 @@ async function flowLaunchOverrides(page, backend) {
     await shot('opencode-tab')
     const runId = await newestPersonalRunId(backend, 'smoke')
     await waitForRunStatus(backend, runId, 'done')
-    const record = await waitForDiskRecord(runId, (d) => d.status === 'done')
+    const record = await waitForDiskRecord(runId, (d) => d.status === 'done' && d.budgetUsd === 5)
     if (record.overriddenFrom?.plan?.agent !== 'claude') {
       throw new Error(`overriddenFrom ${JSON.stringify(record.overriddenFrom)}, expected the original claude plan step`)
     }
@@ -1096,7 +1112,7 @@ async function flowLaunchOverrides(page, backend) {
     }
     const attempts = record.attempts.filter((a) => a.stepId === 'plan').map((a) => `${a.n}:${a.agent}:${a.status}`)
     if (attempts.join(',') !== '1:opencode:done') throw new Error(`plan attempts ${JSON.stringify(attempts)}, expected 1:opencode:done`)
-    log(`launch-overrides: run ${runId} done with plan overridden from claude to opencode (${attempts.join(', ')})`)
+    log(`launch-overrides: run ${runId} done with budgetUsd ${record.budgetUsd} and plan overridden from claude to opencode (${attempts.join(', ')})`)
     await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
     await shot('run-done')
     await launchAutopilot(page, backend, dataDir, shot)
