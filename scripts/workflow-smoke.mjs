@@ -10,7 +10,9 @@
 // shell step), `smoke-codex` (Codex step then shell step), `smoke-opencode`
 // (opencode step then shell step), `smoke-diamond` (Claude plan, two
 // read-only Claude branches, shell join), `smoke-gate` (gated multi-turn
-// Claude plan then shell step), `smoke-retry` (one
+// Claude plan then shell step), `smoke-loop` (multi-turn Claude build, shell
+// test, read-only multi-turn Claude review looping back to build until its
+// verdict is pass), `smoke-retry` (one
 // `test -f flag` shell step) and `smoke-full`, plus the committed repo
 // definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
@@ -335,6 +337,35 @@ async function scenarioGate(worktreePath) {
   )
 }
 
+async function scenarioLoop(worktreePath) {
+  const runId = await startRun('personal:smoke-loop', worktreePath)
+  const record = await runSettled(runId)
+  expectThat(record.status === 'done', `loop scenario run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+  const [build, test, review] = ['build', 'test', 'review'].map((stepId) => attemptsFor(record, stepId))
+  for (const [stepId, attempts] of Object.entries({ build, test, review })) {
+    expectThat(
+      attempts.length === 2 && attempts.every((attempt) => attempt.status === 'done'),
+      `loop ${stepId} has ${attempts.length} attempts, expected two done`,
+      record
+    )
+  }
+  expectThat(
+    typeof build[0].executionId === 'string' && build[1].executionId === build[0].executionId,
+    'the second build attempt did not continue on the first build terminal',
+    record
+  )
+  expectThat(review[1].executionId === review[0].executionId, 'the second review attempt did not continue on the first review terminal', record)
+  expectThat(test[1].executionId !== test[0].executionId, 'the second test pass reused the first shell terminal', record)
+  expectThat(review[0].result?.data?.verdict === 'fail' && review[1].result?.data?.verdict === 'pass', 'review verdicts were not fail then pass', record)
+  expectThat(build[1].startedAt >= review[0].endedAt, 'build pass 2 started before the failing review ended', record)
+  expectThat(test[1].startedAt >= build[1].endedAt && review[1].startedAt >= test[1].endedAt, 'pass 2 did not run build -> test -> review', record)
+  console.log(
+    'scenario loop OK: run=%s done; review fail -> build attempt 2 on terminal %s -> test -> review pass',
+    runId,
+    build[0].executionId
+  )
+}
+
 async function scenarioFailRetry(worktreePath) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const runId = await startRun('personal:smoke-retry', worktreePath)
@@ -427,6 +458,7 @@ async function main() {
     'personal:smoke-opencode',
     'personal:smoke-diamond',
     'personal:smoke-gate',
+    'personal:smoke-loop',
     'personal:smoke-retry',
     'personal:smoke-full'
   ]
@@ -451,6 +483,7 @@ async function main() {
   await scenarioOpencodeThenShell(worktreePath)
   await scenarioDiamond(worktreePath)
   await scenarioGate(worktreePath)
+  await scenarioLoop(worktreePath)
   await scenarioFailRetry(worktreePath)
   await scenarioRepoTrust(worktreePath)
   ws.close()

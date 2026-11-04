@@ -162,6 +162,24 @@ steps:
     kind: shell
     run: echo {{steps.plan.summary}}
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-loop.yaml" <<'YAML'
+name: smoke-loop
+steps:
+  - id: build
+    agent: claude
+    prompt: "FAKE_AGENT_MODE=multi-turn Reply PLAN-OK and call complete_step."
+  - id: test
+    kind: shell
+    run: echo {{steps.build.summary}}
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: 'FAKE_AGENT_MODE=multi-turn FAKE_AGENT_DATA_1={"verdict":"fail"} Review the build and call complete_step.'
+    on_loop: 'FAKE_AGENT_DATA_2={"verdict":"pass"} Review the build again and call complete_step.'
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3 }
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-retry.yaml" <<'YAML'
 name: smoke-retry
 steps:
