@@ -141,6 +141,15 @@ interface QueueEntry extends LaunchOptions {
   continuation?: WorkflowContinuation
 }
 
+type StaticStartCheck =
+  | { ok: false; reason: StartRefusal }
+  | {
+      ok: true
+      detail: WorkflowDefinitionDetail
+      applied: Extract<AppliedStepOverrides, { ok: true }>
+      chained: StartRunRequest
+    }
+
 function capSummary(text: string): string {
   if (text.length <= STEP_SUMMARY_MAX_CHARS) return text
   const last = text.charCodeAt(STEP_SUMMARY_MAX_CHARS - 1)
@@ -440,21 +449,9 @@ export class WorkflowRunner {
   }
 
   async start(request: StartRunRequest): Promise<StartRunResult> {
-    if (!this.labsOn()) return this.refuse('labs-off')
-    if (!this.ready) return this.refuse('starting')
-    const detail = this.deps.loader.getDefinition(request.defId)
-    if (!detail) return this.refuse('unknown-definition')
-    if (detail.summary.scope === 'repo' && !this.trusted(detail.summary.id, detail.summary.hash)) {
-      return this.refuse('untrusted-definition')
-    }
-    if (!detail.definition) return this.refuse('invalid-definition')
-    if (!detail.definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
-    const applied = applyOverrides(detail.definition, request.overrides)
-    if (!applied.ok) return this.refuse(applied.reason)
-    const chained = chainedRequest(applied.definition, request)
-    if (!chained) return this.refuse('invalid-inputs')
-    const badInputs = inputsRefusal(applied.definition, chained.inputs)
-    if (badInputs) return this.refuse(badInputs)
+    const checked = this.staticCheck(request)
+    if (!checked.ok) return this.refuse(checked.reason)
+    const { detail, applied, chained } = checked
     const placement = this.placementRefusal(chained.worktreePath, applied.definition)
     if (placement) return this.refuse(placement)
     const lookups = trustLookups(applied.definition, chained.inputs, chained.chain)
@@ -463,6 +460,36 @@ export class WorkflowRunner {
         ? []
         : await Promise.all(lookups.map((lookup) => this.inputVerdict(chained.worktreePath, lookup)))
     return this.createRun(chained, detail, applied, lookups, verdicts)
+  }
+
+  checkStart(request: StartRunRequest): StartRefusal | null {
+    const checked = this.staticCheck(request)
+    if (!checked.ok) return checked.reason
+    const { steps } = checked.applied.definition
+    const hooks = this.agentHooksRefusal(steps)
+    if (hooks) return hooks
+    if (parallelWriterPairs(steps).length > 0) return 'parallel-writer'
+    const needsFull = steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
+    return needsFull && request.allowFull !== true ? 'full-permission-unconfirmed' : null
+  }
+
+  private staticCheck(request: StartRunRequest): StaticStartCheck {
+    if (!this.labsOn()) return { ok: false, reason: 'labs-off' }
+    if (!this.ready) return { ok: false, reason: 'starting' }
+    const detail = this.deps.loader.getDefinition(request.defId)
+    if (!detail) return { ok: false, reason: 'unknown-definition' }
+    if (detail.summary.scope === 'repo' && !this.trusted(detail.summary.id, detail.summary.hash)) {
+      return { ok: false, reason: 'untrusted-definition' }
+    }
+    if (!detail.definition) return { ok: false, reason: 'invalid-definition' }
+    if (!detail.definition.steps.every(isRunnable)) return { ok: false, reason: 'unsupported-step' }
+    const applied = applyOverrides(detail.definition, request.overrides)
+    if (!applied.ok) return { ok: false, reason: applied.reason }
+    const chained = chainedRequest(applied.definition, request)
+    if (!chained) return { ok: false, reason: 'invalid-inputs' }
+    const badInputs = inputsRefusal(applied.definition, chained.inputs)
+    if (badInputs) return { ok: false, reason: badInputs }
+    return { ok: true, detail, applied, chained }
   }
 
   private createRun(

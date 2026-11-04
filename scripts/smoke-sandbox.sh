@@ -251,6 +251,16 @@ steps:
     permissions: full
     prompt: "This must never start without allowFull."
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-chain.yaml" <<'YAML'
+name: smoke-chain
+inputs:
+  name: { type: text }
+item_input: name
+steps:
+  - id: say
+    kind: shell
+    run: echo {{item.title}}
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/browser-hang.yaml" <<'YAML'
 name: browser-hang
 steps:

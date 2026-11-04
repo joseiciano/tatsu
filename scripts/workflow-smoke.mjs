@@ -18,14 +18,15 @@
 // `smoke-budget` (read-only Claude spend step that waits before
 // complete_step, then shell settle step),
 // `smoke-retry` (one
-// `test -f flag` shell step) and `smoke-full`, plus the committed repo
+// `test -f flag` shell step), `smoke-full` and `smoke-chain` (shell-only,
+// item_input `name`, echoes {{item.title}}), plus the committed repo
 // definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
 // on a 60 s timeout per scenario.
 
 import { WebSocket } from 'ws'
 import { execFileSync } from 'child_process'
-import { appendFileSync, writeFileSync } from 'fs'
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 const [token, portArg, repoPath, curlArg] = process.argv.slice(2)
@@ -61,6 +62,9 @@ function applyEvent(event) {
     const { [event.payload]: _cleared, ...rest } = state.terminals.panes
     state.terminals.panes = rest
   }
+  else if (event.type === 'workflows/chainStarted') {
+    state.workflows.chains = { ...state.workflows.chains, [event.payload.chain.chainId]: event.payload.chain }
+  } else if (event.type.startsWith('workflows/chain')) applyChainEvent(event)
   else if (event.type === 'workflows/definitionsLoaded') {
     const { scope, repoRoot, definitions } = event.payload
     const inGroup = (d) => d.scope === scope && (scope !== 'repo' || d.repoRoot === repoRoot)
@@ -72,6 +76,21 @@ function applyEvent(event) {
     const { [event.payload.defId]: _removed, ...rest } = state.workflows.definitions
     state.workflows.definitions = rest
   }
+}
+
+function applyChainEvent(event) {
+  const chain = state.workflows.chains[event.payload.chainId]
+  if (!chain) return
+  let next = chain
+  if (event.type === 'workflows/chainItemsChanged') {
+    const patches = new Map(event.payload.items.map((patch) => [patch.id, patch]))
+    next = { ...chain, items: chain.items.map((item) => (patches.has(item.id) ? { ...item, ...patches.get(item.id) } : item)) }
+  } else if (event.type === 'workflows/chainChildRunLinked') {
+    next = { ...chain, childRunIds: { ...chain.childRunIds, [event.payload.itemId]: event.payload.runId } }
+  } else if (event.type === 'workflows/chainFinished') {
+    next = { ...chain, finishedAt: event.payload.finishedAt, finishedStatus: event.payload.status }
+  }
+  state.workflows.chains = { ...state.workflows.chains, [chain.chainId]: next }
 }
 
 ws.on('message', (raw) => {
@@ -613,6 +632,75 @@ async function scenarioRepoTrust(worktreePath) {
   )
 }
 
+const CHAIN_BRANCH = /^wf\/smoke-chain\/(alpha-task|beta-task)-[0-9a-f]{8}$/
+
+async function scenarioChain(repoRoot) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  const payload = {
+    defId: 'personal:smoke-chain',
+    repoRoot,
+    mode: 'independent',
+    items: [
+      { title: 'Alpha task', value: 'alpha' },
+      { title: 'Beta task', value: 'beta' }
+    ],
+    inputs: {}
+  }
+  let chainId
+  for (;;) {
+    const response = await request('workflows:startChain', payload)
+    if (response && typeof response.chainId === 'string') {
+      chainId = response.chainId
+      break
+    }
+    if (response?.error !== STARTING_ERROR || Date.now() > deadline) fail('startChain refused', response)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  const chain = await waitFor(`chain ${chainId} to finish`, () => {
+    const current = state.workflows.chains[chainId]
+    return current?.finishedAt !== undefined ? current : undefined
+  })
+  expectThat(chain.items.length === 2, `chain has ${chain.items.length} items`, chain)
+  const statuses = []
+  for (const item of chain.items) {
+    expectThat(!item.failed, `chain item ${item.id} failed`, chain)
+    expectThat(CHAIN_BRANCH.test(item.branch ?? ''), `chain item branch ${item.branch} does not match ${CHAIN_BRANCH}`, chain)
+    const runId = chain.childRunIds[item.id]
+    expectThat(typeof runId === 'string', `chain item ${item.id} has no child run`, chain)
+    const record = await request('workflows:getRun', runId)
+    expectThat(record?.status === 'done' && record.steps.say === 'done', `child run ${runId} ended ${record?.status}`, record)
+    expectThat(record.chain?.chainId === chainId && record.chain.item.title === item.title, `child run ${runId} lacks its chain item`, record)
+    const said = attemptsFor(record, 'say')[0]?.result?.summary ?? ''
+    expectThat(said.includes(item.title), `child run ${runId} did not echo its item title`, record)
+    const worktree = state.worktrees.list.find((wt) => wt.branch === item.branch)
+    expectThat(worktree && worktree.path === record.worktreePath, `no worktree on ${item.branch} for run ${runId}`, state.worktrees.list)
+    statuses.push(record.status)
+  }
+  const derived = statuses.every((status) => status === 'done') ? 'done' : 'not-done'
+  expectThat(chain.finishedStatus === 'done' && derived === 'done', `chain finished ${chain.finishedStatus}, derived ${derived}`, chain)
+  const recordPath = join(process.env.HARNESS_DATA_DIR ?? '', 'workflow-chains', `${chainId}.json`)
+  if (process.env.HARNESS_DATA_DIR) {
+    let persisted
+    while (!persisted) {
+      const parsed = existsSync(recordPath) ? JSON.parse(readFileSync(recordPath, 'utf8')) : null
+      if (parsed?.finishedAt !== undefined) persisted = parsed
+      else if (Date.now() > deadline + SCENARIO_TIMEOUT_MS) fail(`chain record ${recordPath} never recorded the finish`, parsed)
+      else await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    expectThat(
+      persisted.status === 'done' && persisted.items.every((item) => typeof item.runId === 'string' && item.value),
+      'persisted chain record is incomplete',
+      persisted
+    )
+  }
+  console.log(
+    'scenario chain OK: chain=%s done; worktrees %s; record %s',
+    chainId,
+    chain.items.map((item) => item.branch).join(', '),
+    process.env.HARNESS_DATA_DIR ? recordPath : '(no HARNESS_DATA_DIR)'
+  )
+}
+
 async function main() {
   await new Promise((resolve, reject) => {
     ws.once('open', resolve)
@@ -623,6 +711,7 @@ async function main() {
   state.worktrees.list ??= []
   state.workflows.definitions ??= {}
   state.terminals.panes ??= {}
+  state.workflows.chains ??= {}
   for (const event of buffered.splice(0)) applyEvent(event)
 
   const added = await request('repo:addAtPath', repoPath)
@@ -641,7 +730,8 @@ async function main() {
     'personal:smoke-loop',
     'personal:smoke-when',
     'personal:smoke-retry',
-    'personal:smoke-full'
+    'personal:smoke-full',
+    'personal:smoke-chain'
   ]
   const worktreePath = await waitFor('the repo, hooks consent, Codex hook trust and definitions', () => {
     const wt = state.worktrees.list.find((w) => w.path === added.repoRoot || w.path === repoPath)
@@ -671,6 +761,7 @@ async function main() {
   await scenarioWhen(worktreePath)
   await scenarioFailRetry(worktreePath)
   await scenarioRepoTrust(worktreePath)
+  await scenarioChain(added.repoRoot)
   ws.close()
   process.exit(0)
 }
