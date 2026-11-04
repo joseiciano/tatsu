@@ -68,8 +68,13 @@ function runCost(run: WorkflowRun, attempts: readonly WorkflowAttempt[]): number
 }
 
 function cardStepId(run: WorkflowRun, summary: WorkflowDefinitionSummary | null): string | null {
+  const order = stepOrderFor(run, summary)
+  if (run.status !== 'paused') {
+    const runningAgent = order.find((id) => run.steps[id]?.status === 'running' && run.steps[id]?.kind === 'agent')
+    if (runningAgent !== undefined) return runningAgent
+  }
   if (run.cursorStepId !== undefined && run.steps[run.cursorStepId]) return run.cursorStepId
-  return currentStepId(run, stepOrderFor(run, summary))
+  return currentStepId(run, order)
 }
 
 function stepAgent(run: WorkflowRun, stepId: string | null): string | null {

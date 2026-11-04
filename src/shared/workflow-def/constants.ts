@@ -8,7 +8,7 @@ export const WORKFLOW_FEATURES: Readonly<Record<WorkflowFeature, WorkflowFeature
   when: { phase: 4, message: 'Conditional steps ("when") need phase 4', supported: true },
   on_loop: { phase: 4, message: 'Loop re-entry prompts ("on_loop") need phase 4', supported: true },
   'nonlinear-needs': { phase: 4, message: 'Non-linear "needs" (parallel branches or skipped predecessors) need phase 4', supported: true },
-  parallel_safe: { phase: 4, message: 'Parallel shell steps ("parallel_safe") need phase 4', supported: false },
+  parallel_safe: { phase: 4, message: 'Parallel shell steps ("parallel_safe") need phase 4', supported: true },
   timeout: { phase: 4, message: 'Step timeouts ("timeout") need phase 4', supported: false },
   item_input: { phase: 5, message: 'Batch launches ("item_input") need phase 5', supported: false },
   foreach: { phase: 6, message: 'Foreach steps ("kind: foreach") need phase 6', supported: false },

@@ -62,6 +62,28 @@ describe('deriveStepStrip', () => {
     expect(strip).toEqual([{ id: 'only', status, glyph, paused: false }])
   })
 
+  it('marks every running branch running', () => {
+    const strip = deriveStepStrip(run({ plan: 'done', left: 'running', right: 'running', join: 'pending' }), ['plan', 'left', 'right', 'join'])
+    expect(strip.map((s) => [s.id, s.status, s.glyph])).toEqual([
+      ['plan', 'done', '✓'],
+      ['left', 'running', '●'],
+      ['right', 'running', '●'],
+      ['join', 'pending', '○']
+    ])
+  })
+
+  it('keeps a sibling running while another branch has paused the run', () => {
+    const strip = deriveStepStrip(
+      { ...run({ plan: 'done', left: 'failed', right: 'running' }, 'paused', 'step-failed'), cursorStepId: 'left' },
+      ['plan', 'left', 'right']
+    )
+    expect(strip.map((s) => [s.id, s.glyph, s.paused])).toEqual([
+      ['plan', '✓', false],
+      ['left', '!', true],
+      ['right', '●', false]
+    ])
+  })
+
   it('marks only the current step of a paused run with !', () => {
     const strip = deriveStepStrip(run({ plan: 'done', build: 'failed', test: 'pending' }, 'paused', 'step-failed'), [
       'plan',

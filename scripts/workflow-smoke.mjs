@@ -9,7 +9,8 @@
 // hooks and the repo, and the personal definitions `smoke` (Claude step then
 // shell step), `smoke-codex` (Codex step then shell step), `smoke-opencode`
 // (opencode step then shell step), `smoke-diamond` (Claude plan, two
-// read-only Claude branches, shell join), `smoke-gate` (gated multi-turn
+// read-only Claude branches, shell join), `smoke-parallel` (Claude plan, two
+// read-only Claude branches that hang), `smoke-gate` (gated multi-turn
 // Claude plan then shell step), `smoke-loop` (multi-turn Claude build, shell
 // test, read-only multi-turn Claude review looping back to build until its
 // verdict is pass), `smoke-when` (read-only Claude review reporting verdict
@@ -281,6 +282,35 @@ async function scenarioDiamond(worktreePath) {
   console.log('scenario diamond OK: run=%s done; plan -> left -> right -> join; join summary %j', runId, joined)
 }
 
+async function scenarioParallel(worktreePath) {
+  const raised = await request('settings:setWorkflowSettings', { maxConcurrentAgents: 2 })
+  expectThat(raised === true, 'settings:setWorkflowSettings refused cap 2', raised)
+  try {
+    const runId = await startRun('personal:smoke-parallel', worktreePath)
+    const both = await waitFor(`run ${runId} to run left and right together`, async () => {
+      const record = await request('workflows:getRun', runId)
+      if (!record) return undefined
+      if (['done', 'failed', 'cancelled', 'paused'].includes(record.status)) fail(`parallel scenario run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+      const live = ['left', 'right'].map((stepId) => attemptsFor(record, stepId).filter((attempt) => attempt.status === 'running'))
+      return record.steps.left === 'running' && record.steps.right === 'running' && live.every((attempts) => attempts.length === 1) ? record : undefined
+    })
+    const cancelled = await request('workflows:cancelRun', runId)
+    expectThat(cancelled?.ok === true, 'cancelRun refused', cancelled)
+    const record = await request('workflows:getRun', runId)
+    expectThat(record?.status === 'cancelled', `parallel scenario run is ${record?.status} after cancel`, record)
+    for (const stepId of ['left', 'right']) {
+      const attempts = attemptsFor(record, stepId)
+      expectThat(record.steps[stepId] === 'cancelled', `parallel ${stepId} is ${record.steps[stepId]} after cancel`, record)
+      expectThat(attempts.length === 1 && attempts[0].status === 'cancelled', `parallel ${stepId} attempt was not cancelled`, record)
+    }
+    const [left] = attemptsFor(both, 'left')
+    const [right] = attemptsFor(both, 'right')
+    console.log('scenario parallel OK: run=%s left %s and right %s running together; cancel run ended both', runId, left.attemptId, right.attemptId)
+  } finally {
+    await request('settings:setWorkflowSettings', { maxConcurrentAgents: 1 })
+  }
+}
+
 function paneTabs(node) {
   if (!node) return []
   return node.type === 'leaf' ? node.tabs : [...paneTabs(node.children[0]), ...paneTabs(node.children[1])]
@@ -476,6 +506,7 @@ async function main() {
     'personal:smoke-codex',
     'personal:smoke-opencode',
     'personal:smoke-diamond',
+    'personal:smoke-parallel',
     'personal:smoke-gate',
     'personal:smoke-loop',
     'personal:smoke-when',
@@ -502,6 +533,7 @@ async function main() {
   await scenarioCodexThenShell(worktreePath)
   await scenarioOpencodeThenShell(worktreePath)
   await scenarioDiamond(worktreePath)
+  await scenarioParallel(worktreePath)
   await scenarioGate(worktreePath)
   await scenarioLoop(worktreePath)
   await scenarioWhen(worktreePath)

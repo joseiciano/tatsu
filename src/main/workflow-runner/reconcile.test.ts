@@ -725,6 +725,40 @@ describe('WorkflowRunner per-step scheduling', () => {
     expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'running', cursorStepId: 'b' })
   })
 
+  it('keeps every failed sibling paused across a restart so both retry and the run finishes', async () => {
+    const failedPause = { continuations: 0, pauses: [{ reason: 'step-failed' as const, at: 6 }] }
+    const ctx = boot([
+      fanInRecord('run-f', {
+        status: 'paused',
+        pausedReason: 'step-failed',
+        steps: { a: 'failed', b: 'failed', c: 'pending' },
+        attempts: [
+          attempt('att-a', { stepId: 'a', status: 'failed', endedAt: 6, metrics: failedPause }),
+          attempt('att-b', { stepId: 'b', status: 'failed', endedAt: 6, metrics: failedPause })
+        ]
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.logs).toContain('[workflow] run reconciled paused {"runId":"run-f"}')
+    expect(ctx.wf().runs['run-f']).toMatchObject({ status: 'paused', pausedReason: 'step-failed', cursorStepId: 'a' })
+
+    expect(ctx.runner.retryStep('run-f', 'b')).toEqual({ ok: true })
+    await flush()
+    ctx.runner.complete(ctx.wf().runs['run-f'].steps.b.attemptIds.at(-1) ?? '', { status: 'done', summary: 'b', completedBy: 'tool' })
+    expect(ctx.wf().runs['run-f']).toMatchObject({ status: 'paused', pausedReason: 'step-failed', cursorStepId: 'a' })
+    expect(ctx.stepStatus('run-f', 'c')).toBe('pending')
+
+    expect(ctx.runner.retryStep('run-f', 'a')).toEqual({ ok: true })
+    await flush()
+    ctx.runner.complete(ctx.wf().runs['run-f'].steps.a.attemptIds.at(-1) ?? '', { status: 'done', summary: 'a', completedBy: 'tool' })
+    await flush()
+    expect(ctx.stepStatus('run-f', 'c')).toBe('running')
+    ctx.runner.complete(ctx.wf().runs['run-f'].steps.c.attemptIds.at(-1) ?? '', { status: 'done', summary: 'c', completedBy: 'tool' })
+    expect(ctx.wf().runs['run-f'].status).toBe('done')
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['b', 'a', 'c'])
+  })
+
   it('requeues a queued step of a paused run so it launches once the run resumes', async () => {
     const ctx = boot([
       fanInRecord('run-p', {

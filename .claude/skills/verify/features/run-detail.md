@@ -107,6 +107,15 @@ selected attempt's full result and the files that attempt changed.
     `Open run: smoke-when on repo` -> graph listitems `review: done`, `fix:
     skipped` (its `when: {field: verdict, equals: fail}` is false because
     `review` reports `verdict: pass`), `join: done` -> `All runs` -> `Back`.
+    Then parallel branches: `settings:setWorkflowSettings
+    {maxConcurrentAgents: 2}` -> launch sheet -> `smoke-parallel` -> Start
+    -> sidebar `Workflows` -> `Active runs` -> `Open run: smoke-parallel on
+    repo` -> graph listitems `plan: done`, `left: running` and `right:
+    running` at the same time (the record agrees) -> detail `Cancel run` ->
+    run `cancelled`, graph `left: cancelled`, `right: cancelled` -> `All
+    runs` -> `Back`; the `finally` cancels a still-live run, closes the
+    `⚙ left` / `⚙ right` step tabs (later scenarios use strict locators)
+    and restores cap 1.
   - `attempt-diff` (right after `run-detail`, before `repo-trust`): launch
     sheet -> `browser-diff` -> Start -> wait for the run to be `done` ->
     sidebar `Workflows` -> `Recent runs` -> first `article` `browser-diff on
@@ -128,12 +137,15 @@ selected attempt's full result and the files that attempt changed.
 
 End state that proves it: `run-detail-01-detail-timeline.png`,
 `run-detail-02-detail-summary.png`, `run-detail-05-diamond-graph.png`,
-`run-detail-08-when-graph.png`,
+`run-detail-08-when-graph.png`, `run-detail-11-parallel-graph.png`,
 `attempt-diff-03-changed-files.png` and
 `attempt-diff-04-file-diff.png`, `swap-step-04-swap-dialog.png` and
 `swap-step-05-detail-done.png` in `$EVIDENCE/workflow-flows/`, and the
 `run-detail: timeline [...]`, `run-detail: diamond graph edges [...]`,
 `run-detail: smoke-when graph shows review: done, fix: skipped, join: done`,
+`run-detail: smoke-parallel graph shows left: running, right: running`,
+`run-detail: smoke-parallel run <id> cancelled from the detail; left and
+right cancelled`,
 `attempt-diff: changed files [...]`,
 `attempt-diff: smoke.txt diff renders side by side…` and `swap-step: run
 <id> done after swapping Claude to Codex (1:claude:failed, 2:codex:done)`
@@ -146,6 +158,9 @@ lines in the journal.
   scope locators to the `Workflows` region.
 - Use `exact: true` for `Back`: the section's `Back` and the detail's
   `All runs` are different buttons, but other names may contain "Back".
+- The sandbox cap is 1, so a parallel leg must raise it and put it back;
+  with cap 1 `right` sits `queued` behind `left`. Running steps of one run
+  each get a graph node in `running` and a `●` in the step strip.
 - Mark done records a new attempt, so the Mark-done step has two timeline
   rows, not one updated row.
 - The fake agent reports no cost and finishes in well under a second:
