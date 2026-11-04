@@ -1,13 +1,13 @@
 import { type ReactNode, type ReactElement } from 'react'
 import * as RadixTooltip from '@radix-ui/react-tooltip'
-import { formatBindingGlyphs, type Action, type HotkeyBinding } from '../../hotkeys'
+import { formatBindingGlyphs, type Action, type HotkeyBindings } from '../../hotkeys'
 import { HotkeysContextProvider, useHotkeyLabel } from '../HotkeyBadge'
 
 export function HotkeysProvider({
   bindings,
   children
 }: {
-  bindings: Record<Action, HotkeyBinding>
+  bindings: HotkeyBindings
   children: ReactNode
 }): ReactElement {
   return (

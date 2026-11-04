@@ -1,6 +1,6 @@
-import type { Action, HotkeyBinding, HotkeyCategory } from './types'
+import type { Action, HotkeyBindings, HotkeyCategory } from './types'
 
-export const DEFAULT_HOTKEYS: Record<Action, HotkeyBinding> = {
+export const DEFAULT_HOTKEYS: HotkeyBindings = {
   nextWorktree: { key: 'ArrowDown', modifiers: { cmd: true } },
   prevWorktree: { key: 'ArrowUp', modifiers: { cmd: true } },
   worktree1: { key: '1', modifiers: { cmd: true } },
@@ -89,6 +89,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   openInEditor: 'Open worktree in editor',
   toggleCommandCenter: 'Toggle command center',
   toggleWorkflows: 'Toggle workflows',
+  runWorkflow: 'Run workflow…',
   commandPalette: 'Command palette',
   fileQuickOpen: 'Open file...',
   splitPaneRight: 'Split pane right',
@@ -144,7 +145,7 @@ export const ACTION_CATEGORIES: HotkeyCategory[] = [
   {
     id: 'commands',
     label: 'Search & commands',
-    actions: ['commandPalette', 'fileQuickOpen', 'toggleCommandCenter', 'toggleWorkflows', 'hotkeyCheatsheet']
+    actions: ['commandPalette', 'fileQuickOpen', 'toggleCommandCenter', 'toggleWorkflows', 'runWorkflow', 'hotkeyCheatsheet']
   },
   {
     id: 'overlays',

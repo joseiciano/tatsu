@@ -1,5 +1,5 @@
 import type { Worktree, PtyStatus, PRStatus } from '../../types'
-import type { Action, HotkeyBinding } from '../../hotkeys'
+import type { Action, HotkeyBindings } from '../../hotkeys'
 
 export type PaletteMode = 'root' | 'files'
 
@@ -9,7 +9,7 @@ export interface CommandPaletteProps {
   prStatuses: Record<string, PRStatus | null>
   mergedPaths: Record<string, boolean>
   activeWorktreeId: string | null
-  resolvedHotkeys: Record<Action, HotkeyBinding>
+  resolvedHotkeys: HotkeyBindings
   initialMode?: PaletteMode
   onClose: () => void
   onSelectWorktree: (path: string) => void

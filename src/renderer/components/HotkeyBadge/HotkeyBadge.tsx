@@ -3,16 +3,16 @@ import {
   bindingToString,
   formatBindingGlyphs,
   type Action,
-  type HotkeyBinding
+  type HotkeyBindings
 } from '../../hotkeys'
 
-const HotkeysContext = createContext<Record<Action, HotkeyBinding> | null>(null)
+const HotkeysContext = createContext<HotkeyBindings | null>(null)
 
 export function HotkeysContextProvider({
   bindings,
   children
 }: {
-  bindings: Record<Action, HotkeyBinding>
+  bindings: HotkeyBindings
   children: ReactNode
 }): ReactElement {
   return <HotkeysContext.Provider value={bindings}>{children}</HotkeysContext.Provider>

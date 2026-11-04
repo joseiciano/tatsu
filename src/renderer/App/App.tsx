@@ -762,6 +762,8 @@ const setQuestStep = useCallback((next: QuestStep) => {
     setShowHotkeyCheatsheet,
     setShowReview,
     toggleWorkflows,
+    openRunWorkflowHere,
+    openRunWorkflow,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
