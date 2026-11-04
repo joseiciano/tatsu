@@ -20,6 +20,7 @@ export type WorkflowDiagnosticCode =
   | 'unsafe-allow'
   | 'bad-template'
   | 'template-scope'
+  | 'parallel-writer'
   | 'unsupported-feature'
   | 'internal'
 

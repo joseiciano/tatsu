@@ -593,9 +593,11 @@ steps:
   - id: a
     agent: claude
     prompt: "a"
+    permissions: read-only
   - id: b
     agent: claude
     prompt: "b"
+    permissions: read-only
     needs: []
   - id: c
     agent: claude
@@ -604,7 +606,7 @@ steps:
 `
 
 function fanInDefinition(): ResolvedDefinition {
-  const { definition } = validateWorkflowDefinition(FAN_IN, { supportedFeatures: ['nonlinear-needs'] })
+  const { definition } = validateWorkflowDefinition(FAN_IN)
   if (!definition) throw new Error('fan-in fixture invalid')
   return definition
 }
