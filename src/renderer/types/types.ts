@@ -7,6 +7,8 @@ export type { Worktree, PendingWorktree, PendingDeletion }
 import type { RepoConfig } from '../../shared/state/repo-configs'
 import type {
   WorkflowActionResponse,
+  WorkflowAttemptChangedFilesResponse,
+  WorkflowAttemptFileDiffResponse,
   WorkflowAttemptRecord,
   WorkflowDefinitionDetail,
   WorkflowMarkDonePayload,
@@ -406,6 +408,8 @@ export interface ElectronAPI {
   getWorkflowDefinition(id: string): Promise<WorkflowDefinitionDetail | null>
   getWorkflowRun(runId: string): Promise<WorkflowRunRecord | null>
   getWorkflowAttemptResult(attemptId: string): Promise<WorkflowAttemptRecord | null>
+  getWorkflowAttemptChangedFiles(attemptId: string): Promise<WorkflowAttemptChangedFilesResponse>
+  getWorkflowAttemptFileDiff(attemptId: string, path: string): Promise<WorkflowAttemptFileDiffResponse>
   startWorkflowRun(payload: WorkflowStartRunPayload): Promise<WorkflowStartRunResponse>
   trustWorkflowDefinition(defId: string, hash: string): Promise<WorkflowActionResponse>
   cancelWorkflowRun(runId: string): Promise<WorkflowActionResponse>

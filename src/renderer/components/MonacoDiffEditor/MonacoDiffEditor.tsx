@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react'
 import * as monaco from 'monaco-editor'
 import { detectMonacoLanguage } from '../../monaco-setup'
 
+const SIDE_BY_SIDE_MIN_WIDTH = 480
+
 interface MonacoDiffEditorProps {
   original: string
   modified: string
   filePath?: string
   readOnly?: boolean
+  sideBySide?: boolean
   fontFamily?: string
   fontSize?: number
   onModifiedChange?: (value: string) => void
@@ -22,6 +25,7 @@ export function MonacoDiffEditor({
   modified,
   filePath,
   readOnly = true,
+  sideBySide = false,
   fontFamily,
   fontSize,
   onModifiedChange,
@@ -54,7 +58,8 @@ export function MonacoDiffEditor({
 
     const editor = monaco.editor.createDiffEditor(hostRef.current, {
       theme: 'harness',
-      renderSideBySide: false,
+      renderSideBySide: sideBySide,
+      renderSideBySideInlineBreakpoint: SIDE_BY_SIDE_MIN_WIDTH,
       readOnly,
       originalEditable: false,
       automaticLayout: true,
@@ -174,6 +179,10 @@ export function MonacoDiffEditor({
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly })
   }, [readOnly])
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({ renderSideBySide: sideBySide })
+  }, [sideBySide])
 
   useEffect(() => {
     editorRef.current?.updateOptions({

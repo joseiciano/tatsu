@@ -18,6 +18,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
   backendApi: {
     getWorkflowRun: vi.fn(),
     getWorkflowAttemptResult: vi.fn(),
+    getWorkflowAttemptChangedFiles: vi.fn(),
+    getWorkflowAttemptFileDiff: vi.fn(),
     retryWorkflowStep: vi.fn(),
     retryWorkflowStepFromClean: vi.fn(),
     skipWorkflowStep: vi.fn(),
@@ -32,6 +34,14 @@ const { backendApi, storeState } = vi.hoisted(() => ({
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('../../../backend', () => ({ useBackend: () => backendApi }))
+vi.mock('../../MonacoDiffEditor', () => ({
+  MonacoDiffEditor: ({ original, modified, filePath, sideBySide }: { original: string; modified: string; filePath?: string; sideBySide?: boolean }) => (
+    <div data-testid="diff-editor" data-path={filePath} data-side-by-side={String(sideBySide)}>
+      <pre data-side="original">{original}</pre>
+      <pre data-side="modified">{modified}</pre>
+    </div>
+  )
+}))
 vi.mock('../../../store', async () => {
   const selectors = await import('../../../workflow-selectors')
   const selectAttempts = selectors.createRunAttemptsSelector()
@@ -194,6 +204,8 @@ beforeEach(() => {
   const attempts = [PLAN_ATTEMPT, EXIT_FAILED]
   backendApi.getWorkflowRun.mockResolvedValue(record(attempts))
   backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => attempts.find((a) => a.attemptId === id) ?? null)
+  backendApi.getWorkflowAttemptChangedFiles.mockResolvedValue({ files: [], truncated: false })
+  backendApi.getWorkflowAttemptFileDiff.mockResolvedValue({ original: '', modified: '' })
   onJumpToTab.mockReset()
   onBack.mockReset()
   container = document.createElement('div')
@@ -352,4 +364,108 @@ describe('RunDetailContainer', () => {
     await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'All runs'))
     expect(onBack).toHaveBeenCalledOnce()
   })
+
+  describe('attempt changes', () => {
+    const SNAPSHOTS = {
+      baseSnapshot: { commit: 'a'.repeat(40), ref: 'refs/harness/runs/r1/exit/0' },
+      headSnapshot: { commit: 'b'.repeat(40), ref: 'refs/harness/runs/r1/exit/1' }
+    }
+    const SNAPPED = { ...EXIT_FAILED, ...SNAPSHOTS }
+    const FILES = [
+      { path: 'smoke.txt', status: 'added', additions: 1, deletions: 0 },
+      { path: 'notes.md', status: 'modified', additions: 2, deletions: 1 },
+      { path: 'logo.png', status: 'modified', additions: null, deletions: null }
+    ]
+
+    function useAttempt(attempt: WorkflowAttemptRecord): void {
+      backendApi.getWorkflowRun.mockResolvedValue(record([PLAN_ATTEMPT, attempt]))
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) =>
+        id === attempt.attemptId ? attempt : PLAN_ATTEMPT
+      )
+    }
+
+    const changedFiles = (): HTMLElement => section('Changed files')
+    const fileButtons = (): HTMLButtonElement[] => [...changedFiles().querySelectorAll<HTMLButtonElement>('li button')]
+    const diffSide = (side: string): string | null | undefined =>
+      changedFiles().querySelector(`[data-testid="diff-editor"] [data-side="${side}"]`)?.textContent
+
+    it('lists the attempt’s changed files and shows the first file’s side-by-side diff', async () => {
+      useAttempt(SNAPPED)
+      backendApi.getWorkflowAttemptChangedFiles.mockResolvedValue({ files: FILES, truncated: false })
+      backendApi.getWorkflowAttemptFileDiff.mockImplementation(async (_id: string, path: string) =>
+        path === 'smoke.txt' ? { original: '', modified: 'smoke\n' } : { original: 'old\n', modified: 'new\n' }
+      )
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+
+      expect(backendApi.getWorkflowAttemptChangedFiles).toHaveBeenCalledWith('a-exit')
+      expect(fileButtons().map((b) => b.getAttribute('aria-label'))).toEqual([
+        'smoke.txt, added, +1 −0',
+        'notes.md, modified, +2 −1',
+        'logo.png, modified, binary'
+      ])
+      expect(fileButtons()[0].getAttribute('aria-pressed')).toBe('true')
+      expect(backendApi.getWorkflowAttemptFileDiff).toHaveBeenCalledWith('a-exit', 'smoke.txt')
+      expect(diffSide('modified')).toBe('smoke\n')
+      const editor = changedFiles().querySelector('[data-testid="diff-editor"]')
+      expect(editor?.getAttribute('data-side-by-side')).toBe('true')
+      expect(editor?.getAttribute('data-path')).toBe('smoke.txt')
+
+      await click(fileButtons()[1])
+      expect(backendApi.getWorkflowAttemptFileDiff).toHaveBeenLastCalledWith('a-exit', 'notes.md')
+      expect(fileButtons()[1].getAttribute('aria-pressed')).toBe('true')
+      expect(diffSide('original')).toBe('old\n')
+      expect(diffSide('modified')).toBe('new\n')
+    })
+
+    it('shows No snapshot for an attempt without snapshots and does not ask the backend', async () => {
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      expect(changedFiles().textContent).toContain('No snapshot for this attempt')
+      expect(backendApi.getWorkflowAttemptChangedFiles).not.toHaveBeenCalled()
+    })
+
+    it('shows the backend error for the list and for the diff', async () => {
+      useAttempt(SNAPPED)
+      backendApi.getWorkflowAttemptChangedFiles.mockResolvedValue({ error: 'snapshot missing' })
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      expect(changedFiles().querySelector('[role="alert"]')?.textContent).toBe('snapshot missing')
+
+      backendApi.getWorkflowAttemptChangedFiles.mockResolvedValue({ files: FILES, truncated: true })
+      backendApi.getWorkflowAttemptFileDiff.mockResolvedValue({ error: 'File too large to show' })
+      await click(timelineRows()[0])
+      await click(timelineRows()[1])
+      expect(changedFiles().querySelector('[role="alert"]')?.textContent).toBe('File too large to show')
+      expect(changedFiles().textContent).toContain('Showing the first 3 files')
+    })
+
+    it('says when the attempt changed nothing', async () => {
+      useAttempt(SNAPPED)
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      expect(changedFiles().textContent).toContain('No changes in this attempt')
+    })
+
+    it('waits for a just-ended attempt’s head snapshot and then lists its files', async () => {
+      const endedNow = { ...EXIT_FAILED, endedAt: Date.now(), baseSnapshot: SNAPSHOTS.baseSnapshot }
+      let calls = 0
+      backendApi.getWorkflowRun.mockResolvedValue(record([PLAN_ATTEMPT, endedNow]))
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => {
+        if (id !== 'a-exit') return PLAN_ATTEMPT
+        calls += 1
+        return calls === 1 ? endedNow : { ...endedNow, headSnapshot: SNAPSHOTS.headSnapshot }
+      })
+      backendApi.getWorkflowAttemptChangedFiles.mockResolvedValue({ files: FILES.slice(0, 1), truncated: false })
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      expect(changedFiles().textContent).toContain('Loading changed files')
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400))
+      })
+      expect(fileButtons().map((b) => b.getAttribute('aria-label'))).toEqual(['smoke.txt, added, +1 −0'])
+    })
+  })
 })
+

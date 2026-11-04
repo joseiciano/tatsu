@@ -119,3 +119,17 @@ export interface WorktreeScriptResult {
   stderr: string
   error?: string
 }
+
+export interface RangeChangedFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted'
+  additions: number | null
+  deletions: number | null
+}
+
+export interface RangeChangedFiles {
+  files: RangeChangedFile[]
+  truncated: boolean
+}
+
+export type BlobAtCommit = { kind: 'ok'; text: string } | { kind: 'missing' } | { kind: 'too-large' }

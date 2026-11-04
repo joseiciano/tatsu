@@ -214,3 +214,16 @@ export interface WorkflowMarkDonePayload {
 export type WorkflowStartRunResponse = { runId: string } | { error: string }
 
 export type WorkflowActionResponse = { ok: true } | { error: string }
+
+export interface WorkflowAttemptChangedFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted'
+  additions: number | null
+  deletions: number | null
+}
+
+export type WorkflowAttemptChangedFilesResponse =
+  | { files: WorkflowAttemptChangedFile[]; truncated: boolean }
+  | { error: string }
+
+export type WorkflowAttemptFileDiffResponse = { original: string; modified: string } | { error: string }

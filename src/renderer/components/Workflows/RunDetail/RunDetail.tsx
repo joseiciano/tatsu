@@ -44,6 +44,7 @@ export interface RunDetailProps {
   selectedAttemptId: string | null
   onSelectAttempt: (attemptId: string) => void
   attemptResult: AttemptResultState
+  attemptChanges: ReactNode
   busy: boolean
   actionError: string | null
   markDoneOpen: boolean
@@ -117,6 +118,7 @@ export function RunDetail({
   selectedAttemptId,
   onSelectAttempt,
   attemptResult,
+  attemptChanges,
   busy,
   actionError,
   markDoneOpen,
@@ -190,6 +192,7 @@ export function RunDetail({
             <AttemptTimeline rows={model.timeline} selectedAttemptId={selectedAttemptId} onSelect={onSelectAttempt} />
             <AttemptResult state={attemptResult} />
           </div>
+          {attemptChanges}
         </>
       )}
     </section>
