@@ -98,3 +98,54 @@ describe('WorktreesFSM.runPending onWorktreeCreated (TEST-023)', () => {
     expect(store.getSnapshot().state.worktrees.list.map((w) => w.path)).toContain(CREATED.path)
   })
 })
+
+describe('WorktreesFSM request validation', () => {
+  function makeFsm(): { fsm: WorktreesFSM; store: Store; onWorktreeCreated: ReturnType<typeof vi.fn> } {
+    const store = new Store()
+    const onWorktreeCreated = vi.fn()
+    const fsm = new WorktreesFSM(store, {
+      getRepoRoots: () => ['/r/repo'],
+      getWorktreeSetupCmd: () => '',
+      getWorktreeBaseMode: () => 'local',
+      onWorktreeCreated
+    })
+    return { fsm, store, onWorktreeCreated }
+  }
+
+  it('refuses a repoRoot that is not a registered repo and records the error on the pending entry', async () => {
+    const { fsm, store, onWorktreeCreated } = makeFsm()
+    const outcome = await fsm.runPending({ id: 'pending-x', repoRoot: '/etc', branchName: 'feat' })
+    expect(outcome).toEqual({ id: 'pending-x', outcome: 'error', error: 'Unknown repository: /etc' })
+    expect(onWorktreeCreated).not.toHaveBeenCalled()
+    expect(store.getSnapshot().state.worktrees.pending).toMatchObject([
+      { id: 'pending-x', status: 'error', error: 'Unknown repository: /etc' }
+    ])
+  })
+
+  it.each([
+    ['../../escape', 'A branch name can’t contain “..”'],
+    ['-b', 'A branch name can’t start with “-”'],
+    ['HEAD', '“HEAD” is not a valid git branch name']
+  ])('refuses the branch name %j without creating a worktree', async (branchName, error) => {
+    const { fsm, onWorktreeCreated } = makeFsm()
+    const outcome = await fsm.runPending({ id: 'pending-b', repoRoot: '/r/repo', branchName })
+    expect(outcome).toEqual({ id: 'pending-b', outcome: 'error', error })
+    expect(onWorktreeCreated).not.toHaveBeenCalled()
+  })
+
+  it('refuses a PR worktree for an unregistered repoRoot before asking GitHub', async () => {
+    const { getPRMetadata } = await import('../github')
+    vi.mocked(getPRMetadata).mockClear()
+    const { fsm } = makeFsm()
+    const outcome = await fsm.runPendingPR({ id: 'pending-pr', repoRoot: '/elsewhere', prNumber: 7 })
+    expect(outcome).toEqual({ id: 'pending-pr', outcome: 'error', error: 'Unknown repository: /elsewhere' })
+    expect(getPRMetadata).not.toHaveBeenCalled()
+  })
+
+  it('re-validates the stored request on retry', async () => {
+    const { fsm } = makeFsm()
+    await fsm.runPending({ id: 'pending-r', repoRoot: '/nope', branchName: 'feat' })
+    const outcome = await fsm.retryPending('pending-r')
+    expect(outcome).toEqual({ id: 'pending-r', outcome: 'error', error: 'Unknown repository: /nope' })
+  })
+})

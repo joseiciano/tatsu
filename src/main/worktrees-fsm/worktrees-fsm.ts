@@ -11,6 +11,7 @@ import {
 import { getPRMetadata } from '../github'
 import { loadRepoConfig } from '../repo-config'
 import { log } from '../debug'
+import { checkBranchName } from '../branch-name-check'
 import type { Store } from '../store'
 import type { Worktree, PendingWorktree } from '../../shared/state/worktrees'
 import type { AgentKind } from '../../shared/state/terminals'
@@ -131,6 +132,8 @@ export class WorktreesFSM {
     this.store.dispatch({ type: 'worktrees/pendingAdded', payload: pending })
 
     try {
+      this.assertKnownRepo(repoRoot)
+      await this.assertBranchName(branchName)
       const wtDir = defaultWorktreeDir(repoRoot)
       const mode = this.opts.getWorktreeBaseMode()
       const created = await addWorktree(repoRoot, wtDir, branchName, {
@@ -180,6 +183,7 @@ export class WorktreesFSM {
     this.store.dispatch({ type: 'worktrees/pendingAdded', payload: pending })
 
     try {
+      this.assertKnownRepo(repoRoot)
       const meta = await getPRMetadata(repoRoot, prNumber)
       if (!meta) throw new Error(`Couldn't fetch PR #${prNumber} from GitHub`)
 
@@ -191,6 +195,7 @@ export class WorktreesFSM {
         })
       }
 
+      await this.assertBranchName(branchName)
       await fetchPullRequestRef(repoRoot, prNumber, branchName)
 
       const wtDir = defaultWorktreeDir(repoRoot)
@@ -214,6 +219,15 @@ export class WorktreesFSM {
       })
       return { id, outcome: 'error', error: message }
     }
+  }
+
+  private assertKnownRepo(repoRoot: string): void {
+    if (!this.opts.getRepoRoots().includes(repoRoot)) throw new Error(`Unknown repository: ${repoRoot}`)
+  }
+
+  private async assertBranchName(branchName: string): Promise<void> {
+    const problem = await checkBranchName(branchName)
+    if (problem !== null) throw new Error(problem)
   }
 
   /** Shared post-creation steps: setup script + .claude symlink +
