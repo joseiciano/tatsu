@@ -34,6 +34,11 @@ detail.
   `paused`.
 - **Approve**: `workflows:approveGate(runId, stepId)`. The step becomes
   `done` and the next step starts.
+- **Autopilot**: a run launched with the launch sheet's `Autopilot (approve
+  gates automatically)` checkbox (see workflow-run.md) passes every gate on
+  `done` through the same approve path (`stepStatusChanged` done, then
+  `gateResolved` with decision `autopilot`) and no pause, so no Needs-you row or `run paused gate` appears. Forced off for
+  untrusted issue/PR inputs.
 - **Cancelled at a gate**: `Cancel run` leaves the step `awaiting-gate`
   inside a cancelled run. The UI shows that step as `cancelled` (strip,
   graph) and never marks it `needs you`.
@@ -75,6 +80,14 @@ lines: `gate: dialog submit disabled while blank; Escape closed it…`,
 `gate: run <id> paused at the gate again after Request changes (1:done,
 2:done)`, `gate: run <id> done after Approve from Needs you; publish ran
 once` and `gate OK`.
+
+Autopilot proof (driven in `launch-overrides`, after `gate`):
+`launch-overrides-04-autopilot.png` and
+`launch-overrides-05-autopilot-done.png` in `$EVIDENCE/workflow-flows/`,
+`launch-overrides OK`, and the journal line
+`launch-overrides: autopilot run <id> done without a Needs-you row (record
+autopilot true; draft 1:done; publish done; debug.log has step done draft,
+gate approved (autopilot) and no run paused)`.
 
 ## Gotchas
 

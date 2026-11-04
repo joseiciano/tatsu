@@ -832,7 +832,90 @@ async function flowLaunchOverrides(page, backend) {
     log(`launch-overrides: run ${runId} done with plan overridden from claude to opencode (${attempts.join(', ')})`)
     await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
     await shot('run-done')
+    await launchAutopilot(page, backend, dataDir, shot)
   })
+}
+
+async function launchAutopilot(page, backend, dataDir, shot) {
+  let runId = null
+  try {
+    const row = worktreeRow(page)
+    await row.scrollIntoViewIfNeeded()
+    await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Run workflow here…' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+    await sheet.getByLabel('Workflow', { exact: true }).selectOption({ label: 'browser-gate' })
+    await sheet.getByRole('button', { name: 'Overrides', exact: true }).click()
+    const autopilot = sheet.getByRole('checkbox', { name: 'Autopilot (approve gates automatically)', exact: true })
+    if (await autopilot.isChecked()) throw new Error('Autopilot is checked by default')
+    await autopilot.check()
+    await sheet.getByRole('button', { name: 'Overrides (1 changed)', exact: true }).waitFor()
+    await shot('autopilot')
+    const before = new Set(Object.keys((await backend.snapshot()).state.workflows.runs))
+    await sheet.getByRole('button', { name: 'Start', exact: true }).click()
+    await sheet.waitFor({ state: 'detached' })
+
+    const gateRow = needsYouRow(page, 'browser-gate').filter({ hasText: 'Waiting at gate · draft' })
+    const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+    let record = null
+    for (;;) {
+      if ((await gateRow.count()) > 0) throw new Error('autopilot run showed a Needs-you gate row')
+      if (runId === null) {
+        const { state } = await backend.snapshot()
+        runId = Object.keys(state.workflows.runs).find((id) => !before.has(id) && state.workflows.runs[id].defId === 'personal:browser-gate') ?? null
+      }
+      record = runId === null ? null : await backend.request('workflows:getRun', runId)
+      if (record?.status === 'done') break
+      if (record && ['paused', 'failed', 'cancelled'].includes(record.status)) {
+        throw new Error(`autopilot run ${runId} is ${record.status}/${record.pausedReason}, expected done`)
+      }
+      if (Date.now() > deadline) throw new Error(`autopilot run ${runId} is ${record?.status}, expected done`)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    const disk = JSON.parse(readFileSync(join(dataDir, 'workflow-runs', `${runId}.json`), 'utf8'))
+    if (disk.autopilot !== true || disk.status !== 'done') {
+      throw new Error(`autopilot record autopilot=${JSON.stringify(disk.autopilot)} status=${disk.status}, expected true/done`)
+    }
+    const drafts = disk.attempts.filter((a) => a.stepId === 'draft').map((a) => `${a.n}:${a.status}`)
+    const publish = disk.attempts.filter((a) => a.stepId === 'publish').map((a) => a.status)
+    if (drafts.join(',') !== '1:done' || publish.join(',') !== 'done' || disk.steps.publish !== 'done') {
+      throw new Error(`autopilot draft attempts ${JSON.stringify(drafts)} publish ${JSON.stringify(publish)}, expected 1:done and done`)
+    }
+    if (disk.attempts.some((a) => a.metrics.pauses.length > 0)) throw new Error('autopilot run recorded a pause')
+    const debugLog = join(dataDir, 'debug.log')
+    let logNote = 'debug.log not found'
+    if (existsSync(debugLog)) {
+      const lines = readFileSync(debugLog, 'utf8').split('\n').filter((line) => line.includes(runId))
+      if (!lines.some((line) => line.includes('run started'))) {
+        logNote = 'debug.log has no lines for this run'
+      } else {
+        if (lines.some((line) => line.includes('run paused'))) throw new Error(`debug.log has a run paused line for ${runId}`)
+        if (!lines.some((line) => line.includes('gate approved') && line.includes('"decision":"autopilot"'))) {
+          throw new Error(`debug.log has no gate approved autopilot line for ${runId}`)
+        }
+        if (!lines.some((line) => line.includes('step done') && line.includes('"stepId":"draft"'))) {
+          throw new Error(`debug.log has no step done line for draft in ${runId}`)
+        }
+        logNote = 'debug.log has step done draft, gate approved (autopilot) and no run paused'
+      }
+    }
+    log(`launch-overrides: autopilot run ${runId} done without a Needs-you row (record autopilot true; draft ${drafts.join(',')}; publish ${publish.join(',')}; ${logNote})`)
+    await shot('autopilot-done')
+  } finally {
+    if (runId) {
+      const record = await backend.request('workflows:getRun', runId)
+      if (record && ['queued', 'running', 'paused'].includes(record.status)) {
+        await backend.request('workflows:cancelRun', runId)
+        await waitForRunStatus(backend, runId, 'cancelled')
+      }
+    }
+    const tab = page.getByRole('button', { name: /^Close tab ⚙ draft/ })
+    if (await tab.count()) {
+      await tab.first().click()
+      await tab.waitFor({ state: 'detached' })
+      log('launch-overrides: closed the autopilot draft step tab so the multi-turn agent exits')
+    }
+  }
 }
 
 async function flowLibrary(page, backend) {

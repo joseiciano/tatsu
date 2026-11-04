@@ -170,6 +170,19 @@ describe('loadRunRecordsSync', () => {
     expect(await records.read('untrusted')).toEqual(untrusted)
   })
 
+  it('keeps autopilot through a persist and reload and skips any value other than true', async () => {
+    const runsDir = join(dir, 'workflow-runs')
+    const autopilot = record('autopilot', { autopilot: true })
+    records.persist(autopilot)
+    await records.flush()
+    for (const [name, value] of [['offflag', false], ['strflag', 'true'], ['numflag', 1]] as const) {
+      writeFileSync(join(runsDir, `${name}.json`), JSON.stringify({ ...record(name), autopilot: value }))
+    }
+
+    expect(loadRunRecordsSync(runsDir)).toEqual([autopilot])
+    expect(await records.read('autopilot')).toEqual(autopilot)
+  })
+
   it('returns no records when the directory does not exist yet', () => {
     expect(loadRunRecordsSync(join(dir, 'missing'))).toEqual([])
   })

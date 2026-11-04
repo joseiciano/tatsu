@@ -875,6 +875,27 @@ describe('untrusted issue and PR inputs', () => {
     expect(ctx.logs).toContainEqual({ message: 'run capped at edit permissions', data: { runId: result.runId } })
   })
 
+  it('forces autopilot off when an input is untrusted and logs ids only', async () => {
+    const ctx = twoProfileRunner({ inputTrust: trustFetcher('untrusted') })
+    const result = await ctx.runner.start({ ...ISSUE_START, autopilot: true })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    expect(ctx.runner.getRunRecord(result.runId)?.autopilot).toBeUndefined()
+    expect(ctx.persisted.at(-1)?.autopilot).toBeUndefined()
+    expect(ctx.logs).toContainEqual({ message: 'run autopilot disabled untrusted-inputs', data: { runId: result.runId } })
+  })
+
+  it('keeps autopilot for trusted inputs and still needs allowFull for a full step', async () => {
+    const ctx = twoProfileRunner({ inputTrust: trustFetcher('trusted') })
+    expect(await ctx.runner.start({ ...ISSUE_START, autopilot: true })).toEqual({
+      ok: false,
+      reason: 'full-permission-unconfirmed'
+    })
+    const result = await ctx.runner.start({ ...ISSUE_START, autopilot: true, allowFull: true })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    expect(ctx.runner.getRunRecord(result.runId)?.autopilot).toBe(true)
+    expect(ctx.logs.map((entry) => entry.message)).not.toContain('run autopilot disabled untrusted-inputs')
+  })
+
   it('never spawns full on retry or swap of an untrusted run and needs no allowFull', async () => {
     const ctx = twoProfileRunner({ inputTrust: trustFetcher('untrusted') })
     const result = await ctx.runner.start(ISSUE_START)

@@ -110,6 +110,12 @@ export function needsFull(definition: ResolvedDefinition | null): boolean {
   return !!definition?.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
 }
 
+export function hasGate(definition: ResolvedDefinition | null): boolean {
+  return !!definition?.steps.some((step) => step.gate === 'approve')
+}
+
+export const AUTOPILOT_UNTRUSTED_NOTICE = 'Autopilot is off: an issue or pull request input is not from a collaborator'
+
 export type InputTrustVerdict = WorkflowInputTrust | 'unknown'
 
 export interface InputTrustCheck {

@@ -77,7 +77,7 @@ const OVERRIDES_MAX = 64
 const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
 const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
-const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides'] as const
+const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides', 'autopilot'] as const
 const REQUEST_CHANGES_KEYS = ['feedback', 'fresh'] as const
 const SAVE_DEFINITION_KEYS = ['scope', 'repoRoot', 'defId', 'name', 'source'] as const
 const DEFINITION_NAME_MAX_CHARS = 200
@@ -212,7 +212,9 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
   const rawInputs = ownValue(payload, 'inputs', {})
   const allowFull = ownValue(payload, 'allowFull')
   const rawOverrides = ownValue(payload, 'overrides')
+  const autopilot = ownValue(payload, 'autopilot')
   if (allowFull !== undefined && typeof allowFull !== 'boolean') return null
+  if (autopilot !== undefined && typeof autopilot !== 'boolean') return null
   const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
   if (overrides === null) return null
   if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(worktreePath, WORKTREE_PATH_MAX_CHARS)) return null
@@ -229,7 +231,8 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
     worktreePath,
     inputs,
     ...(allowFull === true ? { allowFull } : {}),
-    ...(overrides === undefined ? {} : { overrides })
+    ...(overrides === undefined ? {} : { overrides }),
+    ...(autopilot === true ? { autopilot } : {})
   }
 }
 

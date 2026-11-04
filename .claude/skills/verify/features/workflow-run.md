@@ -62,7 +62,7 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   and starts no agent. The flag stays on the pending entry, so Retry keeps
   it; a creation error releases the reservation.
 - **Overrides**: a collapsed section in the launch sheet for a definition
-  with agent steps (hidden otherwise). Toggle button `Overrides` (`Overrides
+  with agent steps or a gated step (hidden otherwise). Toggle button `Overrides` (`Overrides
   (<n> changed)` once a value differs) with `aria-expanded` and
   `aria-controls`. One row per agent step: `Agent for <stepId>` select
   (supported step harnesses only) and `Model for <stepId>` text input
@@ -75,6 +75,18 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   still shows the definition's own steps. Drafts reset when the workflow
   changes and survive the switch to `Existing worktree` after a refusal.
   The run record's `overriddenFrom.<stepId>` holds the original agent/model.
+- **Autopilot**: inside Overrides, only for a definition with a gated step,
+  checkbox `Autopilot (approve gates automatically)` (unchecked by default;
+  counts as one change in `Overrides (<n> changed)`). Checked, `startRun`
+  gets `autopilot: true` and the record gets `autopilot: true`: every gate
+  is approved on `done` with no pause (`gateResolved` decision `autopilot`,
+  no Needs-you row). It never changes permissions (`full` still needs
+  `Allow full access`). Any issue/PR input verdict that is not trusted
+  (including a failed check) disables and unchecks it with the notice
+  `Autopilot is off: an issue or pull request input is not from a
+  collaborator` linked by `aria-describedby`, and no `autopilot` is sent;
+  the server also drops it for untrusted inputs and logs `run autopilot
+  disabled untrusted-inputs`. Resets when the workflow changes.
 - **Input pickers**: definition inputs of type `issue`, `pr` and `file`
   render as one combobox (`role="combobox"`, `aria-expanded`,
   `aria-controls` -> `role="listbox"` labelled `<input> options`,
@@ -184,7 +196,15 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     `Model for plan` = `fake/opencode-model` -> `Overrides (1 changed)` ->
     Start -> a new `⚙ plan · opencode` step tab -> run record `done` with
     `overriddenFrom.plan.agent: claude`, `plan` step opencode with that model
-    and attempts `1:opencode:done`.
+    and attempts `1:opencode:done`. Then the autopilot sub-step: open the
+    launch sheet -> pick `browser-gate` -> expand `Overrides` -> check
+    `Autopilot (approve gates automatically)` -> `Overrides (1 changed)` ->
+    Start -> poll the record to `done` while asserting no Needs-you row
+    `Waiting at gate · draft` ever shows -> record `autopilot: true`,
+    `draft` attempts `1:done`, one `publish` attempt done, no recorded
+    pauses, and in `debug.log` a `step done` line for `draft`, a `gate
+    approved` line with decision `autopilot` and no `run paused` line. A
+    `finally` closes the `⚙ draft · Claude` tab (multi-turn fake).
   - `input-pickers`: open the launch sheet -> pick `browser-file` (inputs
     `target: file`, `ticket: issue`; shell step `test -f
     {{inputs.target}}`) -> focus the `target` combobox -> type `picker` ->

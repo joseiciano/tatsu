@@ -1090,6 +1090,29 @@ describe('workflowsReducer gateResolved', () => {
       expect(resolve(cancelled, 'run-a', 'plan')).toBe(cancelled)
     }
   )
+
+  it('autopilot moves an awaiting-gate step to done and keeps its attempts', () => {
+    const start = fixture({
+      steps: { plan: { status: 'awaiting-gate', attemptIds: ['att-a1'] }, build: { status: 'pending', attemptIds: [] } }
+    })
+    const next = workflowsReducer(start, {
+      type: 'workflows/gateResolved',
+      payload: { runId: 'run-a', stepId: 'plan', decision: 'autopilot' }
+    })
+    expect(next.runs['run-a'].steps.plan).toEqual({ status: 'done', attemptIds: ['att-a1'] })
+    expect(next.runs['run-a'].steps.build).toBe(start.runs['run-a'].steps.build)
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+  })
+
+  it.each(['pending', 'queued', 'running', 'failed', 'done'] as const)('autopilot returns the same state for a %s step', (status) => {
+    const start = fixture({ steps: { plan: { status, attemptIds: [] } } })
+    expect(
+      workflowsReducer(start, {
+        type: 'workflows/gateResolved',
+        payload: { runId: 'run-a', stepId: 'plan', decision: 'autopilot' }
+      })
+    ).toBe(start)
+  })
 })
 
 describe('capPermissions', () => {
