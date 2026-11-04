@@ -447,6 +447,28 @@ async function flowRunDetail(page, backend) {
     await diamond.waitFor({ state: 'detached' })
     await section.getByRole('button', { name: 'Back', exact: true }).click()
     await section.waitFor({ state: 'detached' })
+
+    const beforeWhen = new Set(await personalRunIds(backend, 'smoke-when'))
+    await startFromLaunchSheet(page, 'smoke-when', shot)
+    const whenRunId = await newRunId(backend, 'smoke-when', beforeWhen)
+    await waitForRunStatus(backend, whenRunId, 'done', 3 * SCENARIO_TIMEOUT_MS)
+    log(`run-detail: smoke-when run ${whenRunId} done`)
+    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    await section.waitFor()
+    const whenCard = section.getByRole('region', { name: 'Recent runs' }).getByRole('article', { name: 'smoke-when on repo', exact: true }).first()
+    await whenCard.getByRole('button', { name: 'Open run: smoke-when on repo', exact: true }).click()
+    const whenDetail = section.getByRole('region', { name: 'smoke-when', exact: true })
+    await whenDetail.waitFor()
+    const whenGraph = whenDetail.getByRole('group', { name: 'Workflow graph', exact: true })
+    for (const name of ['review: done', 'fix: skipped', 'join: done']) {
+      await whenGraph.getByRole('listitem', { name, exact: true }).waitFor()
+    }
+    log('run-detail: smoke-when graph shows review: done, fix: skipped, join: done')
+    await shot('when-graph')
+    await whenDetail.getByRole('button', { name: 'All runs', exact: true }).click()
+    await whenDetail.waitFor({ state: 'detached' })
+    await section.getByRole('button', { name: 'Back', exact: true }).click()
+    await section.waitFor({ state: 'detached' })
   })
 }
 

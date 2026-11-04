@@ -12,7 +12,9 @@
 // read-only Claude branches, shell join), `smoke-gate` (gated multi-turn
 // Claude plan then shell step), `smoke-loop` (multi-turn Claude build, shell
 // test, read-only multi-turn Claude review looping back to build until its
-// verdict is pass), `smoke-retry` (one
+// verdict is pass), `smoke-when` (read-only Claude review reporting verdict
+// pass, a Claude fix step conditioned on verdict fail, shell join),
+// `smoke-retry` (one
 // `test -f flag` shell step) and `smoke-full`, plus the committed repo
 // definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
@@ -366,6 +368,23 @@ async function scenarioLoop(worktreePath) {
   )
 }
 
+async function scenarioWhen(worktreePath) {
+  const runId = await startRun('personal:smoke-when', worktreePath)
+  const record = await runSettled(runId)
+  expectThat(record.status === 'done', `when scenario run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+  expectThat(
+    record.steps.review === 'done' && record.steps.fix === 'skipped' && record.steps.join === 'done',
+    `when scenario step statuses review=${record.steps.review} fix=${record.steps.fix} join=${record.steps.join}`,
+    record
+  )
+  const [review, fix, join] = ['review', 'fix', 'join'].map((stepId) => attemptsFor(record, stepId))
+  expectThat(review.length === 1 && review[0].result?.data?.verdict === 'pass', 'when scenario review did not report verdict pass', record)
+  expectThat(fix.length === 0, `when scenario fix has ${fix.length} attempts, expected none`, record)
+  expectThat(join.length === 1 && join[0].status === 'done', 'when scenario join did not run once', record)
+  expectThat(join[0].startedAt >= review[0].endedAt, 'when scenario join started before review ended', record)
+  console.log('scenario when OK: run=%s done; review verdict pass -> fix skipped -> join done', runId)
+}
+
 async function scenarioFailRetry(worktreePath) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const runId = await startRun('personal:smoke-retry', worktreePath)
@@ -459,6 +478,7 @@ async function main() {
     'personal:smoke-diamond',
     'personal:smoke-gate',
     'personal:smoke-loop',
+    'personal:smoke-when',
     'personal:smoke-retry',
     'personal:smoke-full'
   ]
@@ -484,6 +504,7 @@ async function main() {
   await scenarioDiamond(worktreePath)
   await scenarioGate(worktreePath)
   await scenarioLoop(worktreePath)
+  await scenarioWhen(worktreePath)
   await scenarioFailRetry(worktreePath)
   await scenarioRepoTrust(worktreePath)
   ws.close()

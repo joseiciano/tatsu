@@ -5,7 +5,7 @@ export const WORKFLOW_FEATURES: Readonly<Record<WorkflowFeature, WorkflowFeature
   'agent-opencode': { phase: 3, message: 'opencode steps ("agent: opencode") need phase 3', supported: true },
   gate: { phase: 4, message: 'Gates ("gate") need phase 4', supported: true },
   loop: { phase: 4, message: 'Loops ("loop") need phase 4', supported: true },
-  when: { phase: 4, message: 'Conditional steps ("when") need phase 4', supported: false },
+  when: { phase: 4, message: 'Conditional steps ("when") need phase 4', supported: true },
   on_loop: { phase: 4, message: 'Loop re-entry prompts ("on_loop") need phase 4', supported: true },
   'nonlinear-needs': { phase: 4, message: 'Non-linear "needs" (parallel branches or skipped predecessors) need phase 4', supported: true },
   parallel_safe: { phase: 4, message: 'Parallel shell steps ("parallel_safe") need phase 4', supported: false },
