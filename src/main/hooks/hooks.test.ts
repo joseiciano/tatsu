@@ -234,7 +234,7 @@ describe('tailLog', () => {
   it('emits the Claude Stop shape with transcript path and final message', () => {
     append(claudeLine)
     expect(stops).toEqual([
-      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', continued: false, ts: 1 }
+      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', continued: false, stopHookActive: false, ts: 1 }
     ])
   })
 
@@ -259,13 +259,13 @@ describe('tailLog', () => {
     }
   ])('emits a Codex Stop: $name', ({ payload, transcriptPath, lastAssistantMessage }) => {
     append(stopLine(payload))
-    expect(stops).toEqual([{ terminalId: id, sessionId: 'x1', transcriptPath, lastAssistantMessage, continued: false, ts: 1 }])
+    expect(stops).toEqual([{ terminalId: id, sessionId: 'x1', transcriptPath, lastAssistantMessage, continued: false, stopHookActive: false, ts: 1 }])
   })
 
   it('emits the opencode Stop shape without a transcript path, message unchanged', () => {
     append(stopLine({ session_id: 'o1', last_assistant_message: 'line1\nline2' }))
     expect(stops).toEqual([
-      { terminalId: id, sessionId: 'o1', transcriptPath: null, lastAssistantMessage: 'line1\nline2', continued: false, ts: 1 }
+      { terminalId: id, sessionId: 'o1', transcriptPath: null, lastAssistantMessage: 'line1\nline2', continued: false, stopHookActive: false, ts: 1 }
     ])
   })
 
@@ -303,6 +303,13 @@ describe('tailLog', () => {
     expect(stops.map((stop) => stop.continued)).toEqual([true, false])
   })
 
+  it('carries stop_hook_active only when the payload holds literal true', () => {
+    append(JSON.stringify({ event: 'Stop', ts: 1, payload: { session_id: 'c1', stop_hook_active: true } }) + '\n')
+    append(JSON.stringify({ event: 'Stop', ts: 2, payload: { session_id: 'c1', stop_hook_active: 'true' } }) + '\n')
+    append(JSON.stringify({ event: 'Stop', ts: 3, payload: { session_id: 'c1' } }) + '\n')
+    expect(stops.map((stop) => stop.stopHookActive)).toEqual([true, false, false])
+  })
+
   it('tells prompt-submit listeners about UserPromptSubmit for this terminal only', () => {
     const prompts: string[] = []
     const offPrompt = onPromptSubmit((e) => prompts.push(e.terminalId))
@@ -321,7 +328,7 @@ describe('tailLog', () => {
     fsCap.maxRead = 7
     append(claudeLine)
     expect(stops).toEqual([
-      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', continued: false, ts: 1 }
+      { terminalId: id, sessionId: 'c1', transcriptPath: '/tmp/c.jsonl', lastAssistantMessage: 'Done.', continued: false, stopHookActive: false, ts: 1 }
     ])
     expect(statusDispatches()).toEqual([
       { type: 'terminals/statusChanged', payload: { id, status: 'waiting', pendingTool: null } }
