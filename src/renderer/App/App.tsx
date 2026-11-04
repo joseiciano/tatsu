@@ -672,7 +672,8 @@ const setQuestStep = useCallback((next: QuestStep) => {
     activeWorktreeId,
     setActiveWorktreeId,
     setActivePaneId,
-    setShowNewWorktree
+    setShowNewWorktree,
+    openWorkflowLaunch: setLaunchTarget
   })
 
   // All tab/pane mutation handlers (addTab, closeTab, restartClaude,
