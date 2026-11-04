@@ -62,6 +62,7 @@ import {
   type WorkflowDefinitionDetail,
   type WorkflowInputTrust,
   type WorkflowInputTrustType,
+  type WorkflowLoopCapAction,
   type WorkflowPausedReason,
   type WorkflowRun,
   type WorkflowRunStatus,
@@ -763,10 +764,35 @@ export class WorkflowRunner {
       this.log('loop cap reached', ids)
       return
     }
-    this.resume(state, step.id)
     this.log('loop back', { ...ids, backTo: step.loop.back_to })
-    for (const id of this.spanOf(state, step.id)) this.setStep(state, id, 'pending')
+    this.reenterSpan(state, step.id)
+  }
+
+  private reenterSpan(state: RunState, loopingId: string): void {
+    for (const id of this.spanOf(state, loopingId)) this.setStep(state, id, 'pending')
+    this.resume(state, loopingId)
     this.schedule(state)
+  }
+
+  resolveLoopCap(runId: string, stepId: string, action: WorkflowLoopCapAction): StepActionResult {
+    const ids = { runId, stepId }
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
+    if (!this.ready) return this.refuseAction('starting', ids)
+    if (!this.labsOn()) return this.refuseAction('labs-off', ids)
+    if (state.busy) return this.refuseAction('busy', ids)
+    if (!state.record.definition.steps.some((step) => step.id === stepId)) return this.refuseAction('wrong-step', ids)
+    if (state.pauses.get(stepId) !== 'loop-cap') return this.refuseAction('not-at-loop-cap', ids)
+    if (action === 'again') {
+      this.log('loop cap again', ids)
+      this.reenterSpan(state, stepId)
+    } else {
+      this.log('loop cap continued', ids)
+      this.resume(state, stepId)
+      this.schedule(state)
+    }
+    this.settle(state)
+    return ACTION_OK
   }
 
   private spanOf(state: RunState, loopingId: string): string[] {

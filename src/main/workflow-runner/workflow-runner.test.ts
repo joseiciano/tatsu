@@ -2995,6 +2995,102 @@ describe('WorkflowRunner loops', () => {
     expect(ctx.logs).toContain(`[workflow] loop cap reached ${JSON.stringify({ runId, stepId: 'review' })}`)
   })
 
+  async function atLoopCap() {
+    const run = await loopRun('loop-cap')
+    await run.finish('build', done('built-1'))
+    await run.finish('review', verdict('fail', 'review-1'))
+    await run.finish('build', done('built-2'))
+    await run.finish('review', verdict('fail', 'review-2'))
+    expect(run.ctx.wf().runs[run.runId].pausedReason).toBe('loop-cap')
+    return run
+  }
+
+  it('loops again from the cap: one more pass over the span, then pauses loop-cap again while until stays unmet', async () => {
+    const { ctx, runId, finish, attempts } = await atLoopCap()
+    const seen = ctx.eventsSince(() => expect(ctx.runner.resolveLoopCap(runId, 'review', 'again')).toEqual({ ok: true }))
+    expect(seen.slice(0, 4)).toEqual(['stepStatusChanged', 'stepStatusChanged', 'cursorChanged', 'runResumed'])
+    expect(seen.filter((type) => type === 'cursorChanged')).toHaveLength(1)
+    expect(ctx.stepStatus(runId, 'build')).toBe('running')
+    expect(ctx.stepStatus(runId, 'review')).toBe('pending')
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'running', steps: { build: 'running', review: 'pending' } })
+    expect(ctx.logs).toContain(`[workflow] loop cap again ${JSON.stringify({ runId, stepId: 'review' })}`)
+    await flush()
+    expect(ctx.agent.continued.at(-1)?.attempt.stepId).toBe('build')
+    expect(ctx.agent.continued.at(-1)?.prompt).toBe('Your previous result was:\nbuilt-2\n\nAddress this feedback from review:\nreview-2')
+    await finish('build', done('built-3'))
+    await finish('review', verdict('fail', 'review-3'))
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'loop-cap', cursorStepId: 'review' })
+    expect([attempts('build'), attempts('review')]).toEqual([3, 3])
+    expect(ctx.stepStatus(runId, 'after')).toBe('pending')
+    expect(ctx.shell.started).toEqual([])
+  })
+
+  it('loops again from the cap and finishes the run once the extra pass meets until', async () => {
+    const { ctx, runId, finish, exitShell } = await atLoopCap()
+    expect(ctx.runner.resolveLoopCap(runId, 'review', 'again')).toEqual({ ok: true })
+    await flush()
+    await finish('build')
+    await finish('review', verdict('pass'))
+    expect(ctx.stepStatus(runId, 'review')).toBe('done')
+    expect(ctx.stepStatus(runId, 'after')).toBe('running')
+    await exitShell('after')
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('continues anyway from the cap: keeps the last result and starts the dependents', async () => {
+    const { ctx, runId, exitShell, attempts } = await atLoopCap()
+    const seen = ctx.eventsSince(() => expect(ctx.runner.resolveLoopCap(runId, 'review', 'continue')).toEqual({ ok: true }))
+    expect(seen).toEqual(['cursorChanged', 'runResumed', 'stepStarted', 'attemptStarted'])
+    expect(ctx.stepStatus(runId, 'review')).toBe('done')
+    expect(ctx.stepStatus(runId, 'after')).toBe('running')
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'running', steps: { review: 'done', after: 'running' } })
+    expect(ctx.records.at(-1)?.pausedReason).toBeUndefined()
+    expect(ctx.logs).toContain(`[workflow] loop cap continued ${JSON.stringify({ runId, stepId: 'review' })}`)
+    await flush()
+    await exitShell('after')
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect([attempts('build'), attempts('review')]).toEqual([2, 2])
+  })
+
+  it('refuses to resolve a loop cap on unknown runs and steps, a run not at its cap, another step and labs off', async () => {
+    const { ctx, runId, finish } = await loopRun('loop-cap')
+    expect(ctx.runner.resolveLoopCap('nope', 'review', 'continue')).toEqual({ ok: false, reason: 'unknown-run' })
+    expect(ctx.runner.resolveLoopCap(runId, 'review', 'again')).toEqual({ ok: false, reason: 'not-at-loop-cap' })
+    await finish('build')
+    await finish('review', verdict('fail'))
+    await finish('build')
+    ctx.runner.complete(ctx.attemptOf(runId, 'review'), failed())
+    expect(ctx.wf().runs[runId].pausedReason).toBe('step-failed')
+    expect(ctx.runner.resolveLoopCap(runId, 'review', 'continue')).toEqual({ ok: false, reason: 'not-at-loop-cap' })
+
+    const capped = await atLoopCap()
+    expect(capped.ctx.runner.resolveLoopCap(capped.runId, 'build', 'continue')).toEqual({ ok: false, reason: 'not-at-loop-cap' })
+    expect(capped.ctx.runner.resolveLoopCap(capped.runId, 'ghost', 'continue')).toEqual({ ok: false, reason: 'wrong-step' })
+    capped.ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(capped.ctx.runner.resolveLoopCap(capped.runId, 'review', 'again')).toEqual({ ok: false, reason: 'labs-off' })
+    expect(capped.ctx.wf().runs[capped.runId]).toMatchObject({ status: 'paused', pausedReason: 'loop-cap' })
+    expect(capped.ctx.logs).toContain(
+      `[workflow] step action refused not-at-loop-cap ${JSON.stringify({ runId: capped.runId, stepId: 'build' })}`
+    )
+    expect(capped.ctx.runner.cancelRun(capped.runId)).toEqual({ ok: true })
+    expect(capped.ctx.runner.resolveLoopCap(capped.runId, 'review', 'continue')).toEqual({ ok: false, reason: 'unknown-run' })
+  })
+
+  it('continues anyway past the cap of a gated looping step without stopping at its gate', async () => {
+    const { ctx, runId, finish } = await loopRun('loop-gated')
+    for (let pass = 0; pass < 3; pass += 1) {
+      await finish('build')
+      await finish('review', verdict('fail'))
+    }
+    expect(ctx.wf().runs[runId].pausedReason).toBe('loop-cap')
+    expect(ctx.runner.resolveLoopCap(runId, 'review', 'continue')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'review')).toBe('done')
+    expect(ctx.stepStatus(runId, 'after')).toBe('running')
+    expect(ctx.events.some((event) => event.type === 'workflows/gateResolved')).toBe(false)
+  })
+
   it('queues a loop continuation behind the agent cap, records it, and continues when a slot frees', async () => {
     const ctx = setup({ cap: 1, deps: { hasExecution: () => true } })
     const runId = await ctx.startRun('loop-cap')

@@ -134,6 +134,7 @@ export type StepActionRefusal =
   | 'not-continuable-step'
   | 'nothing-to-continue'
   | 'not-awaiting-gate'
+  | 'not-at-loop-cap'
 
 export interface ContinueStepOptions {
   fresh?: boolean

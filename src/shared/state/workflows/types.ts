@@ -249,6 +249,8 @@ export interface WorkflowRequestChangesPayload {
   fresh: boolean
 }
 
+export type WorkflowLoopCapAction = 'again' | 'continue'
+
 export type WorkflowStartRunResponse = { runId: string } | { error: string }
 
 export type WorkflowActionResponse = { ok: true } | { error: string }
