@@ -115,6 +115,7 @@ import {
   opencodeProfile,
   writeStepPromptFile
 } from './workflow-runner'
+import { createWorkflowNotifier } from './workflow-notifier'
 import {
   createWorkflowRunLookup,
   createWorkflowRunRecords,
@@ -850,6 +851,12 @@ registerWorkflowsRequestHandlers({
 store.subscribe((event) => {
   if (event.type === 'settings/workflowSettingsChanged') queueMicrotask(() => workflowRunner.reschedule())
 })
+const workflowNotifier = createWorkflowNotifier({
+  store,
+  notify: desktopShellMod ? desktopShellMod.showNotification : null,
+  openSection: () => desktopHooks.openWorkflowsSection(),
+  log
+})
 removeStaleStepMarkers()
 const RECONCILE_WAIT_MS = 10_000
 let workflowRunsReconciled = false
@@ -860,6 +867,8 @@ function reconcileWorkflowRuns(): void {
     workflowRunner.reconcile(bootRunRecords)
   } catch {
     log('workflow', 'run reconcile failed')
+  } finally {
+    workflowNotifier.arm()
   }
 }
 function reconcileWorkflowRunsAfter(panesRestored: Promise<unknown>, controlServerStarted: Promise<unknown>): void {
@@ -3271,7 +3280,8 @@ function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
 // shell replaces them after `startDesktopShell` returns.
 const desktopHooks = {
   startAutoUpdateChecks: (): void => {},
-  stopAutoUpdateChecks: (): void => {}
+  stopAutoUpdateChecks: (): void => {},
+  openWorkflowsSection: (): void => {}
 }
 
 async function runBoot(): Promise<void> {
@@ -3665,6 +3675,7 @@ if (desktopShellMod && desktopEarly) {
     },
     onBeforeQuit: () => {
       codexHookTrustMonitor?.stop()
+      workflowNotifier.dispose()
       workflowRunner.dispose()
       workflowDefsLoader.dispose()
       shellStepDriver.dispose()
@@ -3675,6 +3686,7 @@ if (desktopShellMod && desktopEarly) {
   })
   desktopHooks.startAutoUpdateChecks = handle.startAutoUpdateChecks
   desktopHooks.stopAutoUpdateChecks = handle.stopAutoUpdateChecks
+  desktopHooks.openWorkflowsSection = handle.openWorkflowsSection
 } else {
   // Headless: no app.whenReady to wait for, no menus, no window. Just
   // boot. The WS server already listens (the webHttpServer.listen call
@@ -3689,6 +3701,7 @@ if (desktopShellMod && desktopEarly) {
     if (shuttingDown) return
     shuttingDown = true
     codexHookTrustMonitor?.stop()
+    workflowNotifier.dispose()
     workflowRunner.dispose()
     workflowDefsLoader.dispose()
     shellStepDriver.dispose()

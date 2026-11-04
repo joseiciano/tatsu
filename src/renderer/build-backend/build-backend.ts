@@ -478,6 +478,8 @@ export function buildBackend(
       onLocalSignal('app:splitPaneDown', () => callback()),
     onOpenNewProject: (callback: () => void) =>
       onLocalSignal('menu:newProject', () => callback()),
+    onOpenWorkflowsSection: (callback: () => void) =>
+      onLocalSignal('workflows:openSection', () => callback()),
     onOpenReportIssue: (callback: () => void) =>
       onLocalSignal('app:openReportIssue', () => callback()),
     onDebugCrashFocusedTab: (callback: () => void) =>

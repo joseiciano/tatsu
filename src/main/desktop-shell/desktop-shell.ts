@@ -27,7 +27,18 @@
 //     update checks) for the few shared handlers that need to call into
 //     the desktop side.
 
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, screen, shell } from 'electron'
+import {
+  app,
+  autoUpdater as nativeAutoUpdater,
+  BrowserWindow,
+  dialog,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  Notification,
+  screen,
+  shell
+} from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { join } from 'path'
 import { BrowserManager } from '../browser-manager'
@@ -48,6 +59,53 @@ import { HARNESS_REPO_URL } from '../../shared/constants'
 import { resolveRepoPath } from '../repo-resolve'
 import { registerRepoRoot } from '../repo-roots'
 import type { AddRepoResult } from '../../shared/repo-pick'
+import type { WorkflowNotification } from '../workflow-notifier'
+
+const liveNotifications = new Set<Notification>()
+
+export function showNotification({ title, body, onClick }: WorkflowNotification): void {
+  if (!Notification.isSupported()) return
+  const notification = new Notification({ title, body })
+  liveNotifications.add(notification)
+  notification.on('click', () => {
+    liveNotifications.delete(notification)
+    onClick()
+  })
+  notification.on('close', () => {
+    liveNotifications.delete(notification)
+  })
+  notification.show()
+}
+
+export interface FocusableWindow {
+  isMinimized: () => boolean
+  restore: () => void
+  show: () => void
+  focus: () => void
+  webContents: { once: (event: 'did-finish-load', listener: () => void) => void }
+}
+
+export interface FocusAndOpenWorkflowsDeps {
+  getWindow: () => FocusableWindow | null
+  createWindow: () => FocusableWindow
+  sendSignal: (name: string) => void
+}
+
+export function focusAndOpenWorkflowsSection({ getWindow, createWindow, sendSignal }: FocusAndOpenWorkflowsDeps): void {
+  const existing = getWindow()
+  if (existing) {
+    if (existing.isMinimized()) existing.restore()
+    existing.show()
+    existing.focus()
+    sendSignal('workflows:openSection')
+    return
+  }
+  const created = createWindow()
+  created.webContents.once('did-finish-load', () => {
+    created.focus()
+    sendSignal('workflows:openSection')
+  })
+}
 
 export interface DesktopShellInit {
   store: Store
@@ -139,6 +197,7 @@ export interface DesktopShellStartDeps {
 export interface DesktopShellStartHandle {
   startAutoUpdateChecks: () => void
   stopAutoUpdateChecks: () => void
+  openWorkflowsSection: () => void
 }
 
 /** Second call. After index.ts has wired its mode-agnostic IPC handlers,
@@ -693,8 +752,17 @@ export function startDesktopShell(deps: DesktopShellStartDeps): DesktopShellStar
     })
   })
 
+  function openWorkflowsSection(): void {
+    focusAndOpenWorkflowsSection({
+      getWindow: () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+      createWindow,
+      sendSignal: (name) => transport.sendSignal(name)
+    })
+  }
+
   return {
     startAutoUpdateChecks,
-    stopAutoUpdateChecks
+    stopAutoUpdateChecks,
+    openWorkflowsSection
   }
 }
