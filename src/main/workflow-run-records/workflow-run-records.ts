@@ -197,8 +197,14 @@ export interface WorkflowRunLookupDeps {
   attemptRunId: (attemptId: string) => string | undefined
 }
 
+export interface WorkflowRunAttempt {
+  run: WorkflowRunRecord
+  attempt: WorkflowAttemptRecord
+}
+
 export interface WorkflowRunLookup {
   getRun(runId: unknown): Promise<WorkflowRunRecord | null>
+  getAttempt(attemptId: unknown): Promise<WorkflowRunAttempt | null>
   getAttemptResult(attemptId: unknown): Promise<WorkflowAttemptRecord | null>
 }
 
@@ -216,11 +222,12 @@ export function createWorkflowRunLookup({
     return live(runId) ?? (await records.read(runId))
   }
 
-  function attemptIn(run: WorkflowRunRecord | null, attemptId: string): WorkflowAttemptRecord | null {
-    return run?.attempts.find((attempt) => attempt.attemptId === attemptId) ?? null
+  function attemptIn(run: WorkflowRunRecord | null, attemptId: string): WorkflowRunAttempt | null {
+    const attempt = run?.attempts.find((candidate) => candidate.attemptId === attemptId)
+    return run && attempt ? { run, attempt } : null
   }
 
-  async function scanDisk(attemptId: string): Promise<WorkflowAttemptRecord | null> {
+  async function scanDisk(attemptId: string): Promise<WorkflowRunAttempt | null> {
     for (const runId of await records.list()) {
       if (scanned.has(runId)) continue
       const liveRun = live(runId)
@@ -234,19 +241,24 @@ export function createWorkflowRunLookup({
     return null
   }
 
+  async function getAttempt(attemptId: unknown): Promise<WorkflowRunAttempt | null> {
+    if (!isRunId(attemptId)) return null
+    const known = runIdByAttempt.get(attemptId) ?? attemptRunId(attemptId) ?? liveAttemptRunId(attemptId)
+    if (known !== undefined) {
+      const found = attemptIn(await getRun(known), attemptId)
+      if (found) {
+        runIdByAttempt.set(attemptId, known)
+        return found
+      }
+    }
+    return scanDisk(attemptId)
+  }
+
   return {
     getRun,
+    getAttempt,
     async getAttemptResult(attemptId) {
-      if (!isRunId(attemptId)) return null
-      const known = runIdByAttempt.get(attemptId) ?? attemptRunId(attemptId) ?? liveAttemptRunId(attemptId)
-      if (known !== undefined) {
-        const found = attemptIn(await getRun(known), attemptId)
-        if (found) {
-          runIdByAttempt.set(attemptId, known)
-          return found
-        }
-      }
-      return scanDisk(attemptId)
+      return (await getAttempt(attemptId))?.attempt ?? null
     }
   }
 }

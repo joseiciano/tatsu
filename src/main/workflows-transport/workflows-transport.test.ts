@@ -1,5 +1,6 @@
+import { execFileSync } from 'child_process'
 import { createHash } from 'crypto'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,6 +26,7 @@ import type {
   WorkflowsEvent
 } from '../../shared/state/workflows'
 import { validateWorkflowDefinition } from '../../shared/workflow-def'
+import { takeSnapshot } from '../workflow-snapshots'
 import type { PersistedWorkflowTrust } from '../persistence'
 
 vi.mock('../perf-log', () => ({
@@ -322,6 +324,173 @@ describe('workflows:getRun and workflows:getAttemptResult', () => {
     expect(await transport.call('workflows:getAttemptResult', 'att-unknown')).toBeNull()
     expect(await transport.call('workflows:getAttemptResult', 'att-orphan')).toBeNull()
     expect(await transport.call('workflows:getAttemptResult', 42)).toBeNull()
+  })
+})
+
+describe('workflows:getAttemptChangedFiles and workflows:getAttemptFileDiff', () => {
+  const gitEnv = {
+    ...process.env,
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_AUTHOR_NAME: 't',
+    GIT_AUTHOR_EMAIL: 't@t',
+    GIT_COMMITTER_NAME: 't',
+    GIT_COMMITTER_EMAIL: 't@t'
+  }
+  const fixtureGit = (cwd: string, args: string[]): string =>
+    execFileSync('git', args, { cwd, env: gitEnv }).toString().trim()
+
+  let repo: string
+
+  beforeEach(() => {
+    repo = join(realpathSync(dir), 'repo')
+    mkdirSync(repo)
+    fixtureGit(repo, ['init', '-q', '-b', 'main'])
+    fixtureGit(repo, ['config', 'commit.gpgsign', 'false'])
+    writeFileSync(join(repo, 'notes.md'), 'one\n')
+    fixtureGit(repo, ['add', '-A'])
+    fixtureGit(repo, ['commit', '-q', '-m', 'base'])
+  })
+
+  async function snapshottedAttempt(
+    runId: string,
+    attemptId: string,
+    change: () => void
+  ): Promise<WorkflowAttemptRecord> {
+    const baseSnapshot = await takeSnapshot({ worktree: repo, runId, stepId: 'plan', n: 0 })
+    change()
+    const headSnapshot = await takeSnapshot({ worktree: repo, runId, stepId: 'plan', n: 1, parent: baseSnapshot.commit })
+    return {
+      ...attempt(attemptId, 'changed'),
+      baseSnapshot: { commit: baseSnapshot.commit, ref: baseSnapshot.ref },
+      headSnapshot: { commit: headSnapshot.commit, ref: headSnapshot.ref }
+    }
+  }
+
+  async function persistRun(runId: string, attempts: WorkflowAttemptRecord[], worktreePath = repo): Promise<void> {
+    records.persist({ ...runRecord(runId, attempts), worktreePath })
+    await records.flush()
+  }
+
+  it('lists the files an uncommitted attempt changed and diffs one of them', async () => {
+    const changed = await snapshottedAttempt('run-diff', 'att-diff', () => {
+      writeFileSync(join(repo, 'smoke.txt'), 'smoke\n')
+      writeFileSync(join(repo, 'notes.md'), 'one\ntwo\n')
+    })
+    await persistRun('run-diff', [changed])
+
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-diff')).toEqual({
+      files: [
+        { path: 'notes.md', status: 'modified', additions: 1, deletions: 0 },
+        { path: 'smoke.txt', status: 'added', additions: 1, deletions: 0 }
+      ],
+      truncated: false
+    })
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-diff', 'smoke.txt')).toEqual({
+      original: '',
+      modified: 'smoke\n'
+    })
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-diff', 'notes.md')).toEqual({
+      original: 'one\n',
+      modified: 'one\ntwo\n'
+    })
+  })
+
+  it('returns the deleted side as empty text', async () => {
+    const changed = await snapshottedAttempt('run-del', 'att-del', () => unlinkSync(join(repo, 'notes.md')))
+    await persistRun('run-del', [changed])
+
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-del', 'notes.md')).toEqual({
+      original: 'one\n',
+      modified: ''
+    })
+  })
+
+  it('returns an error for an unknown or malformed attempt id', async () => {
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-unknown')).toEqual({ error: 'Unknown attempt' })
+    expect(await transport.call('workflows:getAttemptChangedFiles', '../run-1')).toEqual({ error: 'Unknown attempt' })
+    expect(await transport.call('workflows:getAttemptFileDiff', 42, 'smoke.txt')).toEqual({ error: 'Unknown attempt' })
+  })
+
+  it('returns no-snapshot for an attempt without a head snapshot', async () => {
+    const { headSnapshot: _head, ...running } = await snapshottedAttempt('run-open', 'att-open', () => {})
+    await persistRun('run-open', [{ ...running, status: 'running' }])
+
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-open')).toEqual({
+      error: 'No snapshot for this attempt'
+    })
+  })
+
+  it('returns snapshot missing once the snapshot ref is deleted', async () => {
+    const changed = await snapshottedAttempt('run-gone', 'att-gone', () => writeFileSync(join(repo, 'smoke.txt'), 'x\n'))
+    await persistRun('run-gone', [changed])
+    fixtureGit(repo, ['update-ref', '-d', changed.headSnapshot?.ref ?? ''])
+
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-gone')).toEqual({ error: 'snapshot missing' })
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-gone', 'smoke.txt')).toEqual({
+      error: 'snapshot missing'
+    })
+  })
+
+  it('refuses snapshot refs outside this attempt and commits that do not match the ref', async () => {
+    const changed = await snapshottedAttempt('run-tamper', 'att-tamper', () => writeFileSync(join(repo, 'smoke.txt'), 'x\n'))
+    const otherBase = changed.baseSnapshot?.commit ?? ''
+    fixtureGit(repo, ['update-ref', 'refs/heads/elsewhere', otherBase])
+    const foreignRef = { ...changed, attemptId: 'att-foreign', headSnapshot: { commit: otherBase, ref: 'refs/heads/elsewhere' } }
+    const wrongCommit = {
+      ...changed,
+      attemptId: 'att-wrong',
+      headSnapshot: { commit: otherBase, ref: changed.headSnapshot?.ref ?? '' }
+    }
+    await persistRun('run-tamper', [foreignRef, wrongCommit])
+
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-foreign')).toEqual({ error: 'snapshot missing' })
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-wrong')).toEqual({ error: 'snapshot missing' })
+  })
+
+  it('refuses a path outside the attempt’s changed files', async () => {
+    const changed = await snapshottedAttempt('run-path', 'att-path', () => writeFileSync(join(repo, 'smoke.txt'), 'x\n'))
+    await persistRun('run-path', [changed])
+    const notChanged = { error: 'That file is not among this attempt’s changes' }
+
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-path', 'notes.md')).toEqual(notChanged)
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-path', '../../etc/passwd')).toEqual(notChanged)
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-path', join(repo, 'smoke.txt'))).toEqual(notChanged)
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-path', 'smoke.txt\0x')).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-path', { path: 'smoke.txt' })).toEqual({
+      error: 'invalid request'
+    })
+  })
+
+  it('refuses binary and oversized files', async () => {
+    const changed = await snapshottedAttempt('run-big', 'att-big', () => {
+      writeFileSync(join(repo, 'blob.bin'), Buffer.from([0, 1, 2, 0]))
+      writeFileSync(join(repo, 'huge.txt'), 'x\n'.repeat(600 * 1024))
+    })
+    await persistRun('run-big', [changed])
+
+    const listed = await transport.call('workflows:getAttemptChangedFiles', 'att-big')
+    expect(listed).toEqual({
+      files: [
+        { path: 'blob.bin', status: 'added', additions: null, deletions: null },
+        { path: 'huge.txt', status: 'added', additions: 600 * 1024, deletions: 0 }
+      ],
+      truncated: false
+    })
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-big', 'blob.bin')).toEqual({
+      error: 'Binary file; no text diff to show'
+    })
+    expect(await transport.call('workflows:getAttemptFileDiff', 'att-big', 'huge.txt')).toEqual({
+      error: 'File too large to show'
+    })
+  })
+
+  it('returns an error when the run’s worktree is gone', async () => {
+    const changed = await snapshottedAttempt('run-wt', 'att-wt', () => writeFileSync(join(repo, 'smoke.txt'), 'x\n'))
+    await persistRun('run-wt', [changed], join(dir, 'missing-worktree'))
+
+    expect(await transport.call('workflows:getAttemptChangedFiles', 'att-wt')).toEqual({
+      error: 'The worktree for this run is gone'
+    })
   })
 })
 

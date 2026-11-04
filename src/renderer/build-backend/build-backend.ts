@@ -294,6 +294,9 @@ export function buildBackend(
     getWorkflowDefinition: (id: string) => req('workflows:getDefinition', id),
     getWorkflowRun: (runId: string) => req('workflows:getRun', runId),
     getWorkflowAttemptResult: (attemptId: string) => req('workflows:getAttemptResult', attemptId),
+    getWorkflowAttemptChangedFiles: (attemptId: string) => req('workflows:getAttemptChangedFiles', attemptId),
+    getWorkflowAttemptFileDiff: (attemptId: string, path: string) =>
+      req('workflows:getAttemptFileDiff', attemptId, path),
     startWorkflowRun: (payload: WorkflowStartRunPayload) => req('workflows:startRun', payload),
     trustWorkflowDefinition: (defId: string, hash: string) => req('workflows:trustDefinition', defId, hash),
     cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),

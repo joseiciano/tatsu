@@ -32,7 +32,10 @@ import type {
   FileReadResult,
   FileBinaryReadResult,
   FileWriteResult,
-  WorktreeScriptResult
+  WorktreeScriptResult,
+  RangeChangedFile,
+  RangeChangedFiles,
+  BlobAtCommit
 } from './types'
 import { MAX_FILE_READ_BYTES, MAX_FILE_BINARY_READ_BYTES, EXT_TO_MIME, MAX_FILE_WRITE_BYTES } from './constants'
 
@@ -749,6 +752,126 @@ export async function getCommitFileDiffSides(
     originalExists: original != null,
     modifiedExists: modified != null,
     modifiedBinary: false
+  }
+}
+
+const FULL_OBJECT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+const RANGE_MAX_BUFFER = 16 * 1024 * 1024
+
+function rangeStatus(code: string): RangeChangedFile['status'] {
+  if (code === 'A') return 'added'
+  if (code === 'D') return 'deleted'
+  return 'modified'
+}
+
+export async function resolveCommitRef({
+  worktreePath,
+  ref
+}: {
+  worktreePath: string
+  ref: string
+}): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], {
+      cwd: worktreePath
+    })
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+export async function getRangeChangedFiles({
+  worktreePath,
+  base,
+  head,
+  maxFiles
+}: {
+  worktreePath: string
+  base: string
+  head: string
+  maxFiles: number
+}): Promise<RangeChangedFiles> {
+  if (!FULL_OBJECT_ID.test(base) || !FULL_OBJECT_ID.test(head)) throw new Error('invalid range')
+  const t0 = performance.now()
+  const opts = { cwd: worktreePath, maxBuffer: RANGE_MAX_BUFFER }
+  const diffArgs = ['diff-tree', '-r', '-z', '--no-renames']
+  const tA = performance.now()
+  const [nameStatus, ns] = await Promise.all([
+    tracedExec([...diffArgs, '--name-status', base, head], opts),
+    tracedExec([...diffArgs, '--numstat', base, head], opts)
+  ])
+  const walledExec = performance.now() - tA
+  const counts = parseNumstatZ(ns.stdout)
+  const tokens = nameStatus.stdout.split('\0')
+  const files: RangeChangedFile[] = []
+  let truncated = false
+  for (let i = 0; i + 1 < tokens.length; i += 2) {
+    const code = tokens[i]
+    const path = tokens[i + 1]
+    if (!code || !path) continue
+    if (files.length >= maxFiles) {
+      truncated = true
+      break
+    }
+    const fileCounts = counts.get(path)
+    files.push({
+      path,
+      status: rangeStatus(code),
+      additions: fileCounts ? fileCounts.additions : null,
+      deletions: fileCounts ? fileCounts.deletions : null
+    })
+  }
+  logGitOp(
+    'getRangeChangedFiles',
+    { files: files.length, truncated },
+    t0,
+    walledExec,
+    nameStatus.execMs + ns.execMs,
+    nameStatus.outputBytes + ns.outputBytes,
+    [nameStatus.execMs, ns.execMs]
+  )
+  return { files, truncated }
+}
+
+export async function readBlobAtCommit({
+  worktreePath,
+  commit,
+  path,
+  maxBytes
+}: {
+  worktreePath: string
+  commit: string
+  path: string
+  maxBytes: number
+}): Promise<BlobAtCommit> {
+  if (!FULL_OBJECT_ID.test(commit) || path === '' || path.includes('\0')) return { kind: 'missing' }
+  const t0 = performance.now()
+  const spec = `${commit}:${path}`
+  const execParts: number[] = []
+  let outputBytes = 0
+  const finish = (result: BlobAtCommit): BlobAtCommit => {
+    const exec = execParts.reduce((a, b) => a + b, 0)
+    logGitOp('readBlobAtCommit', { result: result.kind }, t0, exec, exec, outputBytes, execParts)
+    return result
+  }
+  let size: number
+  try {
+    const sized = await tracedExec(['cat-file', '-s', spec], { cwd: worktreePath })
+    execParts.push(sized.execMs)
+    size = Number(sized.stdout.trim())
+  } catch {
+    return finish({ kind: 'missing' })
+  }
+  if (!Number.isSafeInteger(size) || size < 0) return finish({ kind: 'missing' })
+  if (size > maxBytes) return finish({ kind: 'too-large' })
+  try {
+    const blob = await tracedExec(['cat-file', 'blob', spec], { cwd: worktreePath, maxBuffer: maxBytes + 1 })
+    execParts.push(blob.execMs)
+    outputBytes = blob.outputBytes
+    return finish({ kind: 'ok', text: blob.stdout })
+  } catch {
+    return finish({ kind: 'missing' })
   }
 }
 

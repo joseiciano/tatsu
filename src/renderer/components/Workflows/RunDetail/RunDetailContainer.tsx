@@ -22,6 +22,7 @@ import { runCardModel } from '../run-card-model'
 import { latestAttemptId, runDetailModel, type RunDetailActionKind } from '../run-detail-model'
 import { CancelStepDialog, MarkDoneForm } from '../StepTab'
 import { confirmRetryFromClean, runNeedsYouAction } from '../workflow-run-helpers'
+import { AttemptChangesContainer } from './AttemptChangesContainer'
 import type { AttemptResultState } from './AttemptResult'
 import { RunDetail } from './RunDetail'
 
@@ -66,12 +67,23 @@ function useRunRecord(runId: string, fetchKey: string | null): LoadedRecord | nu
   return loaded?.runId === runId ? loaded : null
 }
 
-function useAttemptResult(attemptId: string | null): AttemptResultState {
+const HEAD_SNAPSHOT_RETRY_MS = [250, 500, 1000, 2000, 4000]
+const HEAD_SNAPSHOT_WAIT_WINDOW_MS = 30_000
+
+function awaitsHeadSnapshot(attempt: WorkflowAttemptRecord | null): boolean {
+  if (!attempt || attempt.headSnapshot || attempt.endedAt === undefined) return false
+  if (attempt.status === 'running' || attempt.status === 'interrupted') return false
+  return Date.now() - attempt.endedAt < HEAD_SNAPSHOT_WAIT_WINDOW_MS
+}
+
+function useAttemptResult(attemptId: string | null): { state: AttemptResultState; snapshotPending: boolean } {
   const backend = useBackend()
   const sliceAttempt = useWorkflowAttempt(attemptId)
   const [loaded, setLoaded] = useState<LoadedAttempt | null>(null)
+  const [retry, setRetry] = useState<{ attemptId: string; tries: number } | null>(null)
   const status = sliceAttempt?.status
   const endedAt = sliceAttempt?.endedAt
+  const tries = retry !== null && retry.attemptId === attemptId ? retry.tries : 0
   useEffect(() => {
     if (attemptId === null) return
     let cancelled = false
@@ -86,10 +98,19 @@ function useAttemptResult(attemptId: string | null): AttemptResultState {
     return () => {
       cancelled = true
     }
-  }, [backend, attemptId, status, endedAt])
-  if (attemptId === null) return { kind: 'none' }
-  if (loaded?.attemptId !== attemptId) return { kind: 'loading' }
-  return 'error' in loaded ? { kind: 'error' } : { kind: 'ready', attempt: loaded.attempt }
+  }, [backend, attemptId, status, endedAt, tries])
+  const current = loaded?.attemptId === attemptId ? loaded : null
+  const currentAttempt = current && 'attempt' in current ? current.attempt : null
+  const snapshotPending = awaitsHeadSnapshot(currentAttempt) && tries < HEAD_SNAPSHOT_RETRY_MS.length
+  useEffect(() => {
+    if (attemptId === null || !snapshotPending) return
+    const timer = setTimeout(() => setRetry({ attemptId, tries: tries + 1 }), HEAD_SNAPSHOT_RETRY_MS[tries])
+    return () => clearTimeout(timer)
+  }, [attemptId, snapshotPending, tries])
+  if (attemptId === null) return { state: { kind: 'none' }, snapshotPending: false }
+  if (current === null) return { state: { kind: 'loading' }, snapshotPending: false }
+  if ('error' in current) return { state: { kind: 'error' }, snapshotPending: false }
+  return { state: { kind: 'ready', attempt: current.attempt }, snapshotPending }
 }
 
 export function RunDetailContainer({
@@ -113,7 +134,7 @@ export function RunDetailContainer({
   const latestId = record ? latestAttemptId(record) : null
   const effectiveAttemptId = selectedAttemptId && attemptIds.has(selectedAttemptId) ? selectedAttemptId : latestId
   const selectedAttempt = record?.attempts.find((a) => a.attemptId === effectiveAttemptId) ?? null
-  const attemptResult = useAttemptResult(effectiveAttemptId)
+  const { state: attemptResult, snapshotPending } = useAttemptResult(effectiveAttemptId)
 
   const tabRef = { runId, stepId: selectedAttempt?.stepId ?? '', attemptId: effectiveAttemptId }
   const leaf = useWorkflowStepTabLeaf(run && selectedAttempt ? run.worktreePath : null, tabRef)
@@ -240,6 +261,13 @@ export function RunDetailContainer({
         selectedAttemptId={effectiveAttemptId}
         onSelectAttempt={onSelectAttempt}
         attemptResult={attemptResult}
+        attemptChanges={
+          <AttemptChangesContainer
+            attemptId={effectiveAttemptId}
+            attempt={attemptResult}
+            snapshotPending={snapshotPending}
+          />
+        }
         busy={busy}
         actionError={actionError}
         markDoneOpen={showMarkDone}

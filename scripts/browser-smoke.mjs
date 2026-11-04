@@ -13,7 +13,7 @@
 // a screenshot plus an ARIA snapshot to <evidenceDir>.
 
 import { execFileSync } from 'child_process'
-import { accessSync, appendFileSync, constants, mkdirSync, writeFileSync } from 'fs'
+import { accessSync, appendFileSync, constants, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
@@ -389,12 +389,71 @@ async function flowRunDetail(page) {
     if (text !== MARK_DONE_SUMMARY) throw new Error(`attempt summary ${JSON.stringify(text)}, expected ${JSON.stringify(MARK_DONE_SUMMARY)}`)
     if ((await rows.nth(1).getAttribute('aria-pressed')) !== 'true') throw new Error('the selected timeline row is not pressed')
     await shot('detail-summary')
+    const changes = detail.getByRole('region', { name: 'Changed files', exact: true })
+    await changes.getByText('No snapshot for this attempt', { exact: true }).waitFor()
+    log('run-detail: the Mark done attempt (#2, no base snapshot) shows No snapshot for this attempt')
 
     await detail.getByRole('button', { name: 'All runs', exact: true }).click()
     await detail.waitFor({ state: 'detached' })
     await card.waitFor()
     await section.getByRole('button', { name: 'Back', exact: true }).click()
     await section.waitFor({ state: 'detached' })
+  })
+}
+
+const DIFF_FILE = 'smoke.txt'
+
+async function newestPersonalRunId(backend, defName) {
+  const { state } = await backend.snapshot()
+  const [newest] = Object.entries(state.workflows.runs)
+    .filter(([, run]) => run.defId === `personal:${defName}`)
+    .sort(([, a], [, b]) => b.startedAt - a.startedAt)
+  if (!newest) throw new Error(`no run of ${defName}`)
+  return newest[0]
+}
+
+async function flowAttemptDiff(page, backend) {
+  await scenario(page, 'attempt-diff', async (shot) => {
+    try {
+      await startFromLaunchSheet(page, 'browser-diff', shot)
+      const runId = await newestPersonalRunId(backend, 'browser-diff')
+      const record = await waitForRunStatus(backend, runId, 'done')
+      log(`attempt-diff: run ${runId} done with ${record.attempts.length} attempt(s)`)
+
+      await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+      const section = page.getByRole('region', { name: 'Workflows', exact: true })
+      await section.waitFor()
+      const card = section.getByRole('region', { name: 'Recent runs' }).getByRole('article', { name: 'browser-diff on repo', exact: true }).first()
+      await card.getByRole('button', { name: 'Open run: browser-diff on repo', exact: true }).click()
+      const detail = section.getByRole('region', { name: 'browser-diff', exact: true })
+      await detail.waitFor()
+
+      const changes = detail.getByRole('region', { name: 'Changed files', exact: true })
+      const file = changes.getByRole('button', { name: `${DIFF_FILE}, added, +1 −0`, exact: true })
+      await file.waitFor()
+      const listed = await changes.getByRole('listitem').allTextContents()
+      log(`attempt-diff: changed files ${JSON.stringify(listed)}`)
+      await shot('changed-files')
+
+      await file.click()
+      if ((await file.getAttribute('aria-pressed')) !== 'true') throw new Error(`${DIFF_FILE} is not the selected file`)
+      const diff = changes.getByRole('region', { name: `File diff · ${DIFF_FILE}`, exact: true })
+      await diff.locator('.monaco-diff-editor').waitFor()
+      await diff.locator('.editor.modified .view-lines', { hasText: 'smoke' }).waitFor()
+      const originalPane = await diff.locator('.editor.original').boundingBox()
+      if (!originalPane || originalPane.width < 100) {
+        throw new Error(`original side is ${originalPane?.width ?? 0}px wide; the diff is not side by side`)
+      }
+      log(`attempt-diff: ${DIFF_FILE} diff renders side by side with the modified text "smoke"`)
+      await shot('file-diff')
+
+      await detail.getByRole('button', { name: 'All runs', exact: true }).click()
+      await detail.waitFor({ state: 'detached' })
+      await section.getByRole('button', { name: 'Back', exact: true }).click()
+      await section.waitFor({ state: 'detached' })
+    } finally {
+      rmSync(join(worktreePath, DIFF_FILE), { force: true })
+    }
   })
 }
 
@@ -481,6 +540,7 @@ async function main() {
     await flowWorkflowsSection(page, backend)
     await flowExitMarkDone(page, backend)
     await flowRunDetail(page)
+    await flowAttemptDiff(page, backend)
     await flowRepoTrust(page, backend)
   } catch {
     failed = true

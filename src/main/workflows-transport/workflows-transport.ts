@@ -1,4 +1,5 @@
 import type { WorkflowDefsLoader } from '../workflow-defs-loader'
+import { getAttemptChangedFiles, getAttemptFileDiff } from './attempt-changes'
 import { RUN_ID_PATTERN, isRunId, type WorkflowRunLookup } from '../workflow-run-records'
 import {
   RUN_INPUTS_MAX,
@@ -170,6 +171,8 @@ export function registerWorkflowsRequestHandlers({
     })
   }
 
+  guarded('workflows:getAttemptChangedFiles', ([attemptId]) => getAttemptChangedFiles(runs, attemptId))
+  guarded('workflows:getAttemptFileDiff', ([attemptId, path]) => getAttemptFileDiff(runs, attemptId, path))
   guarded('workflows:startRun', ([payload]): WorkflowStartRunResponse => {
     const request = parseStartRun(payload)
     if (!request) return INVALID_REQUEST

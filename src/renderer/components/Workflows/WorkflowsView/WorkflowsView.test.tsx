@@ -15,6 +15,7 @@ const { backendApi } = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../backend', () => ({ useBackend: () => backendApi }))
+vi.mock('../../MonacoDiffEditor', () => ({ MonacoDiffEditor: () => null }))
 vi.mock('../../../store', async () => {
   const selectors = await import('../../../workflow-selectors')
   const selectPaused = selectors.createPausedRunIdsSelector()
