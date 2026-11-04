@@ -1,5 +1,5 @@
 import type { Store } from '../store'
-import type { WorkflowDefsLoader } from '../workflow-defs-loader'
+import type { TimerHandle, WorkflowDefsLoader } from '../workflow-defs-loader'
 import type {
   WorkflowInputTrust,
   WorkflowInputTrustType,
@@ -74,6 +74,8 @@ export interface WorkflowRunnerDeps {
   retagStepTab?: (worktreePath: string, tabId: string, workflow: TerminalTabWorkflow) => void
   inputTrust?: InputTrustFetcher
   inputTrustTimeoutMs?: number
+  setTimer?: (fn: () => void, ms: number) => TimerHandle
+  clearTimer?: (handle: TimerHandle) => void
 }
 
 export type InputTrustFetcher = (
@@ -135,6 +137,7 @@ export type StepActionRefusal =
   | 'nothing-to-continue'
   | 'not-awaiting-gate'
   | 'not-at-loop-cap'
+  | 'not-timed-out'
 
 export interface ContinueStepOptions {
   fresh?: boolean

@@ -7,6 +7,7 @@ import type {
 } from './drivers/types'
 import type { WorkflowRunner } from './workflow-runner'
 import type { Worktree } from '../../shared/state/worktrees'
+import type { TimerHandle } from '../workflow-defs-loader'
 
 export type FakeStartBehavior = 'ok' | 'reject' | 'throw' | 'defer'
 
@@ -92,4 +93,25 @@ export function currentStepId(runner: Pick<WorkflowRunner, 'getRunRecord'>, runI
 
 export function worktreeFixture(path: string): Worktree {
   return { path, branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: path }
+}
+
+export function fakeTimers() {
+  const pending = new Map<TimerHandle, { fn: () => void; ms: number }>()
+  return {
+    setTimer: (fn: () => void, ms: number): TimerHandle => {
+      const handle = setTimeout(() => {}, 0)
+      clearTimeout(handle)
+      pending.set(handle, { fn, ms })
+      return handle
+    },
+    clearTimer: (handle: TimerHandle): void => {
+      pending.delete(handle)
+    },
+    delays: (): number[] => [...pending.values()].map((timer) => timer.ms),
+    fire: (): void => {
+      const due = [...pending.values()]
+      pending.clear()
+      for (const timer of due) timer.fn()
+    }
+  }
 }

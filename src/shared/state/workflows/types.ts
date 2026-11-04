@@ -185,6 +185,7 @@ export interface WorkflowAttemptRecord {
   result?: StepResult
   baseSnapshot?: WorkflowSnapshotRef
   headSnapshot?: WorkflowSnapshotRef
+  timeoutAt?: number
   metrics: WorkflowAttemptMetrics
 }
 

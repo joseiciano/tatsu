@@ -13,7 +13,7 @@ import {
   type WorkflowRunnerDeps,
   type WorkflowRunRecord
 } from '.'
-import { currentStepId, FakeStepDriver, worktreeFixture, type FakeStartBehavior } from './fake-step-driver'
+import { currentStepId, fakeTimers, FakeStepDriver, worktreeFixture, type FakeStartBehavior } from './fake-step-driver'
 import { initialState, type StateEvent } from '../../shared/state'
 import type { PtyStatus, TerminalTab } from '../../shared/state/terminals'
 import type { StepSpawnExtras } from '../agent-spawn'
@@ -380,6 +380,30 @@ steps:
     agent: claude
     prompt: "c"
     when: { field: x, not: y }
+`,
+  timed: `name: timed
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+    timeout: 600
+  - id: test
+    kind: shell
+    run: "true"
+`,
+  'timed-long': `name: timed-long
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+    timeout: 3000000
+`,
+  'timed-huge': `name: timed-huge
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+    timeout: 1e308
 `,
   broken: `name: broken
 steps:
@@ -3500,5 +3524,230 @@ describe('WorkflowRunner when conditions', () => {
     await finish('review', withData({ ok: 'yes' }))
     expect(ctx.wf().runs[runId].status).toBe('done')
     expect(ctx.wf().runs[runId].steps.fix.attemptIds).toHaveLength(1)
+  })
+})
+
+describe('WorkflowRunner step timeouts', () => {
+  async function timedRun(options: SetupOptions = {}) {
+    const timers = fakeTimers()
+    let clock = 1000
+    const advance = (ms: number): void => {
+      clock += ms
+    }
+    const ctx = setup({
+      ...options,
+      deps: { setTimer: timers.setTimer, clearTimer: timers.clearTimer, now: () => ++clock, ...options.deps }
+    })
+    const runId = await ctx.startRun('timed')
+    await flush()
+    const plan = () => ctx.attemptOf(runId, 'plan')
+    const attemptRecord = () => ctx.runner.getRunRecord(runId)?.attempts.find((attempt) => attempt.attemptId === plan())
+    return { ctx, runId, timers, plan, attemptRecord, advance }
+  }
+
+  async function timedOut(options: SetupOptions = {}) {
+    const run = await timedRun(options)
+    run.advance(600_000)
+    run.timers.fire()
+    expect(run.ctx.wf().runs[run.runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+    return run
+  }
+
+  it('arms one timer for the step timeout in seconds and records its deadline on the attempt', async () => {
+    const { timers, attemptRecord } = await timedRun()
+    expect(timers.delays()).toEqual([600_000])
+    const record = attemptRecord()
+    expect(record?.timeoutAt).toBe((record?.startedAt ?? 0) + 600_000)
+  })
+
+  it('pauses the run timeout on expiry while the attempt keeps running and is never cancelled', async () => {
+    const { ctx, runId, timers, plan } = await timedRun()
+    const seen = ctx.eventsSince(() => timers.fire())
+    expect(seen).toEqual(['runPaused'])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout', cursorStepId: 'plan' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(ctx.wf().attempts[plan()].status).toBe('running')
+    expect(ctx.agent.cancelled).toEqual([])
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+    expect(ctx.records.at(-1)?.attempts[0].metrics.pauses.map((pause) => pause.reason)).toEqual(['timeout'])
+    expect(ctx.logs).toContain(`[workflow] step timed out ${JSON.stringify({ runId, stepId: 'plan', attemptId: plan() })}`)
+  })
+
+  it('keeps waiting: re-arms a full timeout with a new deadline, resumes the run, and pauses again on the next expiry', async () => {
+    const { ctx, runId, timers, attemptRecord } = await timedOut()
+    const before = attemptRecord()?.timeoutAt ?? 0
+    const seen = ctx.eventsSince(() => expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: true }))
+    expect(seen).toEqual(['runResumed'])
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    expect(timers.delays()).toEqual([600_000])
+    expect(attemptRecord()?.timeoutAt).toBeGreaterThan(before)
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'running' })
+    expect(ctx.records.at(-1)?.attempts[0].timeoutAt).toBe(attemptRecord()?.timeoutAt)
+    expect(ctx.logs).toContain(`[workflow] step keep waiting ${JSON.stringify({ runId, stepId: 'plan' })}`)
+    timers.fire()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+    expect(ctx.agent.cancelled).toEqual([])
+  })
+
+  it('clears the timer when the step completes before expiry', async () => {
+    const { ctx, runId, timers, plan } = await timedRun()
+    ctx.runner.complete(plan(), done())
+    expect(timers.delays()).toEqual([])
+    expect(ctx.stepStatus(runId, 'test')).toBe('running')
+    expect(ctx.wf().runs[runId].status).toBe('running')
+  })
+
+  it('splits a timeout longer than one timer can hold and pauses only after the whole wait', async () => {
+    const timers = fakeTimers()
+    const ctx = setup({ deps: { setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
+    const runId = await ctx.startRun('timed-long')
+    expect(timers.delays()).toEqual([2 ** 31 - 1])
+    timers.fire()
+    expect(timers.delays()).toEqual([3_000_000_000 - (2 ** 31 - 1)])
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    timers.fire()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+  })
+
+  it('clears every live timer on dispose', async () => {
+    const { ctx, timers } = await timedRun()
+    await ctx.startRun('timed', '/wt/x')
+    await flush()
+    expect(timers.delays()).toEqual([600_000, 600_000])
+    ctx.runner.dispose()
+    expect(timers.delays()).toEqual([])
+  })
+
+  it('does not count time spent queued behind the agent cap', async () => {
+    const timers = fakeTimers()
+    const ctx = setup({ cap: 1, deps: { setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
+    const other = await ctx.startRun('one-agent')
+    const runId = await ctx.startRun('timed')
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+    expect(timers.delays()).toEqual([])
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(timers.delays()).toEqual([600_000])
+  })
+
+  it.each([
+    [
+      'the attempt completing on its own',
+      (ctx: Ctx, runId: string, attemptId: string) => expect(ctx.runner.complete(attemptId, done())).toBe(true),
+      { status: 'running' },
+      { plan: 'done', test: 'running' }
+    ],
+    [
+      'mark done',
+      (ctx: Ctx, runId: string) => expect(ctx.runner.markDone(runId, 'plan', { summary: 'by hand', fields: {} })).toEqual({ ok: true }),
+      { status: 'running' },
+      { plan: 'done', test: 'running' }
+    ],
+    [
+      'skip',
+      (ctx: Ctx, runId: string) => expect(ctx.runner.skipStep(runId, 'plan')).toEqual({ ok: true }),
+      { status: 'running' },
+      { plan: 'skipped', test: 'running' }
+    ],
+    [
+      'cancel step',
+      (ctx: Ctx, runId: string) => expect(ctx.runner.cancelStep(runId, 'plan')).toEqual({ ok: true }),
+      { status: 'paused', pausedReason: 'step-failed' },
+      { plan: 'cancelled', test: 'pending' }
+    ]
+  ])('leaves no timeout pause or timer after %s', async (_name, act, run, steps) => {
+    const { ctx, runId, timers, plan } = await timedOut()
+    act(ctx, runId, plan())
+    expect(timers.delays()).toEqual([])
+    expect(ctx.wf().runs[runId]).toMatchObject(run)
+    expect(Object.fromEntries(['plan', 'test'].map((id) => [id, ctx.stepStatus(runId, id)]))).toEqual(steps)
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toMatchObject({ ok: false })
+  })
+
+  it('keeps an approval pause of the same step when the timeout fires and logs the deferral', async () => {
+    const { ctx, runId, timers, plan } = await timedRun()
+    ctx.agent.emit({ type: 'needsApproval', executionId: ctx.agent.executionFor(plan()) })
+    timers.fire()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+    expect(ctx.runner.getRunRecord(runId)?.attempts[0].metrics.pauses.map((pause) => pause.reason)).toEqual(['needs-approval'])
+    expect(ctx.logs).toContain(`[workflow] step timeout deferred needs-approval ${JSON.stringify({ runId, stepId: 'plan', attemptId: plan() })}`)
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: false, reason: 'not-timed-out' })
+  })
+
+  it('re-arms the passed deadline once an approval that deferred the timeout is submitted, and pauses timeout', async () => {
+    const { ctx, runId, timers, plan, advance } = await timedRun()
+    const execution = ctx.agent.executionFor(plan())
+    ctx.agent.emit({ type: 'needsApproval', executionId: execution })
+    advance(600_000)
+    timers.fire()
+    expect(timers.delays()).toEqual([])
+    ctx.agent.emit({ type: 'promptSubmitted', executionId: execution })
+    expect(timers.delays()).toEqual([0])
+    timers.fire()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: true })
+    expect(timers.delays()).toEqual([600_000])
+  })
+
+  it('re-arms after an approval replaces the timeout pause, so keep waiting is offered again', async () => {
+    const { ctx, runId, timers, plan } = await timedOut()
+    const execution = ctx.agent.executionFor(plan())
+    ctx.agent.emit({ type: 'needsApproval', executionId: execution })
+    expect(ctx.wf().runs[runId].pausedReason).toBe('needs-approval')
+    ctx.agent.emit({ type: 'promptSubmitted', executionId: execution })
+    expect(timers.delays()).toEqual([0])
+    timers.fire()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: true })
+  })
+
+  it('keeps the original timer when an approval clears before the deadline, without a second timer', async () => {
+    const { ctx, runId, timers, plan } = await timedRun()
+    const execution = ctx.agent.executionFor(plan())
+    ctx.agent.emit({ type: 'needsApproval', executionId: execution })
+    ctx.agent.emit({ type: 'promptSubmitted', executionId: execution })
+    expect(timers.delays()).toEqual([600_000])
+    expect(ctx.wf().runs[runId].status).toBe('running')
+  })
+
+  it('re-arms a timeout deferred by needs-input once that pause is cleared on the live attempt', async () => {
+    const { ctx, runId, timers, plan, advance } = await timedRun()
+    const execution = ctx.agent.executionFor(plan())
+    ctx.runner.complete(plan(), { status: 'needs-input', summary: 'which db?', completedBy: 'tool' })
+    advance(600_000)
+    timers.fire()
+    expect(ctx.wf().runs[runId].pausedReason).toBe('needs-input')
+    expect(timers.delays()).toEqual([])
+    expect(ctx.logs).toContain(`[workflow] step timeout deferred needs-input ${JSON.stringify({ runId, stepId: 'plan', attemptId: plan() })}`)
+    ctx.agent.emit({ type: 'needsApproval', executionId: execution })
+    ctx.agent.emit({ type: 'promptSubmitted', executionId: execution })
+    expect(timers.delays()).toEqual([0])
+    timers.fire()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+  })
+
+  it('treats a timeout too large to represent as no timeout', async () => {
+    const timers = fakeTimers()
+    const ctx = setup({ deps: { setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
+    const runId = await ctx.startRun('timed-huge')
+    expect(timers.delays()).toEqual([])
+    expect(ctx.runner.getRunRecord(runId)?.attempts[0].timeoutAt).toBeUndefined()
+  })
+
+  it('refuses keep waiting on unknown runs and steps, a step that has not timed out, labs off and a cancelled run', async () => {
+    const { ctx, runId, timers } = await timedRun()
+    expect(ctx.runner.keepWaiting('nope', 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: false, reason: 'not-timed-out' })
+    timers.fire()
+    expect(ctx.runner.keepWaiting(runId, 'test')).toEqual({ ok: false, reason: 'not-timed-out' })
+    expect(ctx.runner.keepWaiting(runId, 'ghost')).toEqual({ ok: false, reason: 'wrong-step' })
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: false, reason: 'labs-off' })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
+    expect(timers.delays()).toEqual([])
+    expect(ctx.logs).toContain(`[workflow] step action refused not-timed-out ${JSON.stringify({ runId, stepId: 'test' })}`)
+    expect(ctx.runner.cancelRun(runId)).toEqual({ ok: true })
+    expect(ctx.runner.keepWaiting(runId, 'plan')).toEqual({ ok: false, reason: 'unknown-run' })
   })
 })

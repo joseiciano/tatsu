@@ -20,7 +20,7 @@ import { Store } from '../store'
 import { buildInitialAppState } from '../build-initial-state'
 import { loadRunRecordsSync } from '../workflow-run-records'
 import { WorkflowRunner, createClaudeStepDriver, type StepDriver, type WorkflowRunnerDeps } from '.'
-import { currentStepId, FakeStepDriver, worktreeFixture } from './fake-step-driver'
+import { currentStepId, fakeTimers, FakeStepDriver, worktreeFixture } from './fake-step-driver'
 import type { Config } from '../persistence'
 import type {
   WorkflowAttemptRecord,
@@ -107,6 +107,7 @@ interface BootOptions {
   loader?: WorkflowRunnerDeps['loader']
   labs?: boolean
   agentDriver?: (store: Store) => StepDriver
+  timers?: Pick<WorkflowRunnerDeps, 'setTimer' | 'clearTimer'>
 }
 
 function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, options: BootOptions = {}) {
@@ -146,7 +147,8 @@ function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, 
     hasExecution: (executionId) => {
       probed.push(executionId)
       return options.alive?.has(executionId) ?? false
-    }
+    },
+    ...options.timers
   })
   const wf = () => store.getSnapshot().state.workflows
   const lastPersisted = (runId: string): WorkflowRunRecord | undefined =>
@@ -1129,5 +1131,109 @@ steps:
     ctx.runner.complete(ctx.agent.started[1].attemptId, { status: 'done', summary: 'review-2', completedBy: 'tool', data: { verdict: 'pass' } })
     await flush()
     expect(ctx.shell.started.map((started) => started.stepId)).toEqual(['after'])
+  })
+})
+
+const TIMED_FAN_IN = FAN_IN.replace('    prompt: "b"\n', '    prompt: "b"\n    timeout: 600\n')
+
+function timedFanInRecord(runId: string, patch: Partial<WorkflowRunRecord> = {}): WorkflowRunRecord {
+  const { definition } = validateWorkflowDefinition(TIMED_FAN_IN)
+  if (!definition) throw new Error('timed fan-in fixture invalid')
+  return record(runId, { definition, steps: { a: 'running', b: 'running', c: 'pending' }, ...patch })
+}
+
+describe('WorkflowRunner step timeouts after a restart', () => {
+  it('re-arms a reattached live attempt with the time left before its recorded deadline', () => {
+    const timers = fakeTimers()
+    const ctx = boot(
+      [timedFanInRecord('run-t', { attempts: [attempt('att-b', { stepId: 'b', executionId: 'pty-b', timeoutAt: 900_000 })] })],
+      { alive: new Set(['pty-b']), timers }
+    )
+    ctx.runner.reconcile(ctx.records)
+    const [delay] = timers.delays()
+    expect(timers.delays()).toHaveLength(1)
+    expect(delay).toBeLessThan(900_000 - 1000)
+    expect(delay).toBeGreaterThan(900_000 - 1100)
+  })
+
+  it.each([
+    ['no recorded deadline', {}],
+    ['an unreadable deadline', { timeoutAt: Number.NaN }]
+  ])('falls back to the attempt start plus the step timeout for %s', (_name, patch) => {
+    const timers = fakeTimers()
+    const ctx = boot(
+      [timedFanInRecord('run-t', { attempts: [attempt('att-b', { stepId: 'b', executionId: 'pty-b', startedAt: 50_000, ...patch })] })],
+      { alive: new Set(['pty-b']), timers }
+    )
+    ctx.runner.reconcile(ctx.records)
+    const [delay] = timers.delays()
+    expect(delay).toBeLessThan(650_000 - 1000)
+    expect(delay).toBeGreaterThan(650_000 - 1100)
+  })
+
+  it('recovers a timeout pause the record kept only on a non-cursor step by firing at once', async () => {
+    const timers = fakeTimers()
+    const ctx = boot(
+      [
+        timedFanInRecord('run-t', {
+          status: 'paused',
+          pausedReason: 'needs-approval',
+          attempts: [
+            attempt('att-a', { stepId: 'a', executionId: 'pty-a', metrics: { continuations: 0, pauses: [{ reason: 'needs-approval', at: 6 }] } }),
+            attempt('att-b', { stepId: 'b', executionId: 'pty-b', timeoutAt: 7, metrics: { continuations: 0, pauses: [{ reason: 'timeout', at: 8 }] } })
+          ]
+        })
+      ],
+      { alive: new Set(['pty-a', 'pty-b']), timers }
+    )
+    ctx.runner.reconcile(ctx.records)
+    expect(timers.delays()).toEqual([0])
+    timers.fire()
+    expect(ctx.wf().runs['run-t']).toMatchObject({ status: 'paused', pausedReason: 'needs-approval', cursorStepId: 'a' })
+    expect(ctx.runner.keepWaiting('run-t', 'b')).toEqual({ ok: true })
+    expect(timers.delays()).toEqual([600_000])
+    expect(ctx.wf().runs['run-t']).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+    expect(ctx.stepStatus('run-t', 'b')).toBe('running')
+  })
+
+  it('keeps a reattached step already paused timeout waiting without a timer until keep waiting re-arms it', async () => {
+    const timers = fakeTimers()
+    const ctx = boot(
+      [
+        timedFanInRecord('run-t', {
+          status: 'paused',
+          pausedReason: 'timeout',
+          cursor: 1,
+          steps: { a: 'done', b: 'running', c: 'pending' },
+          attempts: [
+            attempt('att-a', { stepId: 'a', status: 'done', endedAt: 6, result: { status: 'done', summary: 'a', completedBy: 'tool' } }),
+            attempt('att-b', { stepId: 'b', executionId: 'pty-b', timeoutAt: 7, metrics: { continuations: 0, pauses: [{ reason: 'timeout', at: 8 }] } })
+          ]
+        })
+      ],
+      { alive: new Set(['pty-b']), timers }
+    )
+    ctx.runner.reconcile(ctx.records)
+    expect(timers.delays()).toEqual([])
+    expect(ctx.wf().runs['run-t']).toMatchObject({ status: 'paused', pausedReason: 'timeout', cursorStepId: 'b' })
+    expect(ctx.runner.keepWaiting('run-t', 'b')).toEqual({ ok: true })
+    expect(timers.delays()).toEqual([600_000])
+    expect(ctx.wf().runs['run-t'].status).toBe('running')
+    ctx.runner.complete('att-b', { status: 'done', summary: 'b', completedBy: 'tool' })
+    await flush()
+    expect(timers.delays()).toEqual([])
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['c'])
+  })
+
+  it('interrupts a dead timed attempt as before and arms nothing', () => {
+    const timers = fakeTimers()
+    const ctx = boot(
+      [timedFanInRecord('run-t', { attempts: [attempt('att-b', { stepId: 'b', executionId: 'pty-dead', timeoutAt: 900_000 })] })],
+      { timers }
+    )
+    ctx.runner.reconcile(ctx.records)
+    expect(timers.delays()).toEqual([])
+    expect(ctx.stepStatus('run-t', 'b')).toBe('interrupted')
+    expect(ctx.runner.keepWaiting('run-t', 'b')).toEqual({ ok: false, reason: 'not-timed-out' })
   })
 })
