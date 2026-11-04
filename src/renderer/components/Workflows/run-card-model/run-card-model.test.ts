@@ -53,7 +53,56 @@ function attempt(costUsd?: number): WorkflowAttempt {
 describe('runCardModel current step and agent', () => {
   it.each<[string, Partial<WorkflowRun>, string | null, string | null]>([
     ['cursor on an agent step names its agent', { cursorStepId: 'build' }, 'build', 'Codex'],
-    ['cursor on a shell step names the shell', { cursorStepId: 'plan' }, 'plan', 'Shell'],
+    [
+      'cursor on a running shell step with no running agent names the shell',
+      {
+        cursorStepId: 'plan',
+        steps: { plan: step('running', { kind: 'shell' }), build: step('pending', { kind: 'agent', agent: 'codex' }), test: step('pending') }
+      },
+      'plan',
+      'Shell'
+    ],
+    [
+      'parallel branches name the first running agent step, not the cursor',
+      {
+        cursorStepId: 'plan',
+        steps: {
+          plan: step('running', { kind: 'shell' }),
+          build: step('queued', { kind: 'agent', agent: 'codex' }),
+          test: step('running', { kind: 'agent', agent: 'claude' })
+        }
+      },
+      'test',
+      'Claude Code'
+    ],
+    [
+      'two running agent branches name the first in definition order',
+      {
+        cursorStepId: 'build',
+        steps: {
+          plan: step('done', { kind: 'shell' }),
+          build: step('running', { kind: 'agent', agent: 'codex' }),
+          test: step('running', { kind: 'agent', agent: 'claude' })
+        }
+      },
+      'build',
+      'Codex'
+    ],
+    [
+      'a paused run keeps its cursor step while a sibling agent runs',
+      {
+        status: 'paused',
+        pausedReason: 'step-failed',
+        cursorStepId: 'build',
+        steps: {
+          plan: step('done', { kind: 'shell' }),
+          build: step('failed', { kind: 'agent', agent: 'codex' }),
+          test: step('running', { kind: 'agent', agent: 'claude' })
+        }
+      },
+      'build',
+      'Codex'
+    ],
     ['no cursor falls back to the first unfinished step', {}, 'build', 'Codex'],
     [
       'no cursor and every step finished has no current step',
