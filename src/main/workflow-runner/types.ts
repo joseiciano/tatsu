@@ -52,6 +52,7 @@ export type StartRefusal =
   | 'missing-input'
   | 'hooks-consent'
   | 'codex-hooks-untrusted'
+  | 'parallel-writer'
   | 'starting'
 
 export type StartRunResult = { ok: true; runId: string } | { ok: false; reason: StartRefusal }

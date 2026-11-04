@@ -17,7 +17,9 @@ selected attempt's full result and the files that attempt changed.
   `Done`, …), `<repo> / <worktree>`, `Elapsed` and `Cost`.
 - **Step graph**: `role="group"` `Workflow graph` (311's `WorkflowGraph`),
   steps from the run record's definition snapshot, one `listitem` per step
-  named `<id>: <status label>` from the live slice.
+  named `<id>: <status label>` from the live slice. Edges are an
+  `aria-hidden` SVG; each `path` carries `data-edge="<from>-><to>"` for
+  tests. A `needs:` graph (branches and joins) lays out in columns.
 - **Actions**: section `Actions · step <cursor step>`. Only what the run
   allows now: `Resume`, `Retry`, `Retry from clean` (only when the cursor
   step's latest attempt has a base snapshot; confirm dialog), `Mark done`
@@ -83,8 +85,14 @@ selected attempt's full result and the files that attempt changed.
     exit, …` then `exit #2: done, completed by you (Mark done), …` ->
     click row 1 (Completed by `process exit`) -> click row 2 -> `Attempt
     summary` reads `Marked done from the browser smoke` -> region `Changed
-    files` reads `No snapshot for this attempt` -> `All runs` -> `Back`
-    closes the section.
+    files` reads `No snapshot for this attempt` -> `All runs` -> `Back`.
+    Then the diamond: launch sheet -> `smoke-diamond` -> Start -> wait for
+    the new run to be `done` -> sidebar `Workflows` -> `Recent runs` ->
+    first `article` `smoke-diamond on repo` -> `Open run: smoke-diamond on repo`
+    -> region `smoke-diamond` -> graph listitems `plan: done`, `left:
+    done`, `right: done`, `join: done` -> `path[data-edge]` set is exactly
+    `left->join`, `plan->left`, `plan->right`, `right->join` -> `All runs`
+    -> `Back` closes the section.
   - `attempt-diff` (right after `run-detail`, before `repo-trust`): launch
     sheet -> `browser-diff` -> Start -> wait for the run to be `done` ->
     sidebar `Workflows` -> `Recent runs` -> first `article` `browser-diff on
@@ -105,10 +113,12 @@ selected attempt's full result and the files that attempt changed.
     and two timeline rows -> `All runs` -> `Back`.
 
 End state that proves it: `run-detail-01-detail-timeline.png`,
-`run-detail-02-detail-summary.png`, `attempt-diff-03-changed-files.png` and
+`run-detail-02-detail-summary.png`, `run-detail-05-diamond-graph.png`,
+`attempt-diff-03-changed-files.png` and
 `attempt-diff-04-file-diff.png`, `swap-step-04-swap-dialog.png` and
 `swap-step-05-detail-done.png` in `$EVIDENCE/workflow-flows/`, and the
-`run-detail: timeline [...]`, `attempt-diff: changed files [...]`,
+`run-detail: timeline [...]`, `run-detail: diamond graph edges [...]`,
+`attempt-diff: changed files [...]`,
 `attempt-diff: smoke.txt diff renders side by side…` and `swap-step: run
 <id> done after swapping Claude to Codex (1:claude:failed, 2:codex:done)`
 lines in the journal.

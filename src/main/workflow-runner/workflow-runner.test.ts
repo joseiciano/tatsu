@@ -141,6 +141,26 @@ steps:
     agent: claude
     prompt: "fix"
 `,
+  diamond: `name: diamond
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+  - id: left
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "left {{steps.plan.summary}}"
+  - id: right
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "right {{steps.plan.summary}}"
+  - id: join
+    kind: shell
+    needs: [left, right]
+    run: "echo {{steps.left.summary}} {{steps.right.summary}}"
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -1690,6 +1710,67 @@ describe('WorkflowRunner start refusals', () => {
     const ctx = setup()
     expect((await ctx.runner.start({ defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, allowFull: true })).ok).toBe(true)
     expect((await ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/b', inputs: {} })).ok).toBe(true)
+  })
+})
+
+describe('WorkflowRunner needs graph', () => {
+  const statuses = (ctx: Ctx, runId: string) =>
+    Object.fromEntries(['plan', 'left', 'right', 'join'].map((id) => [id, ctx.stepStatus(runId, id)]))
+
+  it('runs plan, then both branches one at a time in definition order, then the join', async () => {
+    const ctx = setup()
+    const runId = await ctx.startRun('diamond')
+    await flush()
+    expect(statuses(ctx, runId)).toEqual({ plan: 'running', left: 'pending', right: 'pending', join: 'pending' })
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done('the plan'))
+    await flush()
+    expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'running', right: 'pending', join: 'pending' })
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), done('L'))
+    await flush()
+    expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'done', right: 'running', join: 'pending' })
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), done('R'))
+    await flush()
+    expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'done', right: 'done', join: 'running' })
+    expect(ctx.shell.started.map((attempt) => attempt.stepId)).toEqual(['join'])
+    ctx.runner.complete(ctx.attemptOf(runId, 'join'), done())
+    await flush()
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.agent.started.map((attempt) => attempt.stepId)).toEqual(['plan', 'left', 'right'])
+  })
+
+  it('lets a skipped branch satisfy the join', async () => {
+    const ctx = setup()
+    const runId = await ctx.startRun('diamond')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), failed())
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+    expect(ctx.runner.skipStep(runId, 'left')).toEqual({ ok: true })
+    await flush()
+    expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'skipped', right: 'running', join: 'pending' })
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), done('R'))
+    await flush()
+    expect(ctx.stepStatus(runId, 'join')).toBe('running')
+    const [join] = ctx.shell.started
+    expect(join.step.kind === 'shell' && renderTemplate(join.step.run, join.scope)).toEqual({ text: 'echo  R', missing: ['steps.left.summary'] })
+    expect(join.scope.steps?.left).toEqual({ status: 'skipped' })
+    ctx.runner.complete(ctx.attemptOf(runId, 'join'), done())
+    await flush()
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('refuses to start a definition whose effective steps let a writer run beside another step', async () => {
+    const valid = detail('diamond')
+    const steps = valid.definition?.steps.map((step) => (step.id === 'right' && step.kind === 'agent' ? { ...step, permissions: 'edit' as const } : step))
+    const forged: WorkflowDefinitionDetail = { ...valid, definition: valid.definition && steps && { ...valid.definition, steps } }
+    const ctx = setup({ deps: { loader: { getDefinition: () => forged } } })
+    expect(await ctx.runner.start({ defId: 'personal:diamond', worktreePath: '/wt/diamond', inputs: {} })).toEqual({
+      ok: false,
+      reason: 'parallel-writer'
+    })
+    expect(Object.keys(ctx.wf().runs)).toEqual([])
+    expect(ctx.agent.started).toEqual([])
   })
 })
 

@@ -28,6 +28,7 @@ import {
 import { runContextPath } from './run-artifacts'
 import {
   STEP_SUMMARY_MAX_CHARS,
+  parallelWriterPairs,
   validateStepOutput,
   type ResolvedAgentStep,
   type ResolvedDefinition,
@@ -373,6 +374,7 @@ export class WorkflowRunner {
     if (placement) return this.refuse(placement)
     const inputsUntrusted = verdicts.some((verdict) => verdict !== 'trusted')
     const definition = inputsUntrusted ? capPermissions(applied.definition) : applied.definition
+    if (parallelWriterPairs(definition.steps).length > 0) return this.refuse('parallel-writer')
     const { overriddenFrom } = applied
     const needsFull = definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
     if (needsFull && request.allowFull !== true) return this.refuse('full-permission-unconfirmed')
@@ -1082,7 +1084,7 @@ export class WorkflowRunner {
     }
     for (const attempt of record.attempts) {
       const { result } = attempt
-      if (!result) continue
+      if (!result || stepStatus[attempt.stepId] === 'skipped') continue
       steps[attempt.stepId] = {
         status: stepStatus[attempt.stepId],
         summary: result.summary,

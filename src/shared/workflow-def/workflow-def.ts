@@ -540,6 +540,29 @@ export function needsClosure(steps: readonly NeedsNode[], stepId: string): Set<s
   return seen
 }
 
+export function concurrentPairs(steps: readonly NeedsNode[]): [string, string][] {
+  const closures = steps.map((step) => needsClosure(steps, step.id))
+  const pairs: [string, string][] = []
+  steps.forEach((later, j) => {
+    for (let i = 0; i < j; i++) {
+      const earlier = steps[i]
+      if (!closures[j].has(earlier.id) && !closures[i].has(later.id)) pairs.push([earlier.id, later.id])
+    }
+  })
+  return pairs
+}
+
+export function isParallelSafeStep(step: ResolvedWorkflowStep): boolean {
+  if (step.kind === 'agent') return step.permissions === 'read-only'
+  if (step.kind === 'shell') return step.parallel_safe === true
+  return false
+}
+
+export function parallelWriterPairs(steps: readonly ResolvedWorkflowStep[]): [string, string][] {
+  const safe = new Set(steps.filter(isParallelSafeStep).map((step) => step.id))
+  return concurrentPairs(steps).filter(([a, b]) => !safe.has(a) || !safe.has(b))
+}
+
 function findCycles(steps: readonly NeedsNode[]): string[][] {
   const byId = new Map(steps.map((s) => [s.id, s]))
   const state = new Map<string, 'active' | 'done'>()
@@ -857,6 +880,20 @@ class TemplateStage {
   }
 }
 
+function parallelWriterDiagnostics(def: ResolvedDefinition, locate: Locate): WorkflowDiagnostic[] {
+  const conflicts = new Map<string, string[]>()
+  for (const [earlier, later] of parallelWriterPairs(def.steps)) conflicts.set(later, [...(conflicts.get(later) ?? []), earlier])
+  const diagnostics: WorkflowDiagnostic[] = []
+  def.steps.forEach((step, i) => {
+    const others = conflicts.get(step.id)
+    if (!others) return
+    const path = `steps[${i}].needs`
+    const message = `Step "${step.id}" can run at the same time as ${quoteList(others)}; steps that can run together must not write (agent steps need "permissions: read-only", shell steps "parallel_safe: true"), so add "needs" to order them`
+    diagnostics.push({ ...locate(path), severity: 'error', code: 'parallel-writer', message, path })
+  })
+  return diagnostics
+}
+
 const STEP_FEATURE_KEYS = ['gate', 'loop', 'when', 'on_loop', 'parallel_safe', 'timeout'] as const
 
 class FeatureStage {
@@ -996,6 +1033,9 @@ function parseStage(text: string, supported: ReadonlySet<WorkflowFeature>): Work
   diagnostics.push(...templates.diagnostics)
   if (templates.diagnostics.length > 0) return { parsed, diagnostics }
   const locate = (find: (doc: Document, path: string) => MaybeNode) => (path: string) => positionOf(lineCounter, find(doc, path)?.range?.[0] ?? 0)
+  const writers = parallelWriterDiagnostics(definition, locate(keyAt))
+  diagnostics.push(...writers)
+  if (writers.length > 0) return { parsed, diagnostics }
   const features = new FeatureStage(parsed, definition, supported, locate(keyAt), locate(nodeAt))
   features.run()
   diagnostics.push(...features.diagnostics)

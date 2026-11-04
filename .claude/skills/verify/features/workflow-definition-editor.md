@@ -113,9 +113,9 @@ Library row reads "2 steps: edited, verify"`, and no `zz-editor-smoke.yaml` left
   `.view-lines`, selects all with `ControlOrMeta+a`, then dispatches a
   `paste` `ClipboardEvent` with a `DataTransfer` on the focused element
   (Monaco 0.55 uses the native EditContext div, not a textarea).
-- Non-linear `needs` is rejected under default features
-  (`unsupported-feature`), so the bad edit is a template reference to an
-  unknown step, which is `unknown-ref` (error) in a linear definition.
+- The bad edit is a template reference to an unknown step, which is
+  `unknown-ref` (error). Non-linear `needs` is valid by default since 404,
+  but concurrent steps that write are `parallel-writer` errors.
 - `zz-editor-smoke` sorts last and matches none of the later lookups
   (`/^target/`, `browser-hang`, `smoke`); the launch sheet's default is the
   first valid definition by name.

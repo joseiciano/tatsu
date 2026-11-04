@@ -88,10 +88,12 @@ steps:
   - id: build
     agent: claude
     prompt: build it
+    permissions: read-only
   - id: test
     kind: shell
     run: pnpm test
     needs: [plan]
+    parallel_safe: true
   - id: review
     agent: claude
     prompt: review it

@@ -46,6 +46,7 @@ export function WorkflowGraph({ steps, statusByStep }: WorkflowGraphProps): JSX.
             return (
               <path
                 key={`${edge.from}->${edge.to}`}
+                data-edge={`${edge.from}->${edge.to}`}
                 d={`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`}
                 fill="none"
                 stroke="currentColor"

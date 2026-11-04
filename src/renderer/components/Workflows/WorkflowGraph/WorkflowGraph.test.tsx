@@ -46,6 +46,12 @@ describe('WorkflowGraph', () => {
     expect(container.querySelectorAll('path')).toHaveLength(2)
   })
 
+  it('tags each edge path with its from and to step ids', () => {
+    render({ steps: [{ id: 'plan' }, { id: 'left' }, { id: 'right', needs: ['plan'] }, { id: 'join', needs: ['left', 'right'] }] })
+    const edges = [...container.querySelectorAll('path')].map((p) => p.getAttribute('data-edge'))
+    expect(edges.sort()).toEqual(['left->join', 'plan->left', 'plan->right', 'right->join'])
+  })
+
   it('wraps a wide graph in a focusable scroll container', () => {
     render({ steps })
     const scroll = container.querySelector<HTMLElement>('[aria-label="Workflow graph"]')

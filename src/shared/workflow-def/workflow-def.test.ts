@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ALL_WORKFLOW_FEATURES, BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES, evaluateCondition, needsClosure, validateWorkflowDefinition, type ValidateWorkflowOptions, type WorkflowCondition, type WorkflowDiagnostic, type WorkflowFeature } from '.'
+import { ALL_WORKFLOW_FEATURES, BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES, concurrentPairs, evaluateCondition, needsClosure, validateWorkflowDefinition, type ValidateWorkflowOptions, type WorkflowCondition, type WorkflowDiagnostic, type WorkflowFeature } from '.'
 
 const PLAN_EXAMPLE = `name: plan-build-review
 inputs:
@@ -382,7 +382,7 @@ describe('validateWorkflowDefinition: resolved definition', () => {
   })
 
   it('fills omitted needs with the previous step in file order', () => {
-    const step = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n${extra}`
+    const step = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n    permissions: read-only\n${extra}`
     const result = validateWorkflowDefinition(
       `name: x\nsteps:\n${step('a')}${step('b', '    needs: []\n')}${step('c')}${step('d', '    needs: [a]\n')}${step('e')}`, ALL
     )
@@ -622,7 +622,8 @@ describe('validateWorkflowDefinition: template references', () => {
           agent(
             'd',
             '    needs: [c, x]\n    prompt: "{{steps.x.summary}} {{steps.c.summary}}"\n    output:\n      verdict: { enum: [pass, fail] }\n    loop: { back_to: b, until: { field: verdict, equals: pass }, max: 3 }\n'
-          )
+          ),
+        'defaults:\n  permissions: read-only\n'
       )
 
     it('lets every step in the span reference the rest of the span, both ends included', () => {
@@ -707,20 +708,28 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   const step = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n${extra}`
+  const reader = (id: string, extra = '') => step(id, `    permissions: read-only\n${extra}`)
+  const linearOnly = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'nonlinear-needs')
+
+  it('supports non-linear needs by default', () => {
+    expect(WORKFLOW_FEATURES['nonlinear-needs'].supported).toBe(true)
+    expect(WORKFLOW_FEATURES.parallel_safe.supported).toBe(false)
+  })
 
   it('reports one non-linear needs error when two steps share one parent', () => {
-    const text = `name: x\nsteps:\n${step('a')}${step('b', '    needs: [a]\n')}${step('c', '    needs: [a]\n')}`
-    expect(featuresOf(text)).toEqual([{ code: 'unsupported-feature', feature: 'nonlinear-needs', path: 'steps[2].needs', line: 13, col: 5 }])
+    const text = `name: x\nsteps:\n${reader('a')}${reader('b', '    needs: [a]\n')}${reader('c', '    needs: [a]\n')}`
+    expect(featuresOf(text)).toEqual([])
+    expect(featuresOf(text, linearOnly)).toEqual([{ code: 'unsupported-feature', feature: 'nonlinear-needs', path: 'steps[2].needs', line: 16, col: 5 }])
   })
 
   it('reports non-linear needs for an explicit empty list after the first step', () => {
-    const text = `name: x\nsteps:\n${step('a')}${step('b', '    needs: []\n')}`
-    expect(featuresOf(text).map((d) => [d.feature, d.path])).toEqual([['nonlinear-needs', 'steps[1].needs']])
+    const text = `name: x\nsteps:\n${reader('a')}${reader('b', '    needs: []\n')}`
+    expect(featuresOf(text, linearOnly).map((d) => [d.feature, d.path])).toEqual([['nonlinear-needs', 'steps[1].needs']])
   })
 
   it('does not repeat the non-linear error on implicit steps that follow the break', () => {
-    const text = `name: x\nsteps:\n${step('a')}${step('b', '    needs: [a]\n')}${step('c', '    needs: [a]\n')}${step('d')}`
-    expect(featuresOf(text).map((d) => d.path)).toEqual(['steps[2].needs'])
+    const text = `name: x\nsteps:\n${reader('a')}${reader('b', '    needs: [a]\n')}${reader('c', '    needs: [a]\n')}${reader('d')}`
+    expect(featuresOf(text, linearOnly).map((d) => d.path)).toEqual(['steps[2].needs'])
   })
 
   it.each([
@@ -735,5 +744,83 @@ describe('validateWorkflowDefinition: unsupported features', () => {
     expect(diagnostics.map((d) => [d.code, d.feature, d.path])).toEqual([['unsupported-feature', feature, path]])
     expect(WORKFLOW_FEATURES[feature].phase).toBe(phase)
     expect(diagnostics[0].message).toContain(`phase ${phase}`)
+  })
+})
+
+describe('concurrentPairs', () => {
+  it('pairs steps where neither is upstream of the other, in definition order', () => {
+    const steps = [
+      { id: 'plan', needs: [] },
+      { id: 'left', needs: ['plan'] },
+      { id: 'right', needs: ['plan'] },
+      { id: 'join', needs: ['left', 'right'] },
+      { id: 'tail', needs: ['right'] }
+    ]
+    expect(concurrentPairs(steps)).toEqual([
+      ['left', 'right'],
+      ['left', 'tail'],
+      ['join', 'tail']
+    ])
+  })
+
+  it('finds no pairs in a linear chain', () => {
+    expect(concurrentPairs([{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }, { id: 'c', needs: ['b'] }])).toEqual([])
+  })
+})
+
+describe('validateWorkflowDefinition: parallel writers', () => {
+  const agentStep = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    prompt: go\n${extra}`
+  const diamond = (left: string, right: string) =>
+    `name: diamond\nsteps:\n${agentStep('plan', '    permissions: read-only\n')}${left}${right}  - id: join\n    kind: shell\n    needs: [left, right]\n    run: make\n`
+  const readOnly = (id: string) => agentStep(id, '    needs: [plan]\n    permissions: read-only\n')
+
+  it('validates a diamond with two read-only agent branches under default features', () => {
+    const result = validateWorkflowDefinition(diamond(readOnly('left'), readOnly('right')))
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps.map((s) => [s.id, s.needs])).toEqual([
+      ['plan', []],
+      ['left', ['plan']],
+      ['right', ['plan']],
+      ['join', ['left', 'right']]
+    ])
+  })
+
+  it.each([
+    ['edit', '    permissions: edit\n'],
+    ['the default permission', '']
+  ])('reports parallel-writer at the later step\'s needs when a branch is %s', (_label, permissions) => {
+    const text = diamond(readOnly('left'), agentStep('right', `    needs: [plan]\n${permissions}`))
+    const result = validateWorkflowDefinition(text, { supportedFeatures: ALL_WORKFLOW_FEATURES })
+    expect(result.definition).toBeUndefined()
+    expect(result.parsed).toBeDefined()
+    expect(result.diagnostics.map((d) => [d.code, d.path, d.line, d.col])).toEqual([['parallel-writer', 'steps[2].needs', 15, 5]])
+    expect(result.diagnostics[0].message).toContain('"right"')
+    expect(result.diagnostics[0].message).toContain('"left"')
+  })
+
+  it('reports a shell branch without parallel_safe as parallel-writer', () => {
+    const shell = '  - id: right\n    kind: shell\n    needs: [plan]\n    run: make lint\n'
+    expect(validateWorkflowDefinition(diamond(readOnly('left'), shell)).diagnostics.map((d) => [d.code, d.path])).toEqual([
+      ['parallel-writer', 'steps[2].needs']
+    ])
+  })
+
+  it('reports a parallel_safe shell branch as an unsupported feature until parallel shells land', () => {
+    const shell = '  - id: right\n    kind: shell\n    needs: [plan]\n    run: make lint\n    parallel_safe: true\n'
+    const text = diamond(readOnly('left'), shell)
+    expect(validateWorkflowDefinition(text).diagnostics.map((d) => [d.code, d.feature, d.path])).toEqual([
+      ['unsupported-feature', 'parallel_safe', 'steps[2].parallel_safe']
+    ])
+    expect(validateWorkflowDefinition(text, { supportedFeatures: ALL_WORKFLOW_FEATURES }).diagnostics).toEqual([])
+  })
+
+  it('positions the diagnostic at the step when its needs are implicit', () => {
+    const text = `name: x\nsteps:\n${agentStep('a', '    permissions: read-only\n')}${agentStep('b', '    needs: [a]\n    permissions: read-only\n')}${agentStep('c', '    needs: [a]\n    permissions: read-only\n')}${agentStep('d')}`
+    expect(validateWorkflowDefinition(text).diagnostics.map((d) => [d.code, d.path, d.line, d.col])).toEqual([['parallel-writer', 'steps[3].needs', 17, 5]])
+  })
+
+  it('treats a step that skips its predecessor as concurrent with it', () => {
+    const text = `name: x\nsteps:\n${agentStep('a')}${agentStep('b', '    needs: []\n')}`
+    expect(validateWorkflowDefinition(text).diagnostics.map((d) => [d.code, d.path])).toEqual([['parallel-writer', 'steps[1].needs']])
   })
 })
