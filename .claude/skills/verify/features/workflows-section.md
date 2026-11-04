@@ -25,7 +25,9 @@ per active run, then recent finished and cancelled runs.
   or paused run, newest start first, named `<workflow> on <worktree>`. The
   card shows `<repo> / <worktree>`, the step strip (`role="img"`,
   `Workflow steps: …`), the run status (`Running`, `Paused · <reason>`), and
-  `Step <id> · <agent>`, `Elapsed` (ticks every second) and `Cost` (`—`
+  `Step <id> · <agent>` (a running run names its first running agent step
+  in definition order, so parallel branches show the earliest; a paused run
+  names its cursor step), `Elapsed` (ticks every second) and `Cost` (`—`
   when no attempt reported a cost) as `dt`/`dd` pairs.
 - **Run workflow…**: a button at the top of the Runs tab opens the launch
   sheet with no preset target (Repository, New or Existing worktree; see

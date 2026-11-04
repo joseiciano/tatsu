@@ -127,7 +127,10 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     `origin`, so the notice always shows there and no `gh` or network runs.
 - **Step strip**: `role="img"` under the branch name, `aria-label`
   `Workflow steps: <id> <status>, …`. Only for a live run; it disappears when
-  the run is done, failed or cancelled.
+  the run is done, failed or cancelled. Parallel branches that run together
+  each read `running` (`●`), e.g. `plan done, left running, right running`;
+  while one branch has paused the run, a sibling that is still running keeps
+  `running` and only the cursor step reads `paused`.
 - **Needs you**: sidebar section `NEEDS YOU` with one row per paused run:
   workflow name, `<worktree> · <reason> · <stepId>`, and action buttons
   (`Jump to tab`, `Approve`, `Request changes`, `Resume`, `Retry`, `Retry

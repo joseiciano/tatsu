@@ -150,6 +150,24 @@ steps:
     needs: [left, right]
     run: echo {{steps.left.summary}} {{steps.right.summary}}
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-parallel.yaml" <<'YAML'
+name: smoke-parallel
+steps:
+  - id: plan
+    agent: claude
+    permissions: read-only
+    prompt: "Reply PLAN-OK and call complete_step."
+  - id: left
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "FAKE_AGENT_MODE=hang Review the left half and stay alive."
+  - id: right
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "FAKE_AGENT_MODE=hang Review the right half and stay alive."
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-gate.yaml" <<'YAML'
 name: smoke-gate
 steps:

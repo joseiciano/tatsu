@@ -469,7 +469,68 @@ async function flowRunDetail(page, backend) {
     await whenDetail.waitFor({ state: 'detached' })
     await section.getByRole('button', { name: 'Back', exact: true }).click()
     await section.waitFor({ state: 'detached' })
+
+    await runParallelLeg(page, backend, section, shot)
   })
+}
+
+async function runParallelLeg(page, backend, section, shot) {
+  const raised = await backend.request('settings:setWorkflowSettings', { maxConcurrentAgents: 2 })
+  if (raised !== true) throw new Error(`settings:setWorkflowSettings refused cap 2: ${JSON.stringify(raised)}`)
+  let runId = null
+  try {
+    const before = new Set(await personalRunIds(backend, 'smoke-parallel'))
+    await startFromLaunchSheet(page, 'smoke-parallel', shot)
+    runId = await newRunId(backend, 'smoke-parallel', before)
+    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    await section.waitFor()
+    const card = section.getByRole('region', { name: 'Active runs' }).getByRole('article', { name: 'smoke-parallel on repo', exact: true })
+    await card.getByRole('button', { name: 'Open run: smoke-parallel on repo', exact: true }).click()
+    const detail = section.getByRole('region', { name: 'smoke-parallel', exact: true })
+    await detail.waitFor()
+    const graph = detail.getByRole('group', { name: 'Workflow graph', exact: true })
+    for (const name of ['plan: done', 'left: running', 'right: running']) {
+      await graph.getByRole('listitem', { name, exact: true }).waitFor({ timeout: 3 * SCENARIO_TIMEOUT_MS })
+    }
+    const record = await backend.request('workflows:getRun', runId)
+    if (record?.steps.left !== 'running' || record?.steps.right !== 'running') {
+      throw new Error(`smoke-parallel record steps left=${record?.steps.left} right=${record?.steps.right}, expected both running`)
+    }
+    log('run-detail: smoke-parallel graph shows left: running, right: running')
+    await shot('parallel-graph')
+    await detail.getByRole('button', { name: 'Cancel run', exact: true }).click()
+    await waitForRunStatus(backend, runId, 'cancelled')
+    for (const name of ['left: cancelled', 'right: cancelled']) {
+      await graph.getByRole('listitem', { name, exact: true }).waitFor()
+    }
+    log(`run-detail: smoke-parallel run ${runId} cancelled from the detail; left and right cancelled`)
+    await detail.getByRole('button', { name: 'All runs', exact: true }).click()
+    await detail.waitFor({ state: 'detached' })
+    await section.getByRole('button', { name: 'Back', exact: true }).click()
+    await section.waitFor({ state: 'detached' })
+  } finally {
+    if (runId) {
+      const record = await backend.request('workflows:getRun', runId)
+      if (record && ['queued', 'running', 'paused'].includes(record.status)) {
+        await backend.request('workflows:cancelRun', runId)
+        await waitForRunStatus(backend, runId, 'cancelled')
+      }
+    }
+    for (const stepId of ['left', 'right']) {
+      const tabs = page.getByRole('button', { name: new RegExp(`^Close tab ⚙ ${stepId}`) })
+      const count = await tabs.count()
+      if (count > 0) {
+        await tabs.last().click()
+        const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+        while ((await tabs.count()) >= count) {
+          if (Date.now() > deadline) throw new Error(`the ${stepId} step tab did not close`)
+          await new Promise((resolve) => setTimeout(resolve, 200))
+        }
+        log(`run-detail: closed the ${stepId} step tab`)
+      }
+    }
+    await backend.request('settings:setWorkflowSettings', { maxConcurrentAgents: 1 })
+  }
 }
 
 const DIFF_FILE = 'smoke.txt'
