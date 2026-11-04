@@ -4057,3 +4057,265 @@ describe('WorkflowRunner step cost', () => {
     expect(held.size).toBe(0)
   })
 })
+
+describe('WorkflowRunner run budget', () => {
+  const BUDGET_SESSION = '9b2d3c4e-1111-4a2b-8c3d-5e6f7a8b9c0d'
+
+  function budgetUsage(sessionId: string, costUsd: number): SessionUsage {
+    return {
+      sessionId,
+      transcriptPath: `/tmp/${sessionId}.jsonl`,
+      byModel: {
+        'claude-sonnet-4-5': { messages: 1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: costUsd }
+      },
+      breakdown: { ...emptyBreakdown, toolResults: {} },
+      currentModel: 'claude-sonnet-4-5',
+      updatedAt: 0
+    }
+  }
+
+  function budgetSetup(options: SetupOptions = {}) {
+    const ctx = setup({ ...options, deps: { hasExecution: () => true, ...options.deps } })
+    ctx.agent.sessionId = BUDGET_SESSION
+    const usage = (terminalId: string, costUsd: number): void => {
+      ctx.store.dispatch({ type: 'costs/usageUpdated', payload: { terminalId, usage: budgetUsage(BUDGET_SESSION, costUsd) } })
+    }
+    const start = async (slug: DefSlug, budgetUsd?: number, worktreePath = `/wt/${slug}`): Promise<string> => {
+      const result = await ctx.runner.start({
+        defId: `personal:${slug}`,
+        worktreePath,
+        inputs: slug === 'two-agent' ? { task: 'x' } : {},
+        ...(budgetUsd === undefined ? {} : { budgetUsd })
+      })
+      if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+      await flush()
+      return result.runId
+    }
+    const executionOf = (runId: string, stepId: string): string => ctx.agent.executionFor(ctx.attemptOf(runId, stepId))
+    const lastRecord = (runId: string) => ctx.records.filter((record) => record.runId === runId).at(-1)
+    const pausedEvents = (runId: string) =>
+      ctx.events.filter(
+        (event) => event.type === 'workflows/runPaused' && event.payload.runId === runId && event.payload.reason === 'budget'
+      )
+    return { ctx, usage, start, executionOf, lastRecord, pausedEvents }
+  }
+
+  it('records the budget on the run record and the slice run', async () => {
+    const { ctx, start, lastRecord } = budgetSetup()
+    const runId = await start('two-agent', 0.5)
+    expect(ctx.wf().runs[runId].budgetUsd).toBe(0.5)
+    expect(lastRecord(runId)?.budgetUsd).toBe(0.5)
+    const unbudgeted = await start('one-agent')
+    expect(ctx.wf().runs[unbudgeted]).not.toHaveProperty('budgetUsd')
+    expect(lastRecord(unbudgeted)).not.toHaveProperty('budgetUsd')
+  })
+
+  it('pauses budget once when the run total reaches the cap and keeps the live attempt running', async () => {
+    const { ctx, usage, start, executionOf, lastRecord, pausedEvents } = budgetSetup()
+    const runId = await start('two-agent', 0.1)
+    const execution = executionOf(runId, 'plan')
+    usage(execution, 0.05)
+    expect(ctx.wf().runs[runId].status).toBe('running')
+
+    usage(execution, 0.1)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget', cursorStepId: 'plan' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(ctx.agent.cancelled).toEqual([])
+    expect(lastRecord(runId)).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+    expect(ctx.logs).toContain(`[workflow] run paused budget ${JSON.stringify({ runId })}`)
+
+    usage(execution, 0.2)
+    usage(execution, 0.3)
+    expect(pausedEvents(runId)).toHaveLength(1)
+  })
+
+  it('never pauses a run without a budget, whatever it costs', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup()
+    const runId = await start('two-agent')
+    usage(executionOf(runId, 'plan'), 9999)
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'build')).toBe('running')
+  })
+
+  it('starts nothing new while budget-paused, then setBudget above the total resumes and schedules', async () => {
+    const { ctx, usage, start, executionOf, lastRecord } = budgetSetup()
+    const runId = await start('two-agent', 0.1)
+    usage(executionOf(runId, 'plan'), 0.15)
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('done')
+    expect(ctx.stepStatus(runId, 'build')).toBe('pending')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+    ctx.runner.reschedule()
+    expect(ctx.agent.started).toHaveLength(1)
+
+    const seen = ctx.eventsSince(() => expect(ctx.runner.setBudget(runId, 1)).toEqual({ ok: true }))
+    expect(seen.slice(0, 2)).toEqual(['runBudgetChanged', 'runResumed'])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'running', budgetUsd: 1 })
+    expect(ctx.stepStatus(runId, 'build')).toBe('running')
+    expect(lastRecord(runId)).toMatchObject({ status: 'running', budgetUsd: 1 })
+    expect(lastRecord(runId)?.pausedReason).toBeUndefined()
+  })
+
+  it('accepts a cap at or below the total but stays paused budget, recording the new cap', async () => {
+    const { ctx, usage, start, executionOf, lastRecord, pausedEvents } = budgetSetup()
+    const runId = await start('two-agent', 0.1)
+    usage(executionOf(runId, 'plan'), 0.2)
+    for (const cap of [0.2, 0.15]) {
+      const seen = ctx.eventsSince(() => expect(ctx.runner.setBudget(runId, cap)).toEqual({ ok: true }))
+      expect(seen).toEqual(['runBudgetChanged'])
+      expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget', budgetUsd: cap })
+      expect(lastRecord(runId)).toMatchObject({ status: 'paused', pausedReason: 'budget', budgetUsd: cap })
+    }
+    expect(pausedEvents(runId)).toHaveLength(1)
+  })
+
+  it('pauses a running run when setBudget lowers the cap to the total', async () => {
+    const { ctx, usage, start, executionOf, lastRecord } = budgetSetup()
+    const runId = await start('two-agent', 1)
+    usage(executionOf(runId, 'plan'), 0.2)
+    expect(ctx.runner.setBudget(runId, 0.2)).toEqual({ ok: true })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget', budgetUsd: 0.2 })
+    expect(lastRecord(runId)).toMatchObject({ status: 'paused', pausedReason: 'budget', budgetUsd: 0.2 })
+    expect(ctx.agent.cancelled).toEqual([])
+  })
+
+  it('sets a budget on a run that started without one', async () => {
+    const { ctx, start, lastRecord } = budgetSetup()
+    const runId = await start('two-agent')
+    expect(ctx.runner.setBudget(runId, 3)).toEqual({ ok: true })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'running', budgetUsd: 3 })
+    expect(lastRecord(runId)?.budgetUsd).toBe(3)
+  })
+
+  it('refuses setBudget for an unknown or finished run and while Labs is off', async () => {
+    const { ctx, start } = budgetSetup()
+    expect(ctx.runner.setBudget('run-missing', 1)).toEqual({ ok: false, reason: 'unknown-run' })
+    const runId = await start('one-agent', 1)
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.runner.setBudget(runId, 2)).toEqual({ ok: false, reason: 'unknown-run' })
+    const cancelled = await start('two-agent', 1)
+    ctx.runner.cancelRun(cancelled)
+    expect(ctx.runner.setBudget(cancelled, 2)).toEqual({ ok: false, reason: 'unknown-run' })
+
+    const live = await start('two-agent', 1, '/wt/a')
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.setBudget(live, 2)).toEqual({ ok: false, reason: 'labs-off' })
+    expect(ctx.wf().runs[live].budgetUsd).toBe(1)
+  })
+
+  it('leaves a run whose last step crossed the cap paused until Raise budget finishes it', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup()
+    const runId = await start('one-agent', 0.05)
+    usage(executionOf(runId, 'plan'), 0.06)
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('done')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+
+    expect(ctx.runner.setBudget(runId, 1)).toEqual({ ok: true })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'done', budgetUsd: 1 })
+    expect(ctx.records.filter((record) => record.runId === runId).at(-1)).toMatchObject({ status: 'done', budgetUsd: 1 })
+  })
+
+  it('pauses on a late tail of an ended attempt behind a gate, and approving the gate leaves the run paused budget', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup()
+    const runId = await start('gated', 0.05)
+    const execution = executionOf(runId, 'plan')
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'gate' })
+
+    usage(execution, 0.06)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'gate', cursorStepId: 'plan' })
+    expect(ctx.logs).toContain(`[workflow] run budget reached ${JSON.stringify({ runId })}`)
+
+    const seen = ctx.eventsSince(() => expect(ctx.runner.approveGate(runId, 'plan')).toEqual({ ok: true }))
+    expect(seen).toContain('runPaused')
+    expect(seen).not.toContain('runResumed')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('done')
+    await flush()
+    expect(ctx.shell.started).toEqual([])
+    expect(ctx.stepStatus(runId, 'test')).toBe('pending')
+
+    expect(ctx.runner.setBudget(runId, 1)).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'test')).toBe('running')
+  })
+
+  it('holds a Request changes continuation while budget-paused and starts it after Raise budget', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup()
+    const runId = await start('gated', 0.05)
+    const execution = executionOf(runId, 'plan')
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    usage(execution, 0.06)
+    const first = ctx.attemptOf(runId, 'plan')
+
+    expect(ctx.runner.requestChanges(runId, 'plan', { feedback: 'again', fresh: false })).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+    expect(ctx.attemptOf(runId, 'plan')).toBe(first)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+    ctx.runner.reschedule()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+
+    expect(ctx.runner.setBudget(runId, 1)).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(ctx.attemptOf(runId, 'plan')).not.toBe(first)
+  })
+
+  it('keeps a continuation queued at the agent cap blocked once its run becomes budget-paused', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup({ cap: 1 })
+    const runId = await start('gated', 0.05, '/wt/a')
+    const execution = executionOf(runId, 'plan')
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'ok' })
+    const blocker = await start('one-agent', undefined, '/wt/blocker')
+    expect(ctx.stepStatus(blocker, 'plan')).toBe('running')
+    expect(ctx.runner.requestChanges(runId, 'plan', { feedback: 'again', fresh: false })).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+
+    usage(execution, 0.06)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+    ctx.runner.complete(ctx.attemptOf(blocker, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+
+    expect(ctx.runner.setBudget(runId, 1)).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+  })
+
+  it('does not re-enter a loop span while budget-paused', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup()
+    const runId = await start('loop-fresh', 0.05)
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), done())
+    await flush()
+    usage(executionOf(runId, 'review'), 0.06)
+    expect(ctx.wf().runs[runId].pausedReason).toBe('budget')
+    ctx.runner.complete(ctx.attemptOf(runId, 'review'), { ...done(), data: { verdict: 'fail' } })
+    await flush()
+    expect(ctx.stepStatus(runId, 'build')).toBe('pending')
+    expect(ctx.agent.started).toHaveLength(2)
+
+    expect(ctx.runner.setBudget(runId, 1)).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'build')).toBe('running')
+    expect(ctx.agent.started).toHaveLength(3)
+  })
+
+  it('still lets an explicit Retry launch while budget-paused', async () => {
+    const { ctx, usage, start, executionOf } = budgetSetup()
+    const runId = await start('two-agent', 0.05)
+    usage(executionOf(runId, 'plan'), 0.06)
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget', cursorStepId: 'plan' })
+    expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(ctx.agent.started).toHaveLength(2)
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+  })
+})

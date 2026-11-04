@@ -1232,3 +1232,61 @@ describe('projectRunRecord measured cost', () => {
     expect(projected.attempts['att-2'].costUsd).toBe(0.1)
   })
 })
+
+describe('workflowsReducer runBudgetChanged', () => {
+  const budgetChanged = (runId: string, budgetUsd: number): WorkflowsEvent => ({
+    type: 'workflows/runBudgetChanged',
+    payload: { runId, budgetUsd }
+  })
+
+  it('records the budget on one run and keeps the other run and the attempts', () => {
+    const start = fixture()
+    const next = workflowsReducer(start, budgetChanged('run-a', 2.5))
+    expect(next.runs['run-a']).toEqual({ ...start.runs['run-a'], budgetUsd: 2.5 })
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+    expect(next.attempts).toBe(start.attempts)
+  })
+
+  it('replaces an earlier budget and returns the same state for the same budget', () => {
+    const raised = workflowsReducer(workflowsReducer(fixture(), budgetChanged('run-a', 1)), budgetChanged('run-a', 3))
+    expect(raised.runs['run-a'].budgetUsd).toBe(3)
+    expect(workflowsReducer(raised, budgetChanged('run-a', 3))).toBe(raised)
+  })
+
+  it('returns the same state for an unknown or finished run or an invalid budget', () => {
+    const start = fixture()
+    for (const event of [
+      budgetChanged('run-zz', 1),
+      budgetChanged('run-a', 0),
+      budgetChanged('run-a', -1),
+      budgetChanged('run-a', Number.NaN),
+      budgetChanged('run-a', Number.POSITIVE_INFINITY),
+      budgetChanged('run-a', 10001)
+    ]) {
+      expect(workflowsReducer(start, event)).toBe(start)
+    }
+    const finished = fixture({ status: 'done', finishedAt: 5000 })
+    expect(workflowsReducer(finished, budgetChanged('run-a', 1))).toBe(finished)
+  })
+
+  it('runStarted carries the budget of a new run', () => {
+    const next = workflowsReducer(initialWorkflows, {
+      type: 'workflows/runStarted',
+      payload: { runId: 'run-new', run: run({ budgetUsd: 0.5 }) }
+    })
+    expect(next.runs['run-new'].budgetUsd).toBe(0.5)
+  })
+})
+
+describe('projectRunRecord budget', () => {
+  it('keeps the budget of a record through hydration', () => {
+    const hydrated = hydrateWorkflowRuns([runRecord('run-1', { status: 'paused', pausedReason: 'budget', budgetUsd: 0.25 })])
+    expect(hydrated.runs['run-1'].budgetUsd).toBe(0.25)
+    expect(hydrated.runs['run-1'].pausedReason).toBe('budget')
+  })
+
+  it('leaves the budget absent when the record has none or an invalid one', () => {
+    expect(projectRunRecord(runRecord('run-1')).run).not.toHaveProperty('budgetUsd')
+    expect(projectRunRecord(runRecord('run-1', { budgetUsd: -2 })).run).not.toHaveProperty('budgetUsd')
+  })
+})

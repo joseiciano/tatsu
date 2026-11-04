@@ -5,6 +5,7 @@ import { join } from 'path'
 import { userDataDir } from '../paths'
 import {
   WORKFLOW_RUN_RECORD_VERSION,
+  isBudgetUsd,
   isCostUsd,
   type WorkflowAttemptRecord,
   type WorkflowRunRecord
@@ -76,6 +77,7 @@ function isRecordFor(value: unknown, runId: string): value is WorkflowRunRecord 
     typeof candidate.cursor === 'number' &&
     (candidate.inputsUntrusted === undefined || typeof candidate.inputsUntrusted === 'boolean') &&
     (candidate.autopilot === undefined || candidate.autopilot === true) &&
+    (candidate.budgetUsd === undefined || isBudgetUsd(candidate.budgetUsd)) &&
     typeof candidate.steps === 'object' &&
     candidate.steps !== null &&
     Array.isArray(candidate.definition?.steps) &&

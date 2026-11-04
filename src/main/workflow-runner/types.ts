@@ -28,6 +28,7 @@ export interface StartRunRequest {
   allowFull?: boolean
   overrides?: Record<string, StepOverrideRequest>
   autopilot?: boolean
+  budgetUsd?: number
 }
 
 export interface StepOverrideRequest {

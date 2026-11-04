@@ -178,6 +178,11 @@ class FakeRunner implements WorkflowActionsRunner {
     this.record('keepWaiting', runId, stepId)
     return this.actionResult
   }
+
+  setBudget(runId: string, budgetUsd: number): StepActionResult {
+    this.record('setBudget', runId, budgetUsd)
+    return this.actionResult
+  }
 }
 
 function attempt(attemptId: string, summary: string): WorkflowAttemptRecord {
@@ -572,6 +577,9 @@ describe('workflow action requests', () => {
     ['workflows:resolveLoopCap', [RUN, STEP, 'again'], ['resolveLoopCap', RUN, STEP, 'again']],
     ['workflows:resolveLoopCap', [RUN, STEP, 'continue'], ['resolveLoopCap', RUN, STEP, 'continue']],
     ['workflows:keepWaiting', [RUN, STEP], ['keepWaiting', RUN, STEP]],
+    ['workflows:setBudget', [RUN, 2.5], ['setBudget', RUN, 2.5]],
+    ['workflows:setBudget', [RUN, 10000], ['setBudget', RUN, 10000]],
+    ['workflows:setBudget', [RUN, 0.01], ['setBudget', RUN, 0.01]],
     [
       'workflows:requestChanges',
       [RUN, STEP, { feedback: 'tighten the plan', fresh: false }],
@@ -625,6 +633,53 @@ describe('workflow action requests', () => {
       ['start', { ...base, autopilot: true }],
       ['start', base]
     ])
+  })
+
+  it('passes a budget to the runner only when the payload has one', async () => {
+    const base = { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {} }
+    await transport.call('workflows:startRun', { ...base, budgetUsd: 0.5 })
+    await transport.call('workflows:startRun', { ...base, budgetUsd: 10000 })
+    await transport.call('workflows:startRun', base)
+    expect(runner.calls).toEqual([
+      ['start', { ...base, budgetUsd: 0.5 }],
+      ['start', { ...base, budgetUsd: 10000 }],
+      ['start', base]
+    ])
+  })
+
+  const badBudgets: unknown[] = [
+    '1',
+    '0.5',
+    true,
+    null,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    0,
+    -0,
+    -1,
+    10000.01,
+    1e9,
+    [1],
+    { usd: 1 }
+  ]
+
+  it.each(badBudgets)('rejects a startRun budget of %s', async (budgetUsd) => {
+    const payload = { defId: 'personal:plan', worktreePath: '/wt/a', budgetUsd }
+    expect(await transport.call('workflows:startRun', payload)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it.each([...badBudgets, undefined])('rejects a setBudget amount of %s', async (budgetUsd) => {
+    expect(await transport.call('workflows:setBudget', RUN, budgetUsd)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('maps setBudget refusals to fixed messages', async () => {
+    runner.actionResult = { ok: false, reason: 'unknown-run' }
+    expect(await transport.call('workflows:setBudget', RUN, 1)).toEqual({ error: 'Unknown or finished run' })
+    runner.actionResult = { ok: false, reason: 'labs-off' }
+    expect(await transport.call('workflows:setBudget', RUN, 1)).toEqual({ error: 'Workflows are turned off in Labs' })
   })
 
   const badIds: unknown[] = [undefined, null, 42, '', '../run', 'a/b', 'x'.repeat(129), { runId: RUN }, [RUN]]
@@ -806,6 +861,11 @@ describe('workflow action requests', () => {
   it.each(badIds)('rejects resolveLoopCap ids %#', async (id) => {
     expect(await transport.call('workflows:resolveLoopCap', id, STEP, 'continue')).toEqual({ error: 'invalid request' })
     expect(await transport.call('workflows:resolveLoopCap', RUN, id, 'continue')).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it.each(badIds)('rejects setBudget run ids %#', async (id) => {
+    expect(await transport.call('workflows:setBudget', id, 1)).toEqual({ error: 'invalid request' })
     expect(runner.calls).toEqual([])
   })
 

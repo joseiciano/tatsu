@@ -116,6 +116,24 @@ describe('mergeWireSnapshot', () => {
     expect(next).toBe(merged)
   })
 
+  it('keeps the budget of a new-server workflow run and leaves it absent for an old-server run', () => {
+    const base = {
+      defId: 'personal:a',
+      defHash: 'hash-a',
+      worktreePath: '/repo/wt',
+      status: 'paused' as const,
+      pausedReason: 'budget' as const,
+      startedAt: 1,
+      steps: {}
+    }
+    const runs = { 'run-new': { ...base, budgetUsd: 1.5 }, 'run-old': base }
+    const merged = mergeWireSnapshot({ workflows: { runs } })
+    expect(merged.workflows.runs['run-new'].budgetUsd).toBe(1.5)
+    expect(merged.workflows.runs['run-old']).not.toHaveProperty('budgetUsd')
+    const raised = rootReducer(merged, { type: 'workflows/runBudgetChanged', payload: { runId: 'run-old', budgetUsd: 2 } })
+    expect(raised.workflows.runs['run-old'].budgetUsd).toBe(2)
+  })
+
   it('leaves step kind, cursor and resumability absent in an old-server workflow run', () => {
     const runs = {
       'run-1': {

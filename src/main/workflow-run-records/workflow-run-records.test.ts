@@ -199,6 +199,26 @@ describe('loadRunRecordsSync', () => {
     expect(await records.read('autopilot')).toEqual(autopilot)
   })
 
+  it('keeps a budget through a persist and reload and skips an invalid budget', async () => {
+    const runsDir = join(dir, 'workflow-runs')
+    const budgeted = record('budgeted', { budgetUsd: 0.5 })
+    records.persist(budgeted)
+    await records.flush()
+    for (const [name, value] of [
+      ['zerobudget', 0],
+      ['negbudget', -1],
+      ['strbudget', '1'],
+      ['bigbudget', 10001],
+      ['nullbudget', null],
+      ['boolbudget', true]
+    ] as const) {
+      writeFileSync(join(runsDir, `${name}.json`), JSON.stringify({ ...record(name), budgetUsd: value }))
+    }
+
+    expect(loadRunRecordsSync(runsDir)).toEqual([budgeted])
+    expect(await records.read('budgeted')).toEqual(budgeted)
+  })
+
   it('returns no records when the directory does not exist yet', () => {
     expect(loadRunRecordsSync(join(dir, 'missing'))).toEqual([])
   })
