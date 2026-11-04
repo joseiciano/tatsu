@@ -223,7 +223,9 @@ describe('needsYouActions', () => {
     ['loop-cap before the step loaded', 'loop-cap', null, null, false, ['loop-again', 'loop-continue', 'cancel']],
     ['timeout with a tab', 'timeout', CLAUDE, null, true, ['keep-waiting', 'cancel', 'jump']],
     ['timeout on a shell step', 'timeout', SHELL, null, false, ['keep-waiting', 'cancel']],
-    ['restack-conflict', 'restack-conflict', null, null, false, ['cancel']]
+    ['restack-conflict', 'restack-conflict', null, null, false, ['cancel']],
+    ['publish-failed', 'publish-failed', null, null, false, ['cancel']],
+    ['publish-failed with a tab', 'publish-failed', CLAUDE, DONE, true, ['cancel', 'jump']]
   ])('%s', (_name, reason, step, attempt, tabExists, expected) => {
     expect(needsYouActions({ reason, step, attempt, tabExists })).toEqual(expected)
   })

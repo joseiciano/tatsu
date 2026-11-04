@@ -32,6 +32,7 @@ export type WorkflowPausedReason =
   | 'interrupted'
   | 'trust'
   | 'restack-conflict'
+  | 'publish-failed'
 
 export type WorkflowStepStatus =
   | 'pending'
@@ -57,6 +58,12 @@ export interface WorkflowRunStep {
   agent?: AgentKind
 }
 
+export interface WorkflowRunPr {
+  number: number
+  url: string
+  draft: boolean
+}
+
 export interface WorkflowRun {
   defId: string
   defHash: string
@@ -70,8 +77,44 @@ export interface WorkflowRun {
   costUsd?: number
   budgetUsd?: number
   cursorStepId?: string
+  pr?: WorkflowRunPr
   steps: Record<string, WorkflowRunStep>
 }
+
+export type WorkflowChainMode = 'independent' | 'stacked'
+
+export interface WorkflowChainItem {
+  id: string
+  title: string
+  branch?: string
+  baseBranch?: string
+  prNumber?: number
+  prevItemId?: string
+  skipped?: true
+}
+
+export type WorkflowChainItemPatch = Pick<WorkflowChainItem, 'id'> & Partial<Omit<WorkflowChainItem, 'id'>>
+
+export interface WorkflowChain {
+  chainId: string
+  defId: string
+  repoRoot: string
+  mode: WorkflowChainMode
+  items: WorkflowChainItem[]
+  draftPrs: boolean
+  childRunIds: Record<string, string>
+  startedAt: number
+  finishedAt?: number
+  budgetUsd?: number
+}
+
+export type WorkflowChainStatus = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled'
+
+export type WorkflowChainFinalStatus = Extract<WorkflowChainStatus, 'done' | 'failed' | 'cancelled'>
+
+export type WorkflowChainStatusResult =
+  | { status: 'paused'; runId: string }
+  | { status: Exclude<WorkflowChainStatus, 'paused'> }
 
 export interface WorkflowAttempt {
   runId: string
@@ -97,6 +140,7 @@ export interface WorkflowsState {
   runs: Record<string, WorkflowRun>
   attempts: Record<string, WorkflowAttempt>
   trust: Record<string, string>
+  chains: Record<string, WorkflowChain>
 }
 
 export type WorkflowsEvent =
@@ -144,6 +188,14 @@ export type WorkflowsEvent =
   | { type: 'workflows/runBudgetChanged'; payload: { runId: string; budgetUsd: number } }
   | { type: 'workflows/trustGranted'; payload: { defId: string; hash: string } }
   | { type: 'workflows/gateResolved'; payload: { runId: string; stepId: string; decision: WorkflowGateDecision } }
+  | { type: 'workflows/chainStarted'; payload: { chain: WorkflowChain } }
+  | { type: 'workflows/chainItemsChanged'; payload: { chainId: string; items: WorkflowChainItemPatch[] } }
+  | { type: 'workflows/chainChildRunLinked'; payload: { chainId: string; itemId: string; runId: string } }
+  | {
+      type: 'workflows/chainFinished'
+      payload: { chainId: string; status: WorkflowChainFinalStatus; finishedAt: number }
+    }
+  | { type: 'workflows/prRecorded'; payload: { runId: string; pr: WorkflowRunPr } }
 
 export type WorkflowGateDecision = 'approved' | 'autopilot' | 'changes-requested'
 

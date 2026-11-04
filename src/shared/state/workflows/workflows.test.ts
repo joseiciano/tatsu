@@ -5,12 +5,16 @@ import {
   SUMMARY_PREVIEW_MAX,
   WORKFLOW_RUN_RECORD_VERSION,
   capPermissions,
+  deriveChainStatus,
   hydrateWorkflowRuns,
   projectRunRecord,
   runStepFacts,
   runsToEvict,
   workflowsReducer,
   type WorkflowAttempt,
+  type WorkflowChain,
+  type WorkflowChainItem,
+  type WorkflowChainStatusResult,
   type WorkflowDefinitionSummary,
   type WorkflowRun,
   type WorkflowRunRecord,
@@ -239,6 +243,7 @@ function attempt(overrides: Partial<WorkflowAttempt> = {}): WorkflowAttempt {
 function fixture(runA: Partial<WorkflowRun> = {}): WorkflowsState {
   return {
     trust: {},
+    chains: {},
     definitions: { 'personal:a': summary('a') },
     runs: {
       'run-a': run(runA),
@@ -1288,5 +1293,241 @@ describe('projectRunRecord budget', () => {
   it('leaves the budget absent when the record has none or an invalid one', () => {
     expect(projectRunRecord(runRecord('run-1')).run).not.toHaveProperty('budgetUsd')
     expect(projectRunRecord(runRecord('run-1', { budgetUsd: -2 })).run).not.toHaveProperty('budgetUsd')
+  })
+})
+
+function chain(overrides: Partial<WorkflowChain> = {}): WorkflowChain {
+  return {
+    chainId: 'chain-1',
+    defId: 'personal:a',
+    repoRoot: '/repo',
+    mode: 'stacked',
+    items: [
+      { id: 'i1', title: 'First', branch: 'feat/one', baseBranch: 'main' },
+      { id: 'i2', title: 'Second', prevItemId: 'i1' },
+      { id: 'i3', title: 'Third', prevItemId: 'i2' }
+    ],
+    draftPrs: false,
+    childRunIds: {},
+    startedAt: 500,
+    ...overrides
+  }
+}
+
+function withChain(overrides: Partial<WorkflowChain> = {}): WorkflowsState {
+  const c = chain(overrides)
+  return { ...fixture(), chains: { [c.chainId]: c } }
+}
+
+describe('workflowsReducer chainStarted', () => {
+  it('adds a chain and keeps the runs and other chains', () => {
+    const start = withChain()
+    const other = chain({ chainId: 'chain-2' })
+    const next = workflowsReducer(start, { type: 'workflows/chainStarted', payload: { chain: other } })
+    expect(next.chains['chain-2']).toBe(other)
+    expect(next.chains['chain-1']).toBe(start.chains['chain-1'])
+    expect(next.runs).toBe(start.runs)
+  })
+
+  it('returns the same state when the chain id already exists', () => {
+    const start = withChain()
+    const next = workflowsReducer(start, {
+      type: 'workflows/chainStarted',
+      payload: { chain: chain({ mode: 'independent' }) }
+    })
+    expect(next).toBe(start)
+  })
+
+  it('adds a chain whose id is an Object.prototype key', () => {
+    const next = workflowsReducer(initialWorkflows, {
+      type: 'workflows/chainStarted',
+      payload: { chain: chain({ chainId: 'constructor' }) }
+    })
+    expect(Object.hasOwn(next.chains, 'constructor')).toBe(true)
+  })
+})
+
+describe('workflowsReducer chainItemsChanged', () => {
+  const itemsChanged = (items: Array<Pick<WorkflowChainItem, 'id'> & Partial<WorkflowChainItem>>, chainId = 'chain-1'): WorkflowsEvent => ({
+    type: 'workflows/chainItemsChanged',
+    payload: { chainId, items }
+  })
+
+  it('patches named fields of one item and keeps the other item references', () => {
+    const start = withChain()
+    const next = workflowsReducer(start, itemsChanged([{ id: 'i2', branch: 'feat/two', baseBranch: 'feat/one' }]))
+    const before = start.chains['chain-1'].items
+    const after = next.chains['chain-1'].items
+    expect(after[1]).toEqual({ id: 'i2', title: 'Second', prevItemId: 'i1', branch: 'feat/two', baseBranch: 'feat/one' })
+    expect(after[0]).toBe(before[0])
+    expect(after[2]).toBe(before[2])
+    expect(next.runs).toBe(start.runs)
+  })
+
+  it('applies several patches in one event, including two patches to the same item', () => {
+    const next = workflowsReducer(
+      withChain(),
+      itemsChanged([{ id: 'i1', prNumber: 7 }, { id: 'i3', skipped: true }, { id: 'i1', title: 'First (renamed)' }])
+    )
+    const items = next.chains['chain-1'].items
+    expect(items[0]).toEqual({ id: 'i1', title: 'First (renamed)', branch: 'feat/one', baseBranch: 'main', prNumber: 7 })
+    expect(items[2].skipped).toBe(true)
+  })
+
+  it('treats a field set to undefined as omitted and leaves the existing value', () => {
+    const next = workflowsReducer(withChain(), itemsChanged([{ id: 'i1', title: 'Renamed', branch: undefined }]))
+    const item = next.chains['chain-1'].items[0]
+    expect(item.title).toBe('Renamed')
+    expect(item.branch).toBe('feat/one')
+  })
+
+  it('patches known items and ignores unknown item ids in the same event', () => {
+    const next = workflowsReducer(withChain(), itemsChanged([{ id: 'zz', title: 'x' }, { id: 'i2', prNumber: 9 }]))
+    expect(next.chains['chain-1'].items.map((item) => item.id)).toEqual(['i1', 'i2', 'i3'])
+    expect(next.chains['chain-1'].items[1].prNumber).toBe(9)
+  })
+
+  it('returns the same state for an unknown chain, only unknown items, or values already set', () => {
+    const start = withChain()
+    for (const event of [
+      itemsChanged([{ id: 'i1', title: 'x' }], 'chain-zz'),
+      itemsChanged([{ id: 'zz', title: 'x' }]),
+      itemsChanged([{ id: 'i1', title: 'First', branch: 'feat/one' }]),
+      itemsChanged([{ id: 'i2', branch: undefined }]),
+      itemsChanged([])
+    ]) {
+      expect(workflowsReducer(start, event)).toBe(start)
+    }
+  })
+})
+
+describe('workflowsReducer chainChildRunLinked', () => {
+  const linked = (itemId: string, runId: string, chainId = 'chain-1'): WorkflowsEvent => ({
+    type: 'workflows/chainChildRunLinked',
+    payload: { chainId, itemId, runId }
+  })
+
+  it('links a child run to an item and keeps the items reference', () => {
+    const start = withChain()
+    const next = workflowsReducer(start, linked('i1', 'run-a'))
+    expect(next.chains['chain-1'].childRunIds).toEqual({ i1: 'run-a' })
+    expect(next.chains['chain-1'].items).toBe(start.chains['chain-1'].items)
+  })
+
+  it('relinks an item to a fresh run on retry', () => {
+    const next = workflowsReducer(withChain({ childRunIds: { i1: 'run-a' } }), linked('i1', 'run-b'))
+    expect(next.chains['chain-1'].childRunIds).toEqual({ i1: 'run-b' })
+  })
+
+  it('returns the same state for an unknown chain, an item not in the chain, or the same run', () => {
+    const start = withChain({ childRunIds: { i1: 'run-a' } })
+    for (const event of [linked('i1', 'run-b', 'chain-zz'), linked('zz', 'run-b'), linked('i1', 'run-a')]) {
+      expect(workflowsReducer(start, event)).toBe(start)
+    }
+  })
+})
+
+describe('workflowsReducer chainFinished', () => {
+  const finished = (finishedAt: number, chainId = 'chain-1'): WorkflowsEvent => ({
+    type: 'workflows/chainFinished',
+    payload: { chainId, status: 'done', finishedAt }
+  })
+
+  it('records only finishedAt and never stores a status', () => {
+    const start = withChain()
+    const next = workflowsReducer(start, finished(9000))
+    expect(next.chains['chain-1']).toEqual({ ...start.chains['chain-1'], finishedAt: 9000 })
+    expect(next.chains['chain-1']).not.toHaveProperty('status')
+  })
+
+  it('returns the same state for an unknown or already finished chain', () => {
+    const start = withChain({ finishedAt: 8000 })
+    expect(workflowsReducer(start, finished(9000))).toBe(start)
+    expect(workflowsReducer(start, finished(9000, 'chain-zz'))).toBe(start)
+  })
+})
+
+describe('workflowsReducer prRecorded', () => {
+  const pr = { number: 12, url: 'https://github.com/o/r/pull/12', draft: true }
+  const recorded = (runId: string, value = pr): WorkflowsEvent => ({
+    type: 'workflows/prRecorded',
+    payload: { runId, pr: value }
+  })
+
+  it('records the pull request on one run and keeps the other run and the attempts', () => {
+    const start = fixture()
+    const next = workflowsReducer(start, recorded('run-a'))
+    expect(next.runs['run-a']).toEqual({ ...start.runs['run-a'], pr })
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+    expect(next.attempts).toBe(start.attempts)
+  })
+
+  it('replaces a pull request when it leaves draft and returns the same state for an identical one', () => {
+    const drafted = workflowsReducer(fixture(), recorded('run-a'))
+    const ready = workflowsReducer(drafted, recorded('run-a', { ...pr, draft: false }))
+    expect(ready.runs['run-a'].pr).toEqual({ ...pr, draft: false })
+    expect(workflowsReducer(ready, recorded('run-a', { ...pr, draft: false }))).toBe(ready)
+  })
+
+  it('returns the same state for an unknown run', () => {
+    const start = fixture()
+    expect(workflowsReducer(start, recorded('run-zz'))).toBe(start)
+  })
+
+  it('still records the pull request of a finished run', () => {
+    const next = workflowsReducer(fixture({ status: 'done', finishedAt: 5000 }), recorded('run-a'))
+    expect(next.runs['run-a'].pr).toEqual(pr)
+  })
+})
+
+describe('deriveChainStatus', () => {
+  const ITEMS: WorkflowChainItem[] = [
+    { id: 'i1', title: 'One' },
+    { id: 'i2', title: 'Two' },
+    { id: 'i3', title: 'Three' }
+  ]
+  const statusRun = (status: WorkflowRun['status']): WorkflowRun => run({ status })
+
+  it.each<[string, Partial<WorkflowChain>, Record<string, WorkflowRun['status']>, WorkflowChainStatusResult]>([
+    ['zero items', { items: [] }, {}, { status: 'done' }],
+    ['every child done', { childRunIds: { i1: 'r1', i2: 'r2', i3: 'r3' } }, { r1: 'done', r2: 'done', r3: 'done' }, { status: 'done' }],
+    [
+      'done and skipped mix',
+      { items: [ITEMS[0], { ...ITEMS[1], skipped: true }, ITEMS[2]], childRunIds: { i1: 'r1', i3: 'r3' } },
+      { r1: 'done', r3: 'done' },
+      { status: 'done' }
+    ],
+    [
+      'skipped item whose child failed',
+      { items: [{ ...ITEMS[0], skipped: true }, ITEMS[1], ITEMS[2]], childRunIds: { i1: 'r1', i2: 'r2', i3: 'r3' } },
+      { r1: 'failed', r2: 'done', r3: 'done' },
+      { status: 'done' }
+    ],
+    [
+      'first paused in item order wins',
+      { childRunIds: { i1: 'r1', i2: 'r2', i3: 'r3' } },
+      { r1: 'running', r2: 'paused', r3: 'paused' },
+      { status: 'paused', runId: 'r2' }
+    ],
+    [
+      'paused wins over a failed sibling',
+      { childRunIds: { i1: 'r1', i2: 'r2' } },
+      { r1: 'failed', r2: 'paused' },
+      { status: 'paused', runId: 'r2' }
+    ],
+    ['any running', { childRunIds: { i1: 'r1', i2: 'r2' } }, { r1: 'done', r2: 'running' }, { status: 'running' }],
+    ['failed with nothing live', { childRunIds: { i1: 'r1', i2: 'r2' } }, { r1: 'done', r2: 'failed' }, { status: 'failed' }],
+    ['cancelled with nothing live', { childRunIds: { i1: 'r1' } }, { r1: 'cancelled' }, { status: 'cancelled' }],
+    ['failed wins over cancelled', { childRunIds: { i1: 'r1', i2: 'r2' } }, { r1: 'cancelled', r2: 'failed' }, { status: 'failed' }],
+    ['failed with the remaining items unlinked', { childRunIds: { i1: 'r1' } }, { r1: 'failed' }, { status: 'failed' }],
+    ['failed with a queued sibling', { childRunIds: { i1: 'r1', i2: 'r2' } }, { r1: 'failed', r2: 'queued' }, { status: 'queued' }],
+    ['nothing linked yet', {}, {}, { status: 'queued' }],
+    ['done child and unlinked items', { childRunIds: { i1: 'r1' } }, { r1: 'done' }, { status: 'queued' }],
+    ['linked run evicted from runs', { childRunIds: { i1: 'r1', i2: 'r2', i3: 'r3' } }, { r1: 'done', r3: 'done' }, { status: 'queued' }],
+    ['evicted run next to a failed child', { childRunIds: { i1: 'gone', i2: 'r2' } }, { r2: 'failed' }, { status: 'failed' }]
+  ])('%s', (_name, overrides, statuses, expected) => {
+    const runs: Record<string, WorkflowRun> = {}
+    for (const [runId, status] of Object.entries(statuses)) runs[runId] = statusRun(status)
+    expect(deriveChainStatus(chain({ items: ITEMS, ...overrides }), runs)).toEqual(expected)
   })
 })

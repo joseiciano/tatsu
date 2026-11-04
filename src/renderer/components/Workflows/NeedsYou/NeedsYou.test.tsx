@@ -144,7 +144,7 @@ function setState(opts: {
     ...initialState,
     settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: opts.labs ?? true } },
     terminals: { ...initialState.terminals, panes: opts.panes ?? {} },
-    workflows: { definitions: { [SUMMARY.id]: SUMMARY }, runs: opts.runs ?? {}, attempts: opts.attempts ?? {}, trust: {} }
+    workflows: { definitions: { [SUMMARY.id]: SUMMARY }, runs: opts.runs ?? {}, attempts: opts.attempts ?? {}, trust: {}, chains: {} }
   }
 }
 
