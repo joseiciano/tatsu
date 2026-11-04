@@ -1,13 +1,17 @@
 import type { CodexHookTrustSummary, HooksConsent } from '../../../../shared/state/hooks'
-import type {
-  WorkflowDefinitionSummary,
-  WorkflowRun,
-  WorkflowRunStatus,
-  WorkflowScope
+import {
+  WORKFLOW_STEP_MODEL_MAX_CHARS,
+  applyOverrides,
+  isWorkflowStepModel,
+  type WorkflowDefinitionSummary,
+  type WorkflowRun,
+  type WorkflowRunStatus,
+  type WorkflowScope,
+  type WorkflowStepOverride
 } from '../../../../shared/state/workflows'
 import type { Worktree } from '../../../../shared/state/worktrees'
 import { branchNameProblem } from '../../../../shared/branch-name-rules'
-import type { ResolvedDefinition, WorkflowInputType } from '../../../../shared/workflow-def'
+import type { ResolvedDefinition, WorkflowAgent, WorkflowInputType } from '../../../../shared/workflow-def'
 
 export type LaunchInputControl = 'textarea' | 'text'
 
@@ -66,6 +70,24 @@ export interface TargetBlockReasonArgs {
   repoRoots: readonly string[]
   worktrees: readonly Worktree[]
   runs: Record<string, WorkflowRun>
+}
+
+export interface OverrideRow {
+  id: string
+  agent: WorkflowAgent
+  model: string | undefined
+}
+
+export interface OverrideDraft {
+  agent?: WorkflowAgent
+  model?: string
+}
+
+export interface ResolvedOverrides {
+  overrides: Record<string, WorkflowStepOverride> | undefined
+  effective: ResolvedDefinition
+  reason: string | null
+  invalidStep: string | null
 }
 
 const BRANCH_DEFINITION_MAX_CHARS = 40
@@ -189,4 +211,45 @@ export function targetBlockReason({ target, repoRoots, worktrees, runs }: Target
       return _exhaustive
     }
   }
+}
+
+export function overrideRows(definition: ResolvedDefinition | null): OverrideRow[] {
+  if (!definition) return []
+  return definition.steps.flatMap((step) =>
+    step.kind === 'agent' ? [{ id: step.id, agent: step.agent, model: step.model }] : []
+  )
+}
+
+function changedOverride(row: OverrideRow, draft: OverrideDraft): WorkflowStepOverride | null {
+  const agent = draft.agent ?? row.agent
+  const agentChanged = agent !== row.agent
+  const model = draft.model?.trim() ?? ''
+  const modelChanged = model !== '' && (agentChanged || model !== row.model)
+  if (!agentChanged && !modelChanged) return null
+  return { ...(agentChanged ? { agent } : {}), ...(modelChanged ? { model } : {}) }
+}
+
+function modelProblem(id: string, model: string | undefined): string | null {
+  if (model === undefined) return null
+  if (model.length > WORKFLOW_STEP_MODEL_MAX_CHARS) return `Model for ${id} is too long`
+  return isWorkflowStepModel(model) ? null : `Model for ${id} is invalid`
+}
+
+export function resolveOverrides(definition: ResolvedDefinition, drafts: Record<string, OverrideDraft>): ResolvedOverrides {
+  const overrides: Record<string, WorkflowStepOverride> = {}
+  let invalid: { stepId: string; reason: string } | null = null
+  for (const row of overrideRows(definition)) {
+    if (!Object.hasOwn(drafts, row.id)) continue
+    const change = changedOverride(row, drafts[row.id])
+    if (change === null) continue
+    overrides[row.id] = change
+    const problem = modelProblem(row.id, change.model)
+    if (invalid === null && problem !== null) invalid = { stepId: row.id, reason: problem }
+  }
+  if (Object.keys(overrides).length === 0) return { overrides: undefined, effective: definition, reason: null, invalidStep: null }
+  if (invalid !== null) return { overrides, effective: definition, reason: invalid.reason, invalidStep: invalid.stepId }
+  const applied = applyOverrides(definition, overrides)
+  return applied.ok
+    ? { overrides, effective: applied.definition, reason: null, invalidStep: null }
+    : { overrides, effective: definition, reason: 'Choose a supported agent', invalidStep: null }
 }

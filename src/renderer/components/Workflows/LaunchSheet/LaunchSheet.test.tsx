@@ -11,6 +11,7 @@ import type {
   WorkflowRun
 } from '../../../../shared/state/workflows'
 import type { Worktree } from '../../../../shared/state/worktrees'
+import { STEP_HARNESS_AGENTS } from '../../../../shared/state/workflows'
 
 const { backendApi, storeState } = vi.hoisted(() => {
   const backendApi = {
@@ -63,6 +64,12 @@ steps:
     agent: claude
     permissions: full
     prompt: go
+`,
+  'personal:shell': `name: shell
+steps:
+  - id: test
+    kind: shell
+    run: "true"
 `,
   'repo:abcdefabcdef:ship': `name: ship
 defaults:
@@ -580,5 +587,120 @@ describe('LaunchSheet target', () => {
     })
     expect(backendApi.startWorkflowRun).not.toHaveBeenCalled()
     expect(onStarted).not.toHaveBeenCalled()
+  })
+})
+
+describe('LaunchSheet overrides', () => {
+  const toggle = (): HTMLButtonElement => q<HTMLButtonElement>('button[aria-controls]')
+
+  async function openOverrides(): Promise<void> {
+    await click(toggle())
+  }
+
+  function startPayload(): Record<string, unknown> {
+    const call = backendApi.startWorkflowRun.mock.calls.at(-1)
+    if (!call) throw new Error('startWorkflowRun was not called')
+    return call[0] as Record<string, unknown>
+  }
+
+  it('is collapsed by default and expands to one labelled row per agent step', async () => {
+    await mount()
+    await select(REPO_ID)
+    await click(buttonByText('Trust this definition'))
+    expect(toggle().textContent?.trim()).toBe('Overrides')
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    const body = (): HTMLElement | null => document.getElementById(toggle().getAttribute('aria-controls') ?? '')
+    expect(body()?.hidden).toBe(true)
+    await openOverrides()
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(body()?.hidden).toBe(false)
+    expect(optionValues(byLabel<HTMLSelectElement>('Agent for review'))).toStrictEqual([...STEP_HARNESS_AGENTS])
+    expect(byLabel<HTMLSelectElement>('Agent for review').value).toBe('opencode')
+    expect(byLabel<HTMLSelectElement>('Agent for fix').value).toBe('claude')
+    expect(container.textContent).not.toContain('Agent for test')
+  })
+
+  it('hides the section for a definition without agent steps', async () => {
+    storeState.definitions = { ...storeState.definitions, 'personal:shell': summary('personal:shell') }
+    await mount()
+    await select('personal:shell')
+    expect(container.querySelector('button[aria-controls]')).toBeNull()
+  })
+
+  it('sends no overrides key when nothing was changed', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    await fillPlan()
+    await click(startButton())
+    expect(Object.hasOwn(startPayload(), 'overrides')).toBe(false)
+  })
+
+  it('sends only the changed values, counts them, and clears the model on an agent change', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    await type(byLabel<HTMLInputElement>('Model for plan'), 'opus')
+    await choose(byLabel<HTMLSelectElement>('Agent for plan'), 'opencode')
+    expect(byLabel<HTMLInputElement>('Model for plan').value).toBe('')
+    expect(toggle().textContent?.trim()).toBe('Overrides (1 changed)')
+    await fillPlan()
+    await click(startButton())
+    const { overrides } = startPayload() as { overrides: Record<string, Record<string, unknown>> }
+    expect(overrides).toStrictEqual({ plan: { agent: 'opencode' } })
+  })
+
+  it('blocks Start with the Codex hooks reason when a step is overridden to Codex', async () => {
+    await mount()
+    await select('personal:plan')
+    await fillPlan()
+    expect(startButton().disabled).toBe(false)
+    await openOverrides()
+    await choose(byLabel<HTMLSelectElement>('Agent for plan'), 'codex')
+    expect(startButton().disabled).toBe(true)
+    expect(container.textContent).toContain('Open a Codex tab and run /hooks')
+    await choose(byLabel<HTMLSelectElement>('Agent for plan'), 'claude')
+    expect(startButton().disabled).toBe(false)
+  })
+
+  it('blocks Start on an over-long model and marks the field invalid', async () => {
+    await mount()
+    await select('personal:plan')
+    await fillPlan()
+    await openOverrides()
+    await type(byLabel<HTMLInputElement>('Model for plan'), 'm'.repeat(201))
+    expect(startButton().disabled).toBe(true)
+    expect(container.textContent).toContain('Model for plan is too long')
+    expect(byLabel<HTMLInputElement>('Model for plan').getAttribute('aria-invalid')).toBe('true')
+  })
+
+  it('resets the drafts when the selected definition changes', async () => {
+    await mount()
+    await select('personal:plan')
+    await openOverrides()
+    await choose(byLabel<HTMLSelectElement>('Agent for plan'), 'opencode')
+    await select('personal:full')
+    await select('personal:plan')
+    expect(byLabel<HTMLSelectElement>('Agent for plan').value).toBe('claude')
+    expect(toggle().textContent?.trim()).toBe('Overrides')
+  })
+
+  it('keeps the drafts when a start refusal switches the target to the created worktree', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('12345678-aaaa-bbbb-cccc-dddddddddddd')
+    backendApi.runPendingWorktree.mockImplementation(async ({ id }: { id: string }) => {
+      storeState.worktrees = [...storeState.worktrees, worktree('/wts/new', '/repo', 'wf/full/12345678')]
+      return { id, outcome: 'success', createdPath: '/wts/new' }
+    })
+    backendApi.startWorkflowRun.mockResolvedValueOnce({ error: 'Install hooks to start a workflow' })
+    await mountUnset()
+    await choose(byLabel<HTMLSelectElement>('Workflow'), 'personal:full')
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await openOverrides()
+    await choose(byLabel<HTMLSelectElement>('Agent for fix'), 'opencode')
+    await click(startButton())
+    expect(radio('Existing worktree').checked).toBe(true)
+    expect(byLabel<HTMLSelectElement>('Agent for fix').value).toBe('opencode')
+    await click(startButton())
+    expect(startPayload()).toMatchObject({ worktreePath: '/wts/new', overrides: { fix: { agent: 'opencode' } } })
   })
 })

@@ -6,6 +6,8 @@ import {
   existingWorktreeOptions,
   isWorktreeBusy,
   needsFull,
+  overrideRows,
+  resolveOverrides,
   targetBlockReason,
   workflowBranchName,
   showRunWorkflowItem,
@@ -383,5 +385,90 @@ describe('targetBlockReason', () => {
     expect(targetBlockReason({ ...base, target: { kind: 'existing', repoRoot: '/repo/a', worktreePath: '/elsewhere' } })).toBe(
       'Choose a worktree'
     )
+  })
+})
+
+const MIXED = resolve(`name: mixed
+steps:
+  - id: plan
+    agent: claude
+    permissions: read-only
+    model: opus
+    prompt: go
+  - id: test
+    kind: shell
+    run: "true"
+  - id: fix
+    agent: claude
+    permissions: full
+    prompt: go
+`)
+
+describe('overrideRows', () => {
+  it('lists only agent steps with their definition agent and model', () => {
+    expect(overrideRows(MIXED)).toStrictEqual([
+      { id: 'plan', agent: 'claude', model: 'opus' },
+      { id: 'fix', agent: 'claude', model: undefined }
+    ])
+    expect(overrideRows(SHELL_ONLY)).toStrictEqual([])
+    expect(overrideRows(null)).toStrictEqual([])
+  })
+})
+
+describe('resolveOverrides', () => {
+  it('sends no overrides and keeps the definition when nothing changed', () => {
+    const untouched = resolveOverrides(MIXED, {})
+    expect(untouched).toStrictEqual({ overrides: undefined, effective: MIXED, reason: null, invalidStep: null })
+    const same = resolveOverrides(MIXED, { plan: { agent: 'claude', model: ' opus ' }, fix: { model: '   ' } })
+    expect(same.overrides).toBeUndefined()
+    expect(same.effective).toBe(MIXED)
+  })
+
+  it('emits only the changed agent or model of each step, never undefined keys', () => {
+    const { overrides } = resolveOverrides(MIXED, { plan: { agent: 'opencode' }, fix: { model: ' sonnet ' } })
+    expect(overrides).toStrictEqual({ plan: { agent: 'opencode' }, fix: { model: 'sonnet' } })
+    expect(Object.keys(overrides?.plan ?? {})).toStrictEqual(['agent'])
+    expect(Object.keys(overrides?.fix ?? {})).toStrictEqual(['model'])
+  })
+
+  it('sends a typed model with an agent change even when it equals the definition model', () => {
+    const { overrides } = resolveOverrides(MIXED, { plan: { agent: 'codex', model: 'opus' } })
+    expect(overrides).toStrictEqual({ plan: { agent: 'codex', model: 'opus' } })
+  })
+
+  it('ignores drafts for steps that are not agent steps', () => {
+    expect(resolveOverrides(MIXED, { test: { agent: 'codex' } }).overrides).toBeUndefined()
+  })
+
+  it('drops the definition model when the agent changes without a model, as the server does', () => {
+    const { effective } = resolveOverrides(MIXED, { plan: { agent: 'opencode' } })
+    const plan = effective.steps.find((step) => step.id === 'plan')
+    expect(plan?.kind === 'agent' && plan.agent).toBe('opencode')
+    expect(plan && 'model' in plan).toBe(false)
+  })
+
+  it('makes overriding a step to Codex block on Codex hooks, and overriding a Codex step away clear it', () => {
+    const toCodex = resolveOverrides(MIXED, { plan: { agent: 'codex' } }).effective
+    expect(startBlockReason(args({ definition: toCodex, inputs: {} }))).toBe('Open a Codex tab and run /hooks')
+    expect(startBlockReason(args({ definition: toCodex, inputs: {}, codexTrust: CODEX_OK }))).toBeNull()
+    const away = resolveOverrides(CODEX_STEP, { plan: { agent: 'claude' } }).effective
+    expect(startBlockReason(args({ definition: CODEX_STEP, inputs: {} }))).toBe('Open a Codex tab and run /hooks')
+    expect(startBlockReason(args({ definition: away, inputs: {} }))).toBeNull()
+  })
+
+  it('feeds the effective definition to needsFull', () => {
+    const { effective } = resolveOverrides(MIXED, { fix: { agent: 'opencode' } })
+    expect(effective).not.toBe(MIXED)
+    expect(needsFull(effective)).toBe(true)
+    expect(needsFull(resolveOverrides(EDIT_AGENT, { plan: { agent: 'codex' } }).effective)).toBe(false)
+  })
+
+  it('blocks Start with an inline reason on an invalid model and keeps the raw definition', () => {
+    const long = resolveOverrides(MIXED, { plan: { model: 'm'.repeat(201) } })
+    expect(long.reason).toBe('Model for plan is too long')
+    expect(long.invalidStep).toBe('plan')
+    expect(long.effective).toBe(MIXED)
+    expect(resolveOverrides(MIXED, { fix: { model: 'bad\u0007model' } }).reason).toBe('Model for fix is invalid')
+    expect(resolveOverrides(MIXED, { plan: { model: 'm'.repeat(200) } }).reason).toBeNull()
   })
 })
