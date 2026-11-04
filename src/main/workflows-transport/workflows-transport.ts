@@ -106,6 +106,7 @@ const START_ERRORS: Record<StartRefusal, string> = {
   'missing-input': 'A required workflow input is missing',
   'hooks-consent': 'Accept the hooks install before running agent steps',
   'codex-hooks-untrusted': 'Open a Codex tab and run /hooks',
+  'parallel-writer': 'Steps that can run at the same time must not write; make them read-only or order them with "needs"',
   starting: 'Tatsu is still starting; try again'
 }
 

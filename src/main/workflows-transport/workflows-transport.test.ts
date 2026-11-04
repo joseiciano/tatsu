@@ -729,6 +729,10 @@ describe('workflow action requests', () => {
     expect(await transport.call('workflows:startRun', { defId: 'personal:plan', worktreePath: '/wt/a' })).toEqual({
       error: 'Tatsu is still starting; try again'
     })
+    runner.startResult = { ok: false, reason: 'parallel-writer' }
+    expect(await transport.call('workflows:startRun', { defId: 'personal:plan', worktreePath: '/wt/a' })).toEqual({
+      error: 'Steps that can run at the same time must not write; make them read-only or order them with "needs"'
+    })
     runner.actionResult = { ok: false, reason: 'no-session' }
     expect(await transport.call('workflows:resumeStep', RUN, STEP)).toEqual({
       error: 'The attempt has no stored session to resume; use Retry instead'
