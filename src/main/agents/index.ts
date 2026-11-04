@@ -18,6 +18,7 @@ export interface AgentSpawnOpts {
   cwd: string
   sessionId?: string
   initialPrompt?: string
+  promptOnResume?: boolean
   teleportSessionId?: string
   sessionName?: string
   mcpConfigPath?: string | null

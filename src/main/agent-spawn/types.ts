@@ -17,6 +17,7 @@ export interface AgentSpawnRequest {
   agentKind: AgentKind
   sessionId?: string
   initialPrompt?: string
+  promptOnResume?: boolean
   teleportSessionId?: string
   sessionName?: string
   modelOverride?: string
@@ -41,6 +42,7 @@ export interface StepSpawnExtras {
   permissionLevel?: PermissionLevel
   bashAllow?: string[]
   initialPrompt?: string
+  promptOnResume?: boolean
   sessionId?: string
   model?: string
   env?: Record<string, string>

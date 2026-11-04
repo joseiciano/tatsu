@@ -387,7 +387,10 @@ export function buildSpawnArgs(
   }
 
   const exists = isAgentSessionId('codex', opts.sessionId) && sessionExists(opts.cwd, opts.sessionId, opts.command)
-  if (exists) return `${cmd} resume ${shellQuote(opts.sessionId)}`
+  if (exists) {
+    const resumed = `${cmd} resume ${shellQuote(opts.sessionId)}`
+    return opts.promptOnResume && opts.initialPrompt ? `${resumed} ${shellQuote(opts.initialPrompt)}` : resumed
+  }
 
   return opts.initialPrompt ? `${cmd} ${shellQuote(opts.initialPrompt)}` : cmd
 }
