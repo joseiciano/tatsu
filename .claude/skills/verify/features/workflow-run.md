@@ -38,6 +38,20 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     registered and for a branch name that fails `git check-ref-format
     --branch` or the shared rules (leading `-`, `..`, backslash, `@{`,
     empty, over 200 chars).
+- **Overrides**: a collapsed section in the launch sheet for a definition
+  with agent steps (hidden otherwise). Toggle button `Overrides` (`Overrides
+  (<n> changed)` once a value differs) with `aria-expanded` and
+  `aria-controls`. One row per agent step: `Agent for <stepId>` select
+  (supported step harnesses only) and `Model for <stepId>` text input
+  (prefilled with the definition model for the same agent; empty with
+  placeholder `Agent default` after an agent change, since the server drops
+  the old model). Only changed values go to `startRun` as `overrides`; no
+  `overrides` key when nothing changed. Readiness uses the overridden steps,
+  so overriding to Codex shows `Open a Codex tab and run /hooks`; an
+  over-long model shows `Model for <stepId> is too long`. The trust panel
+  still shows the definition's own steps. Drafts reset when the workflow
+  changes and survive the switch to `Existing worktree` after a refusal.
+  The run record's `overriddenFrom.<stepId>` holds the original agent/model.
 - **Step strip**: `role="img"` under the branch name, `aria-label`
   `Workflow steps: <id> <status>, …`. Only for a live run; it disappears when
   the run is done, failed or cancelled.
@@ -101,6 +115,12 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     with a summary -> overlay shows Status `done`, Completed by
     `you (Mark done)` and the summary; form, row and strip gone -> run record
     `done`, last `exit` attempt completed by `user`.
+  - `launch-overrides`: open the launch sheet -> pick `smoke` -> `Overrides`
+    is `aria-expanded="false"` -> expand -> `Agent for plan` = opencode,
+    `Model for plan` = `fake/opencode-model` -> `Overrides (1 changed)` ->
+    Start -> a new `⚙ plan · opencode` step tab -> run record `done` with
+    `overriddenFrom.plan.agent: claude`, `plan` step opencode with that model
+    and attempts `1:opencode:done`.
   - `launch-target` (runs last): see workflows-section.md.
   - `repo-trust`: append a nonce comment to the committed
     `.harness/workflows/browser-repo.yaml` (fresh bytes, so it is untrusted on
