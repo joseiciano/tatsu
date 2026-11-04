@@ -132,6 +132,8 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   'codex-hooks-untrusted': 'Open a Codex tab and run /hooks',
   'full-permission-unconfirmed': 'This step has full access; confirm full access for the new agent',
   starting: 'Tatsu is still starting; try again',
+  'not-continuable-step': 'Only agent steps can continue their session',
+  'nothing-to-continue': 'This step has no earlier attempt to continue',
   'invalid-output': 'Invalid step output'
 }
 

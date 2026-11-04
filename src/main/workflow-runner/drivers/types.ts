@@ -17,6 +17,7 @@ export interface StepAttempt {
   step: RunnableStep
   scope: TemplateScope
   resumeSessionId?: string
+  prompt?: string
   bind(execution: StepExecution): boolean
 }
 
@@ -26,7 +27,7 @@ export interface StepExecution {
 }
 
 export type StepDriverEvent =
-  | { type: 'turnEnded'; executionId: string; lastMessage?: string; continued?: boolean }
+  | { type: 'turnEnded'; executionId: string; lastMessage?: string; continued?: boolean; stopHookActive?: boolean }
   | { type: 'promptSubmitted'; executionId: string }
   | { type: 'exited'; executionId: string; code: number | null; summary?: string }
   | { type: 'needsApproval'; executionId: string }
@@ -36,7 +37,7 @@ export type StepDriverListener = (event: StepDriverEvent) => void
 
 export interface StepDriver {
   start(attempt: StepAttempt): Promise<StepExecution> | StepExecution
-  continue(executionId: string, prompt: string): void
+  continue(attempt: StepAttempt, executionId: string, prompt: string): Promise<void> | void
   cancel(executionId: string): void
   release?(executionId: string): void
   onEvent(listener: StepDriverListener): () => void

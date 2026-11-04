@@ -4,6 +4,7 @@ import {
   WorkflowRunner,
   createClaudeStepDriver,
   createShellStepDriver,
+  StepStartError,
   type AgentStopEvent,
   type RunArtifacts,
   type StepAttempt,
@@ -177,6 +178,7 @@ interface SetupOptions {
   shellDriver?: StepDriver
   agentDriver?: (store: Store) => StepDriver
   worktrees?: string[]
+  deps?: Partial<WorkflowRunnerDeps>
 }
 
 const WORKTREES = [
@@ -194,7 +196,8 @@ function setup({
   runs = {},
   shellDriver,
   agentDriver,
-  worktrees = WORKTREES
+  worktrees = WORKTREES,
+  deps
 }: SetupOptions = {}) {
   const store = new Store({
     ...initialState,
@@ -235,7 +238,8 @@ function setup({
       persisted.push(run.runId)
       records.push(structuredClone(run))
     },
-    artifacts
+    artifacts,
+    ...deps
   })
   runner.reconcile([])
   const events: StateEvent[] = []
@@ -1256,6 +1260,7 @@ function claudeHarness() {
         markers.delete(id)
       },
       writePromptFile: async () => {},
+      write: () => {},
       newTabId: () => `claude-tab-${++ids}`,
       newSessionId: () => `00000000-0000-4000-8000-00000000000${ids}`,
       log: () => {}
@@ -1997,5 +2002,340 @@ describe('WorkflowRunner attemptSessionRecorded', () => {
     await flush()
     expect(ctx.events.some((event) => event.type === 'workflows/attemptSessionRecorded')).toBe(false)
     expect('resumable' in ctx.wf().attempts[ctx.attemptOf(runId, 'test')]).toBe(false)
+  })
+})
+
+describe('WorkflowRunner.continueStep', () => {
+  const CONTINUE_SECRET = 'CONTINUE-SECRET-ibis-3'
+  const SESSION = '0f8fad5b-d9cb-469f-a165-70867728950e'
+
+  function snapshotArtifacts() {
+    const pending: Array<() => void> = []
+    let hold = false
+    const artifacts: RunArtifacts = {
+      prepare: async () => {},
+      snapshot: ({ n }) => {
+        const ref = { commit: String(n % 10).repeat(40), ref: `refs/test/${n}` }
+        if (!hold) return Promise.resolve(ref)
+        return new Promise((resolve) => pending.push(() => resolve(ref)))
+      },
+      appendContext: async () => {},
+      restore: async () => {}
+    }
+    return {
+      artifacts,
+      hold: () => {
+        hold = true
+      },
+      release: () => {
+        hold = false
+        for (const resolve of pending.splice(0)) resolve()
+      }
+    }
+  }
+
+  async function pausedAfterPlan(options: SetupOptions = {}, alive = true) {
+    const retagged: Array<{ worktreePath: string; tabId: string; workflow: Record<string, string> }> = []
+    const ctx = setup({
+      ...options,
+      deps: {
+        hasExecution: () => alive,
+        retagStepTab: (worktreePath, tabId, workflow) => {
+          retagged.push({ worktreePath, tabId, workflow: { ...workflow } })
+        }
+      }
+    })
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    const planAttempt = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(planAttempt)
+    ctx.runner.complete(planAttempt, done(SUMMARY_SECRET))
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), failed())
+    await flush()
+    return { ctx, runId, planAttempt, execution, retagged }
+  }
+
+  it('rebinds the live execution to a new attempt that complete_step then completes', async () => {
+    const { ctx, runId, planAttempt, execution, retagged } = await pausedAfterPlan()
+    expect(ctx.runner.stepForExecution(execution)).toMatchObject({ attemptId: planAttempt, ended: true })
+
+    expect(ctx.runner.continueStep(runId, 'plan', `${CONTINUE_SECRET} fix it`)).toEqual({ ok: true })
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    expect(attemptId).not.toBe(planAttempt)
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ n: 2, status: 'running' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(retagged).toEqual([
+      { worktreePath: '/wt/two-agent', tabId: execution, workflow: { runId, stepId: 'plan', attemptId } }
+    ])
+    expect(ctx.runner.stepForExecution(execution)).toMatchObject({ attemptId, ended: false })
+    await flush()
+    expect(ctx.agent.continued).toEqual([
+      { attempt: expect.objectContaining({ attemptId, n: 2, stepId: 'plan' }), executionId: execution, prompt: `${CONTINUE_SECRET} fix it` }
+    ])
+    expect(ctx.agent.started).toHaveLength(2)
+    expect(ctx.agent.released).toContain(execution)
+
+    expect(ctx.runner.completeExecution(execution, { status: 'done', summary: 'fixed' })).toEqual({ ok: true })
+    expect(ctx.wf().attempts[attemptId]).toMatchObject({ status: 'done', completedBy: 'tool' })
+    const record = ctx.records.at(-1)?.attempts.find((attempt) => attempt.attemptId === attemptId)
+    expect(record).toMatchObject({ executionId: execution, n: 2, status: 'done' })
+    expect(ctx.runner.completeExecution(execution, { status: 'done', summary: 'again' })).toEqual({
+      ok: false,
+      reason: 'already-completed'
+    })
+    expect(ctx.logs.join('\n')).not.toContain(CONTINUE_SECRET)
+  })
+
+  it('takes the base snapshot before the prompt is sent and the head snapshot on completion', async () => {
+    const snapshots = snapshotArtifacts()
+    const { ctx, runId, execution } = await pausedAfterPlan({ artifacts: snapshots.artifacts })
+    snapshots.hold()
+    ctx.runner.continueStep(runId, 'plan', 'again')
+    await flush()
+    expect(ctx.agent.continued).toEqual([])
+    snapshots.release()
+    await vi.waitFor(() => expect(ctx.agent.continued).toHaveLength(1))
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    ctx.runner.completeExecution(execution, { status: 'done', summary: 'fixed' })
+    await vi.waitFor(() => {
+      const record = ctx.runner.getRunRecord(runId)?.attempts.find((attempt) => attempt.attemptId === attemptId)
+      expect(record?.baseSnapshot?.ref).toBe('refs/test/2')
+      expect(record?.headSnapshot?.ref).toBe('refs/test/3')
+    })
+  })
+
+  it('ignores stale Stop lines of the previous turn until the new turn ends', async () => {
+    const { ctx, runId, execution } = await pausedAfterPlan()
+    ctx.runner.continueStep(runId, 'plan', 'again')
+    await flush()
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'old', stopHookActive: true })
+    ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'old', continued: true })
+    expect(ctx.wf().attempts[attemptId].status).toBe('running')
+
+    expect(ctx.runner.stopCheck(execution, false)).toBe('block')
+    ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'old', stopHookActive: true })
+    expect(ctx.wf().attempts[attemptId].status).toBe('running')
+    ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'nudged', continued: true })
+    expect(ctx.wf().attempts[attemptId].status).toBe('running')
+    ctx.agent.emit({ type: 'turnEnded', executionId: execution, lastMessage: 'second turn' })
+    expect(ctx.records.at(-1)?.attempts.find((attempt) => attempt.attemptId === attemptId)?.result).toEqual({
+      status: 'done',
+      summary: 'second turn',
+      completedBy: 'fallback'
+    })
+    expect(ctx.logs.some((line) => line.includes('stale turn end ignored'))).toBe(true)
+  })
+
+  it('completes on a new turn end that is not stale, and still honours an exit', async () => {
+    const first = await pausedAfterPlan()
+    first.ctx.runner.continueStep(first.runId, 'plan', 'again')
+    await flush()
+    first.ctx.agent.emit({ type: 'turnEnded', executionId: first.execution, lastMessage: 'turn two' })
+    expect(first.ctx.wf().attempts[first.ctx.attemptOf(first.runId, 'plan')]).toMatchObject({
+      status: 'done',
+      completedBy: 'fallback'
+    })
+
+    const second = await pausedAfterPlan()
+    second.ctx.runner.continueStep(second.runId, 'plan', 'again')
+    await flush()
+    second.ctx.agent.emit({ type: 'exited', executionId: second.execution, code: 1 })
+    expect(second.ctx.wf().attempts[second.ctx.attemptOf(second.runId, 'plan')].status).toBe('failed')
+  })
+
+  it('fails the continued attempt when the driver cannot deliver the prompt', async () => {
+    const { ctx, runId } = await pausedAfterPlan()
+    ctx.agent.continueError = new StepStartError('agent is no longer running')
+    ctx.runner.continueStep(runId, 'plan', 'again')
+    await flush()
+    expect(ctx.wf().attempts[ctx.attemptOf(runId, 'plan')]).toMatchObject({ status: 'failed', summaryPreview: 'agent is no longer running' })
+    expect(ctx.stepStatus(runId, 'plan')).toBe('failed')
+  })
+
+  it('refuses finished and cancelled runs, shell steps, live or queued steps and steps with no attempt', async () => {
+    const ctx = setup({ deps: { hasExecution: () => true } })
+    const finished = await ctx.startRun('one-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(finished, 'plan'), done())
+    expect(ctx.runner.continueStep(finished, 'plan', 'p')).toEqual({ ok: false, reason: 'unknown-run' })
+
+    const cancelled = await ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    ctx.runner.cancelRun(cancelled)
+    expect(ctx.runner.continueStep(cancelled, 'plan', 'p')).toEqual({ ok: false, reason: 'unknown-run' })
+
+    const shellRun = await ctx.startRun('shell-then-agent')
+    await flush()
+    expect(ctx.runner.continueStep(shellRun, 'test', 'p')).toEqual({ ok: false, reason: 'not-continuable-step' })
+
+    const live = await ctx.startRun('two-agent')
+    await flush()
+    expect(ctx.runner.continueStep(live, 'plan', 'p')).toEqual({ ok: false, reason: 'live-attempt' })
+    expect(ctx.runner.continueStep(live, 'build', 'p')).toEqual({ ok: false, reason: 'nothing-to-continue' })
+    expect(ctx.runner.continueStep(live, 'nope', 'p')).toEqual({ ok: false, reason: 'wrong-step' })
+    expect(ctx.agent.continued).toEqual([])
+    expect(ctx.wf().runs[finished].status).toBe('done')
+    expect(ctx.wf().runs[cancelled].status).toBe('cancelled')
+  })
+
+  it('refuses while labs is off', async () => {
+    const { ctx, runId } = await pausedAfterPlan()
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.continueStep(runId, 'plan', 'p')).toEqual({ ok: false, reason: 'labs-off' })
+  })
+
+  it('resumes the recorded session in a new execution with the prompt when the PTY is gone', async () => {
+    const ctx = setup({ deps: { hasExecution: () => false } })
+    ctx.agent.sessionId = SESSION
+    const runId = await ctx.startRun('two-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done(SUMMARY_SECRET))
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), failed())
+    await flush()
+
+    expect(ctx.runner.continueStep(runId, 'plan', `${CONTINUE_SECRET} fix`)).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.continued).toEqual([])
+    expect(ctx.agent.started.at(-1)).toMatchObject({ stepId: 'plan', n: 2, resumeSessionId: SESSION, prompt: `${CONTINUE_SECRET} fix` })
+    const attemptId = ctx.attemptOf(runId, 'plan')
+    expect(ctx.agent.executionFor(attemptId)).toBe('agent-exec-3')
+    expect(ctx.logs.join('\n')).not.toContain(CONTINUE_SECRET)
+  })
+
+  it('does not resume a session recorded under another harness after a swap', async () => {
+    const ctx = setup({ deps: { hasExecution: () => false } })
+    ctx.agent.sessionId = SESSION
+    const runId = await ctx.startRun('one-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
+    ctx.agent.sessionId = undefined
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'opencode' })).toEqual({ ok: true })
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
+
+    expect(ctx.runner.continueStep(runId, 'plan', 'fix')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started.at(-1)).toMatchObject({ n: 3, step: { agent: 'opencode' } })
+    expect(ctx.agent.started.at(-1)?.resumeSessionId).toBeUndefined()
+  })
+
+  it('starts a fresh session with the previous summary when the PTY is gone and no session was recorded', async () => {
+    const { ctx, runId, retagged } = await pausedAfterPlan({}, false)
+    ctx.runner.continueStep(runId, 'plan', `${CONTINUE_SECRET} fix`)
+    await flush()
+    const started = ctx.agent.started.at(-1)
+    expect(started).toMatchObject({ stepId: 'plan', n: 2, prompt: `${CONTINUE_SECRET} fix\n\nPrevious result:\n${SUMMARY_SECRET}` })
+    expect(started?.resumeSessionId).toBeUndefined()
+    expect(retagged).toEqual([])
+    expect(ctx.logs.join('\n')).not.toContain(CONTINUE_SECRET)
+  })
+
+  it('queues a fallback start behind the agent cap and launches it with the prompt once a slot frees', async () => {
+    const ctx = setup({ cap: 1, deps: { hasExecution: () => false } })
+    const runId = await ctx.startRun('one-agent')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed(SUMMARY_SECRET))
+    const other = await ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    ctx.runner.continueStep(runId, 'plan', `${CONTINUE_SECRET} fix`)
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+    const before = ctx.agent.started.length
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.agent.started).toHaveLength(before + 1)
+    expect(ctx.agent.started.at(-1)).toMatchObject({
+      runId,
+      stepId: 'plan',
+      prompt: `${CONTINUE_SECRET} fix\n\nPrevious result:\n${SUMMARY_SECRET}`
+    })
+    expect(ctx.runner.continueStep(runId, 'plan', 'p')).toEqual({ ok: false, reason: 'live-attempt' })
+  })
+
+  async function cappedContinue(alive: boolean) {
+    const ctx = setup({ cap: 1, deps: { hasExecution: () => alive } })
+    ctx.agent.sessionId = SESSION
+    const runId = await ctx.startRun('one-agent')
+    await flush()
+    const first = ctx.attemptOf(runId, 'plan')
+    const execution = ctx.agent.executionFor(first)
+    ctx.runner.complete(first, failed(SUMMARY_SECRET))
+    ctx.agent.sessionId = undefined
+    const other = await ctx.startRun('one-agent', '/wt/a')
+    await flush()
+    expect(ctx.runner.continueStep(runId, 'plan', `${CONTINUE_SECRET} fix`)).toEqual({ ok: true })
+    return { ctx, runId, first, execution, other }
+  }
+
+  it('queues a continuation behind the agent cap and rebinds the live PTY once a slot frees', async () => {
+    const { ctx, runId, first, execution, other } = await cappedContinue(true)
+    expect(ctx.stepStatus(runId, 'plan')).toBe('queued')
+    expect(ctx.attemptOf(runId, 'plan')).toBe(first)
+    expect(ctx.agent.continued).toEqual([])
+    expect(ctx.records.at(-1)?.continuations).toEqual({ plan: { prompt: `${CONTINUE_SECRET} fix` } })
+
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.agent.continued).toEqual([
+      expect.objectContaining({ executionId: execution, prompt: `${CONTINUE_SECRET} fix` })
+    ])
+    expect(ctx.wf().attempts[ctx.attemptOf(runId, 'plan')]).toMatchObject({ n: 2, status: 'running' })
+    expect(ctx.runner.getRunRecord(runId)?.continuations).toBeUndefined()
+    expect(ctx.logs.join('\n')).not.toContain(CONTINUE_SECRET)
+  })
+
+  it('relaunches a queued continuation after a restart with its prompt and the recorded session', async () => {
+    const { ctx, runId } = await cappedContinue(true)
+    const onDisk = ctx.records.filter((record) => record.runId === runId).at(-1)
+    if (!onDisk) throw new Error('no record')
+
+    const after = setup({ deps: { hasExecution: () => false } })
+    after.runner.reconcile([onDisk])
+    await flush()
+
+    expect(after.agent.started).toHaveLength(1)
+    expect(after.agent.started[0]).toMatchObject({ runId, stepId: 'plan', n: 2, resumeSessionId: SESSION, prompt: `${CONTINUE_SECRET} fix` })
+    expect(after.runner.getRunRecord(runId)?.continuations).toBeUndefined()
+    expect(after.logs.join('\n')).not.toContain(CONTINUE_SECRET)
+  })
+
+  it.each([
+    ['a non-string prompt', { prompt: 42 }],
+    ['a fresh flag that is not true', { prompt: 'x', fresh: 'yes' }],
+    ['a non-object entry', 'x']
+  ])('ignores a stored continuation with %s and runs the step template', async (_name, stored) => {
+    const { ctx, runId } = await cappedContinue(true)
+    const onDisk = structuredClone(ctx.records.filter((record) => record.runId === runId).at(-1))
+    if (!onDisk) throw new Error('no record')
+    onDisk.continuations = { plan: stored } as never
+
+    const after = setup({ deps: { hasExecution: () => false } })
+    after.runner.reconcile([onDisk])
+    await flush()
+
+    expect(after.agent.started).toHaveLength(1)
+    expect(after.agent.started[0].prompt).toBeUndefined()
+    expect(after.runner.getRunRecord(runId)?.continuations).toBeUndefined()
+  })
+
+  it('drops the stored continuation when the queued step is cancelled', async () => {
+    const { ctx, runId } = await cappedContinue(false)
+    expect(ctx.runner.cancelStep(runId, 'plan')).toEqual({ ok: true })
+    expect(ctx.runner.getRunRecord(runId)?.continuations).toBeUndefined()
+    expect(ctx.records.at(-1)?.continuations).toBeUndefined()
+  })
+
+  it('starts a new execution with the previous summary on fresh even when the PTY is alive', async () => {
+    const { ctx, runId, execution } = await pausedAfterPlan()
+    ctx.agent.sessionId = SESSION
+    ctx.runner.continueStep(runId, 'plan', 'redo', { fresh: true })
+    await flush()
+    expect(ctx.agent.continued).toEqual([])
+    const started = ctx.agent.started.at(-1)
+    expect(started).toMatchObject({ n: 2, prompt: `redo\n\nPrevious result:\n${SUMMARY_SECRET}` })
+    expect(started?.resumeSessionId).toBeUndefined()
+    expect(ctx.agent.executionFor(ctx.attemptOf(runId, 'plan'))).not.toBe(execution)
   })
 })

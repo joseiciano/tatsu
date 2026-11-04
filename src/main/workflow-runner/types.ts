@@ -8,6 +8,7 @@ import type {
   WorkflowSnapshotRef
 } from '../../shared/state/workflows'
 import type { StepDriver, StepDriverKind } from './drivers/types'
+import type { TerminalTabWorkflow } from '../../shared/state/terminals'
 import type { StepOutputFieldError, WorkflowOutputSchema } from '../../shared/workflow-def'
 
 export type {
@@ -67,6 +68,7 @@ export interface WorkflowRunnerDeps {
   persist?: (run: WorkflowRunRecord) => void
   artifacts?: RunArtifacts
   hasExecution?: (executionId: string) => boolean
+  retagStepTab?: (worktreePath: string, tabId: string, workflow: TerminalTabWorkflow) => void
   inputTrust?: InputTrustFetcher
   inputTrustTimeoutMs?: number
 }
@@ -126,6 +128,12 @@ export type StepActionRefusal =
   | 'codex-hooks-untrusted'
   | 'full-permission-unconfirmed'
   | 'starting'
+  | 'not-continuable-step'
+  | 'nothing-to-continue'
+
+export interface ContinueStepOptions {
+  fresh?: boolean
+}
 
 export type StepActionResult =
   | { ok: true }

@@ -76,7 +76,11 @@ function initRepo(repo: string): void {
   git(repo, 'commit', '-q', '-m', 'init')
 }
 
-function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeStartBehavior) {
+function setup(
+  worktree: string,
+  agentScript?: (attempt: StepAttempt) => FakeStartBehavior,
+  deps: Partial<WorkflowRunnerDeps> = {}
+) {
   const store = new Store({
     ...initialState,
     hooks: { ...initialState.hooks, consent: 'accepted' },
@@ -99,7 +103,8 @@ function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeSta
     newId: () => `id-${++ids}`,
     log: (category, message) => logs.push(`[${category}] ${message}`),
     persist: (run) => records.persist(run),
-    artifacts: createGitRunArtifacts()
+    artifacts: createGitRunArtifacts(),
+    ...deps
   })
   runner.reconcile([])
   const handlers = new Map<string, Handler>()
@@ -310,4 +315,44 @@ describe('retry from clean against a real git repo', () => {
     expect(await ctx.runner.retryFromClean(runId, 'one')).toEqual({ ok: false, reason: 'no-snapshot' })
     expect(ctx.agent.started).toHaveLength(1)
   })
+})
+
+describe('continued attempts against a real git repo', () => {
+  it('snapshots the continued attempt so its per-step diff validates and lists only its own changes', async () => {
+    const repo = join(root, 'repo')
+    initRepo(repo)
+    const ctx = setup(repo, undefined, { hasExecution: () => true })
+    const runId = await ctx.start()
+    await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
+    const first = ctx.attemptOf(runId, 'one') ?? ''
+    const execution = ctx.agent.executionFor(first)
+    writeFileSync(join(repo, 'one.txt'), 'turn one\n')
+    ctx.runner.complete(first, { status: 'done', summary: 'one', completedBy: 'tool' })
+    await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(2), WAIT)
+    ctx.runner.complete(ctx.attemptOf(runId, 'two') ?? '', { status: 'failed', summary: 'no', completedBy: 'tool' })
+
+    expect(ctx.runner.continueStep(runId, 'one', 'again')).toEqual({ ok: true })
+    const continued = ctx.attemptOf(runId, 'one') ?? ''
+    expect(continued).not.toBe(first)
+    await vi.waitFor(() => expect(ctx.agent.continued).toHaveLength(1), WAIT)
+    const base = ctx.runner.getRunRecord(runId)?.attempts.find((attempt) => attempt.attemptId === continued)?.baseSnapshot
+    expect(base).toBeDefined()
+    writeFileSync(join(repo, 'again.txt'), 'turn two\n')
+    expect(ctx.runner.completeExecution(execution, { status: 'done', summary: 'two' })).toEqual({ ok: true })
+
+    await vi.waitFor(async () => {
+      await records.flush()
+      expect(await ctx.call('workflows:getAttemptChangedFiles', continued)).toEqual({
+        files: [{ path: 'again.txt', status: 'added', additions: 1, deletions: 0 }],
+        truncated: false
+      })
+    }, WAIT)
+    const record = ctx.runner.getRunRecord(runId)
+    const attempt = record?.attempts.find((candidate) => candidate.attemptId === continued)
+    expect(attempt?.n).toBe(2)
+    for (const snapshot of [attempt?.baseSnapshot, attempt?.headSnapshot]) {
+      if (!snapshot) throw new Error('missing snapshot')
+      expect(git(repo, 'rev-parse', snapshot.ref)).toBe(snapshot.commit)
+    }
+  }, 30_000)
 })

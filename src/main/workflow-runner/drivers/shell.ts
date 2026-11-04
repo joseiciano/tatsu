@@ -22,7 +22,8 @@ export const SHELL_START_SUMMARIES = {
   nul: 'interpolated value contains NUL',
   malformed: 'interpolated value is not valid text',
   unsupported: 'template reference in an unsupported shell context',
-  spawnFailed: 'shell failed to start'
+  spawnFailed: 'shell failed to start',
+  notContinuable: 'shell steps cannot be continued'
 } as const
 
 export interface ShellCommand {
@@ -363,7 +364,9 @@ export function createShellStepDriver(deps: ShellStepDriverDeps): ShellStepDrive
       }
       return { executionId: id }
     },
-    continue() {},
+    continue() {
+      throw new StepStartError(SHELL_START_SUMMARIES.notContinuable)
+    },
     cancel(executionId: string) {
       if (owned.delete(executionId)) deps.kill(executionId, SHELL_CANCEL_SIGNAL)
     },

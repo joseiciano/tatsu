@@ -1,5 +1,6 @@
 import type {
   CompleteExecutionResult,
+  ContinueStepOptions,
   MarkDoneRequest,
   StepActionRefusal,
   StepActionResult,
@@ -19,6 +20,7 @@ import {
   StepPauseError,
   StepStartError,
   type RunnableStep,
+  type StepAttempt,
   type StepDriverEvent,
   type StepDriverKind,
   type StepExecution
@@ -49,6 +51,7 @@ import {
   runsToEvict,
   type AppliedStepOverrides,
   type WorkflowAttemptStatus,
+  type WorkflowContinuation,
   type WorkflowDefinitionDetail,
   type WorkflowInputTrust,
   type WorkflowInputTrustType,
@@ -61,6 +64,7 @@ import {
 } from '../../shared/state/workflows'
 
 const ENDED_EXECUTIONS_MAX = 256
+const CONTINUATION_PROMPT_MAX_CHARS = 1024 * 1024
 const INPUT_TRUST_TIMEOUT_MS = 10_000
 export const RUN_INPUTS_MAX = 64
 export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
@@ -79,6 +83,7 @@ interface LiveAttempt {
   executionId?: string
   blockPending?: boolean
   continuedThisTurn?: boolean
+  staleStops?: boolean
 }
 
 interface RunState {
@@ -98,10 +103,15 @@ interface ActionTarget {
 
 type SnapshotSlot = 'baseSnapshot' | 'headSnapshot'
 
-interface QueueEntry {
+interface LaunchOptions {
+  resumeSessionId?: string
+  prompt?: string
+}
+
+interface QueueEntry extends LaunchOptions {
   runId: string
   stepId: string
-  resumeSessionId?: string
+  continuation?: WorkflowContinuation
 }
 
 function capSummary(text: string): string {
@@ -148,6 +158,21 @@ function userOutput(step: RunnableStep, request: MarkDoneRequest): StepOutputVal
   if (undeclared) return { ok: false, errors: [{ field: '', message: 'Fields must be declared step outputs' }] }
   if (typeof request.summary !== 'string') return { ok: false, errors: [{ field: 'summary', message: 'Expected a string' }] }
   return validateStepOutput(schema, { ...request.fields, summary: capSummary(request.summary) })
+}
+
+function storedContinuation(record: WorkflowRunRecord, stepId: string): WorkflowContinuation | undefined {
+  const stored: unknown = record.continuations
+  if (typeof stored !== 'object' || stored === null || !Object.hasOwn(stored, stepId)) return undefined
+  const value: unknown = (stored as Record<string, unknown>)[stepId]
+  if (typeof value !== 'object' || value === null) return undefined
+  const { prompt, fresh } = value as Record<string, unknown>
+  if (typeof prompt !== 'string' || prompt.length > CONTINUATION_PROMPT_MAX_CHARS) return undefined
+  if (fresh !== undefined && fresh !== true) return undefined
+  return fresh === true ? { prompt, fresh } : { prompt }
+}
+
+function withPreviousResult(prompt: string, previous: WorkflowAttemptRecord): string {
+  return `${prompt}\n\nPrevious result:\n${previous.result?.summary ?? ''}`
 }
 
 function isRunnable(step: ResolvedWorkflowStep): step is RunnableStep {
@@ -269,7 +294,10 @@ export class WorkflowRunner {
         (step): step is RunnableStep => isRunnable(step) && state.stepStatus[step.id] === 'queued'
       )
       const requeue = (): void => {
-        for (const step of queued) this.queue.push({ runId: state.record.runId, stepId: step.id })
+        for (const step of queued) {
+          const continuation = storedContinuation(state.record, step.id)
+          this.queue.push({ runId: state.record.runId, stepId: step.id, ...(continuation ? { continuation } : {}) })
+        }
       }
       const dead = state.record.attempts.filter(
         (attempt) => attempt.status === 'running' && !this.liveAttempts.has(attempt.attemptId)
@@ -530,7 +558,7 @@ export class WorkflowRunner {
       return this.refuseAction('no-session', ids)
     }
     this.resume(state, stepId)
-    this.enterStep(state, step, last.sessionId)
+    this.enterStep(state, step, { resumeSessionId: last.sessionId })
     this.settle(state)
     return ACTION_OK
   }
@@ -609,6 +637,79 @@ export class WorkflowRunner {
     return ACTION_OK
   }
 
+  continueStep(runId: string, stepId: string, prompt: string, options: ContinueStepOptions = {}): StepActionResult {
+    const ids = { runId, stepId }
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
+    if (!this.ready) return this.refuseAction('starting', ids)
+    if (!this.labsOn()) return this.refuseAction('labs-off', ids)
+    if (state.busy) return this.refuseAction('busy', ids)
+    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
+    if (!step || !isRunnable(step)) return this.refuseAction('wrong-step', ids)
+    if (step.kind !== 'agent') return this.refuseAction('not-continuable-step', ids)
+    if (state.live.has(stepId) || state.stepStatus[stepId] === 'queued') return this.refuseAction('live-attempt', ids)
+    const last = this.lastAttempt(state, stepId)
+    if (!last) return this.refuseAction('nothing-to-continue', ids)
+    this.resume(state, stepId)
+    const continuation: WorkflowContinuation = options.fresh === true ? { prompt, fresh: true } : { prompt }
+    if (this.queue.length > 0 || this.agentSlots.size >= this.agentCap()) {
+      this.queue.push({ runId, stepId, continuation })
+      state.record.continuations = { ...state.record.continuations, [stepId]: continuation }
+      this.setStep(state, stepId, 'queued')
+      this.log('step continue queued', ids)
+    } else {
+      this.startContinuation(state, step, continuation)
+    }
+    this.settle(state)
+    return ACTION_OK
+  }
+
+  private startContinuation(state: RunState, step: ResolvedAgentStep, continuation: WorkflowContinuation): void {
+    const ids = { runId: state.record.runId, stepId: step.id }
+    this.clearContinuation(state, step.id)
+    if (!this.labsOn()) {
+      this.hold(state, step)
+      return
+    }
+    const { prompt } = continuation
+    const fresh = continuation.fresh === true
+    const last = this.lastAttempt(state, step.id)
+    const executionId = last?.executionId
+    const reusable =
+      !fresh &&
+      last !== undefined &&
+      executionId !== undefined &&
+      !this.executions.has(executionId) &&
+      (this.deps.hasExecution?.(executionId) ?? false)
+    if (reusable && last !== undefined && executionId !== undefined) {
+      this.rebind(state, step, last, executionId, prompt)
+      return
+    }
+    const sessionId = fresh ? undefined : this.resumableSession(state, step)
+    this.log(sessionId === undefined ? 'step continue fresh session' : 'step continue resumed session', ids)
+    const previous = last === undefined ? prompt : withPreviousResult(prompt, last)
+    this.launch(state, step, sessionId === undefined ? { prompt: previous } : { resumeSessionId: sessionId, prompt })
+  }
+
+  private clearContinuation(state: RunState, stepId: string): void {
+    const stored = state.record.continuations
+    if (!stored || !Object.hasOwn(stored, stepId)) return
+    const { [stepId]: _cleared, ...rest } = stored
+    if (Object.keys(rest).length > 0) state.record.continuations = rest
+    else delete state.record.continuations
+  }
+
+  private adoptContinuations(record: WorkflowRunRecord): void {
+    if (record.continuations === undefined) return
+    const kept: Record<string, WorkflowContinuation> = {}
+    for (const stepId of Object.keys(record.steps)) {
+      const continuation = record.steps[stepId] === 'queued' ? storedContinuation(record, stepId) : undefined
+      if (continuation) kept[stepId] = continuation
+    }
+    if (Object.keys(kept).length > 0) record.continuations = kept
+    else delete record.continuations
+  }
+
   reschedule(): void {
     for (const state of this.drain()) this.persist(state.record)
   }
@@ -677,6 +778,7 @@ export class WorkflowRunner {
       pauses: new Map(),
       io: this.prepare(runId, worktreePath)
     }
+    this.adoptContinuations(record)
     const { steps } = record.definition
     const pausedStep = steps[record.cursor] ?? steps.at(-1)
     if (record.status === 'paused' && record.pausedReason !== undefined && pausedStep) {
@@ -857,6 +959,7 @@ export class WorkflowRunner {
   }
 
   private hold(state: RunState, step: RunnableStep): void {
+    this.clearContinuation(state, step.id)
     this.setStep(state, step.id, 'pending')
     this.pause(state, step.id, 'interrupted')
     this.log('step held labs-off', { runId: state.record.runId, stepId: step.id })
@@ -866,16 +969,13 @@ export class WorkflowRunner {
     return this.deps.store.getSnapshot().state.settings.workflows.maxConcurrentAgents
   }
 
-  private enterStep(state: RunState, step: RunnableStep, resumeSessionId?: string): void {
+  private enterStep(state: RunState, step: RunnableStep, options: LaunchOptions = {}): void {
     if (step.kind === 'shell' || (this.queue.length === 0 && this.agentSlots.size < this.agentCap())) {
-      this.launch(state, step, resumeSessionId)
+      this.launch(state, step, options)
       return
     }
-    this.queue.push({
-      runId: state.record.runId,
-      stepId: step.id,
-      ...(resumeSessionId === undefined ? {} : { resumeSessionId })
-    })
+    this.clearContinuation(state, step.id)
+    this.queue.push({ ...options, runId: state.record.runId, stepId: step.id })
     this.setStep(state, step.id, 'queued')
   }
 
@@ -996,16 +1096,11 @@ export class WorkflowRunner {
     }
   }
 
-  private launch(state: RunState, step: RunnableStep, resumeSessionId?: string): void {
-    if (!this.labsOn()) {
-      this.hold(state, step)
-      return
-    }
-    const { store, now, newId, drivers } = this.deps
-    const { runId, worktreePath, inputs } = state.record
+  private openAttempt(state: RunState, step: RunnableStep): LiveAttempt {
+    const { store, now, newId } = this.deps
+    const { runId } = state.record
     const n = state.record.attempts.filter((attempt) => attempt.stepId === step.id).length + 1
     const attemptId = newId()
-    const scope = this.scopeFor(state)
     const startedAt = now()
     const record: WorkflowAttemptRecord = {
       attemptId,
@@ -1016,8 +1111,9 @@ export class WorkflowRunner {
       ...(step.kind === 'agent' ? harnessOf(step) : {}),
       metrics: { continuations: 0, pauses: [] }
     }
+    const live: LiveAttempt = { record, kind: step.kind }
     state.record.attempts.push(record)
-    state.live.set(step.id, { record, kind: step.kind })
+    state.live.set(step.id, live)
     this.liveAttempts.set(attemptId, runId)
     if (step.kind === 'agent') this.agentSlots.add(attemptId)
     this.setStep(state, step.id, 'running')
@@ -1026,21 +1122,47 @@ export class WorkflowRunner {
       payload: { attemptId, runId, stepId: step.id, n, startedAt }
     })
     this.log('attempt started', { runId, stepId: step.id, attemptId })
-    const driver = drivers[step.kind]
-    const bind = (execution: StepExecution): boolean => this.bind(attemptId, execution)
-    const startDriver = (): Promise<StepExecution> | StepExecution =>
-      driver.start({
-        runId,
-        stepId: step.id,
-        attemptId,
-        n,
-        worktreePath,
-        inputs,
-        step,
-        scope,
-        bind,
-        ...(resumeSessionId === undefined ? {} : { resumeSessionId })
-      })
+    return live
+  }
+
+  private stepAttempt(
+    state: RunState,
+    step: RunnableStep,
+    record: WorkflowAttemptRecord,
+    scope: TemplateScope
+  ): StepAttempt {
+    const { runId, worktreePath, inputs } = state.record
+    const { attemptId, n } = record
+    return {
+      runId,
+      stepId: step.id,
+      attemptId,
+      n,
+      worktreePath,
+      inputs,
+      step,
+      scope,
+      bind: (execution: StepExecution): boolean => this.bind(attemptId, execution)
+    }
+  }
+
+  private launch(state: RunState, step: RunnableStep, options: LaunchOptions = {}): void {
+    if (!this.labsOn()) {
+      this.hold(state, step)
+      return
+    }
+    const { runId } = state.record
+    const { resumeSessionId, prompt } = options
+    const scope = this.scopeFor(state)
+    const { record } = this.openAttempt(state, step)
+    const { attemptId } = record
+    const driver = this.deps.drivers[step.kind]
+    const attempt: StepAttempt = {
+      ...this.stepAttempt(state, step, record, scope),
+      ...(resumeSessionId === undefined ? {} : { resumeSessionId }),
+      ...(prompt === undefined ? {} : { prompt })
+    }
+    const startDriver = (): Promise<StepExecution> | StepExecution => driver.start(attempt)
     const started: Promise<StepExecution | null> = this.deps.artifacts
       ? this.snapshotAttempt(state, record, 'baseSnapshot').then(() =>
           this.liveFor(attemptId) ? startDriver() : null
@@ -1054,6 +1176,47 @@ export class WorkflowRunner {
         (err: unknown) => this.onStartFailed(attemptId, err)
       )
       .catch(() => this.log('driver callback failed', { runId, stepId: step.id, attemptId }))
+  }
+
+  private rebind(
+    state: RunState,
+    step: ResolvedAgentStep,
+    previous: WorkflowAttemptRecord,
+    executionId: string,
+    prompt: string
+  ): void {
+    const { runId, worktreePath } = state.record
+    const scope = this.scopeFor(state)
+    const live = this.openAttempt(state, step)
+    const { record } = live
+    const { attemptId } = record
+    const ids = { runId, stepId: step.id, attemptId }
+    live.staleStops = true
+    this.endedExecutions.delete(executionId)
+    const { sessionId } = previous
+    this.bind(attemptId, sessionId === undefined ? { executionId } : { executionId, sessionId })
+    this.deps.retagStepTab?.(worktreePath, executionId, { runId, stepId: step.id, attemptId })
+    this.log('attempt continued', ids)
+    const attempt = this.stepAttempt(state, step, record, scope)
+    this.snapshotAttempt(state, record, 'baseSnapshot')
+      .then(() => (this.liveFor(attemptId) ? this.deps.drivers.agent.continue(attempt, executionId, prompt) : undefined))
+      .then(
+        () => undefined,
+        (err: unknown) => this.onStartFailed(attemptId, err)
+      )
+      .catch(() => this.log('driver callback failed', ids))
+  }
+
+  private resumableSession(state: RunState, step: ResolvedAgentStep): string | undefined {
+    if (!RESUMABLE_AGENTS.has(step.agent)) return undefined
+    const attempts = state.record.attempts
+    for (let i = attempts.length - 1; i >= 0; i--) {
+      const { stepId, sessionId, agent } = attempts[i]
+      if (stepId !== step.id || sessionId === undefined) continue
+      if (agent !== undefined && agent !== step.agent) return undefined
+      return isAgentSessionId(step.agent, sessionId) ? sessionId : undefined
+    }
+    return undefined
   }
 
   private bind(attemptId: string, execution: StepExecution): boolean {
@@ -1119,9 +1282,17 @@ export class WorkflowRunner {
         return
       }
       case 'turnEnded':
+        if (live.staleStops) {
+          if (event.stopHookActive === true || (event.continued === true && live.blockPending !== true)) {
+            this.log('stale turn end ignored', { runId: state.record.runId, stepId, attemptId })
+            return
+          }
+          live.staleStops = false
+        }
         this.onTurnEnded(state, live, event.lastMessage, event.continued === true)
         return
       case 'promptSubmitted':
+        live.staleStops = false
         live.continuedThisTurn = false
         if (state.pauses.get(stepId) === 'needs-approval') {
           this.resume(state, stepId)
@@ -1299,12 +1470,16 @@ export class WorkflowRunner {
   private dequeue(runId: string, stepId: string): boolean {
     const before = this.queue.length
     this.queue = this.queue.filter((queued) => queued.runId !== runId || queued.stepId !== stepId)
+    const state = this.runs.get(runId)
+    if (state) this.clearContinuation(state, stepId)
     return this.queue.length < before
   }
 
   private dequeueRun(runId: string): string[] {
     const removed = this.queue.filter((queued) => queued.runId === runId).map((queued) => queued.stepId)
     this.queue = this.queue.filter((queued) => queued.runId !== runId)
+    const state = this.runs.get(runId)
+    if (state) delete state.record.continuations
     return removed
   }
 
@@ -1324,7 +1499,8 @@ export class WorkflowRunner {
         continue
       }
       this.queue.splice(i, 1)
-      this.launch(state, step, entry.resumeSessionId)
+      if (entry.continuation && step.kind === 'agent') this.startContinuation(state, step, entry.continuation)
+      else this.launch(state, step, entry)
       launched.push(state)
     }
     return launched
