@@ -181,6 +181,102 @@ steps:
     agent: claude
     prompt: "fix"
 `,
+  'loop-diamond': `name: loop-diamond
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+  - id: left
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "left"
+  - id: right
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "right"
+  - id: side
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "side"
+  - id: review
+    agent: claude
+    needs: [left, right]
+    permissions: read-only
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: plan, until: { field: verdict, equals: pass }, max: 3 }
+`,
+  'loop-prompts': `name: loop-prompts
+steps:
+  - id: build
+    agent: claude
+    prompt: "build"
+  - id: test
+    kind: shell
+    run: "true"
+  - id: note
+    agent: claude
+    permissions: read-only
+    prompt: "note"
+    on_loop: "${PROMPT_SECRET} again after {{steps.review.summary}} with {{steps.build.summary}}"
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3 }
+`,
+  'loop-fresh': `name: loop-fresh
+steps:
+  - id: build
+    agent: claude
+    prompt: "build"
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3, fresh: true }
+`,
+  'loop-cap': `name: loop-cap
+steps:
+  - id: build
+    agent: claude
+    prompt: "build"
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 2 }
+  - id: after
+    kind: shell
+    run: "true"
+`,
+  'loop-gated': `name: loop-gated
+steps:
+  - id: build
+    agent: claude
+    prompt: "build"
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: "review"
+    gate: approve
+    output:
+      verdict: { enum: [pass, fail] }
+    loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3 }
+  - id: after
+    kind: shell
+    run: "true"
+`,
   broken: `name: broken
 steps:
   - id: plan
@@ -2791,5 +2887,152 @@ describe('WorkflowRunner autopilot', () => {
     expect(await ctx.runner.start(request)).toEqual({ ok: false, reason: 'full-permission-unconfirmed' })
     expect(Object.keys(ctx.wf().runs)).toEqual([])
     expect((await ctx.runner.start({ ...request, allowFull: true })).ok).toBe(true)
+  })
+})
+
+describe('WorkflowRunner loops', () => {
+  const verdict = (value: string | undefined, summary = `review-${value ?? 'none'}`): StepResult => ({
+    ...done(summary),
+    ...(value === undefined ? {} : { data: { verdict: value } })
+  })
+
+  async function loopRun(slug: DefSlug, alive = true) {
+    const ctx = setup({ deps: { hasExecution: () => alive } })
+    const runId = await ctx.startRun(slug)
+    await flush()
+    const finish = async (stepId: string, result: StepResult = done(`${stepId}-out`)) => {
+      expect(ctx.runner.complete(ctx.attemptOf(runId, stepId), result)).toBe(true)
+      await flush()
+    }
+    const exitShell = async (stepId: string) => {
+      ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(ctx.attemptOf(runId, stepId)), code: 0 })
+      await flush()
+    }
+    const attempts = (stepId: string) => ctx.wf().runs[runId].steps[stepId].attemptIds.length
+    return { ctx, runId, finish, exitShell, attempts }
+  }
+
+  it('re-runs exactly the loop span over a diamond, continuing each agent step on its own terminal', async () => {
+    const { ctx, runId, finish, attempts } = await loopRun('loop-diamond')
+    for (const stepId of ['plan', 'left', 'right', 'side']) await finish(stepId)
+    const executions = Object.fromEntries(['plan', 'left', 'right', 'review'].map((id) => [id, ctx.agent.executionFor(ctx.attemptOf(runId, id))]))
+    await finish('review', verdict('fail'))
+    expect(ctx.stepStatus(runId, 'side')).toBe('done')
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    for (const stepId of ['plan', 'left', 'right']) await finish(stepId)
+    await finish('review', verdict('pass'))
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(Object.fromEntries(['plan', 'left', 'right', 'side', 'review'].map((id) => [id, attempts(id)]))).toEqual({
+      plan: 2,
+      left: 2,
+      right: 2,
+      side: 1,
+      review: 2
+    })
+    expect(ctx.agent.continued.map((entry) => [entry.attempt.stepId, entry.executionId])).toEqual(
+      ['plan', 'left', 'right', 'review'].map((id) => [id, executions[id]])
+    )
+    expect(ctx.logs).toContain(`[workflow] loop back ${JSON.stringify({ runId, stepId: 'review', backTo: 'plan' })}`)
+  })
+
+  it('continues with the rendered on_loop prompt or the default feedback prompt, and relaunches shell steps from scratch', async () => {
+    const { ctx, runId, finish, exitShell } = await loopRun('loop-prompts')
+    await finish('build', done('built-1'))
+    await exitShell('test')
+    await finish('note', done('noted-1'))
+    await finish('review', verdict('fail', 'review-1'))
+    await finish('build', done('built-2'))
+    expect(ctx.shell.started.map((attempt) => attempt.stepId)).toEqual(['test', 'test'])
+    expect(ctx.shell.started[1].prompt).toBeUndefined()
+    await exitShell('test')
+    await finish('note', done('noted-2'))
+    await finish('review', verdict('pass', 'review-2'))
+    expect(ctx.agent.continued.map((entry) => [entry.attempt.stepId, entry.prompt])).toEqual([
+      ['build', 'Your previous result was:\nbuilt-1\n\nAddress this feedback from review:\nreview-1'],
+      ['note', `${PROMPT_SECRET} again after review-1 with built-2`],
+      ['review', 'Your previous result was:\nreview-1\n\nAddress this feedback from review:\nreview-1']
+    ])
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.logs.join('\n')).not.toContain(PROMPT_SECRET)
+    expect(JSON.stringify(ctx.events)).not.toContain(PROMPT_SECRET)
+  })
+
+  it('starts fresh sessions for every agent step in the span when the loop says fresh', async () => {
+    const { ctx, runId, finish } = await loopRun('loop-fresh')
+    await finish('build', done('built-1'))
+    const firstExecutions = ['build', 'review'].map((id) => ctx.agent.executionFor(ctx.attemptOf(runId, id)))
+    await finish('review', verdict('fail', 'review-1'))
+    await finish('build', done('built-2'))
+    expect(ctx.agent.continued).toEqual([])
+    const relaunched = ctx.agent.started.slice(2)
+    expect(relaunched.map((attempt) => [attempt.stepId, attempt.n, attempt.prompt])).toEqual([
+      ['build', 2, 'Your previous result was:\nbuilt-1\n\nAddress this feedback from review:\nreview-1\n\nPrevious result:\nbuilt-1'],
+      ['review', 2, 'Your previous result was:\nreview-1\n\nAddress this feedback from review:\nreview-1\n\nPrevious result:\nreview-1']
+    ])
+    expect(['build', 'review'].map((id) => ctx.agent.executionFor(ctx.attemptOf(runId, id)))).not.toContain(firstExecutions[0])
+    expect(ctx.agent.executionFor(ctx.attemptOf(runId, 'review'))).not.toBe(firstExecutions[1])
+  })
+
+  it.each([
+    ['a failing verdict', 'fail'],
+    ['a missing until field', undefined]
+  ])('pauses loop-cap after max passes on %s, keeping the looping step done', async (_name, value) => {
+    const { ctx, runId, finish, attempts } = await loopRun('loop-cap')
+    await finish('build')
+    await finish('review', verdict(value))
+    expect(ctx.stepStatus(runId, 'build')).toBe('running')
+    await finish('build')
+    const seen = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'review'), verdict(value)))
+    expect(seen).toEqual(['attemptEnded', 'stepStatusChanged', 'runPaused'])
+    await flush()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'loop-cap', cursorStepId: 'review' })
+    expect(ctx.stepStatus(runId, 'review')).toBe('done')
+    expect(ctx.stepStatus(runId, 'after')).toBe('pending')
+    expect(ctx.shell.started).toEqual([])
+    expect([attempts('build'), attempts('review')]).toEqual([2, 2])
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'paused', pausedReason: 'loop-cap', steps: { review: 'done' } })
+    expect(ctx.logs).toContain(`[workflow] loop cap reached ${JSON.stringify({ runId, stepId: 'review' })}`)
+  })
+
+  it('queues a loop continuation behind the agent cap, records it, and continues when a slot frees', async () => {
+    const ctx = setup({ cap: 1, deps: { hasExecution: () => true } })
+    const runId = await ctx.startRun('loop-cap')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'build'), done('built-1'))
+    await flush()
+    const execution = ctx.agent.executionFor(ctx.attemptOf(runId, 'review'))
+    const other = await ctx.startRun('one-agent')
+    expect(ctx.stepStatus(other, 'plan')).toBe('queued')
+    ctx.runner.complete(ctx.attemptOf(runId, 'review'), verdict('fail', 'review-1'))
+    await flush()
+    const prompt = 'Your previous result was:\nbuilt-1\n\nAddress this feedback from review:\nreview-1'
+    expect(ctx.stepStatus(other, 'plan')).toBe('running')
+    expect(ctx.stepStatus(runId, 'build')).toBe('queued')
+    expect(ctx.records.filter((record) => record.runId === runId).at(-1)?.continuations).toEqual({ build: { prompt } })
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'build')).toBe('running')
+    expect(ctx.agent.continued.map((entry) => [entry.attempt.stepId, entry.prompt])).toEqual([['build', prompt]])
+    expect(ctx.agent.continued[0].executionId).not.toBe(execution)
+    expect(ctx.runner.getRunRecord(runId)?.continuations).toBeUndefined()
+  })
+
+  it('shows a gated looping step its gate only once until is met', async () => {
+    const { ctx, runId, finish } = await loopRun('loop-gated')
+    await finish('build')
+    const failing = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'review'), verdict('fail')))
+    expect(failing).not.toContain('runPaused')
+    expect(ctx.events.some((event) => event.type === 'workflows/stepStatusChanged' && event.payload.status === 'awaiting-gate')).toBe(false)
+    expect(ctx.runner.approveGate(runId, 'review')).toEqual({ ok: false, reason: 'not-awaiting-gate' })
+    await flush()
+    await finish('build')
+    await finish('review', verdict('pass'))
+    expect(ctx.stepStatus(runId, 'review')).toBe('awaiting-gate')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'gate' })
+    expect(ctx.shell.started).toEqual([])
+    expect(ctx.runner.approveGate(runId, 'review')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'after')).toBe('running')
   })
 })
