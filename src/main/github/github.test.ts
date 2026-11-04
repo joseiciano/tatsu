@@ -23,7 +23,8 @@ vi.mock('child_process', async () => {
   return { execFile }
 })
 
-import { getRepoContext, fetchPRStatusesForRepo, mergePR } from '.'
+import { getRepoContext, fetchPRStatusesForRepo, mergePR, listRepoIssues, listOpenPRs } from '.'
+import { invalidateTokenCache, resolveGitHubToken } from '../github-auth'
 
 function mockResponse(status: number, body: unknown): Response {
   return {
@@ -561,5 +562,137 @@ describe('fetchPRStatusesForRepo matcher', () => {
       [{ worktreePath: '/wt', branch: 'feature', headSha: sha }]
     )
     expect(result.get('/wt')?.number).toBe(42)
+  })
+})
+
+describe('listRepoIssues', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+    mocks.originUrl = 'git@github.com:acme/widgets.git\n'
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function issue(number: number, extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return { number, title: `Issue ${number}`, user: { login: 'octo' }, updated_at: '2026-01-01T00:00:00Z', ...extra }
+  }
+
+  function searchParams(): URLSearchParams {
+    const [url] = fetchSpy.mock.calls[0] as [string]
+    expect(url.startsWith('https://api.github.com/search/issues?')).toBe(true)
+    return new URL(url).searchParams
+  }
+
+  it('encodes the whole query so user text cannot add parameters', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { items: [] }))
+    await listRepoIssues('/repo', '  crash & per_page=1 #9 +x  ')
+    const params = searchParams()
+    expect(params.get('q')).toBe('repo:acme/widgets is:issue is:open crash & per_page=1 #9 +x')
+    expect(params.getAll('per_page')).toEqual(['50'])
+  })
+
+  it('drops search qualifiers and quotes from user text so it cannot widen the search', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { items: [] }))
+    await listRepoIssues('/repo', 'crash repo:other/x is:pr -is:issue "quoted\' text\' OR author:me')
+    expect(searchParams().get('q')).toBe('repo:acme/widgets is:issue is:open crash quoted text')
+  })
+
+  it('searches open issues of the repo without a query', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { items: [issue(3)] }))
+    const result = await listRepoIssues('/repo')
+    expect(searchParams().get('q')).toBe('repo:acme/widgets is:issue is:open')
+    expect(result).toEqual({
+      status: 'ok',
+      issues: [{ number: 3, title: 'Issue 3', author: 'octo', updatedAt: '2026-01-01T00:00:00Z' }]
+    })
+  })
+
+  it('excludes pull requests and malformed items and caps at 50', async () => {
+    const items = [
+      issue(1, { pull_request: { url: 'x' } }),
+      { number: 'two', title: 'bad' },
+      ...Array.from({ length: 60 }, (_, i) => issue(i + 10))
+    ]
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { items }))
+    const result = await listRepoIssues('/repo', 'x')
+    if (result.status !== 'ok') throw new Error(`status ${result.status}`)
+    expect(result.issues).toHaveLength(50)
+    expect(result.issues[0].number).toBe(10)
+    expect(result.issues.some((i) => i.number === 1)).toBe(false)
+  })
+
+  it('reports no-token after a 401 survives a token re-resolve', async () => {
+    fetchSpy.mockResolvedValue(mockResponse(401, { message: 'Bad credentials' }))
+    expect(await listRepoIssues('/repo', 'x')).toEqual({ status: 'no-token' })
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports no-token without a request when no token resolves', async () => {
+    vi.mocked(resolveGitHubToken).mockResolvedValueOnce(null)
+    expect(await listRepoIssues('/repo', 'x')).toEqual({ status: 'no-token' })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('reports no-repo without a request when origin is not a GitHub remote', async () => {
+    mocks.originUrl = ''
+    expect(await listRepoIssues('/repo', 'x')).toEqual({ status: 'no-repo' })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('reports error on other failures', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(403, { message: 'rate limited' }))
+    expect(await listRepoIssues('/repo', 'x')).toEqual({ status: 'error' })
+    fetchSpy.mockRejectedValueOnce(new Error('offline'))
+    expect(await listRepoIssues('/repo', 'x')).toEqual({ status: 'error' })
+  })
+})
+
+describe('listOpenPRs requireToken', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+    mocks.originUrl = 'git@github.com:acme/widgets.git\n'
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns null without a request when a token is required and none resolves', async () => {
+    vi.mocked(resolveGitHubToken).mockResolvedValueOnce(null)
+    expect(await listOpenPRs('/repo', { requireToken: true })).toBeNull()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('lists open PRs when a token is required and one resolves', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, []))
+    expect(await listOpenPRs('/repo', { requireToken: true })).toEqual([])
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('githubFetch 401 retry', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+    mocks.originUrl = 'git@github.com:acme/widgets.git\n'
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('re-resolves the token after a 401 and retries once', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(401, {})).mockResolvedValueOnce(mockResponse(200, []))
+    expect(await listOpenPRs('/repo')).toEqual([])
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    expect(invalidateTokenCache).toHaveBeenCalledTimes(1)
+    expect(resolveGitHubToken).toHaveBeenCalledTimes(1)
   })
 })

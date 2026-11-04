@@ -13,7 +13,7 @@ import type { Worktree } from '../../../../shared/state/worktrees'
 import { branchNameProblem } from '../../../../shared/branch-name-rules'
 import type { ResolvedDefinition, WorkflowAgent, WorkflowInputType } from '../../../../shared/workflow-def'
 
-export type LaunchInputControl = 'textarea' | 'text'
+export type LaunchInputControl = 'textarea' | 'picker'
 
 export interface LaunchInputField {
   name: string
@@ -99,7 +99,7 @@ export function buildInputFields(definition: ResolvedDefinition | null): LaunchI
   return Object.entries(definition.inputs).map(([name, { type }]) => ({
     name,
     type,
-    control: type === 'text' ? 'textarea' : 'text'
+    control: type === 'text' ? 'textarea' : 'picker'
   }))
 }
 

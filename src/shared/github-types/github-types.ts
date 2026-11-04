@@ -15,3 +15,16 @@ export interface PRSummary {
 }
 
 export type PRMetadata = PRSummary
+
+export interface IssueSummary {
+  number: number
+  title: string
+  author: string | null
+  updatedAt: string
+}
+
+export type RepoIssuesResult =
+  | { status: 'ok'; issues: IssueSummary[] }
+  | { status: 'no-token' }
+  | { status: 'no-repo' }
+  | { status: 'error' }

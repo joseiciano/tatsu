@@ -582,6 +582,54 @@ async function flowRepoTrust(page, backend) {
   })
 }
 
+const PICKER_FILE = 'docs/picker-target.md'
+
+async function flowInputPickers(page, backend) {
+  await scenario(page, 'input-pickers', async (shot) => {
+    const dataDir = process.env.HARNESS_DATA_DIR
+    if (!dataDir) throw new Error('input-pickers needs HARNESS_DATA_DIR to read the run record from disk')
+    const row = worktreeRow(page)
+    await row.scrollIntoViewIfNeeded()
+    await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Run workflow here…' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+    await sheet.getByLabel('Workflow', { exact: true }).selectOption({ label: 'browser-file' })
+    const picker = sheet.getByRole('combobox', { name: /^target/ })
+    await picker.focus()
+    await page.keyboard.type('picker')
+    const listbox = sheet.getByRole('listbox', { name: 'target options', exact: true })
+    const option = listbox.getByRole('option', { name: PICKER_FILE, exact: true })
+    await option.waitFor()
+    await page.keyboard.press('ArrowDown')
+    if ((await option.getAttribute('aria-selected')) !== 'true') throw new Error(`${PICKER_FILE} is not the active option after ArrowDown`)
+    await shot('file-options')
+    await page.keyboard.press('Enter')
+    if ((await picker.getAttribute('aria-expanded')) !== 'false') throw new Error('the file list stayed open after Enter')
+    if (!(await sheet.isVisible())) throw new Error('Enter in the file picker closed or submitted the sheet')
+    const picked = await picker.inputValue()
+    if (picked !== PICKER_FILE) throw new Error(`file picker shows ${JSON.stringify(picked)}, expected ${PICKER_FILE}`)
+
+    const ticket = sheet.getByLabel(/^ticket/)
+    if ((await ticket.getAttribute('role')) === 'combobox') throw new Error('the issue input is a picker without a GitHub token')
+    if ((await ticket.getAttribute('inputmode')) !== 'numeric') throw new Error('the issue fallback is not a number field')
+    await ticket.fill('7')
+    log(`input-pickers: chose ${PICKER_FILE} from the file picker with the keyboard; issue input fell back to a number field`)
+    await shot('picked')
+
+    await sheet.getByRole('button', { name: 'Start', exact: true }).click()
+    await sheet.waitFor({ state: 'detached' })
+    const runId = await newestPersonalRunId(backend, 'browser-file')
+    await waitForRunStatus(backend, runId, 'done')
+    const record = JSON.parse(readFileSync(join(dataDir, 'workflow-runs', `${runId}.json`), 'utf8'))
+    if (record.inputs?.target !== PICKER_FILE || record.inputs?.ticket !== '7') {
+      throw new Error(`run inputs ${JSON.stringify(record.inputs)}, expected target ${PICKER_FILE} and ticket 7`)
+    }
+    log(`input-pickers: run ${runId} done (test -f passed) with inputs ${JSON.stringify(record.inputs)}`)
+    await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+    await shot('run-done')
+  })
+}
+
 const OVERRIDE_MODEL = 'fake/opencode-model'
 
 async function flowLaunchOverrides(page, backend) {
@@ -717,6 +765,7 @@ async function main() {
     await flowAttemptDiff(page, backend)
     await flowSwapStep(page, backend)
     await flowRepoTrust(page, backend)
+    await flowInputPickers(page, backend)
     await flowLaunchOverrides(page, backend)
     await flowLaunchTarget(page, backend)
   } catch {

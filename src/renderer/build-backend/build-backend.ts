@@ -221,7 +221,8 @@ export function buildBackend(
     refreshAnnouncements: () => req('announcements:refresh'),
     dismissAnnouncement: (id: string) => req('announcements:dismiss', id),
     muteAnnouncements: (muted: boolean) => req('announcements:mute', muted),
-    listRepoPRs: (repoRoot: string) => req('prs:listOpen', repoRoot),
+    listRepoPRs: (repoRoot: string, options?: { requireToken?: boolean }) => req('prs:listOpen', repoRoot, options),
+    listRepoIssues: (repoRoot: string, query?: string) => req('github:listIssues', repoRoot, query ?? ''),
     mergePR: (worktreePath: string, method: 'merge' | 'squash' | 'rebase') =>
       req('pr:merge', worktreePath, method),
 

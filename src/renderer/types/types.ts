@@ -183,8 +183,8 @@ export type { TerminalSpawnSpec, TerminalAttachResult, TerminalCreateResult }
 import type { CheckStatus, PRReview, PRStatus } from '../../shared/state/prs'
 export type { CheckStatus, PRReview, PRStatus }
 
-import type { PRSummary, PRMetadata } from '../../shared/github-types'
-export type { PRSummary, PRMetadata }
+import type { PRSummary, PRMetadata, IssueSummary, RepoIssuesResult } from '../../shared/github-types'
+export type { PRSummary, PRMetadata, IssueSummary, RepoIssuesResult }
 
 import type { BrowserState, BrowserTabState } from '../../shared/state/browser'
 export type { BrowserState, BrowserTabState }
@@ -310,7 +310,8 @@ export interface ElectronAPI {
   refreshAnnouncements(): Promise<boolean>
   dismissAnnouncement(id: string): Promise<boolean>
   muteAnnouncements(muted: boolean): Promise<boolean>
-  listRepoPRs(repoRoot: string): Promise<PRSummary[] | null>
+  listRepoPRs(repoRoot: string, options?: { requireToken?: boolean }): Promise<PRSummary[] | null>
+  listRepoIssues(repoRoot: string, query?: string): Promise<RepoIssuesResult>
   mergePR(
     worktreePath: string,
     method: GitHubMergeMethod

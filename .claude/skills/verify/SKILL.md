@@ -71,6 +71,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |
 | `browser-exit` | `exit` (claude) | `FAKE_AGENT_MODE=exit-no-complete`: exits non-zero |
 | `browser-diff` | `write` (shell `echo smoke > smoke.txt`) | none; the attempt-diff scenario deletes `smoke.txt` afterwards |
+| `browser-file` | inputs `target` (file), `ticket` (issue); `check` (shell `test -f {{inputs.target}}`) | none; the input-pickers scenario picks the committed `docs/picker-target.md` |
 | `browser-swap` | `swap` (claude, `read-only`) | `FAKE_AGENT_MODE_CLAUDE=exit-no-complete`: fails on Claude; after a swap to Codex (`fake-codex-model`) the codex mode ignores the Claude-scoped marker and completes |
 | `smoke-repo` (repo) | `check` (shell `echo REPO-TRUSTED`) | none; needs trust before Start |
 | `browser-repo` (repo) | `check` (shell `sleep 3`) | none; needs trust before Start (launch sheet label `browser-repo (repo)`) |
@@ -184,7 +185,7 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
 | `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record -> step tab per agent step; exit 0 on PASS |
-| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, repo trust, launch overrides, launch target); exit 0 on PASS |
+| `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, repo trust, input pickers, launch overrides, launch target); exit 0 on PASS |
 
 ## Not covered
 
