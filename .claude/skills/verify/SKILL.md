@@ -109,7 +109,8 @@ against this instance, so the verify drive and CI share one flow file. It
 passes the instance's `DATA_DIR` as `HARNESS_DATA_DIR` so the last scenario
 (`launch-target`) can read its run record from disk; that scenario creates a
 `wf/browser-hang/<hex>` worktree next to the scratch repo, cancels its run and
-reselects the scratch repo. Both
+reselects the scratch repo. The `entry-points` scenario before it leaves a
+`wf-entry-<base36>` worktree with only a Shell tab and no run. Both
 flows leave the worktree free (cancelled / done runs), but `workflow-run.mjs`
 and `workflow-flows.sh` each need the worktree without a live run when they
 start.

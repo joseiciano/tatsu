@@ -2,7 +2,9 @@
 # Runs scripts/browser-smoke.mjs (the smoke's browser leg: hang -> close step
 # tab -> Cancel step -> Needs you; hang -> palette -> Workflows section run
 # card -> Cancel run; exit-no-complete -> overlay -> Mark done;
-# repo definition -> trust panel -> Trust -> Start -> step strip; Workflows
+# repo definition -> trust panel -> Trust -> Start -> step strip; palette
+# Run workflow… -> preset sheet; New Worktree with a Workflow -> preset sheet
+# on a shell-only worktree; Workflows
 # section -> Run workflow… -> New worktree -> Start -> new worktree selected
 # with a step strip) against a verify instance. Screenshots and journal go to
 # $EVIDENCE/workflow-flows/.
