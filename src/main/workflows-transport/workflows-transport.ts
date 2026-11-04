@@ -1,4 +1,10 @@
-import type { WorkflowDefsLoader } from '../workflow-defs-loader'
+import type {
+  DefinitionWriteRefusal,
+  DeleteDefinitionResult,
+  SaveDefinitionRequest,
+  SaveDefinitionResult,
+  WorkflowDefsLoader
+} from '../workflow-defs-loader'
 import { getAttemptChangedFiles, getAttemptFileDiff } from './attempt-changes'
 import { RUN_ID_PATTERN, isRunId, type WorkflowRunLookup } from '../workflow-run-records'
 import {
@@ -17,6 +23,7 @@ import {
   isWorkflowInputNumber,
   isWorkflowStepModel,
   type WorkflowActionResponse,
+  type WorkflowDefinitionSaveResponse,
   type WorkflowInputTrustResponse,
   type WorkflowStartRunResponse
 } from '../../shared/state/workflows'
@@ -42,7 +49,10 @@ export type WorkflowActionsRunner = Pick<
 
 export interface RegisterWorkflowsRequestHandlersDeps {
   transport: WorkflowsTransportLike
-  loader: Pick<WorkflowDefsLoader, 'reload' | 'getDefinition'>
+  loader: Pick<
+    WorkflowDefsLoader,
+    'reload' | 'getDefinition' | 'saveDefinition' | 'duplicateDefinition' | 'deleteDefinition'
+  >
   runs: WorkflowRunLookup
   runner: WorkflowActionsRunner
   store: Pick<Store, 'getSnapshot' | 'dispatch'>
@@ -62,6 +72,23 @@ const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
 const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
 const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides'] as const
+const SAVE_DEFINITION_KEYS = ['scope', 'repoRoot', 'defId', 'name', 'source'] as const
+const DEFINITION_NAME_MAX_CHARS = 200
+
+const WRITE_ERRORS: Record<DefinitionWriteRefusal | Exclude<DeleteDefinitionResult, { ok: true }>['reason'], string> = {
+  'invalid-name': 'The name needs at least one letter or digit',
+  'unsafe-name': 'The name must not contain a slash, a backslash, NUL or "..", or start with a dot',
+  'too-large': 'The workflow definition is larger than 256 KB',
+  'unknown-repo': 'Unknown repository',
+  'no-repo-dir': 'The repository has no usable .harness/workflows folder in its primary checkout',
+  'unknown-definition': 'Unknown workflow definition',
+  'scope-mismatch': 'The workflow definition belongs to a different folder',
+  exists: 'A workflow file with that name already exists',
+  'too-many-files': 'The workflows folder already holds the maximum number of files',
+  'not-a-file': 'The workflow file is not a regular file',
+  'not-allowed': 'Trust this repo definition before duplicating it',
+  'write-failed': 'Could not write the workflow file'
+}
 
 const START_ERRORS: Record<StartRefusal, string> = {
   'labs-off': 'Workflows are turned off in Labs',
@@ -195,6 +222,25 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
   }
 }
 
+function parseSaveDefinition(payload: unknown): SaveDefinitionRequest | null {
+  if (!isPlainObject(payload) || !hasOnlyKeys(payload, SAVE_DEFINITION_KEYS)) return null
+  const scope = ownValue(payload, 'scope')
+  const repoRoot = ownValue(payload, 'repoRoot')
+  const defId = ownValue(payload, 'defId')
+  const name = ownValue(payload, 'name')
+  const source = ownValue(payload, 'source')
+  if (!boundedString(name, DEFINITION_NAME_MAX_CHARS) || typeof source !== 'string' || source === '') return null
+  if (defId !== undefined && !boundedString(defId, DEF_ID_MAX_CHARS)) return null
+  const rest = { name, source, ...(defId === undefined ? {} : { defId }) }
+  if (scope === 'personal' && repoRoot === undefined) return { scope, ...rest }
+  if (scope === 'repo' && boundedString(repoRoot, WORKTREE_PATH_MAX_CHARS)) return { scope, repoRoot, ...rest }
+  return null
+}
+
+function saveResponse(result: SaveDefinitionResult): WorkflowDefinitionSaveResponse {
+  return result.ok ? { defId: result.summary.id } : { error: WRITE_ERRORS[result.reason] }
+}
+
 function parseMarkDone(payload: unknown): MarkDoneRequest | null {
   if (!isPlainObject(payload)) return null
   const summary = ownValue(payload, 'summary')
@@ -291,6 +337,34 @@ export function registerWorkflowsRequestHandlers({
     store.dispatch({ type: 'workflows/trustGranted', payload: { defId: summary.id, hash } })
     log('workflow', 'definition trusted', { defId: summary.id })
     return { ok: true }
+  })
+  const labsOff = (): { error: string } | null =>
+    store.getSnapshot().state.settings.labs.workflows ? null : { error: START_ERRORS['labs-off'] }
+  guarded('workflows:saveDefinition', ([payload]): WorkflowDefinitionSaveResponse => {
+    const off = labsOff()
+    if (off) return off
+    const request = parseSaveDefinition(payload)
+    if (!request) return INVALID_REQUEST
+    return saveResponse(loader.saveDefinition(request))
+  })
+  guarded('workflows:duplicateDefinition', ([defId]): WorkflowDefinitionSaveResponse => {
+    const off = labsOff()
+    if (off) return off
+    if (!boundedString(defId, DEF_ID_MAX_CHARS)) return INVALID_REQUEST
+    return saveResponse(
+      loader.duplicateDefinition(defId, ({ summary }) => {
+        if (summary.scope === 'personal') return true
+        const { trust } = store.getSnapshot().state.workflows
+        return Object.hasOwn(trust, summary.id) && trust[summary.id] === summary.hash
+      })
+    )
+  })
+  guarded('workflows:deleteDefinition', ([defId]): WorkflowActionResponse => {
+    const off = labsOff()
+    if (off) return off
+    if (!boundedString(defId, DEF_ID_MAX_CHARS)) return INVALID_REQUEST
+    const result = loader.deleteDefinition(defId)
+    return result.ok ? { ok: true } : { error: WRITE_ERRORS[result.reason] }
   })
   guarded('workflows:cancelRun', ([runId]): WorkflowActionResponse => {
     if (!isRunId(runId)) return INVALID_REQUEST

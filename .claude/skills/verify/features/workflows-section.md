@@ -14,7 +14,8 @@ per active run, then recent finished and cancelled runs.
   worktree and Report issue, and hides the workspace (terminals, right
   column).
 - **Section**: `role="region"` named `Workflows` (h1), a `Back` button, and a
-  tablist `Workflows views` with one tab `Runs` (Library comes later).
+  tablist `Workflows views` with tabs `Runs` and `Library` (see
+  workflows-library.md). Switching tabs closes an open run detail.
 - **Needs you**: the same `NEEDS YOU` group as the sidebar, rendered inside
   the section, so the page has two `NEEDS YOU` regions while the section is
   open. Scope locators to the section region.

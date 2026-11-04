@@ -482,6 +482,23 @@ describe('LaunchSheet target', () => {
     expect(byLabel<HTMLInputElement>('Branch name').value).toBe('wf/plan/12345678')
   })
 
+  it('preselects a preset definition and the repository of a preset repo definition', async () => {
+    storeState.repoRoots = ['/other', '/repo']
+    await act(async () => {
+      root.render(<LaunchSheet defId={REPO_ID} onClose={onClose} />)
+    })
+    expect(byLabel<HTMLSelectElement>('Repository').value).toBe('/repo')
+    expect(byLabel<HTMLSelectElement>('Workflow').value).toBe(REPO_ID)
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await act(async () => {
+      root.render(<LaunchSheet defId="personal:full" onClose={onClose} />)
+    })
+    expect(byLabel<HTMLSelectElement>('Repository').value).toBe('/other')
+    expect(byLabel<HTMLSelectElement>('Workflow').value).toBe('personal:full')
+  })
+
   it('filters definitions by the chosen repository', async () => {
     await mountUnset()
     expect(optionValues(byLabel<HTMLSelectElement>('Workflow'))).toContain(REPO_ID)

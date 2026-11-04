@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAppState } from '../../../store'
+import { useAppState, useWorktreeRepoRoot } from '../../../store'
+import { Library } from '../Library'
 import { NeedsYouGroup, type JumpToTabHandler } from '../NeedsYou'
 import { createRunListsSelector } from '../run-card-model'
 import { RunDetailContainer } from '../RunDetail'
@@ -14,9 +15,17 @@ export interface WorkflowsViewProps {
   onClose: () => void
   onJumpToTab?: JumpToTabHandler
   onRunWorkflow?: () => void
+  onRunDefinition?: (defId: string) => void
+  activeWorktreePath?: string | null
 }
 
-export function WorkflowsView({ onClose, onJumpToTab, onRunWorkflow }: WorkflowsViewProps): JSX.Element {
+export function WorkflowsView({
+  onClose,
+  onJumpToTab,
+  onRunWorkflow,
+  onRunDefinition,
+  activeWorktreePath = null
+}: WorkflowsViewProps): JSX.Element {
   const [tab, setTab] = useState<WorkflowsTab>('runs')
   const [now, setNow] = useState(() => Date.now())
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
@@ -24,6 +33,7 @@ export function WorkflowsView({ onClose, onJumpToTab, onRunWorkflow }: Workflows
   const [returnFocusRunId, setReturnFocusRunId] = useState<string | null>(null)
   const { active, recent } = useAppState((s) => selectRunLists(s.workflows.runs))
   const hasActive = active.length > 0
+  const activeRepoRoot = useWorktreeRepoRoot(activeWorktreePath)
 
   useEffect(() => {
     if (!hasActive) return
@@ -80,6 +90,7 @@ export function WorkflowsView({ onClose, onJumpToTab, onRunWorkflow }: Workflows
             onRunWorkflow={onRunWorkflow}
           />
         ))}
+      {tab === 'library' && <Library activeRepoRoot={activeRepoRoot} onRun={onRunDefinition} />}
     </WorkflowsSection>
   )
 }

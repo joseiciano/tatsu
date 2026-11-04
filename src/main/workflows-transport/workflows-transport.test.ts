@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process'
 import { createHash } from 'crypto'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1149,5 +1149,147 @@ describe('workflows:trustDefinition', () => {
     expect(await live.start({ ...start, allowFull: true })).toEqual({ ok: false, reason: 'untrusted-definition' })
     writeFileSync(h.file, VALID_YAML)
     expect(await live.start(start)).toEqual({ ok: true, runId: 'run-trusted' })
+  })
+})
+
+describe('workflows:saveDefinition, duplicateDefinition and deleteDefinition', () => {
+  function sha256(text: string): string {
+    return createHash('sha256').update(text).digest('hex')
+  }
+
+  function libraryHarness(options: { labs?: boolean } = {}) {
+    const repo = join(dir, 'lib-repo')
+    mkdirSync(join(repo, '.git'), { recursive: true })
+    mkdirSync(join(repo, '.harness', 'workflows'), { recursive: true })
+    const file = join(repo, '.harness', 'workflows', 'shared.yaml')
+    writeFileSync(file, VALID_YAML)
+    const personal = join(dir, 'lib-personal')
+    const own = new FakeTransport()
+    const libStore = new Store({
+      ...initialState,
+      worktrees: { ...initialState.worktrees, repoRoots: [repo] },
+      settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: options.labs ?? true } }
+    })
+    const loader = createWorkflowDefsLoader({
+      dir: personal,
+      dispatch: (event) => libStore.dispatch(event),
+      log: () => {},
+      watch: noWatch,
+      repoRoots: [repo]
+    })
+    loader.reload()
+    registerWorkflowsRequestHandlers({
+      transport: own,
+      loader,
+      runs: createWorkflowRunLookup({ live: () => null, liveAttemptRunId: () => undefined, records, attemptRunId: () => undefined }),
+      runner,
+      store: libStore,
+      persistTrust: () => {},
+      inputTrust: async () => 'untrusted',
+      log: () => {}
+    })
+    const repoDefId = `repo:${repoKeyOf(repo)}:shared`
+    const definitions = () => libStore.getSnapshot().state.workflows.definitions
+    return { own, store: libStore, repo, file, personal, repoDefId, definitions }
+  }
+
+  it('saves in each scope, dispatches the summary and returns its id', async () => {
+    const h = libraryHarness()
+
+    expect(await h.own.call('workflows:saveDefinition', { scope: 'personal', name: 'Mine', source: VALID_YAML })).toEqual({ defId: 'personal:mine' })
+    expect(await h.own.call('workflows:saveDefinition', { scope: 'repo', repoRoot: h.repo, name: 'team', source: VALID_YAML })).toEqual({
+      defId: `repo:${repoKeyOf(h.repo)}:team`
+    })
+
+    expect(readFileSync(join(h.personal, 'mine.yaml'), 'utf8')).toBe(VALID_YAML)
+    expect(readFileSync(join(h.repo, '.harness', 'workflows', 'team.yaml'), 'utf8')).toBe(VALID_YAML)
+    expect(h.definitions()['personal:mine']?.path).toBe(join(h.personal, 'mine.yaml'))
+    expect(h.definitions()[`repo:${repoKeyOf(h.repo)}:team`]?.repoRoot).toBe(h.repo)
+  })
+
+  it('makes a trusted repo definition untrusted once its source is saved with new content', async () => {
+    const h = libraryHarness()
+    h.store.dispatch({ type: 'workflows/trustGranted', payload: { defId: h.repoDefId, hash: sha256(VALID_YAML) } })
+
+    expect(
+      await h.own.call('workflows:saveDefinition', { scope: 'repo', repoRoot: h.repo, defId: h.repoDefId, name: 'shared', source: FULL_YAML })
+    ).toEqual({ defId: h.repoDefId })
+
+    const { definitions, trust } = h.store.getSnapshot().state.workflows
+    expect(definitions[h.repoDefId].hash).toBe(sha256(FULL_YAML))
+    expect(trust[h.repoDefId]).toBe(sha256(VALID_YAML))
+  })
+
+  it('rejects unknown keys, malformed payloads, an unknown repo and Labs off', async () => {
+    const h = libraryHarness()
+    const save = (payload: unknown) => h.own.call('workflows:saveDefinition', payload)
+    const base = { scope: 'personal', name: 'x', source: VALID_YAML }
+
+    for (const payload of [
+      { ...base, extra: 1 },
+      { ...base, scope: 'team' },
+      { ...base, repoRoot: h.repo },
+      { ...base, scope: 'repo' },
+      { ...base, name: '' },
+      { ...base, name: 'n'.repeat(201) },
+      { ...base, source: '' },
+      { ...base, source: 3 },
+      { ...base, defId: 7 },
+      'x',
+      null
+    ]) {
+      expect(await save(payload)).toEqual({ error: 'invalid request' })
+    }
+    expect(await save({ scope: 'repo', repoRoot: join(dir, 'elsewhere'), name: 'x', source: VALID_YAML })).toEqual({ error: 'Unknown repository' })
+    expect(await save({ ...base, name: '---' })).toEqual({ error: 'The name needs at least one letter or digit' })
+    expect(await save({ scope: 'repo', repoRoot: h.repo, name: '../../escape', source: VALID_YAML })).toEqual({
+      error: 'The name must not contain a slash, a backslash, NUL or "..", or start with a dot'
+    })
+    expect(await save({ ...base, name: 'shared-dup', source: 'x'.repeat(256 * 1024 + 1) })).toEqual({ error: 'The workflow definition is larger than 256 KB' })
+
+    const off = libraryHarness({ labs: false })
+    expect(await off.own.call('workflows:saveDefinition', base)).toEqual({ error: 'Workflows are turned off in Labs' })
+    expect(await off.own.call('workflows:duplicateDefinition', 'personal:x')).toEqual({ error: 'Workflows are turned off in Labs' })
+    expect(await off.own.call('workflows:deleteDefinition', off.repoDefId)).toEqual({ error: 'Workflows are turned off in Labs' })
+    expect(readFileSync(off.file, 'utf8')).toBe(VALID_YAML)
+  })
+
+  it('refuses overwriting another file without its defId', async () => {
+    const h = libraryHarness()
+    expect(await h.own.call('workflows:saveDefinition', { scope: 'repo', repoRoot: h.repo, name: 'Shared', source: FULL_YAML })).toEqual({
+      error: 'A workflow file with that name already exists'
+    })
+    expect(readFileSync(h.file, 'utf8')).toBe(VALID_YAML)
+  })
+
+  it('duplicates a repo definition only when it is trusted at its current hash', async () => {
+    const h = libraryHarness()
+
+    expect(await h.own.call('workflows:duplicateDefinition', h.repoDefId)).toEqual({ error: 'Trust this repo definition before duplicating it' })
+    h.store.dispatch({ type: 'workflows/trustGranted', payload: { defId: h.repoDefId, hash: sha256(FULL_YAML) } })
+    expect(await h.own.call('workflows:duplicateDefinition', h.repoDefId)).toEqual({ error: 'Trust this repo definition before duplicating it' })
+    expect(h.definitions()['personal:valid-flow-copy']).toBeUndefined()
+
+    h.store.dispatch({ type: 'workflows/trustGranted', payload: { defId: h.repoDefId, hash: sha256(VALID_YAML) } })
+    expect(await h.own.call('workflows:duplicateDefinition', h.repoDefId)).toEqual({ defId: 'personal:valid-flow-copy' })
+    expect(await h.own.call('workflows:duplicateDefinition', 'personal:valid-flow-copy')).toEqual({ defId: 'personal:valid-flow-copy-copy' })
+    expect(h.definitions()['personal:valid-flow-copy']).toMatchObject({ name: 'Valid flow-copy', scope: 'personal' })
+    expect(await h.own.call('workflows:duplicateDefinition', { defId: h.repoDefId })).toEqual({ error: 'invalid request' })
+  })
+
+  it('deletes only the named definition and refuses unknown ids', async () => {
+    const h = libraryHarness()
+    await h.own.call('workflows:saveDefinition', { scope: 'personal', name: 'keep', source: VALID_YAML })
+    await h.own.call('workflows:saveDefinition', { scope: 'personal', name: 'drop', source: VALID_YAML })
+
+    expect(await h.own.call('workflows:deleteDefinition', 'personal:drop')).toEqual({ ok: true })
+    expect(await h.own.call('workflows:deleteDefinition', 'personal:drop')).toEqual({ error: 'Unknown workflow definition' })
+    expect(await h.own.call('workflows:deleteDefinition', '../keep')).toEqual({ error: 'Unknown workflow definition' })
+    expect(await h.own.call('workflows:deleteDefinition', 5)).toEqual({ error: 'invalid request' })
+
+    expect(Object.keys(h.definitions()).sort()).toEqual(['personal:keep', h.repoDefId].sort())
+    expect(readFileSync(join(h.personal, 'keep.yaml'), 'utf8')).toBe(VALID_YAML)
+    expect(await h.own.call('workflows:deleteDefinition', h.repoDefId)).toEqual({ ok: true })
+    expect(() => readFileSync(h.file)).toThrow()
   })
 })

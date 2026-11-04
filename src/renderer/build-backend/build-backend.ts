@@ -43,6 +43,7 @@ import type { AgentKind } from '../../shared/state/terminals'
 import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
 import type {
   WorkflowInputTrustType,
+  WorkflowSaveDefinitionPayload,
   WorkflowMarkDonePayload,
   WorkflowStartRunPayload,
   WorkflowSwapStepPayload
@@ -305,6 +306,9 @@ export function buildBackend(
       req('workflows:getAttemptFileDiff', attemptId, path),
     startWorkflowRun: (payload: WorkflowStartRunPayload) => req('workflows:startRun', payload),
     trustWorkflowDefinition: (defId: string, hash: string) => req('workflows:trustDefinition', defId, hash),
+    saveWorkflowDefinition: (payload: WorkflowSaveDefinitionPayload) => req('workflows:saveDefinition', payload),
+    duplicateWorkflowDefinition: (defId: string) => req('workflows:duplicateDefinition', defId),
+    deleteWorkflowDefinition: (defId: string) => req('workflows:deleteDefinition', defId),
     checkWorkflowInputTrust: (repoRoot: string, type: WorkflowInputTrustType, number: string) =>
       req('workflows:checkInputTrust', repoRoot, type, number),
     cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),

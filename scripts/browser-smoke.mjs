@@ -13,7 +13,7 @@
 // a screenshot plus an ARIA snapshot to <evidenceDir>.
 
 import { execFileSync } from 'child_process'
-import { accessSync, appendFileSync, constants, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
@@ -686,6 +686,58 @@ async function flowLaunchOverrides(page, backend) {
   })
 }
 
+async function flowLibrary(page, backend) {
+  await scenario(page, 'library', async (shot) => {
+    const dataDir = process.env.HARNESS_DATA_DIR
+    if (!dataDir) throw new Error('library needs HARNESS_DATA_DIR to check the definition files on disk')
+    const copyName = 'smoke-retry-copy'
+    const copyId = `personal:${copyName}`
+    const copyFile = join(dataDir, 'workflows', `${copyName}.yaml`)
+    if (existsSync(copyFile)) throw new Error(`${copyFile} exists before the library scenario`)
+    const section = page.getByRole('region', { name: 'Workflows', exact: true })
+    try {
+      await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+      await section.waitFor()
+      const tab = section.getByRole('tab', { name: 'Library', exact: true })
+      await tab.click()
+      if ((await tab.getAttribute('aria-selected')) !== 'true') throw new Error('the Library tab is not selected after clicking it')
+      const personal = section.getByRole('region', { name: /^Personal/ })
+      await personal.getByRole('button', { name: 'Run smoke-retry', exact: true }).waitFor()
+      const groups = await section.getByRole('tabpanel').locator('section > h2').allTextContents()
+      log(`library: groups ${JSON.stringify(groups)}`)
+      if (!groups.some((g) => g.startsWith('This repo'))) throw new Error(`no "This repo" group: ${JSON.stringify(groups)}`)
+      await shot('library')
+
+      await personal.getByRole('button', { name: 'Duplicate smoke-retry', exact: true }).click()
+      await personal.getByRole('button', { name: `Run ${copyName}`, exact: true }).waitFor()
+      const copied = readFileSync(copyFile, 'utf8')
+      if (!copied.includes(`name: "${copyName}"`)) throw new Error(`copy on disk does not carry the new name: ${copied.slice(0, 200)}`)
+      const { state } = await backend.snapshot()
+      const saved = state.workflows.definitions[copyId]
+      if (saved?.name !== copyName) throw new Error(`no ${copyId} summary in the slice`)
+      log(`library: duplicated smoke-retry to ${copyFile}`)
+      await shot('duplicated')
+
+      await personal.getByRole('button', { name: `Delete ${copyName}`, exact: true }).click()
+      const dialog = page.getByRole('alertdialog', { name: `Delete “${copyName}”?`, exact: true })
+      await dialog.waitFor()
+      if (!((await dialog.textContent()) ?? '').includes(saved.path)) throw new Error(`the delete dialog does not name ${saved.path}`)
+      await assertFocusTrapped(page, dialog, 'library')
+      await shot('delete-confirm')
+      await dialog.getByRole('button', { name: 'Delete file', exact: true }).click()
+      await dialog.waitFor({ state: 'detached' })
+      await personal.getByRole('button', { name: `Run ${copyName}`, exact: true }).waitFor({ state: 'detached' })
+      if (existsSync(copyFile)) throw new Error(`${copyFile} is still on disk after Delete`)
+      log(`library: deleted ${copyFile}`)
+      await shot('deleted')
+    } finally {
+      if (existsSync(copyFile)) await backend.request('workflows:deleteDefinition', copyId).catch(() => rmSync(copyFile, { force: true }))
+      if (await section.count()) await section.getByRole('button', { name: 'Back' }).click()
+      await section.waitFor({ state: 'detached' })
+    }
+  })
+}
+
 async function flowLaunchTarget(page, backend) {
   await scenario(page, 'launch-target', async (shot) => {
     const dataDir = process.env.HARNESS_DATA_DIR
@@ -773,6 +825,7 @@ async function main() {
     await flowRepoTrust(page, backend)
     await flowInputPickers(page, backend)
     await flowLaunchOverrides(page, backend)
+    await flowLibrary(page, backend)
     await flowLaunchTarget(page, backend)
   } catch {
     failed = true

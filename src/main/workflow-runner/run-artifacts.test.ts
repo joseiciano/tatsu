@@ -105,7 +105,13 @@ function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeSta
   const handlers = new Map<string, Handler>()
   registerWorkflowsRequestHandlers({
     transport: { onRequest: (name, handler) => handlers.set(name, handler) },
-    loader: { reload: () => 0, getDefinition: () => null },
+    loader: {
+      reload: () => 0,
+      getDefinition: () => null,
+      saveDefinition: () => ({ ok: false, reason: 'write-failed' }),
+      duplicateDefinition: () => ({ ok: false, reason: 'write-failed' }),
+      deleteDefinition: () => ({ ok: false, reason: 'write-failed' })
+    },
     runs: createWorkflowRunLookup({
       live: (runId) => runner.getRunRecord(runId),
       liveAttemptRunId: (attemptId) => runner.runIdForAttempt(attemptId),

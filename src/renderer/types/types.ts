@@ -13,6 +13,8 @@ import type {
   WorkflowDefinitionDetail,
   WorkflowInputTrustResponse,
   WorkflowInputTrustType,
+  WorkflowDefinitionSaveResponse,
+  WorkflowSaveDefinitionPayload,
   WorkflowMarkDonePayload,
   WorkflowRunRecord,
   WorkflowStartRunPayload,
@@ -416,6 +418,9 @@ export interface ElectronAPI {
   getWorkflowAttemptFileDiff(attemptId: string, path: string): Promise<WorkflowAttemptFileDiffResponse>
   startWorkflowRun(payload: WorkflowStartRunPayload): Promise<WorkflowStartRunResponse>
   trustWorkflowDefinition(defId: string, hash: string): Promise<WorkflowActionResponse>
+  saveWorkflowDefinition(payload: WorkflowSaveDefinitionPayload): Promise<WorkflowDefinitionSaveResponse>
+  duplicateWorkflowDefinition(defId: string): Promise<WorkflowDefinitionSaveResponse>
+  deleteWorkflowDefinition(defId: string): Promise<WorkflowActionResponse>
   checkWorkflowInputTrust(
     repoRoot: string,
     type: WorkflowInputTrustType,

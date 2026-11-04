@@ -68,6 +68,36 @@ function threeGroups(): WorkflowsState {
 }
 
 describe('workflowsReducer', () => {
+  it('definitionSaved upserts one summary, keeps sibling references and no-ops on an identical summary', () => {
+    const start = threeGroups()
+    const added = workflowsReducer(start, { type: 'workflows/definitionSaved', payload: summary('copy') })
+    expect(added.definitions['personal:copy']).toEqual(summary('copy'))
+    expect(added.definitions['personal:mine']).toBe(start.definitions['personal:mine'])
+    expect(added.definitions[repoSummary('shared').id]).toBe(start.definitions[repoSummary('shared').id])
+
+    const edited = workflowsReducer(added, {
+      type: 'workflows/definitionSaved',
+      payload: repoSummary('shared', REPO_A)
+    })
+    expect(edited).toBe(added)
+    const rehashed = workflowsReducer(added, {
+      type: 'workflows/definitionSaved',
+      payload: { ...repoSummary('shared', REPO_A), hash: 'changed' }
+    })
+    expect(rehashed.definitions[repoSummary('shared').id].hash).toBe('changed')
+    expect(rehashed.definitions['personal:copy']).toBe(added.definitions['personal:copy'])
+    expect(rehashed.trust).toBe(added.trust)
+  })
+
+  it('definitionDeleted removes only the named summary and no-ops on an unknown id', () => {
+    const start = threeGroups()
+    const next = workflowsReducer(start, { type: 'workflows/definitionDeleted', payload: { defId: 'personal:mine' } })
+    expect(Object.keys(next.definitions).sort()).toEqual([repoSummary('shared', REPO_A).id, repoSummary('shared', REPO_B).id].sort())
+    expect(next.definitions[repoSummary('shared', REPO_B).id]).toBe(start.definitions[repoSummary('shared', REPO_B).id])
+    expect(workflowsReducer(next, { type: 'workflows/definitionDeleted', payload: { defId: 'personal:mine' } })).toBe(next)
+    expect(workflowsReducer(next, { type: 'workflows/definitionDeleted', payload: { defId: 'toString' } })).toBe(next)
+  })
+
   it('definitionsLoaded replaces the personal entries keyed by id', () => {
     const start: WorkflowsState = {
       ...initialWorkflows,

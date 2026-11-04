@@ -34,7 +34,8 @@ vi.mock('../../../store', async () => {
     useWorkflowRunRecordKey: (id: string) => useAppState((s) => selectors.workflowRunRecordKey(s.workflows, id)),
     useWorktreeRepoRoot: (path: string | null) =>
       useAppState((s) => (path ? s.worktrees.list.find((w) => w.path === path)?.repoRoot ?? null : null)),
-    useWorkflowStepTabLeaf: () => null
+    useWorkflowStepTabLeaf: () => null,
+    useWorkflowDefinitions: () => useAppState((s) => s.workflows.definitions)
   }
 })
 
@@ -128,6 +129,31 @@ const cards = (section: HTMLElement): string[] =>
   [...section.querySelectorAll('article')].map((a) => a.getAttribute('aria-label') ?? '')
 
 describe('WorkflowsView', () => {
+  it('opens the Library tab with the active worktree repo group first', async () => {
+    setState({})
+    storeState.current = {
+      ...storeState.current!,
+      worktrees: { ...storeState.current!.worktrees, repoRoots: ['/repos/other', '/repos/app'] }
+    }
+    await act(async () => {
+      root.render(<WorkflowsView onClose={onClose} activeWorktreePath="/repos/app/feature" />)
+    })
+    const tabs = [...container.querySelectorAll('[role="tab"]')]
+    expect(tabs.map((t) => t.textContent)).toEqual(['Runs', 'Library'])
+
+    await act(async () => {
+      ;(tabs[1] as HTMLElement).click()
+    })
+
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true')
+    expect([...container.querySelectorAll('[role="tabpanel"] section > h2')].map((h) => h.firstChild?.textContent)).toEqual([
+      'This repo (app)',
+      'Personal',
+      'other'
+    ])
+    expect(container.querySelector('[aria-label="Run Ship it"]')).not.toBeNull()
+  })
+
   it('pins Needs you above the Active and Recent runs', async () => {
     setState(
       {

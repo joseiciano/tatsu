@@ -38,6 +38,7 @@ import {
 
 interface LaunchSheetProps {
   worktreePath?: string
+  defId?: string
   onClose: () => void
   onStarted?: (worktreePath: string) => void
 }
@@ -67,7 +68,7 @@ function newBranchSuffix(): string {
   return crypto.randomUUID().slice(0, 8)
 }
 
-export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetProps): JSX.Element {
+export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchSheetProps): JSX.Element {
   const backend = useBackend()
   const definitions = useWorkflowDefinitions()
   const { consent, codexTrust } = useHooks()
@@ -75,13 +76,15 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
   const worktrees = useAppState((s) => s.worktrees.list)
   const runs = useAppState((s) => s.workflows.runs)
   const presetRepo = useWorktreeRepoRoot(worktreePath ?? null)
-  const [repoChoice, setRepoChoice] = useState<string | null>(null)
+  const [repoChoice, setRepoChoice] = useState<string | null>(() =>
+    defId !== undefined && Object.hasOwn(definitions, defId) ? definitions[defId].repoRoot ?? null : null
+  )
   const [mode, setMode] = useState<TargetMode>('new')
   const [branchDraft, setBranchDraft] = useState<string | null>(null)
   const [branchSuffix] = useState(newBranchSuffix)
   const [existingChoice, setExistingChoice] = useState<string | null>(null)
   const mounted = useRef(true)
-  const [chosenId, setChosenId] = useState<string | null>(null)
+  const [chosenId, setChosenId] = useState<string | null>(defId ?? null)
   const [loaded, setLoaded] = useState<LoadedDefinition | null>(null)
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [allowFullFor, setAllowFullFor] = useState<string | null>(null)

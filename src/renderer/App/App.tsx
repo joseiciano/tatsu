@@ -250,10 +250,11 @@ function DesktopApp(): JSX.Element {
   const [showNewProject, setShowNewProject] = useState(false)
   const [reportIssueState, setReportIssueState] = useState<OpenReportIssueDetail | null>(null)
   const [showAddBackend, setShowAddBackend] = useState(false)
-  const [launchTarget, setLaunchTarget] = useState<{ worktreePath?: string } | null>(null)
+  const [launchTarget, setLaunchTarget] = useState<{ worktreePath?: string; defId?: string } | null>(null)
   const closeRunWorkflow = useCallback(() => setLaunchTarget(null), [])
   const openRunWorkflowHere = useCallback((worktreePath: string) => setLaunchTarget({ worktreePath }), [])
   const openRunWorkflow = useCallback(() => setLaunchTarget({}), [])
+  const openRunDefinition = useCallback((defId: string) => setLaunchTarget({ defId }), [])
   // Dev-only: forces the welcome / onboarding form to render even when
   // the user already has repos added, so the layout can be inspected
   // without wiping `userData/config.json`. Toggled from Help → Debug:
@@ -1627,6 +1628,8 @@ const setQuestStep = useCallback((next: QuestStep) => {
               onClose={closeWorkflows}
               onJumpToTab={handleJumpToWorkflowTab}
               onRunWorkflow={openRunWorkflow}
+              onRunDefinition={openRunDefinition}
+              activeWorktreePath={activeWorktreeId}
             />
           </div>
         )}
@@ -1783,6 +1786,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
     {launchTarget !== null && (
       <LaunchSheet
         worktreePath={launchTarget.worktreePath}
+        defId={launchTarget.defId}
         onClose={closeRunWorkflow}
         onStarted={handleWorkflowStarted}
       />
