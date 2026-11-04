@@ -31,6 +31,7 @@ import { runContextPath } from './run-artifacts'
 import {
   STEP_SUMMARY_MAX_CHARS,
   evaluateCondition,
+  isParallelSafeStep,
   loopSpan,
   parallelWriterPairs,
   renderTemplate,
@@ -114,6 +115,7 @@ type SnapshotSlot = 'baseSnapshot' | 'headSnapshot'
 interface LaunchOptions {
   resumeSessionId?: string
   prompt?: string
+  targeted?: true
 }
 
 interface QueueEntry extends LaunchOptions {
@@ -207,6 +209,14 @@ function hasLoop(step: ResolvedWorkflowStep): step is ResolvedWorkflowStep & { l
   return step.loop !== undefined
 }
 
+function adoptedPause(record: WorkflowRunRecord, stepId: string): WorkflowPausedReason | undefined {
+  const status = record.steps[stepId]
+  if (status === 'awaiting-gate') return 'gate'
+  if (status !== 'failed' && status !== 'cancelled' && status !== 'interrupted') return undefined
+  const last = record.attempts.filter((attempt) => attempt.stepId === stepId).at(-1)
+  return last?.metrics.pauses.at(-1)?.reason ?? (status === 'interrupted' ? 'interrupted' : 'step-failed')
+}
+
 function untilMet(loop: WorkflowLoop, result: StepResult): boolean {
   return evaluateCondition(loop.until, { status: result.status, data: result.data, exitCode: result.exitCode })
 }
@@ -278,13 +288,15 @@ export class WorkflowRunner {
     live.continuedThisTurn = true
     live.blockPending = true
     record.metrics.continuations += 1
-    if (state.pauses.get(record.stepId) === 'needs-approval') this.resume(state, record.stepId)
+    const approved = state.pauses.get(record.stepId) === 'needs-approval'
+    if (approved) this.resume(state, record.stepId)
     this.log(`step continued ${record.metrics.continuations}`, {
       runId: state.record.runId,
       stepId: record.stepId,
       attemptId: record.attemptId
     })
-    this.persist(state.record)
+    if (approved) this.schedule(state)
+    this.settle(state)
     return 'block'
   }
 
@@ -543,7 +555,8 @@ export class WorkflowRunner {
     this.resume(state, stepId)
     const live = state.live.get(stepId)
     if (live) this.endAttempt(state, live, 'cancelled', undefined, true)
-    this.enterStep(state, step)
+    this.enterStep(state, step, { targeted: true })
+    this.schedule(state)
     this.settle(state)
     return ACTION_OK
   }
@@ -553,7 +566,7 @@ export class WorkflowRunner {
     const target = this.retryTarget(runId, stepId)
     if (typeof target === 'string') return this.refuseAction(target, ids)
     const { state } = target
-    if (state.live.has(stepId)) return this.refuseAction('live-attempt', ids)
+    if (state.live.size > 0) return this.refuseAction('live-attempt', ids)
     const { artifacts } = this.deps
     const commit = this.lastAttempt(state, stepId)?.baseSnapshot?.commit
     if (!artifacts || commit === undefined) return this.refuseAction('no-snapshot', ids)
@@ -574,9 +587,10 @@ export class WorkflowRunner {
     this.log('step restored to base snapshot', ids)
     const again = this.retryTarget(runId, stepId)
     if (typeof again === 'string') return this.refuseAction(again, ids)
-    if (again.state.live.has(stepId)) return this.refuseAction('live-attempt', ids)
+    if (again.state.live.size > 0) return this.refuseAction('live-attempt', ids)
     this.resume(again.state, stepId)
-    this.enterStep(again.state, again.step)
+    this.enterStep(again.state, again.step, { targeted: true })
+    this.schedule(again.state)
     this.settle(again.state)
     return ACTION_OK
   }
@@ -594,7 +608,8 @@ export class WorkflowRunner {
       return this.refuseAction('no-session', ids)
     }
     this.resume(state, stepId)
-    this.enterStep(state, step, { resumeSessionId: last.sessionId })
+    this.enterStep(state, step, { resumeSessionId: last.sessionId, targeted: true })
+    this.schedule(state)
     this.settle(state)
     return ACTION_OK
   }
@@ -627,7 +642,8 @@ export class WorkflowRunner {
     }
     this.logHarness('step swapped', state, stepId)
     this.resume(state, stepId)
-    this.enterStep(state, effective)
+    this.enterStep(state, effective, { targeted: true })
+    this.schedule(state)
     this.settle(state)
     return ACTION_OK
   }
@@ -744,7 +760,7 @@ export class WorkflowRunner {
     const stepId = step.id
     const ids = { runId, stepId }
     this.resume(state, stepId)
-    if (this.queue.length > 0 || this.agentSlots.size >= this.agentCap()) {
+    if (this.hasLaunchableEntry() || this.agentSlots.size >= this.agentCap()) {
       this.queue.push({ runId, stepId, continuation })
       state.record.continuations = { ...state.record.continuations, [stepId]: continuation }
       this.setStep(state, stepId, 'queued')
@@ -752,6 +768,7 @@ export class WorkflowRunner {
     } else {
       this.startContinuation(state, step, continuation)
     }
+    this.schedule(state)
     this.settle(state)
   }
 
@@ -951,7 +968,9 @@ export class WorkflowRunner {
     }
     if (record.status === 'paused') {
       for (const step of steps) {
-        if (record.steps[step.id] === 'awaiting-gate' && !state.pauses.has(step.id)) state.pauses.set(step.id, 'gate')
+        if (state.pauses.has(step.id)) continue
+        const reason = adoptedPause(record, step.id)
+        if (reason) state.pauses.set(step.id, reason)
       }
     }
     for (const attempt of record.attempts) {
@@ -1069,12 +1088,17 @@ export class WorkflowRunner {
   }
 
   private firstReady(state: RunState): RunnableStep | undefined {
+    return this.readySteps(state)[0]
+  }
+
+  private readySteps(state: RunState): RunnableStep[] {
+    const ready: RunnableStep[] = []
     for (const step of state.record.definition.steps) {
       if (state.stepStatus[step.id] !== 'pending') continue
-      const ready = this.actionable(state, step.id)
-      if (ready) return ready
+      const actionable = this.actionable(state, step.id)
+      if (actionable) ready.push(actionable)
     }
-    return undefined
+    return ready
   }
 
   private cursorIndex(state: RunState): number {
@@ -1140,7 +1164,7 @@ export class WorkflowRunner {
   }
 
   private enterStep(state: RunState, step: RunnableStep, options: LaunchOptions = {}, continuation?: WorkflowContinuation): void {
-    if (step.kind === 'shell' || (this.queue.length === 0 && this.agentSlots.size < this.agentCap())) {
+    if (step.kind === 'shell' || (!this.hasLaunchableEntry() && this.agentSlots.size < this.agentCap())) {
       if (continuation && step.kind === 'agent') this.startContinuation(state, step, continuation)
       else this.launch(state, step, options)
       return
@@ -1152,16 +1176,28 @@ export class WorkflowRunner {
   }
 
   private schedule(state: RunState): void {
+    let skipped = true
+    while (skipped && state.pauses.size === 0) {
+      this.syncCursor(state)
+      skipped = false
+      for (const next of this.readySteps(state)) {
+        if (state.pauses.size > 0) break
+        if (!this.whenHolds(state, next)) {
+          this.log('step condition unmet', { runId: state.record.runId, stepId: next.id })
+          this.setStep(state, next.id, 'skipped')
+          skipped = true
+        } else if (this.mayStartBesideOthers(state, next)) {
+          this.enterStep(state, next, {}, this.loopContinuation(state, next))
+        }
+      }
+    }
     this.syncCursor(state)
-    if (state.pauses.size > 0 || state.live.size > 0) return
-    if (Object.values(state.stepStatus).includes('queued')) return
-    const next = this.firstReady(state)
-    if (next && !this.whenHolds(state, next)) {
-      this.log('step condition unmet', { runId: state.record.runId, stepId: next.id })
-      this.setStep(state, next.id, 'skipped')
-      this.schedule(state)
-    } else if (next) this.enterStep(state, next, {}, this.loopContinuation(state, next))
-    else if (this.allSettled(state)) this.finish(state)
+    if (state.pauses.size === 0 && this.allSettled(state)) this.finish(state)
+  }
+
+  private mayStartBesideOthers(state: RunState, step: RunnableStep): boolean {
+    if (isParallelSafeStep(step)) return true
+    return state.live.size === 0 && !Object.values(state.stepStatus).includes('queued')
   }
 
   private whenHolds(state: RunState, step: RunnableStep): boolean {
@@ -1481,7 +1517,8 @@ export class WorkflowRunner {
         live.continuedThisTurn = false
         if (state.pauses.get(stepId) === 'needs-approval') {
           this.resume(state, stepId)
-          this.persist(state.record)
+          this.schedule(state)
+          this.settle(state)
         }
         return
       case 'needsApproval':
@@ -1673,22 +1710,37 @@ export class WorkflowRunner {
     let i = 0
     while (i < this.queue.length && this.agentSlots.size < this.agentCap()) {
       const entry = this.queue[i]
-      const state = this.runs.get(entry.runId)
-      const step = state?.record.definition.steps.find((candidate) => candidate.id === entry.stepId)
-      if (!state || !step || !isRunnable(step) || state.stepStatus[step.id] !== 'queued' || state.live.has(step.id)) {
+      const target = this.queuedTarget(entry)
+      if (target === 'stale') {
         this.queue.splice(i, 1)
         continue
       }
-      if (state.live.size > 0 || (state.pauses.size > 0 && (!entry.continuation || state.pauses.has(step.id)))) {
+      if (target === 'blocked') {
         i += 1
         continue
       }
+      const { state, step } = target
       this.queue.splice(i, 1)
       if (entry.continuation && step.kind === 'agent') this.startContinuation(state, step, entry.continuation)
       else this.launch(state, step, entry)
       launched.push(state)
     }
     return launched
+  }
+
+  private queuedTarget(entry: QueueEntry): ActionTarget | 'stale' | 'blocked' {
+    const state = this.runs.get(entry.runId)
+    const step = state?.record.definition.steps.find((candidate) => candidate.id === entry.stepId)
+    if (!state || !step || !isRunnable(step) || state.stepStatus[step.id] !== 'queued' || state.live.has(step.id)) {
+      return 'stale'
+    }
+    const passesPause = (entry.continuation !== undefined || entry.targeted === true) && !state.pauses.has(step.id)
+    if (state.busy || (state.pauses.size > 0 && !passesPause)) return 'blocked'
+    return { state, step }
+  }
+
+  private hasLaunchableEntry(): boolean {
+    return this.queue.some((entry) => typeof this.queuedTarget(entry) !== 'string')
   }
 
   private settle(state: RunState): void {

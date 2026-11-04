@@ -161,6 +161,43 @@ steps:
     needs: [left, right]
     run: "echo {{steps.left.summary}} {{steps.right.summary}}"
 `,
+  'shell-branch': `name: shell-branch
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+  - id: review
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "review"
+  - id: lint
+    kind: shell
+    needs: [plan]
+    parallel_safe: true
+    run: "true"
+`,
+  triple: `name: triple
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+  - id: a
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "a"
+  - id: b
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "b"
+  - id: c
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "c"
+`,
   gated: `name: gated
 steps:
   - id: plan
@@ -1900,14 +1937,14 @@ describe('WorkflowRunner needs graph', () => {
   const statuses = (ctx: Ctx, runId: string) =>
     Object.fromEntries(['plan', 'left', 'right', 'join'].map((id) => [id, ctx.stepStatus(runId, id)]))
 
-  it('runs plan, then both branches one at a time in definition order, then the join', async () => {
+  it('runs plan, then both read-only branches together, then the join', async () => {
     const ctx = setup()
     const runId = await ctx.startRun('diamond')
     await flush()
     expect(statuses(ctx, runId)).toEqual({ plan: 'running', left: 'pending', right: 'pending', join: 'pending' })
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done('the plan'))
     await flush()
-    expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'running', right: 'pending', join: 'pending' })
+    expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'running', right: 'running', join: 'pending' })
     ctx.runner.complete(ctx.attemptOf(runId, 'left'), done('L'))
     await flush()
     expect(statuses(ctx, runId)).toEqual({ plan: 'done', left: 'done', right: 'running', join: 'pending' })
@@ -1954,6 +1991,194 @@ describe('WorkflowRunner needs graph', () => {
     })
     expect(Object.keys(ctx.wf().runs)).toEqual([])
     expect(ctx.agent.started).toEqual([])
+  })
+})
+
+describe('WorkflowRunner parallel steps', () => {
+  const setCap = (ctx: Ctx, cap: number) =>
+    ctx.store.dispatch({ type: 'settings/workflowSettingsChanged', payload: { maxConcurrentAgents: cap } })
+
+  const snapshotArtifacts = (restore: RunArtifacts['restore'] = async () => {}): RunArtifacts => ({
+    prepare: async () => {},
+    snapshot: async ({ n }) => ({ commit: String(n).repeat(40), ref: `refs/test/${n}` }),
+    appendContext: async () => {},
+    restore
+  })
+
+  async function afterPlan(slug: DefSlug, options: SetupOptions = {}) {
+    const ctx = setup(options)
+    const runId = await ctx.startRun(slug)
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done('the plan'))
+    await flush()
+    return { ctx, runId }
+  }
+
+  it('queues the second read-only branch behind the cap and starts it when the first ends', async () => {
+    const { ctx, runId } = await afterPlan('diamond', { cap: 1 })
+    expect([ctx.stepStatus(runId, 'left'), ctx.stepStatus(runId, 'right')]).toEqual(['running', 'queued'])
+    expect(ctx.wf().runs[runId].steps.right.attemptIds).toEqual([])
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), done('L'))
+    await flush()
+    expect([ctx.stepStatus(runId, 'right'), ctx.stepStatus(runId, 'join')]).toEqual(['running', 'pending'])
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), done('R'))
+    await flush()
+    expect(ctx.stepStatus(runId, 'join')).toBe('running')
+    expect(ctx.agent.started.map((attempt) => attempt.stepId)).toEqual(['plan', 'left', 'right'])
+  })
+
+  it('runs a parallel_safe shell branch beside an agent branch that holds the only slot', async () => {
+    const { ctx, runId } = await afterPlan('shell-branch', { cap: 1 })
+    expect([ctx.stepStatus(runId, 'review'), ctx.stepStatus(runId, 'lint')]).toEqual(['running', 'running'])
+    expect(ctx.shell.started.map((attempt) => attempt.stepId)).toEqual(['lint'])
+  })
+
+  it('lets a running sibling finish after a branch fails, and starts nothing new until the run resumes', async () => {
+    const { ctx, runId } = await afterPlan('diamond')
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), failed())
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+    expect(ctx.stepStatus(runId, 'right')).toBe('running')
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), done('R'))
+    await flush()
+    expect([ctx.stepStatus(runId, 'right'), ctx.stepStatus(runId, 'join')]).toEqual(['done', 'pending'])
+    expect(ctx.shell.started).toEqual([])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+    expect(ctx.runner.skipStep(runId, 'left')).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'join')).toBe('running')
+  })
+
+  it('keeps a queued sibling queued while another branch has paused the run', async () => {
+    const { ctx, runId } = await afterPlan('diamond', { cap: 1 })
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), failed())
+    await flush()
+    expect(ctx.stepStatus(runId, 'right')).toBe('queued')
+    expect(ctx.agent.started.map((attempt) => attempt.stepId)).toEqual(['plan', 'left'])
+    expect(ctx.runner.skipStep(runId, 'left')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus(runId, 'right')).toBe('running')
+  })
+
+  it('starts ready siblings held by a pause once a retry clears it', async () => {
+    const { ctx, runId } = await afterPlan('triple', { cap: 2 })
+    expect(['a', 'b', 'c'].map((id) => ctx.stepStatus(runId, id))).toEqual(['running', 'running', 'queued'])
+    ctx.runner.complete(ctx.attemptOf(runId, 'a'), failed())
+    ctx.runner.complete(ctx.attemptOf(runId, 'b'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'c')).toBe('queued')
+    expect(ctx.runner.retryStep(runId, 'a')).toEqual({ ok: true })
+    await flush()
+    expect(['a', 'b', 'c'].map((id) => ctx.stepStatus(runId, id))).toEqual(['running', 'done', 'running'])
+  })
+
+  it('starts a queued sibling when a needs-approval pause clears', async () => {
+    const { ctx, runId } = await afterPlan('triple', { cap: 2 })
+    const execution = ctx.agent.executionFor(ctx.attemptOf(runId, 'a'))
+    ctx.agent.emit({ type: 'needsApproval', executionId: execution })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-approval' })
+    ctx.runner.complete(ctx.attemptOf(runId, 'b'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'c')).toBe('queued')
+    ctx.agent.emit({ type: 'promptSubmitted', executionId: execution })
+    await flush()
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    expect(ctx.stepStatus(runId, 'c')).toBe('running')
+  })
+
+  it('launches a queued retry target past a sibling pause once a slot frees', async () => {
+    const { ctx, runId } = await afterPlan('diamond')
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), failed())
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), failed())
+    const other = await ctx.startRun('one-agent', '/wt/b')
+    await flush()
+    setCap(ctx, 1)
+    expect(ctx.runner.retryStep(runId, 'left')).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'left')).toBe('queued')
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'left')).toBe('running')
+    expect(ctx.stepStatus(runId, 'right')).toBe('failed')
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
+  })
+
+  it('refuses retry from clean while a sibling attempt is live', async () => {
+    const { ctx, runId } = await afterPlan('diamond', { artifacts: snapshotArtifacts() })
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), failed())
+    await flush()
+    expect(await ctx.runner.retryFromClean(runId, 'left')).toEqual({ ok: false, reason: 'live-attempt' })
+    expect(ctx.logs.some((line) => line.includes('step restored to base snapshot'))).toBe(false)
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), done())
+    await flush()
+    expect(await ctx.runner.retryFromClean(runId, 'left')).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'left')).toBe('running')
+  })
+
+  it('keeps a queued continuation of the run queued while a clean restore rewrites the tree', async () => {
+    let finishRestore = (): void => {}
+    const restore = () =>
+      new Promise<void>((resolve) => {
+        finishRestore = resolve
+      })
+    const { ctx, runId } = await afterPlan('diamond', { artifacts: snapshotArtifacts(restore) })
+    ctx.runner.complete(ctx.attemptOf(runId, 'right'), done('R'))
+    ctx.runner.complete(ctx.attemptOf(runId, 'left'), failed())
+    const other = await ctx.startRun('one-agent', '/wt/b')
+    await flush()
+    setCap(ctx, 1)
+    expect(ctx.runner.continueStep(runId, 'right', 'again')).toEqual({ ok: true })
+    expect(ctx.stepStatus(runId, 'right')).toBe('queued')
+    const pending = ctx.runner.retryFromClean(runId, 'left')
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(other, 'plan'), done())
+    await flush()
+    expect(ctx.stepStatus(runId, 'right')).toBe('queued')
+    finishRestore()
+    expect(await pending).toEqual({ ok: true })
+    await flush()
+    expect([ctx.stepStatus(runId, 'right'), ctx.stepStatus(runId, 'left')]).toEqual(['running', 'queued'])
+  })
+
+  it('serializes the base snapshots of concurrent attempts and chains their parents', async () => {
+    let inFlight = 0
+    let maxInFlight = 0
+    let made = 0
+    const calls: Array<{ stepId: string; parent: string | undefined; commit: string }> = []
+    const artifacts: RunArtifacts = {
+      ...snapshotArtifacts(),
+      snapshot: async ({ stepId, parent }) => {
+        inFlight += 1
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        await flush()
+        const commit = String(++made).repeat(40)
+        calls.push({ stepId, parent, commit })
+        inFlight -= 1
+        return { commit, ref: `refs/test/${made}` }
+      }
+    }
+    const { ctx, runId } = await afterPlan('triple', { artifacts })
+    for (let i = 0; i < 20; i++) await flush()
+    expect(['a', 'b', 'c'].map((id) => ctx.stepStatus(runId, id))).toEqual(['running', 'running', 'running'])
+    expect(maxInFlight).toBe(1)
+    expect(calls.map((call) => call.stepId)).toEqual(['plan', 'plan', 'a', 'b', 'c'])
+    calls.slice(1).forEach((call, i) => expect(call.parent).toBe(calls[i].commit))
+    expect(ctx.agent.started.map((attempt) => attempt.stepId)).toEqual(['plan', 'a', 'b', 'c'])
+  })
+
+  it('holds a writer re-entered by a loop until a live sibling outside the span ends', async () => {
+    const ctx = setup()
+    const runId = await ctx.startRun('loop-diamond')
+    await flush()
+    const finish = async (stepId: string, result: StepResult = done(`${stepId}-out`)) => {
+      ctx.runner.complete(ctx.attemptOf(runId, stepId), result)
+      await flush()
+    }
+    await finish('plan')
+    expect(['left', 'right', 'side'].map((id) => ctx.stepStatus(runId, id))).toEqual(['running', 'running', 'running'])
+    await finish('left')
+    await finish('right')
+    await finish('review', { ...done('review-fail'), data: { verdict: 'fail' } })
+    expect([ctx.stepStatus(runId, 'plan'), ctx.stepStatus(runId, 'side')]).toEqual(['pending', 'running'])
+    await finish('side')
+    expect(ctx.stepStatus(runId, 'plan')).toBe('running')
   })
 })
 

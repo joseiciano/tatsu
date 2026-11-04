@@ -803,9 +803,18 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   const reader = (id: string, extra = '') => step(id, `    permissions: read-only\n${extra}`)
   const linearOnly = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'nonlinear-needs')
 
-  it('supports non-linear needs by default', () => {
+  it('supports non-linear needs and parallel_safe by default', () => {
     expect(WORKFLOW_FEATURES['nonlinear-needs'].supported).toBe(true)
-    expect(WORKFLOW_FEATURES.parallel_safe.supported).toBe(false)
+    expect(WORKFLOW_FEATURES.parallel_safe.supported).toBe(true)
+  })
+
+  it('reports one parallel_safe error naming phase 4 when the feature is not supported', () => {
+    const text = `name: x\nsteps:\n${step('a')}  - id: b\n    kind: shell\n    run: make\n    parallel_safe: true\n`
+    const withoutParallel = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'parallel_safe')
+    expect(validateWorkflowDefinition(text).diagnostics).toEqual([])
+    const diagnostics = validateWorkflowDefinition(text, { supportedFeatures: withoutParallel }).diagnostics
+    expect(diagnostics.map((d) => [d.code, d.feature, d.path])).toEqual([['unsupported-feature', 'parallel_safe', 'steps[1].parallel_safe']])
+    expect(diagnostics[0].message).toContain('phase 4')
   })
 
   it('reports one non-linear needs error when two steps share one parent', () => {
@@ -825,7 +834,6 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it.each([
-    ['parallel_safe', `name: x\nsteps:\n${step('a')}  - id: b\n    kind: shell\n    run: make\n    parallel_safe: true\n`, 'steps[1].parallel_safe', 4],
     ['timeout', `name: x\nsteps:\n${step('a', '    timeout: 60\n')}`, 'steps[0].timeout', 4],
     ['foreach', 'name: x\nsteps:\n  - id: each\n    kind: foreach\n    over: inputs.list\n', 'steps[0].kind', 6],
     ['orchestrator', 'name: x\nsteps:\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n', 'steps[0].kind', 8]
@@ -896,13 +904,11 @@ describe('validateWorkflowDefinition: parallel writers', () => {
     ])
   })
 
-  it('reports a parallel_safe shell branch as an unsupported feature until parallel shells land', () => {
+  it('accepts a parallel_safe shell branch beside a read-only agent branch', () => {
     const shell = '  - id: right\n    kind: shell\n    needs: [plan]\n    run: make lint\n    parallel_safe: true\n'
-    const text = diamond(readOnly('left'), shell)
-    expect(validateWorkflowDefinition(text).diagnostics.map((d) => [d.code, d.feature, d.path])).toEqual([
-      ['unsupported-feature', 'parallel_safe', 'steps[2].parallel_safe']
-    ])
-    expect(validateWorkflowDefinition(text, { supportedFeatures: ALL_WORKFLOW_FEATURES }).diagnostics).toEqual([])
+    const result = validateWorkflowDefinition(diamond(readOnly('left'), shell))
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps.find((s) => s.id === 'right')).toMatchObject({ kind: 'shell', parallel_safe: true })
   })
 
   it('positions the diagnostic at the step when its needs are implicit', () => {
