@@ -23,8 +23,23 @@ selected attempt's full result and the files that attempt changed.
   step's latest attempt has a base snapshot; confirm dialog), `Mark done`
   (opens the inline Mark done form), `Skip`, `Cancel step` (confirm dialog,
   running attempt only), `Cancel run`, `Jump to tab` (when the selected
-  attempt's tab is open). Step actions are named `<label>: <step id>`. No
-  gate actions.
+  attempt's tab is open), `Swap harness/model` (agent step whose latest
+  attempt is failed, cancelled or interrupted on a paused run). Step actions
+  are named `<label>: <step id>`. No gate actions.
+- **Swap harness/model**: modal `dialog` `Swap harness or model for
+  “<step>”` (focus trap, Escape closes): select `Agent` (Claude Code,
+  Codex, Opencode; current one marked `(current)`), text field `Model`
+  (empty = agent default; picking another agent clears it), an `Allow full
+  access for <agent>` checkbox only for a `full` step (required), button
+  `Swap and retry` (disabled until something changes). It calls
+  `workflows:swapStep(runId, stepId, {agent, model?, allowFull?})`: the
+  runner swaps only the agent and model in the run's definition snapshot
+  (prompt, `permissions` and `allow` stay), keeps the original in the
+  record's `overriddenFrom`, records `agent`/`model` on each attempt, flips
+  the slice step agent (`workflows/stepAgentChanged`) and retries the step
+  as attempt n+1. Refusals (Codex hooks untrusted, consent, full access not
+  confirmed, unsupported agent, not paused, …) show as an alert inside the
+  dialog, which stays open.
 - **Attempt timeline**: list `Attempt timeline`, one `aria-pressed` button
   per attempt in definition step order then attempt number, named
   `<step> #<n>: <status>, completed by <who>, <duration>, cost <cost>`.
@@ -78,12 +93,25 @@ selected attempt's full result and the files that attempt changed.
     region `File diff · smoke.txt` holds `.monaco-diff-editor` whose
     modified side shows `smoke` -> `All runs` -> `Back`. Deletes
     `smoke.txt` from the worktree afterwards.
+  - `swap-step` (right after `attempt-diff`, before `repo-trust`; needs
+    curl): launch sheet -> `browser-swap` -> Start -> Needs-you row
+    `Step failed · swap` -> sidebar `Workflows` -> `Active runs` ->
+    `Open run: browser-swap on repo` -> button `Swap harness/model: swap`
+    -> dialog `Swap harness or model for “swap”` (focus inside) -> `Agent`
+    = `codex`, `Model` = `fake-codex-model` -> `Swap and retry` -> dialog
+    closes -> run `done`; record step `swap` is codex /
+    `fake-codex-model` / `read-only`, `overriddenFrom.swap.agent` is
+    `claude`, attempts `1:claude:failed,2:codex:done` -> graph `swap: done`
+    and two timeline rows -> `All runs` -> `Back`.
 
 End state that proves it: `run-detail-01-detail-timeline.png`,
 `run-detail-02-detail-summary.png`, `attempt-diff-03-changed-files.png` and
-`attempt-diff-04-file-diff.png` in `$EVIDENCE/workflow-flows/`, and the
-`run-detail: timeline [...]`, `attempt-diff: changed files [...]` and
-`attempt-diff: smoke.txt diff renders side by side…` lines in the journal.
+`attempt-diff-04-file-diff.png`, `swap-step-04-swap-dialog.png` and
+`swap-step-05-detail-done.png` in `$EVIDENCE/workflow-flows/`, and the
+`run-detail: timeline [...]`, `attempt-diff: changed files [...]`,
+`attempt-diff: smoke.txt diff renders side by side…` and `swap-step: run
+<id> done after swapping Claude to Codex (1:claude:failed, 2:codex:done)`
+lines in the journal.
 
 ## Gotchas
 
@@ -103,5 +131,9 @@ End state that proves it: `run-detail-01-detail-timeline.png`,
   ended attempt briefly reads `Loading changed files…` while the detail
   refetches the attempt record (up to about 8 s in total) before it shows
   the list or `No snapshot for this attempt`.
+- The fake codex only runs its default mode and needs `--model` and a
+  `read-only` sandbox, so the swap must name a model and the swapped step
+  must be `read-only`; the `browser-swap` prompt uses the Claude-scoped
+  marker `FAKE_AGENT_MODE_CLAUDE=` so the Codex attempt completes.
 - Leaving `smoke.txt` in the worktree puts it in every later attempt's base
   snapshot; the attempt-diff scenario removes it in a `finally`.
