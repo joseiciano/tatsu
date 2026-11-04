@@ -17,9 +17,40 @@
 //                     SIGHUP (agent cancel) ends it, a 5 min cap bounds leaks
 //   exit-no-complete  run the Stop hook once (expects a block), then exit 1
 //                     without complete_step, so the step fails by exit
+//   multi-turn        Claude kind only. Turn 1 is the argv prompt and runs as
+//                     the default mode does. After each completed turn the
+//                     agent stays alive and reads stdin for the next prompt,
+//                     then runs the Stop hook, calls complete_step again
+//                     through a fresh bridge and runs the post-turn Stop hook.
+//                     The pre-complete Stop hook must block on turn 1 only;
+//                     on later turns the real stop-check may not block, so
+//                     either reply is accepted and logged. The post-complete
+//                     hook (stop_hook_active true) must never block. Turns are numbered from 1. The
+//                     mode is read from the argv prompt only. SIGHUP or stdin
+//                     EOF exits 0; the 5 min cap fails a leaked agent.
+//                     A prompt is complete in one of two framings:
+//                       bracketed  ESC[200~ <text> ESC[201~ immediately
+//                                  followed by CR (\r) or LF (\n, what a
+//                                  cooked tty turns CR into); the markers
+//                                  are stripped, text may span lines
+//                       plain      one line ended by CR (\r) or LF (\n)
+//                     Empty lines between prompts are skipped. Anything
+//                     other than CR or LF right after ESC[201~ fails the agent.
+//                     When stdin is a TTY (a PTY) it is put in raw mode first,
+//                     so there is no line buffering, CR to LF mapping or echo.
 // `FAKE_AGENT_MODE_<KIND>=<mode>` (KIND = CLAUDE, CODEX or OPENCODE) applies
 // only to that kind and wins over the plain marker, so one prompt can fail on
 // one harness and complete on another.
+//
+// Output data (Claude kind only; Codex and opencode stay single-turn and
+// ignore these markers): `FAKE_AGENT_DATA=<json>` in a turn's prompt adds the
+// fields of that JSON object to the turn's complete_step arguments, and
+// `FAKE_AGENT_DATA_<n>=<json>` applies only to turn n and wins over the plain
+// marker per field. The JSON must be one object starting right after `=` and
+// ending at its balanced closing brace (no whitespace after `=`); it may
+// contain nested values and braces inside strings. Anything else fails the
+// agent. Data fields win over the default `summary`. Markers are read from the
+// prompt of the turn being run.
 //
 // FAKE_AGENT_KIND=codex (set by the `codex` shim) stands in for the `codex`
 // CLI instead: it reads the harness-control MCP server from the
@@ -46,7 +77,9 @@ import { parse as parseToml } from 'smol-toml'
 
 const TIMEOUT_MS = 30_000
 const HANG_LIFETIME_MS = 5 * 60_000
-const MODES = new Set(['default', 'hang', 'exit-no-complete'])
+const MODES = new Set(['default', 'hang', 'exit-no-complete', 'multi-turn'])
+const PASTE_START = '\x1b[200~'
+const PASTE_END = '\x1b[201~'
 const HOOK_SIGNATURE = 'harness-status'
 const CODEX_SERVER_PREFIX = 'mcp_servers.harness-control.'
 const CODEX_DISCOVERY_SLACK_MS = 1500
@@ -196,7 +229,82 @@ function startBridge(server) {
   }
 }
 
-async function completeStep(server, summary) {
+function balancedObjectEnd(text, start) {
+  let depth = 0
+  let inString = false
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (ch === '\\') i++
+      else if (ch === '"') inString = false
+    } else if (ch === '"') inString = true
+    else if (ch === '{') depth++
+    else if (ch === '}' && --depth === 0) return i + 1
+  }
+  return -1
+}
+
+function dataMarker(prompt, name) {
+  const needle = `${name}=`
+  const at = (prompt ?? '').indexOf(needle)
+  if (at === -1) return {}
+  const start = at + needle.length
+  const end = prompt[start] === '{' ? balancedObjectEnd(prompt, start) : -1
+  if (end === -1) fail(`${name} must be a JSON object right after =`)
+  try {
+    return JSON.parse(prompt.slice(start, end))
+  } catch (err) {
+    return fail(`${name} is not valid JSON: ${err.message}`)
+  }
+}
+
+function turnData(prompt, turn) {
+  return { ...dataMarker(prompt, 'FAKE_AGENT_DATA'), ...dataMarker(prompt, `FAKE_AGENT_DATA_${turn}`) }
+}
+
+function promptReader() {
+  let buffer = ''
+  let ended = false
+  let wake = null
+  process.stdin.setEncoding('utf-8')
+  process.stdin.on('data', (chunk) => {
+    buffer += chunk
+    wake?.()
+  })
+  process.stdin.on('end', () => {
+    ended = true
+    wake?.()
+  })
+  function take() {
+    buffer = buffer.replace(/^[\r\n]+/, '')
+    if (buffer.startsWith(PASTE_START)) {
+      const end = buffer.indexOf(PASTE_END)
+      if (end === -1 || buffer.length === end + PASTE_END.length) return null
+      if (!/[\r\n]/.test(buffer[end + PASTE_END.length])) fail('bracketed paste is not followed by CR or LF')
+      const text = buffer.slice(PASTE_START.length, end)
+      buffer = buffer.slice(end + PASTE_END.length + 1)
+      return text
+    }
+    const eol = buffer.search(/[\r\n]/)
+    if (eol === -1) return null
+    const text = buffer.slice(0, eol)
+    buffer = buffer.slice(eol + 1)
+    return text
+  }
+  return async function next() {
+    for (;;) {
+      const text = take()
+      if (text !== null) return text
+      if (ended) return null
+      await new Promise((resolve) => {
+        wake = resolve
+      })
+      wake = null
+    }
+  }
+}
+
+async function completeStep(server, summary, data = {}) {
   const bridge = startBridge(server)
   const init = await bridge.request('initialize', {
     protocolVersion: '2024-11-05',
@@ -209,7 +317,7 @@ async function completeStep(server, summary) {
   if (!tools.some((tool) => tool.name === 'complete_step')) {
     fail(`complete_step not listed (tools: ${tools.map((tool) => tool.name).join(',')})`)
   }
-  const called = await bridge.request('tools/call', { name: 'complete_step', arguments: { summary } })
+  const called = await bridge.request('tools/call', { name: 'complete_step', arguments: { summary, ...data } })
   if (called.error || called.result?.isError) fail(`complete_step failed: ${JSON.stringify(called)}`)
   log('complete_step: ok')
   bridge.close()
@@ -423,28 +531,59 @@ async function main() {
 
   const hook = stopHookCommand()
   const summary = `PLAN-OK ${args.sessionId}`
-  const reply = runStopHook(hook, {
-    session_id: args.sessionId,
-    last_assistant_message: summary,
-    stop_hook_active: false
-  })
-  if (isBlock(reply)) {
-    log('stop hook: block')
-  } else if (curlPresent()) {
-    fail(`Stop hook did not return a block: ${JSON.stringify(reply)}`)
-  } else {
-    log('::warning::curl is missing, so the Stop hook could not ask for a continuation')
+  const server = serverFromConfig(args.mcpConfig)
+
+  async function runTurn(prompt, turn) {
+    const strict = turn === 1
+    const data = turnData(prompt, turn)
+    const reply = runStopHook(hook, {
+      session_id: args.sessionId,
+      last_assistant_message: summary,
+      stop_hook_active: false
+    })
+    if (isBlock(reply)) {
+      log('stop hook: block')
+    } else if (!strict) {
+      log(`stop hook: no block on turn ${turn}`)
+    } else if (curlPresent()) {
+      fail(`Stop hook did not return a block: ${JSON.stringify(reply)}`)
+    } else {
+      log('::warning::curl is missing, so the Stop hook could not ask for a continuation')
+    }
+
+    if (mode === 'exit-no-complete') {
+      log('exit-no-complete: exiting without complete_step')
+      process.exit(1)
+    }
+
+    await completeStep(server, summary, data)
+
+    const after = runStopHook(hook, { session_id: args.sessionId, last_assistant_message: summary, stop_hook_active: true })
+    if (isBlock(after)) fail(`Stop hook blocked again after complete_step: ${after}`)
   }
 
-  if (mode === 'exit-no-complete') {
-    log('exit-no-complete: exiting without complete_step')
-    process.exit(1)
+  if (mode === 'multi-turn') {
+    clearTimeout(timer)
+    setTimeout(() => fail(`multi-turn still alive after ${HANG_LIFETIME_MS} ms`), HANG_LIFETIME_MS)
+    process.on('SIGHUP', () => {
+      log('multi-turn: SIGHUP')
+      process.exit(0)
+    })
+    if (process.stdin.isTTY) process.stdin.setRawMode(true)
+    const nextPrompt = promptReader()
+    let prompt = args.prompt
+    for (let turn = 1; ; turn++) {
+      await runTurn(prompt, turn)
+      log(`turn ${turn} done`)
+      prompt = await nextPrompt()
+      if (prompt === null) {
+        log('multi-turn: stdin closed')
+        process.exit(0)
+      }
+    }
   }
 
-  await completeStep(serverFromConfig(args.mcpConfig), summary)
-
-  const after = runStopHook(hook, { session_id: args.sessionId, last_assistant_message: summary, stop_hook_active: true })
-  if (isBlock(after)) fail(`Stop hook blocked again after complete_step: ${after}`)
+  await runTurn(args.prompt, 1)
   log('done')
   process.exit(0)
 }
