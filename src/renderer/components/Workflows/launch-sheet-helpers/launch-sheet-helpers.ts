@@ -1,7 +1,9 @@
 import type { CodexHookTrustSummary, HooksConsent } from '../../../../shared/state/hooks'
 import {
+  WORKFLOW_BUDGET_MAX_USD,
   WORKFLOW_STEP_MODEL_MAX_CHARS,
   applyOverrides,
+  isBudgetUsd,
   isWorkflowInputNumber,
   isWorkflowStepModel,
   type WorkflowDefinitionSummary,
@@ -300,4 +302,31 @@ export function resolveOverrides(definition: ResolvedDefinition, drafts: Record<
   return applied.ok
     ? { overrides, effective: applied.definition, reason: null, invalidStep: null }
     : { overrides, effective: definition, reason: 'Choose a supported agent', invalidStep: null }
+}
+
+export type LaunchBudget = { kind: 'none' } | { kind: 'ok'; usd: number } | { kind: 'invalid'; message: string }
+
+export const LAUNCH_BUDGET_INVALID_REASON = 'Enter a valid budget'
+export const BUDGET_ALL_OPENCODE_NOTICE =
+  "Every agent step runs on opencode, which reports no cost, so this run can't reach its budget."
+export const BUDGET_SOME_OPENCODE_NOTICE =
+  "Some steps run on opencode, which reports no cost; they don't count toward the budget."
+
+export function parseLaunchBudget(text: string): LaunchBudget {
+  const trimmed = text.trim()
+  if (trimmed === '') return { kind: 'none' }
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return { kind: 'invalid', message: 'Budget must be a number, like 5 or 2.50' }
+  const usd = Number(trimmed)
+  if (isBudgetUsd(usd)) return { kind: 'ok', usd }
+  return usd > WORKFLOW_BUDGET_MAX_USD
+    ? { kind: 'invalid', message: `Budget must be $${WORKFLOW_BUDGET_MAX_USD.toLocaleString('en-US')} or less` }
+    : { kind: 'invalid', message: 'Budget must be more than $0' }
+}
+
+export function budgetCostNotice(resolved: ResolvedOverrides | null): string | null {
+  if (resolved === null || resolved.reason !== null) return null
+  const agents = resolved.effective.steps.flatMap((step) => (step.kind === 'agent' ? [step.agent] : []))
+  const opencode = agents.filter((agent) => agent === 'opencode').length
+  if (opencode === 0) return null
+  return opencode === agents.length ? BUDGET_ALL_OPENCODE_NOTICE : BUDGET_SOME_OPENCODE_NOTICE
 }

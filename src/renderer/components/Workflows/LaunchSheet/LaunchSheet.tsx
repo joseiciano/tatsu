@@ -10,6 +10,8 @@ import {
 } from '../../../../shared/state/workflows'
 import type { ResolvedDefinition, WorkflowAgent } from '../../../../shared/workflow-def'
 import {
+  LAUNCH_BUDGET_INVALID_REASON,
+  budgetCostNotice,
   buildInputFields,
   definitionsForRepo,
   existingWorktreeOptions,
@@ -18,6 +20,7 @@ import {
   inputTrustKey,
   needsFull as definitionNeedsFull,
   overrideRows,
+  parseLaunchBudget,
   resolveOverrides,
   startBlockReason,
   targetBlockReason,
@@ -51,6 +54,11 @@ interface LoadedDefinition {
   source: string
   scope: WorkflowScope
   detailHash: string
+}
+
+interface BudgetDraft {
+  key: string
+  text: string
 }
 
 interface OverrideDrafts {
@@ -90,6 +98,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [allowFullFor, setAllowFullFor] = useState<string | null>(null)
   const [autopilotFor, setAutopilotFor] = useState<string | null>(null)
+  const [budgetDraft, setBudgetDraft] = useState<BudgetDraft | null>(null)
   const [overrideDrafts, setOverrideDrafts] = useState<OverrideDrafts | null>(null)
   const [overridesOpen, setOverridesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -167,6 +176,11 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
   const effective = resolved?.effective ?? null
   const overrides = resolved?.overrides
   const overrideList = useMemo(() => overrideRows(definition), [definition])
+  const budgetShown = overrideList.length > 0
+  const budgetText = budgetShown && confirmKey !== null && budgetDraft?.key === confirmKey ? budgetDraft.text : ''
+  const budget = parseLaunchBudget(budgetText)
+  const budgetUsd = budget.kind === 'ok' ? budget.usd : null
+  const budgetNotice = useMemo(() => budgetCostNotice(resolved), [resolved])
   const trustChecks = useMemo(() => inputTrustChecks(fields, inputs), [fields, inputs])
   const untrusted = useMemo(
     () => untrustedInputs(trustChecks, repoRoot, inputVerdicts),
@@ -235,6 +249,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
       (loading
         ? 'Loading workflow…'
         : resolved?.reason ??
+          (budget.kind === 'invalid' ? LAUNCH_BUDGET_INVALID_REASON : null) ??
           startBlockReason({
             consent,
             codexTrust,
@@ -250,6 +265,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
     setInputs({})
     setAllowFullFor(null)
     setAutopilotFor(null)
+    setBudgetDraft(null)
     setOverrideDrafts(null)
     setError(null)
   }, [])
@@ -345,7 +361,8 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
         inputs: declared,
         ...(needsFull && allowFull ? { allowFull: true } : {}),
         ...(overrides ? { overrides } : {}),
-        ...(autopilot ? { autopilot: true } : {})
+        ...(autopilot ? { autopilot: true } : {}),
+        ...(budgetUsd !== null ? { budgetUsd } : {})
       })
       if (!mounted.current) return
       if ('runId' in response) {
@@ -378,6 +395,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
     confirmKey,
     overrides,
     autopilot,
+    budgetUsd,
     onStarted,
     onClose
   ])
@@ -418,10 +436,14 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
           : {
               rows: overrideList,
               drafts,
-              changedCount: (overrides ? Object.keys(overrides).length : 0) + (autopilot ? 1 : 0),
+              changedCount:
+                (overrides ? Object.keys(overrides).length : 0) + (autopilot ? 1 : 0) + (budgetUsd !== null ? 1 : 0),
               expanded: overridesOpen,
               invalidStep: resolved?.invalidStep ?? null,
-              autopilot: gated ? { checked: autopilot, blocked: autopilotBlocked } : null
+              autopilot: gated ? { checked: autopilot, blocked: autopilotBlocked } : null,
+              budget: budgetShown
+                ? { text: budgetText, error: budget.kind === 'invalid' ? budget.message : null, notice: budgetNotice }
+                : null
             }
       }
       blockReason={blockReason}
@@ -447,6 +469,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
       onOverrideAgentChange={handleOverrideAgent}
       onOverrideModelChange={handleOverrideModel}
       onAutopilotChange={(checked) => setAutopilotFor(checked ? confirmKey : null)}
+      onBudgetChange={(text) => setBudgetDraft(confirmKey === null ? null : { key: confirmKey, text })}
       onStart={() => void handleStart()}
       onClose={onClose}
     />

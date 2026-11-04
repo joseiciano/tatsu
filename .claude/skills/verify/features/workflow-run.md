@@ -75,6 +75,18 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   still shows the definition's own steps. Drafts reset when the workflow
   changes and survive the switch to `Existing worktree` after a refusal.
   The run record's `overriddenFrom.<stepId>` holds the original agent/model.
+- **Budget**: inside Overrides, only for a definition with agent steps,
+  text field `Budget (USD)` (blank by default; help text says the budget is
+  best effort). Blank sends no `budgetUsd`; a value that is not a plain
+  decimal, is <= 0 or is over 10000 shows an inline message under the
+  field and disables Start (`Enter a valid budget`); a valid value counts
+  as one change in `Overrides (<n> changed)` and `startRun` gets
+  `budgetUsd`, which the run record keeps. Notice from the definition
+  after overrides: every agent step on opencode shows `Every agent step
+  runs on opencode, which reports no cost, so this run can't reach its
+  budget.`; some on opencode shows `Some steps run on opencode, which
+  reports no cost; they don't count toward the budget.`. The field resets
+  when the workflow changes.
 - **Autopilot**: inside Overrides, only for a definition with a gated step,
   checkbox `Autopilot (approve gates automatically)` (unchecked by default;
   counts as one change in `Overrides (<n> changed)`). Checked, `startRun`
@@ -197,7 +209,10 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   - `launch-overrides`: open the launch sheet -> pick `smoke` -> `Overrides`
     is `aria-expanded="false"` -> expand -> `Agent for plan` = opencode,
     `Model for plan` = `fake/opencode-model` -> `Overrides (1 changed)` ->
-    Start -> a new `⚙ plan · opencode` step tab -> run record `done` with
+    the all-opencode budget notice shows under `Budget (USD)` -> fill `0`
+    -> Start disabled with the inline budget message -> fill `5` ->
+    `Overrides (2 changed)` -> Start -> a new `⚙ plan · opencode` step tab
+    -> run record `done` with `budgetUsd: 5`,
     `overriddenFrom.plan.agent: claude`, `plan` step opencode with that model
     and attempts `1:opencode:done`. Then the autopilot sub-step: open the
     launch sheet -> pick `browser-gate` -> expand `Overrides` -> check
