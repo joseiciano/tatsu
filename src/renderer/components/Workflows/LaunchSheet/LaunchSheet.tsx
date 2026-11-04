@@ -2,12 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBackend } from '../../../backend'
 import { sanitizeBranchInput } from '../../../branch-name'
 import { useAppState, useHooks, useWorkflowDefinitions, useWorkflowTrust, useWorktreeRepoRoot } from '../../../store'
-import type { WorkflowDefinitionDetail, WorkflowScope } from '../../../../shared/state/workflows'
+import {
+  capPermissions,
+  isWorkflowInputNumber,
+  type WorkflowDefinitionDetail,
+  type WorkflowScope
+} from '../../../../shared/state/workflows'
 import type { ResolvedDefinition, WorkflowAgent } from '../../../../shared/workflow-def'
 import {
   buildInputFields,
   definitionsForRepo,
   existingWorktreeOptions,
+  inputTrustChecks,
+  inputTrustKey,
   needsFull as definitionNeedsFull,
   overrideRows,
   resolveOverrides,
@@ -15,7 +22,9 @@ import {
   targetBlockReason,
   trustNeeded,
   trustStepRows,
+  untrustedInputs,
   workflowBranchName,
+  type InputTrustVerdict,
   type LaunchTarget,
   type OverrideDraft
 } from '../launch-sheet-helpers'
@@ -48,6 +57,7 @@ interface OverrideDrafts {
 }
 
 const NO_DRAFTS: Record<string, OverrideDraft> = {}
+const INPUT_TRUST_DEBOUNCE_MS = 250
 
 function basename(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path
@@ -81,6 +91,9 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
   const [installingHooks, setInstallingHooks] = useState(false)
   const [trusting, setTrusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [inputVerdicts, setInputVerdicts] = useState<Record<string, InputTrustVerdict>>({})
+  const [fullDemandedFor, setFullDemandedFor] = useState<string | null>(null)
+  const requestedTrust = useRef(new Set<string>())
 
   useEffect(() => {
     mounted.current = true
@@ -149,7 +162,40 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
   const effective = resolved?.effective ?? null
   const overrides = resolved?.overrides
   const overrideList = useMemo(() => overrideRows(definition), [definition])
-  const needsFull = definitionNeedsFull(effective)
+  const trustChecks = useMemo(() => inputTrustChecks(fields, inputs), [fields, inputs])
+  const untrusted = useMemo(
+    () => untrustedInputs(trustChecks, repoRoot, inputVerdicts),
+    [trustChecks, repoRoot, inputVerdicts]
+  )
+  const pendingTrustKeys = (repoRoot === null ? [] : trustChecks.map((check) => inputTrustKey(repoRoot, check)))
+    .filter((key) => !Object.hasOwn(inputVerdicts, key))
+    .join('\0')
+
+  useEffect(() => {
+    if (repoRoot === null || pendingTrustKeys === '') return
+    const timer = setTimeout(() => {
+      for (const check of trustChecks) {
+        const key = inputTrustKey(repoRoot, check)
+        if (requestedTrust.current.has(key) || !isWorkflowInputNumber(check.number)) continue
+        requestedTrust.current.add(key)
+        const settle = (verdict: InputTrustVerdict): void => {
+          if (mounted.current) setInputVerdicts((prev) => ({ ...prev, [key]: verdict }))
+        }
+        backend.checkWorkflowInputTrust(repoRoot, check.type, check.number).then(
+          (response) => settle('trusted' in response ? (response.trusted ? 'trusted' : 'untrusted') : 'unknown'),
+          () => settle('unknown')
+        )
+      }
+    }, INPUT_TRUST_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [backend, repoRoot, pendingTrustKeys, trustChecks])
+
+  const capsFull =
+    (confirmKey === null || fullDemandedFor !== confirmKey) &&
+    untrusted.some((check) => repoRoot === null || inputVerdicts[inputTrustKey(repoRoot, check)] !== 'unknown')
+  const capped = capsFull && effective !== null ? capPermissions(effective) : effective
+  const needsFull = definitionNeedsFull(capped)
+  const fullHidden = capsFull && definitionNeedsFull(effective)
   const needsTrust =
     loaded !== null && definition !== null
       ? trustNeeded({ scope: loaded.scope, hash: loaded.detailHash, trustedHash })
@@ -298,6 +344,11 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
         return
       }
       setError(response.error)
+      if (fullHidden) {
+        setFullDemandedFor(confirmKey)
+        setInputVerdicts({})
+        requestedTrust.current.clear()
+      }
     } catch {
       if (mounted.current) setError('Could not start the workflow')
     } finally {
@@ -313,6 +364,8 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
     createWorktree,
     needsFull,
     allowFull,
+    fullHidden,
+    confirmKey,
     overrides,
     onStarted,
     onClose
@@ -347,6 +400,7 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
       needsFull={needsFull}
       allowFull={allowFull}
       trust={trust}
+      untrustedInputs={untrusted.map(({ name, type }) => ({ name, type }))}
       overrides={
         overrideList.length === 0
           ? null

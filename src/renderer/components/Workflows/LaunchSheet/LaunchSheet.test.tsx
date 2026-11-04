@@ -19,6 +19,7 @@ const { backendApi, storeState } = vi.hoisted(() => {
     startWorkflowRun: vi.fn(),
     acceptHooks: vi.fn(),
     trustWorkflowDefinition: vi.fn(),
+    checkWorkflowInputTrust: vi.fn(),
     runPendingWorktree: vi.fn(),
     dismissPendingWorktree: vi.fn(),
     listRepoIssues: vi.fn(),
@@ -90,6 +91,16 @@ steps:
     run: pnpm test
 `
 }
+
+SOURCES['personal:fixissue'] = `name: fixissue
+inputs:
+  ticket: { type: issue }
+steps:
+  - id: fix
+    agent: claude
+    permissions: full
+    prompt: "fix {{inputs.ticket}}"
+`
 
 SOURCES['personal:pick'] = `name: pick
 inputs:
@@ -164,6 +175,7 @@ beforeEach(() => {
     .mockImplementation(async ({ id }: { id: string }) => ({ id, outcome: 'success', createdPath: '/wts/new' }))
   backendApi.dismissPendingWorktree.mockReset().mockResolvedValue(true)
   backendApi.trustWorkflowDefinition.mockReset().mockResolvedValue({ ok: true })
+  backendApi.checkWorkflowInputTrust.mockReset().mockResolvedValue({ trusted: true })
   backendApi.getWorkflowDefinition.mockReset().mockImplementation(async (id: string) => detail(id))
   backendApi.startWorkflowRun.mockReset().mockResolvedValue({ runId: 'run-1' })
   backendApi.acceptHooks.mockReset().mockResolvedValue(true)
@@ -811,5 +823,113 @@ describe('LaunchSheet input pickers', () => {
     expect(backendApi.listAllFiles).toHaveBeenLastCalledWith('/wt/feature')
     expect(picker().value).toBe('')
     expect(startButton().disabled).toBe(true)
+  })
+})
+
+describe('LaunchSheet untrusted input authors', () => {
+  const ISSUE_NOTICE = "This issue's author is not a collaborator: steps will run with at most edit permissions"
+
+  async function settleTrust(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+  }
+
+  beforeEach(() => {
+    storeState.definitions['personal:fixissue'] = summary('personal:fixissue')
+  })
+
+  it('shows the notice before Start for an untrusted issue author, checking the committed value once', async () => {
+    backendApi.checkWorkflowInputTrust.mockResolvedValue({ trusted: false })
+    await mount()
+    await select('personal:plan')
+    await type(q<HTMLTextAreaElement>('textarea'), 'ship it')
+    const number = q<HTMLInputElement>('input[type="text"]')
+    await type(number, '1')
+    await type(number, '12')
+    expect(container.textContent).not.toContain(ISSUE_NOTICE)
+    await settleTrust()
+    expect(backendApi.checkWorkflowInputTrust.mock.calls).toEqual([['/repo', 'issue', '12']])
+    const notice = [...container.querySelectorAll('[role="status"]')].find((el) => el.textContent === ISSUE_NOTICE)
+    expect(notice).toBeDefined()
+    expect(startButton().disabled).toBe(false)
+  })
+
+  it('shows no notice for a collaborator', async () => {
+    await mount()
+    await select('personal:plan')
+    await fillPlan()
+    await settleTrust()
+    expect(backendApi.checkWorkflowInputTrust).toHaveBeenCalledWith('/repo', 'issue', '12')
+    expect(container.textContent).not.toContain(ISSUE_NOTICE)
+  })
+
+  it('drops the allow-full checkbox when the untrusted author caps every full step', async () => {
+    backendApi.checkWorkflowInputTrust.mockResolvedValue({ trusted: false })
+    await mount()
+    await select('personal:fixissue')
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull()
+    await settleTrust()
+    expect(container.textContent).toContain(ISSUE_NOTICE)
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull()
+    expect(startButton().disabled).toBe(false)
+    await click(startButton())
+    expect(backendApi.startWorkflowRun).toHaveBeenCalledWith({
+      defId: 'personal:fixissue',
+      worktreePath: '/wt/feature',
+      inputs: { ticket: '7' }
+    })
+  })
+
+  it.each<[string, () => void]>([
+    ['an error response', () => backendApi.checkWorkflowInputTrust.mockResolvedValue({ error: 'Unknown repository' })],
+    ['a failed request', () => backendApi.checkWorkflowInputTrust.mockRejectedValue(new Error('offline'))]
+  ])('shows the notice but keeps the allow-full checkbox after %s', async (_name, arrange) => {
+    arrange()
+    await mount()
+    await select('personal:fixissue')
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    await settleTrust()
+    expect(container.textContent).toContain(ISSUE_NOTICE)
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull()
+    expect(startButton().disabled).toBe(true)
+  })
+
+  it('brings the allow-full checkbox back when the server still asks for full access at Start', async () => {
+    const FULL_REFUSAL = 'This workflow has a full-access step; confirm full access to start it'
+    backendApi.checkWorkflowInputTrust.mockResolvedValue({ trusted: false })
+    backendApi.startWorkflowRun.mockResolvedValueOnce({ error: FULL_REFUSAL })
+    await mount()
+    await select('personal:fixissue')
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    await settleTrust()
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull()
+    await click(startButton())
+    expect(q('[role="alert"]').textContent).toBe(FULL_REFUSAL)
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull()
+    expect(startButton().disabled).toBe(true)
+    await settleTrust()
+    expect(backendApi.checkWorkflowInputTrust).toHaveBeenCalledTimes(2)
+    expect(container.textContent).toContain(ISSUE_NOTICE)
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull()
+    await click(q<HTMLInputElement>('input[type="checkbox"]'))
+    await click(startButton())
+    expect(backendApi.startWorkflowRun).toHaveBeenLastCalledWith({
+      defId: 'personal:fixissue',
+      worktreePath: '/wt/feature',
+      inputs: { ticket: '7' },
+      allowFull: true
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the allow-full checkbox for a collaborator', async () => {
+    await mount()
+    await select('personal:fixissue')
+    await type(q<HTMLInputElement>('input[type="text"]'), '7')
+    await settleTrust()
+    expect(container.textContent).not.toContain(ISSUE_NOTICE)
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull()
   })
 })

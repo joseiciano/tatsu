@@ -42,6 +42,7 @@ import type { ElectronAPI, TerminalSpawnSpec } from '../types'
 import type { AgentKind } from '../../shared/state/terminals'
 import type { LabsSettings, WorkflowSettings } from '../../shared/state/settings'
 import type {
+  WorkflowInputTrustType,
   WorkflowMarkDonePayload,
   WorkflowStartRunPayload,
   WorkflowSwapStepPayload
@@ -304,6 +305,8 @@ export function buildBackend(
       req('workflows:getAttemptFileDiff', attemptId, path),
     startWorkflowRun: (payload: WorkflowStartRunPayload) => req('workflows:startRun', payload),
     trustWorkflowDefinition: (defId: string, hash: string) => req('workflows:trustDefinition', defId, hash),
+    checkWorkflowInputTrust: (repoRoot: string, type: WorkflowInputTrustType, number: string) =>
+      req('workflows:checkInputTrust', repoRoot, type, number),
     cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),
     cancelWorkflowStep: (runId: string, stepId: string) => req('workflows:cancelStep', runId, stepId),
     retryWorkflowStep: (runId: string, stepId: string) => req('workflows:retryStep', runId, stepId),
