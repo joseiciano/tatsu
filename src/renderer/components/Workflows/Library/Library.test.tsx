@@ -189,4 +189,23 @@ describe('Library', () => {
     await click(button('Cancel'))
     expect(document.querySelector('[role="alertdialog"]')).toBeNull()
   })
+
+  it('offers Edit per definition and New workflow when the handlers are given', async () => {
+    const onEdit = vi.fn()
+    const onNew = vi.fn()
+    await act(async () => {
+      root.render(<Library activeRepoRoot={ACTIVE} onRun={onRun} onEdit={onEdit} onNew={onNew} />)
+    })
+    await click(button('Edit ship'))
+    expect(onEdit).toHaveBeenCalledWith('repo:cccccccccccc:ship')
+    await click(button('New workflow'))
+    expect(onNew).toHaveBeenCalledOnce()
+  })
+
+  it('hides Edit and New without handlers', async () => {
+    await render()
+    expect(document.querySelector('[aria-label="Edit ship"]')).toBeNull()
+    expect([...document.querySelectorAll('button')].some((b) => b.textContent?.includes('New workflow'))).toBe(false)
+  })
 })
+

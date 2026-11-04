@@ -11,11 +11,21 @@ const { storeState } = vi.hoisted(() => ({ storeState: { current: null as AppSta
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const { backendApi } = vi.hoisted(() => ({
-  backendApi: { getWorkflowRun: vi.fn(), getWorkflowAttemptResult: vi.fn() }
+  backendApi: {
+    getWorkflowRun: vi.fn(),
+    getWorkflowAttemptResult: vi.fn(),
+    getWorkflowDefinition: vi.fn(),
+    saveWorkflowDefinition: vi.fn()
+  }
 }))
 
 vi.mock('../../../backend', () => ({ useBackend: () => backendApi }))
 vi.mock('../../MonacoDiffEditor', () => ({ MonacoDiffEditor: () => null }))
+vi.mock('../../MonacoEditor', () => ({
+  MonacoEditor: (props: { value: string; ariaLabel?: string; onChange?: (value: string) => void }) => (
+    <textarea aria-label={props.ariaLabel} defaultValue={props.value} onChange={(e) => props.onChange?.(e.target.value)} />
+  )
+}))
 vi.mock('../../../store', async () => {
   const selectors = await import('../../../workflow-selectors')
   const selectPaused = selectors.createPausedRunIdsSelector()
@@ -101,6 +111,12 @@ beforeEach(() => {
   onClose.mockReset()
   backendApi.getWorkflowRun.mockReset().mockResolvedValue(null)
   backendApi.getWorkflowAttemptResult.mockReset().mockResolvedValue(null)
+  backendApi.getWorkflowDefinition.mockReset().mockResolvedValue({
+    summary: SUMMARY,
+    source: 'name: Ship it\nsteps: []\n',
+    diagnostics: []
+  })
+  backendApi.saveWorkflowDefinition.mockReset().mockResolvedValue({ defId: SUMMARY.id })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -253,6 +269,19 @@ describe('WorkflowsView', () => {
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Open run: Ship it on old')
   })
 
+  it('returns to the run list when the active Runs tab is clicked from a run detail', async () => {
+    setState(
+      { old: run({ status: 'done', startedAt: NOW - 500_000, finishedAt: NOW - 400_000, worktreePath: '/repos/app/old' }) },
+      { 'a-plan': attempt('plan'), 'a-build': attempt('build') }
+    )
+    await render()
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Open run: Ship it on old"]')?.click())
+    expect(container.querySelector('h2')?.textContent).toBe('Ship it')
+    const runsTab = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((t) => t.textContent === 'Runs')
+    await act(async () => runsTab?.click())
+    expect(region('Recent runs').querySelector('article')?.getAttribute('aria-label')).toBe('Ship it on old')
+  })
+
   it('restores focus to the returned-from card once and never steals it later', async () => {
     setState({ live: run({}) }, { 'a-plan': attempt('plan'), 'a-build': attempt('build') })
     await render()
@@ -276,3 +305,107 @@ describe('WorkflowsView', () => {
   })
 })
 
+describe('WorkflowsView definition editor', () => {
+  const VALID_SOURCE = 'name: Ship it\nsteps:\n  - id: plan\n    kind: shell\n    run: echo hi\n'
+  const exitGuardRef: { current: ((proceed: () => void) => void) | null } = { current: null }
+
+  async function openEditor(): Promise<void> {
+    setState({})
+    await act(async () => {
+      root.render(<WorkflowsView onClose={onClose} activeWorktreePath="/repos/app/feature" exitGuardRef={exitGuardRef} />)
+    })
+    await act(async () => buttonNamed('Library').click())
+    await act(async () => buttonNamed('Edit Ship it').click())
+  }
+
+  function buttonNamed(name: string, scope: ParentNode = document): HTMLButtonElement {
+    const found = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => (b.getAttribute('aria-label') ?? b.textContent?.trim()) === name
+    )
+    if (!found) throw new Error(`no button ${name}`)
+    return found
+  }
+
+  function editor(): HTMLTextAreaElement | null {
+    return container.querySelector('textarea[aria-label="Workflow definition YAML"]')
+  }
+
+  function edit(text: string): void {
+    const el = editor()!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(el, text)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+
+  const discardDialog = (): HTMLElement | null => document.querySelector('[role="alertdialog"]')
+
+  it('opens Edit from the Library and returns without asking while clean', async () => {
+    await openEditor()
+    expect(backendApi.getWorkflowDefinition).toHaveBeenCalledWith(SUMMARY.id)
+    expect(editor()?.value).toBe('name: Ship it\nsteps: []\n')
+    await act(async () => buttonNamed('Back to Library').click())
+    expect(discardDialog()).toBeNull()
+    expect(container.querySelector('[aria-label="Edit Ship it"]')).not.toBeNull()
+  })
+
+  it('opens New workflow from the Library', async () => {
+    setState({})
+    await render()
+    await act(async () => buttonNamed('Library').click())
+    await act(async () => buttonNamed('New workflow').click())
+    expect(container.textContent).toContain('New workflow')
+    expect(editor()?.value).toContain('name: new-workflow')
+  })
+
+  it('asks before discarding a dirty draft on tab switch, and Keep editing keeps it', async () => {
+    await openEditor()
+    edit('name: Ship it\nsteps: [oops\n')
+    await act(async () => buttonNamed('Runs').click())
+    expect(discardDialog()?.textContent).toContain('Discard unsaved changes?')
+    await act(async () => buttonNamed('Keep editing', discardDialog()!).click())
+    expect(discardDialog()).toBeNull()
+    expect(editor()?.value).toBe('name: Ship it\nsteps: [oops\n')
+    await act(async () => buttonNamed('Runs').click())
+    await act(async () => buttonNamed('Discard changes', discardDialog()!).click())
+    expect(editor()).toBeNull()
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Runs')
+  })
+
+  it('guards Back to Library, the section Back button and the App exit guard', async () => {
+    await openEditor()
+    edit('changed')
+    await act(async () => buttonNamed('Back to Library').click())
+    expect(discardDialog()).not.toBeNull()
+    await act(async () => buttonNamed('Keep editing', discardDialog()!).click())
+
+    await act(async () => buttonNamed('Back').click())
+    expect(onClose).not.toHaveBeenCalled()
+    await act(async () => buttonNamed('Keep editing', discardDialog()!).click())
+
+    const proceed = vi.fn()
+    await act(async () => exitGuardRef.current?.(proceed))
+    expect(proceed).not.toHaveBeenCalled()
+    await act(async () => buttonNamed('Discard changes', discardDialog()!).click())
+    expect(proceed).toHaveBeenCalledOnce()
+    expect(editor()).toBeNull()
+
+    await act(async () => buttonNamed('Back').click())
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('lets a saved draft leave without asking', async () => {
+    await openEditor()
+    edit(VALID_SOURCE)
+    await act(async () => buttonNamed('Save').click())
+    expect(backendApi.saveWorkflowDefinition).toHaveBeenCalledWith({
+      scope: 'personal',
+      defId: SUMMARY.id,
+      name: 'ship',
+      source: VALID_SOURCE
+    })
+    await act(async () => buttonNamed('Runs').click())
+    expect(discardDialog()).toBeNull()
+    expect(editor()).toBeNull()
+  })
+})

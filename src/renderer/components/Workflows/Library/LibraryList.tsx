@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Copy, Play, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react'
+import { Copy, Pencil, Play, Plus, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react'
 import type { WorkflowDefinitionSummary } from '../../../../shared/state/workflows'
 import { isDefinitionTrusted, type LibraryGroup } from './library-groups'
 
@@ -12,6 +12,8 @@ export interface LibraryListProps {
   onRun: (defId: string) => void
   onDuplicate: (defId: string) => void
   onDelete: (defId: string) => void
+  onEdit?: (defId: string) => void
+  onNew?: () => void
 }
 
 const ACTION_CLASS =
@@ -27,7 +29,8 @@ function DefinitionRow({
   busy,
   onRun,
   onDuplicate,
-  onDelete
+  onDelete,
+  onEdit
 }: {
   summary: WorkflowDefinitionSummary
   trusted: boolean
@@ -35,6 +38,7 @@ function DefinitionRow({
   onRun: (defId: string) => void
   onDuplicate: (defId: string) => void
   onDelete: (defId: string) => void
+  onEdit?: (defId: string) => void
 }): JSX.Element {
   const reasonId = useId()
   const duplicateBlocked = !trusted
@@ -89,6 +93,20 @@ function DefinitionRow({
           <Play className="icon-xs" aria-hidden="true" />
           Run
         </button>
+        {onEdit && (
+          <button
+            type="button"
+            aria-label={`Edit ${summary.name}`}
+            aria-disabled={busy || undefined}
+            onClick={() => {
+              if (!busy) onEdit(summary.id)
+            }}
+            className={ACTION_CLASS}
+          >
+            <Pencil className="icon-xs" aria-hidden="true" />
+            Edit
+          </button>
+        )}
         <button
           type="button"
           aria-label={`Duplicate ${summary.name}`}
@@ -125,8 +143,9 @@ function GroupSection({
   busyId,
   onRun,
   onDuplicate,
-  onDelete
-}: Omit<LibraryListProps, 'groups' | 'error' | 'status'> & { group: LibraryGroup }): JSX.Element {
+  onDelete,
+  onEdit
+}: Omit<LibraryListProps, 'groups' | 'error' | 'status' | 'onNew'> & { group: LibraryGroup }): JSX.Element {
   const headingId = useId()
   return (
     <section aria-label={group.label} className="flex flex-col gap-2">
@@ -151,6 +170,7 @@ function GroupSection({
               onRun={onRun}
               onDuplicate={onDuplicate}
               onDelete={onDelete}
+              onEdit={onEdit}
             />
           ))}
         </ul>
@@ -159,9 +179,17 @@ function GroupSection({
   )
 }
 
-export function LibraryList({ groups, error, status, ...rest }: LibraryListProps): JSX.Element {
+export function LibraryList({ groups, error, status, onNew, ...rest }: LibraryListProps): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
+      {onNew && (
+        <div className="flex justify-end">
+          <button type="button" onClick={onNew} className={ACTION_CLASS}>
+            <Plus className="icon-xs" aria-hidden="true" />
+            New workflow
+          </button>
+        </div>
+      )}
       {error && (
         <p role="alert" className="text-xs text-danger break-words">
           {error}

@@ -22,6 +22,7 @@ import {
 import {
   isWorkflowInputNumber,
   isWorkflowStepModel,
+  WORKFLOW_NO_REPO_DIR_ERROR,
   type WorkflowActionResponse,
   type WorkflowDefinitionSaveResponse,
   type WorkflowInputTrustResponse,
@@ -80,7 +81,7 @@ const WRITE_ERRORS: Record<DefinitionWriteRefusal | Exclude<DeleteDefinitionResu
   'unsafe-name': 'The name must not contain a slash, a backslash, NUL or "..", or start with a dot',
   'too-large': 'The workflow definition is larger than 256 KB',
   'unknown-repo': 'Unknown repository',
-  'no-repo-dir': 'The repository has no usable .harness/workflows folder in its primary checkout',
+  'no-repo-dir': WORKFLOW_NO_REPO_DIR_ERROR,
   'unknown-definition': 'Unknown workflow definition',
   'scope-mismatch': 'The workflow definition belongs to a different folder',
   exists: 'A workflow file with that name already exists',
