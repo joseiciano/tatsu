@@ -181,8 +181,8 @@ export function RunDetailContainer({
 
   const tabExists = tab !== null && !!onJumpToTab
   const model = useMemo(
-    () => (record && run ? runDetailModel({ record, run, tabExists, now }) : null),
-    [record, run, tabExists, now]
+    () => (record && run ? runDetailModel({ record, run, attempts, tabExists, now }) : null),
+    [record, run, attempts, tabExists, now]
   )
   const stepId = model?.actionStepId ?? null
   const markDoneAvailable = model?.actions.includes('mark-done') ?? false

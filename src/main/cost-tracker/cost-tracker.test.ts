@@ -266,3 +266,140 @@ describe('CostTracker — JSON-mode wiring', () => {
     tracker.stop()
   })
 })
+
+describe('CostTracker — runner-held interest', () => {
+  const assistantLine = (input: number, output: number): string =>
+    JSON.stringify({
+      type: 'assistant',
+      message: {
+        model: 'claude-sonnet-4-5',
+        usage: { input_tokens: input, output_tokens: output },
+        content: [{ type: 'text', text: 'step work' }]
+      }
+    }) + '\n'
+
+  function harness(terminalId: string) {
+    readFileSyncMock.mockReset()
+    readFileSyncMock.mockReturnValue('')
+    statusWatchCallback = undefined
+    const store = new Store()
+    const tracker = new CostTracker(store)
+    const stopWatching = watchStatusDir(store)
+    tracker.start()
+    const statusFilename = `${terminalId}.ndjson`
+    let lines = ''
+    const fireStop = (sessionId: string, transcriptPath: string): void => {
+      lines +=
+        JSON.stringify({
+          event: 'Stop',
+          ts: 1_700_000_000,
+          payload: { session_id: sessionId, transcript_path: transcriptPath }
+        }) + '\n'
+      writeFileSync(`/tmp/harness-status/${statusFilename}`, lines)
+      const notify = statusWatchCallback
+      if (!notify) throw new Error('status watcher callback was not registered')
+      notify('change', statusFilename)
+    }
+    const usage = () => store.getSnapshot().state.costs.byTerminal[terminalId]
+    const dispose = (): void => {
+      tracker.stop()
+      stopWatching()
+      cleanupTerminalLog(terminalId)
+    }
+    return { tracker, fireStop, usage, dispose }
+  }
+
+  it('parses a held terminal Stop with zero interested clients', () => {
+    const h = harness('terminal-held')
+    try {
+      h.tracker.holdInterest('terminal-held')
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-held', '/tmp/transcript-held.jsonl')
+      expect(h.usage()?.byModel['claude-sonnet-4-5']?.input).toBe(100)
+    } finally {
+      h.dispose()
+    }
+  })
+
+  it('leaves a terminal that is not held on the short-circuit', () => {
+    const h = harness('terminal-unheld')
+    try {
+      h.tracker.holdInterest('terminal-other')
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-unheld', '/tmp/transcript-unheld.jsonl')
+      expect(h.usage()).toBeUndefined()
+      expect(readFileSyncMock).not.toHaveBeenCalledWith('/tmp/transcript-unheld.jsonl', 'utf-8')
+    } finally {
+      h.dispose()
+    }
+  })
+
+  it('restores the short-circuit after release', () => {
+    const h = harness('terminal-released')
+    try {
+      h.tracker.holdInterest('terminal-released')
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-released', '/tmp/transcript-released.jsonl')
+      h.tracker.releaseInterest('terminal-released')
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50) + assistantLine(200, 80))
+      h.fireStop('sess-released', '/tmp/transcript-released.jsonl')
+      expect(h.usage()).toBeUndefined()
+    } finally {
+      h.dispose()
+    }
+  })
+
+  it('clears the held terminal usage on release when no client is interested', () => {
+    const h = harness('terminal-cleared')
+    try {
+      h.tracker.holdInterest('terminal-cleared')
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-cleared', '/tmp/transcript-cleared.jsonl')
+      expect(h.usage()).toBeDefined()
+      h.tracker.releaseInterest('terminal-cleared')
+      expect(h.usage()).toBeUndefined()
+    } finally {
+      h.dispose()
+    }
+  })
+
+  it('keeps the held terminal usage on release while a client is interested', () => {
+    const h = harness('terminal-kept')
+    try {
+      h.tracker.holdInterest('terminal-kept')
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-kept', '/tmp/transcript-kept.jsonl')
+      h.tracker.setClientInterested('client-A', true)
+      h.tracker.releaseInterest('terminal-kept')
+      expect(h.usage()?.byModel['claude-sonnet-4-5']?.input).toBe(100)
+    } finally {
+      h.dispose()
+    }
+  })
+
+  it('does not clear usage of a terminal it never held', () => {
+    const h = harness('terminal-panel')
+    try {
+      h.tracker.setClientInterested('client-A', true)
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-panel', '/tmp/transcript-panel.jsonl')
+      h.tracker.removeClient('client-A')
+      h.tracker.releaseInterest('terminal-panel')
+      expect(h.usage()).toBeDefined()
+    } finally {
+      h.dispose()
+    }
+  })
+
+  it('does not backfill every terminal when a terminal is held', () => {
+    const h = harness('terminal-seen')
+    try {
+      readFileSyncMock.mockReturnValue(assistantLine(100, 50))
+      h.fireStop('sess-seen', '/tmp/transcript-seen.jsonl')
+      h.tracker.holdInterest('terminal-new')
+      expect(h.usage()).toBeUndefined()
+    } finally {
+      h.dispose()
+    }
+  })
+})

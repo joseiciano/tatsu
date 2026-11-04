@@ -52,6 +52,15 @@
 // agent. Data fields win over the default `summary`. Markers are read from the
 // prompt of the turn being run.
 //
+// FAKE_AGENT_TRANSCRIPT_DIR=<dir> (Claude kind only) makes each turn append a
+// Claude-format assistant line with token usage to <dir>/<session id>.jsonl
+// before the pre-complete Stop hook and another after complete_step, and pass
+// that file as `transcript_path` in both Stop payloads, so cost tracking has
+// usage to read. Unset, no transcript is written. With it set, the default
+// mode stays alive briefly after the last Stop hook, as a real TUI does: the
+// server deletes a terminal's status file when its process exits, so a Stop
+// line written just before exit can go unread.
+//
 // FAKE_AGENT_KIND=codex (set by the `codex` shim) stands in for the `codex`
 // CLI instead: it reads the harness-control MCP server from the
 // `-c mcp_servers.harness-control.*` TOML overrides, requires the sandbox,
@@ -70,7 +79,7 @@
 
 import { spawn, spawnSync } from 'child_process'
 import { randomBytes, randomUUID } from 'crypto'
-import { appendFileSync, readFileSync, realpathSync } from 'fs'
+import { appendFileSync, mkdirSync, readFileSync, realpathSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { parse as parseToml } from 'smol-toml'
@@ -86,6 +95,10 @@ const CODEX_DISCOVERY_SLACK_MS = 1500
 const OPENCODE_STEP_AGENT = 'harness-step'
 const OPENCODE_PLUGIN_SIGNATURE = '// harness-opencode-plugin'
 const OPENCODE_ID_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+const TRANSCRIPT_MODEL = 'claude-sonnet-4-5'
+const PRE_COMPLETE_USAGE = { input_tokens: 10_000, output_tokens: 2_000 }
+const POST_COMPLETE_USAGE = { input_tokens: 5_000, output_tokens: 1_000 }
+const TRANSCRIPT_LINGER_MS = 1_000
 
 function log(message) {
   const line = `[fake-agent] ${message}`
@@ -125,6 +138,19 @@ function modeFrom(prompt, kind) {
   const mode = match ? match[1] : 'default'
   if (!MODES.has(mode)) fail(`unknown FAKE_AGENT_MODE ${mode}`)
   return mode
+}
+
+function transcriptPath(sessionId) {
+  const dir = process.env.FAKE_AGENT_TRANSCRIPT_DIR
+  if (!dir) return null
+  mkdirSync(dir, { recursive: true })
+  return join(dir, `${sessionId}.jsonl`)
+}
+
+function appendUsage(path, text, usage) {
+  if (!path) return
+  const line = { type: 'assistant', message: { model: TRANSCRIPT_MODEL, usage, content: [{ type: 'text', text }] } }
+  appendFileSync(path, JSON.stringify(line) + '\n')
 }
 
 function stopHookCommand() {
@@ -532,12 +558,16 @@ async function main() {
   const hook = stopHookCommand()
   const summary = `PLAN-OK ${args.sessionId}`
   const server = serverFromConfig(args.mcpConfig)
+  const transcript = transcriptPath(args.sessionId)
+  const transcriptField = transcript ? { transcript_path: transcript } : {}
 
   async function runTurn(prompt, turn) {
     const strict = turn === 1
     const data = turnData(prompt, turn)
+    appendUsage(transcript, summary, PRE_COMPLETE_USAGE)
     const reply = runStopHook(hook, {
       session_id: args.sessionId,
+      ...transcriptField,
       last_assistant_message: summary,
       stop_hook_active: false
     })
@@ -558,7 +588,13 @@ async function main() {
 
     await completeStep(server, summary, data)
 
-    const after = runStopHook(hook, { session_id: args.sessionId, last_assistant_message: summary, stop_hook_active: true })
+    appendUsage(transcript, summary, POST_COMPLETE_USAGE)
+    const after = runStopHook(hook, {
+      session_id: args.sessionId,
+      ...transcriptField,
+      last_assistant_message: summary,
+      stop_hook_active: true
+    })
     if (isBlock(after)) fail(`Stop hook blocked again after complete_step: ${after}`)
   }
 
@@ -584,6 +620,7 @@ async function main() {
   }
 
   await runTurn(args.prompt, 1)
+  if (transcript) await new Promise((resolve) => setTimeout(resolve, TRANSCRIPT_LINGER_MS))
   log('done')
   process.exit(0)
 }

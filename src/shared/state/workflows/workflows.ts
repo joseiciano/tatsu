@@ -101,6 +101,14 @@ function isTerminalRun(state: WorkflowsState, runId: string): boolean {
   return run !== undefined && TERMINAL_RUN_STATUSES.has(run.status)
 }
 
+export function isCostUsd(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function costEntry(costUsd: number | undefined): { costUsd?: number } {
+  return isCostUsd(costUsd) ? { costUsd } : {}
+}
+
 function previewOf(summary: string): string {
   if (summary.length <= SUMMARY_PREVIEW_MAX) return summary
   const last = summary.charCodeAt(SUMMARY_PREVIEW_MAX - 1)
@@ -210,7 +218,7 @@ export function projectRunRecord(record: WorkflowRunRecord): {
       startedAt: attempt.startedAt,
       ...(ended ? { endedAt: attempt.endedAt } : {}),
       ...(result ? { completedBy: result.completedBy } : {}),
-      ...(result?.costUsd === undefined ? {} : { costUsd: result.costUsd }),
+      ...costEntry(attempt.metrics.costUsd ?? result?.costUsd),
       ...(attempt.sessionId === undefined ? {} : { resumable: true })
     }
   }
@@ -399,6 +407,12 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       const attempt = state.attempts[attemptId]
       if (!attempt || attempt.resumable || isTerminalRun(state, attempt.runId)) return state
       return { ...state, attempts: { ...state.attempts, [attemptId]: { ...attempt, resumable: true } } }
+    }
+    case 'workflows/attemptCostChanged': {
+      const { attemptId, costUsd } = event.payload
+      const attempt = state.attempts[attemptId]
+      if (!attempt || attempt.costUsd === costUsd || !isCostUsd(costUsd)) return state
+      return { ...state, attempts: { ...state.attempts, [attemptId]: { ...attempt, costUsd } } }
     }
     case 'workflows/trustGranted': {
       const { defId, hash } = event.payload

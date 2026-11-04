@@ -1162,3 +1162,73 @@ steps:
     expect(capPermissions(definition)).toBe(definition)
   })
 })
+
+describe('workflowsReducer attemptCostChanged', () => {
+  const costChanged = (attemptId: string, costUsd: number): WorkflowsEvent => ({
+    type: 'workflows/attemptCostChanged',
+    payload: { attemptId, costUsd }
+  })
+
+  it('records the cost on one attempt and keeps other references', () => {
+    const start = fixture()
+    const next = workflowsReducer(start, costChanged('att-a1', 0.25))
+    expect(next.attempts['att-a1']).toEqual({ ...start.attempts['att-a1'], costUsd: 0.25 })
+    expect(next.attempts['att-b1']).toBe(start.attempts['att-b1'])
+    expect(next.runs).toBe(start.runs)
+  })
+
+  it('returns the same state for the same cost', () => {
+    const next = workflowsReducer(fixture(), costChanged('att-a1', 0.25))
+    expect(workflowsReducer(next, costChanged('att-a1', 0.25))).toBe(next)
+  })
+
+  it('returns the same state for an unknown attempt or a non-finite or negative cost', () => {
+    const start = fixture()
+    for (const event of [
+      costChanged('att-zz', 0.25),
+      costChanged('att-a1', Number.NaN),
+      costChanged('att-a1', Number.POSITIVE_INFINITY),
+      costChanged('att-a1', -0.01)
+    ]) {
+      expect(workflowsReducer(start, event)).toBe(start)
+    }
+  })
+
+  it('still records the late cost of an attempt on a finished run', () => {
+    const start = fixture({ status: 'done', finishedAt: 5000 })
+    const next = workflowsReducer(start, costChanged('att-a1', 0.4))
+    expect(next.attempts['att-a1'].costUsd).toBe(0.4)
+  })
+})
+
+describe('projectRunRecord measured cost', () => {
+  it('prefers the attempt metrics cost over the result cost', () => {
+    const projected = projectRunRecord(
+      runRecord('run-1', {
+        steps: { plan: 'done', build: 'running', ship: 'pending' },
+        attempts: [
+          {
+            attemptId: 'att-1',
+            stepId: 'plan',
+            n: 1,
+            status: 'done',
+            startedAt: 110,
+            endedAt: 120,
+            result: { status: 'done', summary: 'ok', completedBy: 'tool', costUsd: 0.5 },
+            metrics: { continuations: 0, pauses: [], costUsd: 0.75 }
+          },
+          {
+            attemptId: 'att-2',
+            stepId: 'build',
+            n: 1,
+            status: 'running',
+            startedAt: 130,
+            metrics: { continuations: 0, pauses: [], costUsd: 0.1 }
+          }
+        ]
+      })
+    )
+    expect(projected.attempts['att-1'].costUsd).toBe(0.75)
+    expect(projected.attempts['att-2'].costUsd).toBe(0.1)
+  })
+})

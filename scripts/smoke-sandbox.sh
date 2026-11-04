@@ -31,6 +31,7 @@ smoke_sandbox() {
   export GIT_AUTHOR_NAME="Tatsu Smoke" GIT_AUTHOR_EMAIL="smoke@example.invalid"
   export GIT_COMMITTER_NAME="Tatsu Smoke" GIT_COMMITTER_EMAIL="smoke@example.invalid"
   export FAKE_AGENT_LOG="$scratch/fake-agent.log"
+  export FAKE_AGENT_TRANSCRIPT_DIR="$HOME/.claude/projects/fake-agent"
   unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SANDBOXED OPENCODE_CONFIG_DIR OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT
   case "$CODEX_HOME" in
     "$scratch"/*) ;;

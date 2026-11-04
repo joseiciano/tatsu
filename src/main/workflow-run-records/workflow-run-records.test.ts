@@ -159,6 +159,22 @@ describe('loadRunRecordsSync', () => {
     expect(loadRunRecordsSync(runsDir)).toEqual([withIds])
   })
 
+  it('keeps a finite non-negative attempt cost and skips records with any other cost', () => {
+    const runsDir = join(dir, 'workflow-runs')
+    mkdirSync(runsDir)
+    const attempt = { attemptId: 'a', stepId: 's', status: 'done' as const, n: 1, startedAt: 1, metrics: { continuations: 0, pauses: [] } }
+    const costed = record('costed', { attempts: [{ ...attempt, metrics: { ...attempt.metrics, costUsd: 0.42 } }] })
+    writeFileSync(join(runsDir, 'costed.json'), JSON.stringify(costed))
+    for (const [name, costUsd] of [['negcost', -1], ['strcost', '0.5'], ['nullcost', null]] as const) {
+      writeFileSync(
+        join(runsDir, `${name}.json`),
+        JSON.stringify({ ...record(name), attempts: [{ ...attempt, metrics: { ...attempt.metrics, costUsd } }] })
+      )
+    }
+
+    expect(loadRunRecordsSync(runsDir)).toEqual([costed])
+  })
+
   it('keeps inputsUntrusted through a persist and reload and skips a non-boolean flag', async () => {
     const runsDir = join(dir, 'workflow-runs')
     const untrusted = record('untrusted', { inputsUntrusted: true })
