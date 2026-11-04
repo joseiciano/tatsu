@@ -48,6 +48,11 @@ function applyEvent(event) {
     const inGroup = (d) => d.scope === scope && (scope !== 'repo' || d.repoRoot === repoRoot)
     const kept = Object.values(state.workflows.definitions).filter((d) => !inGroup(d))
     state.workflows.definitions = Object.fromEntries([...kept, ...definitions.filter(inGroup)].map((d) => [d.id, d]))
+  } else if (event.type === 'workflows/definitionSaved') {
+    state.workflows.definitions = { ...state.workflows.definitions, [event.payload.id]: event.payload }
+  } else if (event.type === 'workflows/definitionDeleted') {
+    const { [event.payload.defId]: _removed, ...rest } = state.workflows.definitions
+    state.workflows.definitions = rest
   }
 }
 
