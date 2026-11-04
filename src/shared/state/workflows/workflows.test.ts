@@ -4,6 +4,7 @@ import {
   RECENT_RUNS_MAX,
   SUMMARY_PREVIEW_MAX,
   WORKFLOW_RUN_RECORD_VERSION,
+  capPermissions,
   hydrateWorkflowRuns,
   projectRunRecord,
   runStepFacts,
@@ -16,6 +17,7 @@ import {
   type WorkflowsEvent,
   type WorkflowsState
 } from './index'
+import { validateWorkflowDefinition } from '../../workflow-def'
 
 function summary(
   slug: string,
@@ -1004,5 +1006,53 @@ describe('workflowsReducer trustGranted', () => {
   it('returns the same state when the hash is already trusted', () => {
     const start = { ...initialWorkflows, trust: { [defId]: hashA } }
     expect(workflowsReducer(start, { type: 'workflows/trustGranted', payload: { defId, hash: hashA } })).toBe(start)
+  })
+})
+
+describe('capPermissions', () => {
+  function resolved(source: string) {
+    const { definition } = validateWorkflowDefinition(source)
+    if (!definition) throw new Error('fixture did not resolve')
+    return definition
+  }
+
+  it('lowers full agent steps to edit and leaves read-only, edit and shell steps alone', () => {
+    const definition = resolved(`name: mixed
+steps:
+  - id: a
+    agent: claude
+    permissions: full
+    prompt: a
+  - id: b
+    agent: claude
+    permissions: read-only
+    prompt: b
+  - id: c
+    agent: claude
+    permissions: edit
+    prompt: c
+  - id: d
+    kind: shell
+    run: echo d
+`)
+    const capped = capPermissions(definition)
+    expect(capped.steps.map((step) => (step.kind === 'agent' ? step.permissions : step.kind))).toEqual([
+      'edit',
+      'read-only',
+      'edit',
+      'shell'
+    ])
+    expect(capped.steps[1]).toBe(definition.steps[1])
+    expect(definition.steps[0]).toMatchObject({ permissions: 'full' })
+  })
+
+  it('returns the same definition when no step has full permissions', () => {
+    const definition = resolved(`name: plain
+steps:
+  - id: a
+    agent: claude
+    prompt: a
+`)
+    expect(capPermissions(definition)).toBe(definition)
   })
 })

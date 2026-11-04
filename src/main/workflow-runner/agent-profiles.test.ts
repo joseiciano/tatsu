@@ -14,6 +14,8 @@ import {
   AGENT_START_SUMMARIES,
   StepStartError,
   claudeProfile,
+  type InputTrustFetcher,
+  type RunArtifacts,
   codexProfile,
   createAgentStepDriver,
   opencodeProfile,
@@ -66,13 +68,53 @@ interface RunnerOptions {
   codexFolder?: TrustStatus
   records?: WorkflowRunRecord[]
   opencode?: boolean
+  inputTrust?: InputTrustFetcher
+  inputTrustTimeoutMs?: number
+  artifacts?: RunArtifacts
+}
+
+const SHIP_STEP = `  - id: ship
+    agent: claude
+    permissions: full
+    prompt: "ship {{inputs.ticket}}"
+`
+
+function inputDetail(type: 'issue' | 'pr', extraSteps = ''): WorkflowDefinitionDetail {
+  const source = `name: ${type}-def
+inputs:
+  ticket: { type: ${type} }
+steps:
+  - id: plan
+    agent: claude
+    permissions: full
+    prompt: "work on {{inputs.ticket}}"
+${extraSteps}`
+  const result = validateWorkflowDefinition(source)
+  if (!result.definition) throw new Error('fixture did not resolve')
+  return {
+    ...result,
+    definition: result.definition,
+    source,
+    summary: {
+      id: `personal:input-${type}`,
+      name: `${type}-def`,
+      scope: 'personal',
+      path: `/defs/${type}.yaml`,
+      hash: `hash-${type}`,
+      stepIds: result.definition.steps.map((step) => step.id),
+      issues: []
+    }
+  }
 }
 
 function twoProfileRunner({
   codexTrust = OK_TRUST,
   codexFolder = 'trusted',
   records = [],
-  opencode = true
+  opencode = true,
+  inputTrust,
+  inputTrustTimeoutMs,
+  artifacts
 }: RunnerOptions = {}) {
   const store = new Store({
     ...initialState,
@@ -85,6 +127,7 @@ function twoProfileRunner({
   const alive = new Set<string>()
   const killed: Array<{ id: string; signal: string }> = []
   const persisted: WorkflowRunRecord[] = []
+  const logs: Array<{ message: string; data?: Record<string, string> }> = []
   const exitListeners = new Set<(id: string, code: number, signal?: number) => void>()
   const promptListeners = new Set<(event: { terminalId: string }) => void>()
   const codexTrustChecks: string[] = []
@@ -130,6 +173,9 @@ function twoProfileRunner({
     store,
     loader: {
       getDefinition: (id: string) => {
+        if (id === 'personal:input-issue') return inputDetail('issue')
+        if (id === 'personal:input-pr') return inputDetail('pr')
+        if (id === 'personal:input-issue-ship') return inputDetail('issue', SHIP_STEP)
         const [agent, full] = id.replace(/^personal:/, '').split('-')
         if (full !== undefined && full !== 'full') return null
         return agent === 'claude' || agent === 'codex' || agent === 'opencode'
@@ -140,12 +186,15 @@ function twoProfileRunner({
     drivers: { agent: driver, shell: new FakeStepDriver('shell') },
     now: () => ++next,
     newId: () => `id-${++next}`,
-    log: () => {},
-    persist: (run) => persisted.push(structuredClone(run))
+    log: (_category, message, data) => logs.push({ message, ...(data === undefined ? {} : { data }) }),
+    persist: (run) => persisted.push(structuredClone(run)),
+    ...(inputTrust === undefined ? {} : { inputTrust }),
+    ...(inputTrustTimeoutMs === undefined ? {} : { inputTrustTimeoutMs }),
+    ...(artifacts === undefined ? {} : { artifacts })
   })
   runner.reconcile(records)
-  const start = (agent: WorkflowAgent): string => {
-    const result = runner.start({ defId: `personal:${agent}`, worktreePath: `/wt/${agent}`, inputs: {} })
+  const start = async (agent: WorkflowAgent): Promise<string> => {
+    const result = await runner.start({ defId: `personal:${agent}`, worktreePath: `/wt/${agent}`, inputs: {} })
     if (!result.ok) throw new Error(`start refused: ${result.reason}`)
     return result.runId
   }
@@ -179,6 +228,7 @@ function twoProfileRunner({
     tabs,
     killed,
     persisted,
+    logs,
     driverEvents,
     exitListeners,
     codexTrustChecks,
@@ -195,8 +245,8 @@ function twoProfileRunner({
 describe('agent step driver with two profiles', () => {
   it('turns one PTY exit of an owned execution into exactly one exited event and ignores an unowned exit', async () => {
     const ctx = twoProfileRunner()
-    const claudeRun = ctx.start('claude')
-    const codexRun = ctx.start('codex')
+    const claudeRun = await ctx.start('claude')
+    const codexRun = await ctx.start('codex')
     await flush()
     expect(ctx.exitListeners.size).toBe(1)
     const claudeTab = ctx.tabs.find(({ tab }) => tab.agentKind === 'claude')
@@ -250,7 +300,7 @@ describe('agent step driver with two profiles', () => {
 describe('codex profile', () => {
   it('spawns a Codex tab with the step permission level and model and no preassigned session', async () => {
     const ctx = twoProfileRunner()
-    ctx.start('codex')
+    await ctx.start('codex')
     await flush()
     const { tab, spawn } = ctx.tabFor('codex')
     expect(tab).toMatchObject({ type: 'agent', agentKind: 'codex', label: '⚙ plan · Codex' })
@@ -261,7 +311,7 @@ describe('codex profile', () => {
 
   it.each<TrustStatus>(['untrusted', 'unknown'])('pauses the run for trust when the folder is %s', async (status) => {
     const ctx = twoProfileRunner({ codexFolder: status })
-    const runId = ctx.start('codex')
+    const runId = await ctx.start('codex')
     await flush()
     expect(ctx.tabs).toEqual([])
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'trust' })
@@ -275,7 +325,7 @@ describe('codex profile', () => {
 
   it('pauses needs-input without a tab when Codex hooks stop being trusted before a retry', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('codex')
+    const runId = await ctx.start('codex')
     await flush()
     ctx.exit(ctx.tabFor('codex').tab.id, 1)
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'step-failed' })
@@ -290,7 +340,7 @@ describe('codex profile', () => {
 
   it('records a discovered session id on the attempt and dispatches attemptSessionRecorded once', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('codex')
+    const runId = await ctx.start('codex')
     await flush()
     const executionId = ctx.tabFor('codex').tab.id
     const recorded = ctx.recorded()
@@ -313,7 +363,7 @@ describe('codex profile', () => {
     ['an opencode id', OPENCODE_SESSION]
   ])('drops %s without persisting or dispatching', async (_name, sessionId) => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('codex')
+    const runId = await ctx.start('codex')
     await flush()
     const recorded = ctx.recorded()
     const persistedBefore = ctx.persisted.length
@@ -325,7 +375,7 @@ describe('codex profile', () => {
 
   it('ignores discovery for a Claude execution and for an unowned terminal', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('claude')
+    const runId = await ctx.start('claude')
     await flush()
     const claudeTab = ctx.tabFor('claude')
     const recorded = ctx.recorded()
@@ -338,7 +388,7 @@ describe('codex profile', () => {
 
   it('resumes an interrupted Codex attempt with its session and keeps one dispatch when Codex reports another id', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('codex')
+    const runId = await ctx.start('codex')
     await flush()
     ctx.discover(ctx.tabFor('codex').tab.id, CODEX_SESSION)
     const record = ctx.runner.getRunRecord(runId)
@@ -366,8 +416,8 @@ describe('codex profile', () => {
 
   it('cancels each kind with its profile signal', async () => {
     const ctx = twoProfileRunner()
-    const claudeRun = ctx.start('claude')
-    const codexRun = ctx.start('codex')
+    const claudeRun = await ctx.start('claude')
+    const codexRun = await ctx.start('codex')
     await flush()
     expect(ctx.runner.cancelStep(claudeRun, 'plan')).toEqual({ ok: true })
     expect(ctx.runner.cancelStep(codexRun, 'plan')).toEqual({ ok: true })
@@ -381,7 +431,7 @@ describe('codex profile', () => {
 
   it('blocks a Codex Stop once per turn and again only after a new prompt', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('codex')
+    const runId = await ctx.start('codex')
     await flush()
     const executionId = ctx.tabFor('codex').tab.id
     expect(ctx.runner.stopCheck(executionId, false)).toBe('block')
@@ -400,12 +450,12 @@ describe('codex hooks trust at start', () => {
     ['unknown', { state: 'unknown', reviewEvents: [] }]
   ])('refuses a Codex definition while Codex hooks are %s and still starts a Claude one', async (_name, codexTrust) => {
     const ctx = twoProfileRunner({ codexTrust })
-    expect(ctx.runner.start({ defId: 'personal:codex', worktreePath: '/wt/codex', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: 'personal:codex', worktreePath: '/wt/codex', inputs: {} })).toEqual({
       ok: false,
       reason: 'codex-hooks-untrusted'
     })
     expect(Object.keys(ctx.wf().runs)).toHaveLength(0)
-    ctx.start('claude')
+    await ctx.start('claude')
     await flush()
     expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['claude'])
   })
@@ -414,7 +464,7 @@ describe('codex hooks trust at start', () => {
 describe('opencode profile', () => {
   it('spawns an opencode tab with the step permission level and model, no preassigned session and no trust check', async () => {
     const ctx = twoProfileRunner({ codexFolder: 'untrusted' })
-    const runId = ctx.start('opencode')
+    const runId = await ctx.start('opencode')
     await flush()
     const { tab, spawn } = ctx.tabFor('opencode')
     expect(tab).toMatchObject({ type: 'agent', agentKind: 'opencode', label: '⚙ plan · opencode' })
@@ -426,14 +476,14 @@ describe('opencode profile', () => {
 
   it('starts an opencode definition while Codex hooks are untrusted', async () => {
     const ctx = twoProfileRunner({ codexTrust: null })
-    ctx.start('opencode')
+    await ctx.start('opencode')
     await flush()
     expect(ctx.tabs.map(({ tab }) => tab.agentKind)).toEqual(['opencode'])
   })
 
   it('records a discovered opencode session id on the attempt and dispatches attemptSessionRecorded once', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('opencode')
+    const runId = await ctx.start('opencode')
     await flush()
     const executionId = ctx.tabFor('opencode').tab.id
     const recorded = ctx.recorded()
@@ -454,7 +504,7 @@ describe('opencode profile', () => {
     ['a quoted id', `'${OPENCODE_SESSION}'`]
   ])('drops %s without persisting or dispatching', async (_name, sessionId) => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('opencode')
+    const runId = await ctx.start('opencode')
     await flush()
     const recorded = ctx.recorded()
     const persistedBefore = ctx.persisted.length
@@ -466,7 +516,7 @@ describe('opencode profile', () => {
 
   it('blocks an opencode idle once and not again while the plugin reports the continuation as active', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('opencode')
+    const runId = await ctx.start('opencode')
     await flush()
     const executionId = ctx.tabFor('opencode').tab.id
     expect(ctx.runner.stopCheck(executionId, false)).toBe('block')
@@ -477,7 +527,7 @@ describe('opencode profile', () => {
 
   it('cancels an opencode step with SIGHUP', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('opencode')
+    const runId = await ctx.start('opencode')
     await flush()
     expect(ctx.runner.cancelStep(runId, 'plan')).toEqual({ ok: true })
     expect(ctx.killed).toEqual([{ id: ctx.tabFor('opencode').tab.id, signal: 'SIGHUP' }])
@@ -503,7 +553,7 @@ describe('resume after a restart', () => {
 
   const interruptedRecord = async (agent: 'codex' | 'opencode', session?: string): Promise<WorkflowRunRecord> => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start(agent)
+    const runId = await ctx.start(agent)
     await flush()
     if (session) ctx.discover(ctx.tabFor(agent).tab.id, session)
     const record = ctx.runner.getRunRecord(runId)
@@ -547,7 +597,7 @@ describe('resume after a restart', () => {
 describe('step harness overrides at start', () => {
   it('spawns the overridden agent and model and records the original step', async () => {
     const ctx = twoProfileRunner()
-    const result = ctx.runner.start({
+    const result = await ctx.runner.start({
       defId: 'personal:claude',
       worktreePath: '/wt/claude',
       inputs: {},
@@ -570,7 +620,7 @@ describe('step harness overrides at start', () => {
 
   it('drops the definition model when only the agent is overridden', async () => {
     const ctx = twoProfileRunner()
-    const result = ctx.runner.start({
+    const result = await ctx.runner.start({
       defId: 'personal:claude',
       worktreePath: '/wt/claude',
       inputs: {},
@@ -581,14 +631,14 @@ describe('step harness overrides at start', () => {
     expect(ctx.tabFor('opencode').spawn).not.toHaveProperty('model')
   })
 
-  it('runs the Codex hooks check on the overridden agent', () => {
+  it('runs the Codex hooks check on the overridden agent', async () => {
     const ctx = twoProfileRunner({ codexTrust: { state: 'needs-review', reviewEvents: ['Stop'] } })
     const request = { defId: 'personal:claude', worktreePath: '/wt/claude', inputs: {} }
-    expect(ctx.runner.start({ ...request, overrides: { plan: { agent: 'codex' } } })).toEqual({
+    expect(await ctx.runner.start({ ...request, overrides: { plan: { agent: 'codex' } } })).toEqual({
       ok: false,
       reason: 'codex-hooks-untrusted'
     })
-    expect(ctx.runner.start({ ...request, overrides: { plan: { agent: 'opencode' } } }).ok).toBe(true)
+    expect((await ctx.runner.start({ ...request, overrides: { plan: { agent: 'opencode' } } })).ok).toBe(true)
   })
 
   it.each([
@@ -597,11 +647,11 @@ describe('step harness overrides at start', () => {
     ['an unsupported agent', { plan: { agent: 'pi' } }, 'unsupported-agent'],
     ['an empty model', { plan: { model: ' ' } }, 'invalid-overrides'],
     ['an over-long model', { plan: { model: 'm'.repeat(201) } }, 'invalid-overrides']
-  ])('refuses %s and starts nothing', (_name, overrides, reason) => {
+  ])('refuses %s and starts nothing', async (_name, overrides, reason) => {
     const ctx = twoProfileRunner()
     const overridesRecord: Record<string, { agent?: string; model?: string }> = Object.fromEntries(Object.entries(overrides))
     expect(
-      ctx.runner.start({ defId: 'personal:claude', worktreePath: '/wt/claude', inputs: {}, overrides: overridesRecord })
+      await ctx.runner.start({ defId: 'personal:claude', worktreePath: '/wt/claude', inputs: {}, overrides: overridesRecord })
     ).toEqual({ ok: false, reason })
     expect(Object.keys(ctx.wf().runs)).toHaveLength(0)
   })
@@ -609,7 +659,7 @@ describe('step harness overrides at start', () => {
 
 describe('swapStep', () => {
   async function failedClaudeRun(ctx: ReturnType<typeof twoProfileRunner>, defId = 'personal:claude') {
-    const result = ctx.runner.start({ defId, worktreePath: '/wt/claude', inputs: {}, allowFull: true })
+    const result = await ctx.runner.start({ defId, worktreePath: '/wt/claude', inputs: {}, allowFull: true })
     if (!result.ok) throw new Error(`start refused: ${result.reason}`)
     await flush()
     ctx.exit(ctx.tabFor('claude').tab.id, 1)
@@ -671,7 +721,7 @@ describe('swapStep', () => {
 
   it('refuses a swap on a running step', async () => {
     const ctx = twoProfileRunner()
-    const runId = ctx.start('claude')
+    const runId = await ctx.start('claude')
     await flush()
     expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({
       ok: false,
@@ -712,5 +762,183 @@ describe('swapStep', () => {
       ok: false,
       reason: 'labs-off'
     })
+  })
+})
+
+describe('untrusted issue and PR inputs', () => {
+  const ISSUE_START = { defId: 'personal:input-issue', worktreePath: '/wt/claude', inputs: { ticket: '7' } }
+
+  function trustFetcher(verdict: 'trusted' | 'untrusted') {
+    return vi.fn<InputTrustFetcher>(async () => verdict)
+  }
+
+  it('caps a full step to edit in the spawned extras when the issue author is not a collaborator', async () => {
+    const inputTrust = trustFetcher('untrusted')
+    const ctx = twoProfileRunner({ inputTrust })
+    const result = await ctx.runner.start(ISSUE_START)
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    expect(inputTrust).toHaveBeenCalledWith('/wt/claude', 'issue', '7')
+    expect(ctx.tabFor('claude').spawn).toMatchObject({ permissionLevel: 'edit' })
+    const record = ctx.runner.getRunRecord(result.runId)
+    expect(record?.inputsUntrusted).toBe(true)
+    expect(record?.definition.steps[0]).toMatchObject({ permissions: 'edit' })
+    expect(ctx.persisted.at(-1)?.inputsUntrusted).toBe(true)
+  })
+
+  it('leaves a full step full when the issue author is a collaborator', async () => {
+    const ctx = twoProfileRunner({ inputTrust: trustFetcher('trusted') })
+    expect(await ctx.runner.start(ISSUE_START)).toEqual({ ok: false, reason: 'full-permission-unconfirmed' })
+    const result = await ctx.runner.start({ ...ISSUE_START, allowFull: true })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    expect(ctx.tabFor('claude').spawn).toMatchObject({ permissionLevel: 'full' })
+    expect(ctx.runner.getRunRecord(result.runId)?.inputsUntrusted).toBeUndefined()
+  })
+
+  it('looks up a pr input as a pull request', async () => {
+    const inputTrust = trustFetcher('untrusted')
+    const ctx = twoProfileRunner({ inputTrust })
+    const result = await ctx.runner.start({ defId: 'personal:input-pr', worktreePath: '/wt/claude', inputs: { ticket: '12' } })
+    expect(result.ok).toBe(true)
+    await flush()
+    expect(inputTrust).toHaveBeenCalledWith('/wt/claude', 'pr', '12')
+    expect(ctx.tabFor('claude').spawn).toMatchObject({ permissionLevel: 'edit' })
+  })
+
+  it.each<[string, Partial<RunnerOptions>]>([
+    ['the lookup throws', { inputTrust: vi.fn<InputTrustFetcher>(async () => Promise.reject(new Error('offline'))) }],
+    ['the lookup throws synchronously', { inputTrust: vi.fn<InputTrustFetcher>(() => { throw new Error('boom') }) }],
+    ['the lookup times out', { inputTrust: vi.fn<InputTrustFetcher>(() => new Promise(() => {})), inputTrustTimeoutMs: 5 }],
+    ['the lookup returns something else', { inputTrust: vi.fn(async () => 'OWNER') as unknown as InputTrustFetcher }],
+    ['no fetcher is wired', {}]
+  ])('caps when %s', async (_name, options) => {
+    const ctx = twoProfileRunner(options)
+    const result = await ctx.runner.start(ISSUE_START)
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    expect(ctx.tabFor('claude').spawn).toMatchObject({ permissionLevel: 'edit' })
+    expect(ctx.runner.getRunRecord(result.runId)?.inputsUntrusted).toBe(true)
+  })
+
+  it('does not look anything up for a definition without issue or PR inputs', async () => {
+    const inputTrust = trustFetcher('untrusted')
+    const ctx = twoProfileRunner({ inputTrust })
+    await ctx.start('claude')
+    expect(inputTrust).not.toHaveBeenCalled()
+  })
+
+  it('does not look anything up for a request refused before the lookup', async () => {
+    const inputTrust = trustFetcher('trusted')
+    const ctx = twoProfileRunner({ inputTrust })
+    expect(await ctx.runner.start({ ...ISSUE_START, worktreePath: '/wt/unknown' })).toEqual({
+      ok: false,
+      reason: 'unknown-worktree'
+    })
+    expect(await ctx.runner.start({ ...ISSUE_START, inputs: {} })).toEqual({ ok: false, reason: 'missing-input' })
+    expect(inputTrust).not.toHaveBeenCalled()
+  })
+
+  it('re-checks the worktree and Labs after the lookup', async () => {
+    let release: (verdict: 'trusted' | 'untrusted') => void = () => {}
+    const inputTrust = vi.fn<InputTrustFetcher>(
+      () => new Promise((resolve) => {
+        release = resolve
+      })
+    )
+    const ctx = twoProfileRunner({ inputTrust })
+    const pending = ctx.runner.start(ISSUE_START)
+    await flush()
+    await ctx.start('claude')
+    release('untrusted')
+    expect(await pending).toEqual({ ok: false, reason: 'worktree-busy' })
+
+    const other = twoProfileRunner({ inputTrust })
+    const held = other.runner.start(ISSUE_START)
+    await flush()
+    expect(inputTrust).toHaveBeenCalledTimes(2)
+    other.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    release('trusted')
+    expect(await held).toEqual({ ok: false, reason: 'labs-off' })
+    expect(Object.keys(other.wf().runs)).toHaveLength(0)
+  })
+
+  it('logs the verdict with the input name, type and number only', async () => {
+    const ctx = twoProfileRunner({ inputTrust: trustFetcher('untrusted') })
+    const result = await ctx.runner.start(ISSUE_START)
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    expect(ctx.logs).toContainEqual({
+      message: 'run input untrusted',
+      data: { runId: result.runId, input: 'ticket', type: 'issue', number: '7' }
+    })
+    expect(ctx.logs).toContainEqual({ message: 'run capped at edit permissions', data: { runId: result.runId } })
+  })
+
+  it('never spawns full on retry or swap of an untrusted run and needs no allowFull', async () => {
+    const ctx = twoProfileRunner({ inputTrust: trustFetcher('untrusted') })
+    const result = await ctx.runner.start(ISSUE_START)
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    const { runId } = result
+    await flush()
+    ctx.exit(ctx.tabFor('claude').tab.id, 1)
+    expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.tabFor('claude').spawn).toMatchObject({ permissionLevel: 'edit' })
+    ctx.exit(ctx.tabFor('claude').tab.id, 1)
+    expect(ctx.runner.swapStep(runId, 'plan', { agent: 'codex', model: 'gpt-swap' })).toEqual({ ok: true })
+    await flush()
+    expect(ctx.tabFor('codex').spawn).toMatchObject({ permissionLevel: 'edit' })
+    expect(ctx.tabs.every(({ spawn }) => spawn.permissionLevel === 'edit')).toBe(true)
+  })
+
+  it('spawns edit on every later path of a two-step untrusted run: advance, retry from clean, restart and resume', async () => {
+    const restored: string[] = []
+    const artifacts: RunArtifacts = {
+      prepare: async () => {},
+      snapshot: async () => ({ commit: 'a'.repeat(40), ref: 'refs/harness/test' }),
+      appendContext: async () => {},
+      restore: async ({ commit }) => {
+        restored.push(commit)
+      }
+    }
+    const ctx = twoProfileRunner({ inputTrust: trustFetcher('untrusted'), artifacts })
+    const result = await ctx.runner.start({ ...ISSUE_START, defId: 'personal:input-issue-ship' })
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    const { runId } = result
+    await vi.waitFor(() => expect(ctx.tabs).toHaveLength(1))
+    expect(ctx.runner.markDone(runId, 'plan', { summary: 'planned', fields: {} })).toEqual({ ok: true })
+    await vi.waitFor(() => expect(ctx.tabs).toHaveLength(2))
+    expect(ctx.tabs[1].tab.workflow).toMatchObject({ stepId: 'ship' })
+    ctx.exit(ctx.tabs[1].tab.id, 1)
+    await vi.waitFor(() => expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused' }))
+    expect(await ctx.runner.retryFromClean(runId, 'ship')).toEqual({ ok: true })
+    expect(restored).toHaveLength(1)
+    await vi.waitFor(() => expect(ctx.tabs).toHaveLength(3))
+    await vi.waitFor(() => expect(ctx.runner.getRunRecord(runId)?.attempts.at(-1)?.sessionId).toBeDefined())
+
+    const saved = ctx.runner.getRunRecord(runId)
+    if (!saved) throw new Error('no record')
+    ctx.runner.dispose()
+    const resumed = twoProfileRunner({ records: [saved] })
+    expect(resumed.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'interrupted' })
+    expect(resumed.runner.resumeStep(runId, 'ship')).toEqual({ ok: true })
+    await vi.waitFor(() => expect(resumed.tabs).toHaveLength(1))
+    expect(resumed.tabs[0].spawn.sessionId).toBe(saved.attempts.at(-1)?.sessionId)
+
+    expect([...ctx.tabs, ...resumed.tabs].map(({ spawn }) => spawn.permissionLevel)).toEqual(['edit', 'edit', 'edit', 'edit'])
+  })
+
+  it('keeps the cap for a reconciled untrusted record', async () => {
+    const first = twoProfileRunner({ inputTrust: trustFetcher('untrusted') })
+    const result = await first.runner.start(ISSUE_START)
+    if (!result.ok) throw new Error(`start refused: ${result.reason}`)
+    await flush()
+    first.exit(first.tabFor('claude').tab.id, 1)
+    const saved = first.persisted.at(-1)
+    if (!saved) throw new Error('no record persisted')
+    const ctx = twoProfileRunner({ records: [saved] })
+    expect(ctx.runner.retryStep(result.runId, 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.tabFor('claude').spawn).toMatchObject({ permissionLevel: 'edit' })
   })
 })

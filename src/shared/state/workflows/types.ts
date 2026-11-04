@@ -201,6 +201,7 @@ export interface WorkflowRunRecord {
   timeToFirstDoneMs?: number
   attempts: WorkflowAttemptRecord[]
   overriddenFrom?: Record<string, WorkflowStepHarness>
+  inputsUntrusted?: boolean
 }
 
 export interface WorkflowStepHarness {
@@ -233,6 +234,12 @@ export interface WorkflowMarkDonePayload {
 export type WorkflowStartRunResponse = { runId: string } | { error: string }
 
 export type WorkflowActionResponse = { ok: true } | { error: string }
+
+export type WorkflowInputTrustType = 'issue' | 'pr'
+
+export type WorkflowInputTrust = 'trusted' | 'untrusted'
+
+export type WorkflowInputTrustResponse = { trusted: boolean } | { error: string }
 
 export interface WorkflowAttemptChangedFile {
   path: string

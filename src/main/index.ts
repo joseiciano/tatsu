@@ -38,7 +38,7 @@ import { getWeeklyStats } from './weekly-stats'
 import type { TerminalTab, PaneNode, PaneLeaf } from '../shared/state/terminals'
 import { getLeaves, mapLeaves } from '../shared/state/terminals'
 import { listWorktrees, listBranches, continueWorktree, isWorktreeDirty, defaultWorktreeDir, getChangedFiles, getFileDiff, getBranchCommits, getCommitDiff, getCommitChangedFiles, getCommitFileDiffSides, getMainWorktreeStatus, prepareMainForMerge, mergeWorktreeLocally, getBranchSha, previewMergeConflicts, getBranchDiffStats, listAllFiles, readWorktreeFile, readWorktreeFileBinary, writeWorktreeFile, getFileDiffSides, getCurrentBranch, symlinkClaudeSettings, type MergeStrategy } from './worktree'
-import { listOpenPRs, listRepoIssues, testToken, starRepo, unstarRepo, isRepoStarred, mergePR, getRepoInfo, type GitHubMergeMethod, type MergePRResult } from './github'
+import { inputAuthorTrust, listOpenPRs, listRepoIssues, testToken, starRepo, unstarRepo, isRepoStarred, mergePR, getRepoInfo, type GitHubMergeMethod, type MergePRResult } from './github'
 import { AVAILABLE_EDITORS, DEFAULT_EDITOR_ID, openInEditor } from './editor'
 import { setSecret, getSecret, hasSecret, deleteSecret } from './secrets'
 import { resolveGitHubToken, getTokenSource, invalidateTokenCache, getCachedToken } from './github-auth'
@@ -826,7 +826,8 @@ const workflowRunner = new WorkflowRunner({
   log,
   persist: (run) => workflowRunRecords.persist(run),
   artifacts: createGitRunArtifacts(),
-  hasExecution: (executionId) => ptyManager.hasTerminal(executionId)
+  hasExecution: (executionId) => ptyManager.hasTerminal(executionId),
+  inputTrust: inputAuthorTrust
 })
 registerWorkflowsRequestHandlers({
   transport,
@@ -843,6 +844,7 @@ registerWorkflowsRequestHandlers({
     config.workflowTrust = upsertWorkflowTrust(config.workflowTrust ?? [], entry)
     saveConfig(config)
   },
+  inputTrust: inputAuthorTrust,
   log
 })
 store.subscribe((event) => {

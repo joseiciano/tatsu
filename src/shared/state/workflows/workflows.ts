@@ -164,6 +164,15 @@ export function applyOverrides(
   return { ok: true, definition: { ...definition, steps }, overriddenFrom }
 }
 
+export function capStepPermissions<T extends ResolvedWorkflowStep>(step: T): T {
+  return step.kind === 'agent' && step.permissions === 'full' ? { ...step, permissions: 'edit' } : step
+}
+
+export function capPermissions(definition: ResolvedDefinition): ResolvedDefinition {
+  if (!definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')) return definition
+  return { ...definition, steps: definition.steps.map(capStepPermissions) }
+}
+
 export function projectRunRecord(record: WorkflowRunRecord): {
   run: WorkflowRun
   attempts: Record<string, WorkflowAttempt>

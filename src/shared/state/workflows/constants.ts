@@ -16,6 +16,12 @@ export function isStepHarnessAgent(value: unknown): value is WorkflowAgent {
   return typeof value === 'string' && STEP_HARNESS_AGENTS.some((agent) => agent === value)
 }
 
+const WORKFLOW_INPUT_NUMBER_PATTERN = /^[1-9]\d{0,9}$/
+
+export function isWorkflowInputNumber(value: unknown): value is string {
+  return typeof value === 'string' && WORKFLOW_INPUT_NUMBER_PATTERN.test(value)
+}
+
 export function isWorkflowStepModel(value: unknown): value is string {
   return (
     typeof value === 'string' &&

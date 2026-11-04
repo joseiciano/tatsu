@@ -9,6 +9,7 @@ import { registerWorkflowsRequestHandlers, type WorkflowActionsRunner } from '.'
 import { Store } from '../store'
 import {
   WorkflowRunner,
+  type InputTrustFetcher,
   type MarkDoneRequest,
   type StartRunRequest,
   type SwapStepRequest,
@@ -52,6 +53,16 @@ steps:
     prompt: Plan it
 `
 
+const ISSUE_FULL_YAML = `name: Issue flow
+inputs:
+  ticket: { type: issue }
+steps:
+  - id: plan
+    agent: claude
+    permissions: full
+    prompt: Fix {{inputs.ticket}}
+`
+
 const CODEX_YAML = `name: Codex flow
 steps:
   - id: plan
@@ -84,6 +95,8 @@ let liveRuns: Map<string, WorkflowRunRecord>
 let attemptRuns: Map<string, string>
 let runner: FakeRunner
 let logs: string[]
+let inputTrust: ReturnType<typeof vi.fn<InputTrustFetcher>>
+let store: Store
 
 type RunnerCall = [method: string, ...args: unknown[]]
 
@@ -98,7 +111,7 @@ class FakeRunner implements WorkflowActionsRunner {
     if (this.throwOn === method) throw new Error(`boom ${method}`)
   }
 
-  start(request: StartRunRequest): StartRunResult {
+  async start(request: StartRunRequest): Promise<StartRunResult> {
     this.record('start', request)
     return this.startResult
   }
@@ -193,13 +206,24 @@ beforeEach(() => {
   })
   runner = new FakeRunner()
   logs = []
+  inputTrust = vi.fn<InputTrustFetcher>(async () => 'untrusted')
+  store = new Store({
+    ...initialState,
+    worktrees: {
+      ...initialState.worktrees,
+      repoRoots: ['/repo'],
+      list: [{ path: '/wt/a', branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/repo' }]
+    },
+    settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: true } }
+  })
   registerWorkflowsRequestHandlers({
     transport,
     loader,
     runs,
     runner,
-    store: new Store(initialState),
+    store,
     persistTrust: () => {},
+    inputTrust,
     log: (category, message, data) => logs.push(`[${category}] ${message} ${JSON.stringify(data ?? {})}`)
   })
 })
@@ -573,6 +597,9 @@ describe('workflow action requests', () => {
     { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: 'true' },
     { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: 1 },
     { defId: 'personal:plan', worktreePath: '/wt/a', allowFull: null },
+    { defId: 'personal:plan', worktreePath: '/wt/a', inputsUntrusted: false },
+    { defId: 'personal:plan', worktreePath: '/wt/a', trusted: true },
+    { defId: 'personal:plan', worktreePath: '/wt/a', definition: { steps: [] } },
     new Map([['defId', 'personal:plan']])
   ]
   const badMarkDone: unknown[] = [
@@ -739,6 +766,52 @@ describe('workflow action requests', () => {
   })
 })
 
+describe('workflows:checkInputTrust', () => {
+  it('returns only the server verdict for a known repo root or worktree', async () => {
+    expect(await transport.call('workflows:checkInputTrust', '/repo', 'issue', '7')).toEqual({ trusted: false })
+    inputTrust.mockResolvedValueOnce('trusted')
+    expect(await transport.call('workflows:checkInputTrust', '/wt/a', 'pr', '12')).toEqual({ trusted: true })
+    expect(inputTrust.mock.calls).toEqual([
+      ['/repo', 'issue', '7'],
+      ['/wt/a', 'pr', '12']
+    ])
+    expect(logs).toContain('[workflow] input trust checked untrusted {"type":"issue","number":"7"}')
+  })
+
+  it('refuses a path that is not a known repo root or worktree without looking anything up', async () => {
+    expect(await transport.call('workflows:checkInputTrust', '/elsewhere', 'issue', '7')).toEqual({
+      error: 'Unknown repository'
+    })
+    expect(await transport.call('workflows:checkInputTrust', '/repo/', 'issue', '7')).toEqual({
+      error: 'Unknown repository'
+    })
+    expect(inputTrust).not.toHaveBeenCalled()
+  })
+
+  it.each<unknown[]>([
+    [7, 'issue', '7'],
+    ['', 'issue', '7'],
+    ['/repo', 'file', '7'],
+    ['/repo', 'ISSUE', '7'],
+    ['/repo', 'issue', 7],
+    ['/repo', 'issue', '0'],
+    ['/repo', 'issue', '7/../../user'],
+    ['/repo', 'issue', '12345678901'],
+    ['/repo', 'issue']
+  ])('rejects malformed arguments %#', async (...args) => {
+    expect(await transport.call('workflows:checkInputTrust', ...args)).toEqual({ error: 'invalid request' })
+    expect(inputTrust).not.toHaveBeenCalled()
+  })
+
+  it('refuses while Labs workflows are off', async () => {
+    store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(await transport.call('workflows:checkInputTrust', '/repo', 'issue', '7')).toEqual({
+      error: 'Workflows are turned off in Labs'
+    })
+    expect(inputTrust).not.toHaveBeenCalled()
+  })
+})
+
 describe('workflows:startRun against the runner', () => {
   const idleDriver = (): StepDriver => ({
     start: (attempt) => ({ executionId: `exec-${attempt.attemptId}` }),
@@ -753,6 +826,8 @@ describe('workflows:startRun against the runner', () => {
       yaml?: string
       codexTrust?: CodexHookTrustSummary
       loader?: Pick<WorkflowDefsLoader, 'getDefinition'>
+      inputTrust?: InputTrustFetcher
+      persisted?: WorkflowRunRecord[]
     } = {}
   ) {
     const store = new Store({
@@ -794,7 +869,9 @@ describe('workflows:startRun against the runner', () => {
         let n = 0
         return () => `id-${++n}`
       })(),
-      log: () => {}
+      log: () => {},
+      persist: (run) => options.persisted?.push(structuredClone(run)),
+      ...(options.inputTrust === undefined ? {} : { inputTrust: options.inputTrust })
     })
     live.reconcile([])
     const own = new FakeTransport()
@@ -810,11 +887,40 @@ describe('workflows:startRun against the runner', () => {
       runner: live,
       store,
       persistTrust: () => {},
+      inputTrust: options.inputTrust ?? (async () => 'untrusted'),
       log: () => {}
     })
     return own
   }
   const payload = { defId: 'personal:plan', worktreePath: '/wt/a', inputs: {} }
+
+  it('ignores no client trust claim: the server lookup caps an untrusted issue run', async () => {
+    const lookup = vi.fn<InputTrustFetcher>(async () => 'untrusted')
+    const persisted: WorkflowRunRecord[] = []
+    const own = realRunner({ yaml: ISSUE_FULL_YAML, inputTrust: lookup, persisted })
+    const issuePayload = { ...payload, inputs: { ticket: '7' } }
+    expect(await own.call('workflows:startRun', { ...issuePayload, inputsUntrusted: false })).toEqual({
+      error: 'invalid request'
+    })
+    expect(await own.call('workflows:startRun', { ...issuePayload, trusted: true, allowFull: true })).toEqual({
+      error: 'invalid request'
+    })
+    expect(lookup).not.toHaveBeenCalled()
+    expect(await own.call('workflows:startRun', issuePayload)).toEqual({ runId: 'id-1' })
+    expect(lookup).toHaveBeenCalledWith('/wt/a', 'issue', '7')
+    const record = persisted.at(-1)
+    expect(record?.inputsUntrusted).toBe(true)
+    expect(record?.definition.steps[0]).toMatchObject({ permissions: 'edit' })
+  })
+
+  it('still asks for full access when the server lookup trusts the issue author', async () => {
+    const own = realRunner({ yaml: ISSUE_FULL_YAML, inputTrust: async () => 'trusted' })
+    const issuePayload = { ...payload, inputs: { ticket: '7' } }
+    expect(await own.call('workflows:startRun', issuePayload)).toEqual({
+      error: 'This workflow has a full-access step; confirm full access to start it'
+    })
+    expect(await own.call('workflows:startRun', { ...issuePayload, allowFull: true })).toEqual({ runId: 'id-1' })
+  })
 
   it('returns the labs-off error', async () => {
     expect(await realRunner({ labs: false }).call('workflows:startRun', payload)).toEqual({
@@ -953,6 +1059,7 @@ describe('workflows:trustDefinition', () => {
         order.push('persist')
         persisted.push(entry)
       },
+      inputTrust: async () => 'untrusted',
       log: () => {}
     })
     const defId = `repo:${repoKeyOf(repo)}:shared`
@@ -1035,12 +1142,12 @@ describe('workflows:trustDefinition', () => {
       payload: [{ path: '/wt/a', branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/wt/a' }]
     })
     const start = { defId: h.defId, worktreePath: '/wt/a', inputs: {} }
-    expect(live.start(start)).toEqual({ ok: false, reason: 'untrusted-definition' })
+    expect(await live.start(start)).toEqual({ ok: false, reason: 'untrusted-definition' })
 
     expect(await h.own.call('workflows:trustDefinition', h.defId, sha256(VALID_YAML))).toEqual({ ok: true })
     writeFileSync(h.file, FULL_YAML)
-    expect(live.start({ ...start, allowFull: true })).toEqual({ ok: false, reason: 'untrusted-definition' })
+    expect(await live.start({ ...start, allowFull: true })).toEqual({ ok: false, reason: 'untrusted-definition' })
     writeFileSync(h.file, VALID_YAML)
-    expect(live.start(start)).toEqual({ ok: true, runId: 'run-trusted' })
+    expect(await live.start(start)).toEqual({ ok: true, runId: 'run-trusted' })
   })
 })

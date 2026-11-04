@@ -115,6 +115,7 @@ function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeSta
     runner,
     store,
     persistTrust: () => {},
+    inputTrust: async () => 'untrusted',
     log: () => {}
   })
   const call = async (name: string, payload: unknown): Promise<unknown> => {
@@ -122,8 +123,8 @@ function setup(worktree: string, agentScript?: (attempt: StepAttempt) => FakeSta
     if (!handler) throw new Error(`no handler ${name}`)
     return handler({}, payload)
   }
-  const start = (): string => {
-    const result = runner.start({ defId: 'personal:handoff', worktreePath: worktree, inputs: { task: 'ship' } })
+  const start = async (): Promise<string> => {
+    const result = await runner.start({ defId: 'personal:handoff', worktreePath: worktree, inputs: { task: 'ship' } })
     if (!result.ok) throw new Error(result.reason)
     return result.runId
   }
@@ -144,7 +145,7 @@ describe('runner artifacts against a real git repo', () => {
     git(repo, 'commit', '-q', '-m', 'init')
 
     const ctx = setup(repo)
-    const runId = ctx.start()
+    const runId = await ctx.start()
     await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
     writeFileSync(join(repo, 'one.txt'), 'step one\n')
     const summaryOne = `${'a'.repeat(5000)}-ONE`
@@ -221,7 +222,7 @@ describe('runner artifacts against a real git repo', () => {
     const plain = join(root, 'plain')
     execFileSync('mkdir', ['-p', plain])
     const ctx = setup(plain)
-    const runId = ctx.start()
+    const runId = await ctx.start()
     await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
     ctx.runner.complete(ctx.attemptOf(runId, 'one') ?? '', { status: 'done', summary: 's', completedBy: 'tool' })
     await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(2), WAIT)
@@ -251,7 +252,7 @@ describe('retry from clean against a real git repo', () => {
       seen.push(readFileSync(join(repo, 'README.md'), 'utf8'))
       return 'ok'
     })
-    const runId = ctx.start()
+    const runId = await ctx.start()
     await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
     writeFileSync(join(repo, 'README.md'), 'edited by the step\n')
     writeFileSync(join(repo, 'extra.txt'), 'new file\n')
@@ -297,7 +298,7 @@ describe('retry from clean against a real git repo', () => {
     const plain = join(root, 'plain')
     execFileSync('mkdir', ['-p', plain])
     const ctx = setup(plain)
-    const runId = ctx.start()
+    const runId = await ctx.start()
     await vi.waitFor(() => expect(ctx.agent.started).toHaveLength(1), WAIT)
     ctx.runner.complete(ctx.attemptOf(runId, 'one') ?? '', { status: 'failed', summary: 'no', completedBy: 'tool' })
     expect(await ctx.runner.retryFromClean(runId, 'one')).toEqual({ ok: false, reason: 'no-snapshot' })

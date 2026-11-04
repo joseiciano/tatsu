@@ -72,6 +72,7 @@ function isRecordFor(value: unknown, runId: string): value is WorkflowRunRecord 
     typeof candidate.status === 'string' &&
     typeof candidate.startedAt === 'number' &&
     typeof candidate.cursor === 'number' &&
+    (candidate.inputsUntrusted === undefined || typeof candidate.inputsUntrusted === 'boolean') &&
     typeof candidate.steps === 'object' &&
     candidate.steps !== null &&
     Array.isArray(candidate.definition?.steps) &&
