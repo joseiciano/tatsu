@@ -242,9 +242,9 @@ function setup({
   store.subscribe((event) => events.push(event))
   const wf = () => store.getSnapshot().state.workflows
 
-  function startRun(slug: DefSlug, worktreePath = `/wt/${slug}`): string {
+  async function startRun(slug: DefSlug, worktreePath = `/wt/${slug}`): Promise<string> {
     const declared = detail(slug).definition?.inputs ?? {}
-    const result = runner.start({
+    const result = await runner.start({
       defId: `personal:${slug}`,
       worktreePath,
       inputs: Object.hasOwn(declared, 'task') ? { task: INPUT_SECRET } : {}
@@ -270,6 +270,12 @@ function setup({
     return events.slice(from).map((event) => event.type.replace('workflows/', ''))
   }
 
+  async function eventsSinceAsync(fn: () => Promise<void>): Promise<string[]> {
+    const from = events.length
+    await fn()
+    return events.slice(from).map((event) => event.type.replace('workflows/', ''))
+  }
+
   return {
     store,
     runner,
@@ -284,7 +290,8 @@ function setup({
     startRun,
     attemptOf,
     stepStatus,
-    eventsSince
+    eventsSince,
+    eventsSinceAsync
   }
 }
 
@@ -424,7 +431,7 @@ describe('WorkflowRunner scenarios', () => {
     '%s',
     async (_name, scenario) => {
       const ctx = setup()
-      const runId = ctx.startRun('two-agent')
+      const runId = await ctx.startRun('two-agent')
       await flush()
       await scenario.act(ctx, runId)
       await flush()
@@ -447,7 +454,7 @@ describe('WorkflowRunner scenarios', () => {
 describe('WorkflowRunner.start', () => {
   it('snapshots the definition hash and starts the first step with the inputs', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent', '/wt/a')
+    const runId = await ctx.startRun('two-agent', '/wt/a')
     await flush()
     expect(ctx.wf().runs[runId]).toMatchObject({
       defId: 'personal:two-agent',
@@ -472,23 +479,23 @@ describe('WorkflowRunner.start', () => {
     ['labs-off', { labs: false }, 'one-agent'],
     ['unknown-definition', {}, 'missing'],
     ['invalid-definition', {}, 'broken']
-  ] as const)('refuses with %s and dispatches nothing', (reason, options, slug) => {
+  ] as const)('refuses with %s and dispatches nothing', async (reason, options, slug) => {
     const ctx = setup(options)
-    const types = ctx.eventsSince(() => {
+    const types = await ctx.eventsSinceAsync(async () => {
       expect(
-        ctx.runner.start({ defId: `personal:${slug}`, worktreePath: '/wt/a', inputs: {} })
+        await ctx.runner.start({ defId: `personal:${slug}`, worktreePath: '/wt/a', inputs: {} })
       ).toEqual({ ok: false, reason })
     })
     expect(types).toEqual([])
     expect(ctx.agent.started).toEqual([])
   })
 
-  it('refuses a worktree that already has a non-terminal run', () => {
+  it('refuses a worktree that already has a non-terminal run', async () => {
     const ctx = setup()
-    ctx.startRun('one-agent', '/wt/a')
-    const types = ctx.eventsSince(() => {
+    await ctx.startRun('one-agent', '/wt/a')
+    const types = await ctx.eventsSinceAsync(async () => {
       expect(
-        ctx.runner.start({ defId: 'personal:one-shell', worktreePath: '/wt/a', inputs: {} })
+        await ctx.runner.start({ defId: 'personal:one-shell', worktreePath: '/wt/a', inputs: {} })
       ).toEqual({ ok: false, reason: 'worktree-busy' })
     })
     expect(types).toEqual([])
@@ -496,30 +503,30 @@ describe('WorkflowRunner.start', () => {
 
   it('refuses a worktree with a paused run and accepts it once that run is terminal', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent', '/wt/a')
+    const runId = await ctx.startRun('one-agent', '/wt/a')
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
-    expect(ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/a', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/a', inputs: {} })).toEqual({
       ok: false,
       reason: 'worktree-busy'
     })
     ctx.runner.cancelRun(runId)
     expect(
-      ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/a', inputs: {} }).ok
+      (await ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/a', inputs: {} })).ok
     ).toBe(true)
   })
 })
 
 describe('WorkflowRunner dispatch order and dedup', () => {
-  it('dispatches attemptEnded, stepStatusChanged, runFinished at the end of a run', () => {
+  it('dispatches attemptEnded, stepStatusChanged, runFinished at the end of a run', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     const types = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done()))
     expect(types).toEqual(['attemptEnded', 'stepStatusChanged', 'runFinished'])
   })
 
-  it('dispatches attemptEnded, stepStatusChanged, runCancelled on cancelRun', () => {
+  it('dispatches attemptEnded, stepStatusChanged, runCancelled on cancelRun', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     expect(ctx.eventsSince(() => ctx.runner.cancelRun(runId))).toEqual([
       'attemptEnded',
       'stepStatusChanged',
@@ -527,10 +534,10 @@ describe('WorkflowRunner dispatch order and dedup', () => {
     ])
   })
 
-  it('cancelRun on a queued step cancels the step before the run', () => {
+  it('cancelRun on a queued step cancels the step before the run', async () => {
     const ctx = setup({ cap: 1 })
-    ctx.startRun('one-agent', '/wt/a')
-    const queuedRun = ctx.startRun('one-agent', '/wt/b')
+    await ctx.startRun('one-agent', '/wt/a')
+    const queuedRun = await ctx.startRun('one-agent', '/wt/b')
     expect(ctx.stepStatus(queuedRun, 'plan')).toBe('queued')
     expect(ctx.eventsSince(() => ctx.runner.cancelRun(queuedRun))).toEqual([
       'stepStatusChanged',
@@ -543,18 +550,18 @@ describe('WorkflowRunner dispatch order and dedup', () => {
     ['retry', (ctx: Ctx, runId: string) => ctx.runner.retryStep(runId, currentStepId(ctx.runner, runId))],
     ['skip', (ctx: Ctx, runId: string) => ctx.runner.skipStep(runId, currentStepId(ctx.runner, runId))],
     ['markDone', (ctx: Ctx, runId: string) => markDoneFor(ctx, runId)]
-  ] as const)('%s from a paused run dispatches runResumed first', (_name, action) => {
+  ] as const)('%s from a paused run dispatches runResumed first', async (_name, action) => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
     const types = ctx.eventsSince(() => expect(action(ctx, runId)).toEqual({ ok: true }))
     expect(types[0]).toBe('runResumed')
     expect(types.length).toBeGreaterThan(1)
   })
 
-  it('ignores a second completion of the same attempt without dispatching', () => {
+  it('ignores a second completion of the same attempt without dispatching', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     const attemptId = ctx.attemptOf(runId, 'plan')
     ctx.runner.complete(attemptId, failed())
     expect(ctx.eventsSince(() => expect(ctx.runner.complete(attemptId, done())).toBe(false))).toEqual([])
@@ -562,7 +569,7 @@ describe('WorkflowRunner dispatch order and dedup', () => {
 
   it('needs-input keeps the attempt running, pauses once, and a later done resumes', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     const needsInput: StepResult = { status: 'needs-input', summary: '', completedBy: 'fallback' }
@@ -582,7 +589,7 @@ describe('WorkflowRunner dispatch order and dedup', () => {
 
   it('retry from needs-input cancels the live attempt and starts attempt 2', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     await flush()
     const first = ctx.attemptOf(runId, 'plan')
     const execution = ctx.agent.executionFor(first)
@@ -598,7 +605,7 @@ describe('WorkflowRunner dispatch order and dedup', () => {
 
   it('drops driver events for execution ids it does not map', async () => {
     const ctx = setup()
-    ctx.startRun('one-agent')
+    await ctx.startRun('one-agent')
     await flush()
     expect(
       ctx.eventsSince(() => {
@@ -610,7 +617,7 @@ describe('WorkflowRunner dispatch order and dedup', () => {
 
   it('cancels an execution whose start resolves after the run was cancelled', async () => {
     const ctx = setup({ agentScript: () => 'defer' })
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     ctx.runner.cancelRun(runId)
@@ -631,7 +638,7 @@ describe('WorkflowRunner driver exits', () => {
     [1, 'failed', 'paused']
   ] as const)('shell exit %i ends the attempt %s', async (code, attemptStatus, runStatus) => {
     const ctx = setup()
-    const runId = ctx.startRun('one-shell')
+    const runId = await ctx.startRun('one-shell')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'test')
     ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(attemptId), code })
@@ -641,7 +648,7 @@ describe('WorkflowRunner driver exits', () => {
 
   it('an agent exit without completion fails the step', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     ctx.agent.emit({ type: 'exited', executionId: ctx.agent.executionFor(attemptId), code: 0 })
@@ -653,7 +660,7 @@ describe('WorkflowRunner driver exits', () => {
     'a driver start that %ss fails the attempt and pauses step-failed',
     async (behavior) => {
       const ctx = setup({ agentScript: () => behavior })
-      const runId = ctx.startRun('one-agent')
+      const runId = await ctx.startRun('one-agent')
       await flush()
       const attemptId = ctx.attemptOf(runId, 'plan')
       expect(ctx.wf().attempts[attemptId].status).toBe('failed')
@@ -696,7 +703,7 @@ function exitingPty(code: number, history: string, signal?: number) {
 describe('WorkflowRunner.swapStep refusals', () => {
   it('refuses a failed shell step as not an agent step', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-shell')
+    const runId = await ctx.startRun('one-shell')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'test')
     ctx.shell.emit({ type: 'exited', executionId: ctx.shell.executionFor(attemptId), code: 1 })
@@ -705,7 +712,7 @@ describe('WorkflowRunner.swapStep refusals', () => {
 
   it('refuses while the agent attempt is still live in a needs-input pause', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), { status: 'needs-input', summary: 'q', completedBy: 'tool' })
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'needs-input' })
@@ -715,7 +722,7 @@ describe('WorkflowRunner.swapStep refusals', () => {
 
   it('logs the swap with the agent and no prompt text', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
     expect(ctx.runner.swapStep(runId, 'plan', { agent: 'opencode', model: 'm/x' })).toEqual({ ok: true })
@@ -732,7 +739,7 @@ describe('WorkflowRunner with the shell driver', () => {
     const history = Array.from({ length: 60 }, (_, i) => `\u001b[2Kline ${i}\r\n`).join('')
     const pty = exitingPty(code, history)
     const ctx = setup({ shellDriver: pty.driver })
-    const runId = ctx.startRun('shell-input')
+    const runId = await ctx.startRun('shell-input')
     await flush()
     await flush()
     const attemptId = ctx.attemptOf(runId, 'test')
@@ -759,7 +766,7 @@ describe('WorkflowRunner with the shell driver', () => {
   it('fails the step when the PTY dies from a signal', async () => {
     const pty = exitingPty(0, 'partial\r\n', 9)
     const ctx = setup({ shellDriver: pty.driver })
-    const runId = ctx.startRun('shell-input')
+    const runId = await ctx.startRun('shell-input')
     await flush()
     await flush()
     expect(ctx.records.at(-1)?.attempts[0].result).toEqual({ status: 'failed', summary: 'partial', completedBy: 'exit' })
@@ -771,7 +778,7 @@ describe('WorkflowRunner with the shell driver', () => {
     const ctx = setup({ shellDriver: pty.driver })
     const big = `${INPUT_SECRET} `.repeat(2800)
     const inputs = Object.fromEntries([...'abcdefghi'].map((name) => [name, big]))
-    const started = ctx.runner.start({ defId: 'personal:shell-big', worktreePath: '/wt/big', inputs })
+    const started = await ctx.runner.start({ defId: 'personal:shell-big', worktreePath: '/wt/big', inputs })
     if (!started.ok) throw new Error(started.reason)
     await flush()
     const attemptId = ctx.attemptOf(started.runId, 'test')
@@ -789,8 +796,8 @@ describe('WorkflowRunner with the shell driver', () => {
 describe('WorkflowRunner concurrency cap', () => {
   it('starts agent steps of two runs one at a time in FIFO order', async () => {
     const ctx = setup({ cap: 1 })
-    const runA = ctx.startRun('two-agent', '/wt/a')
-    const runB = ctx.startRun('one-agent', '/wt/b')
+    const runA = await ctx.startRun('two-agent', '/wt/a')
+    const runB = await ctx.startRun('one-agent', '/wt/b')
     await flush()
     expect(ctx.stepStatus(runA, 'plan')).toBe('running')
     expect(ctx.stepStatus(runB, 'plan')).toBe('queued')
@@ -813,8 +820,8 @@ describe('WorkflowRunner concurrency cap', () => {
 
   it('starts a shell step while an agent holds the only slot', async () => {
     const ctx = setup({ cap: 1 })
-    const runA = ctx.startRun('one-agent', '/wt/a')
-    const runB = ctx.startRun('one-shell', '/wt/b')
+    const runA = await ctx.startRun('one-agent', '/wt/a')
+    const runB = await ctx.startRun('one-shell', '/wt/b')
     await flush()
     expect(ctx.stepStatus(runA, 'plan')).toBe('running')
     expect(ctx.stepStatus(runB, 'test')).toBe('running')
@@ -823,11 +830,11 @@ describe('WorkflowRunner concurrency cap', () => {
 
   it('reads the cap from settings at each scheduling point', async () => {
     const ctx = setup({ cap: 1 })
-    ctx.startRun('one-agent', '/wt/a')
-    const runB = ctx.startRun('one-agent', '/wt/b')
+    await ctx.startRun('one-agent', '/wt/a')
+    const runB = await ctx.startRun('one-agent', '/wt/b')
     expect(ctx.stepStatus(runB, 'plan')).toBe('queued')
     ctx.store.dispatch({ type: 'settings/workflowSettingsChanged', payload: { maxConcurrentAgents: 2 } })
-    const runC = ctx.startRun('one-agent', '/wt/c')
+    const runC = await ctx.startRun('one-agent', '/wt/c')
     expect(ctx.stepStatus(runB, 'plan')).toBe('running')
     expect(ctx.stepStatus(runC, 'plan')).toBe('queued')
   })
@@ -865,8 +872,8 @@ describe('WorkflowRunner concurrency cap', () => {
 
   it.each(releases)('%s releases the agent slot to the queued run', async (_name, act, options) => {
     const ctx = setup({ cap: 1, ...options })
-    const runA = ctx.startRun('one-agent', '/wt/a')
-    const runB = ctx.startRun('one-agent', '/wt/b')
+    const runA = await ctx.startRun('one-agent', '/wt/a')
+    const runB = await ctx.startRun('one-agent', '/wt/b')
     await flush()
     act(ctx, runA)
     await flush()
@@ -881,8 +888,8 @@ describe('WorkflowRunner logging', () => {
       cap: 1,
       agentScript: (a) => (a.stepId === 'build' && a.n === 1 ? 'reject' : 'ok')
     })
-    const runA = ctx.startRun('two-agent', '/wt/a')
-    const runQ = ctx.startRun('one-agent', '/wt/q')
+    const runA = await ctx.startRun('two-agent', '/wt/a')
+    const runQ = await ctx.startRun('one-agent', '/wt/q')
     ctx.runner.cancelRun(runQ)
     await flush()
     ctx.runner.complete(ctx.attemptOf(runA, 'plan'), failed(SUMMARY_SECRET))
@@ -901,13 +908,13 @@ describe('WorkflowRunner logging', () => {
     ctx.runner.retryStep(runA, currentStepId(ctx.runner, runA))
     await flush()
     markDoneFor(ctx, runA)
-    const runB = ctx.startRun('one-shell', '/wt/b')
+    const runB = await ctx.startRun('one-shell', '/wt/b')
     await flush()
     ctx.runner.cancelStep(runB, currentStepId(ctx.runner, runB))
     ctx.runner.skipStep(runB, currentStepId(ctx.runner, runB))
-    const runC = ctx.startRun('one-agent', '/wt/c')
+    const runC = await ctx.startRun('one-agent', '/wt/c')
     ctx.runner.cancelRun(runC)
-    ctx.runner.start({ defId: 'personal:broken', worktreePath: '/wt/d', inputs: {} })
+    await ctx.runner.start({ defId: 'personal:broken', worktreePath: '/wt/d', inputs: {} })
     await flush()
 
     const expectedLines = [
@@ -962,7 +969,7 @@ describe('WorkflowRunner run records', () => {
 
   it('persists a versioned record with the definition, inputs, full results and metrics', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent', '/wt/a')
+    const runId = await ctx.startRun('two-agent', '/wt/a')
     await flush()
     const plan = ctx.attemptOf(runId, 'plan')
     ctx.runner.complete(plan, failed('first try'))
@@ -1009,7 +1016,7 @@ describe('WorkflowRunner run records', () => {
 
   it('persists the current state after every transition', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent', '/wt/a')
+    const runId = await ctx.startRun('one-agent', '/wt/a')
     await flush()
     const early = lastRecord(ctx, runId)
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
@@ -1019,7 +1026,7 @@ describe('WorkflowRunner run records', () => {
 
   it('does not mutate the result object the caller passed to complete', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent', '/wt/a')
+    const runId = await ctx.startRun('one-agent', '/wt/a')
     await flush()
     const result = Object.freeze(done('frozen'))
     expect(ctx.runner.complete(ctx.attemptOf(runId, 'plan'), result)).toBe(true)
@@ -1028,7 +1035,7 @@ describe('WorkflowRunner run records', () => {
 
   it('records a needs-input pause on the live attempt', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent', '/wt/a')
+    const runId = await ctx.startRun('one-agent', '/wt/a')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), { status: 'needs-input', summary: '?', completedBy: 'fallback' })
     expect(lastRecord(ctx, runId).attempts[0]).toMatchObject({
@@ -1039,8 +1046,8 @@ describe('WorkflowRunner run records', () => {
 
   it('does not attribute a pause to an earlier step attempt when a queued step is cancelled', async () => {
     const ctx = setup({ cap: 1 })
-    const runId = ctx.startRun('two-agent', '/wt/a')
-    const blocker = ctx.startRun('one-agent', '/wt/blocker')
+    const runId = await ctx.startRun('two-agent', '/wt/a')
+    const blocker = await ctx.startRun('one-agent', '/wt/blocker')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
     expect(ctx.stepStatus(blocker, 'plan')).toBe('running')
@@ -1055,7 +1062,7 @@ describe('WorkflowRunner run records', () => {
 
   it('renders a later step prompt from the full summary of an earlier step, not the preview', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('handoff', '/wt/a')
+    const runId = await ctx.startRun('handoff', '/wt/a')
     await flush()
     const summary = `${'x'.repeat(5 * 1024 - 4)}-END`
     ctx.runner.complete(ctx.attemptOf(runId, 'one'), done(summary))
@@ -1100,7 +1107,7 @@ describe('WorkflowRunner recent-run eviction', () => {
     ['cancelling', (ctx: Ctx, runId: string) => ctx.runner.cancelRun(runId)]
   ])('%s a 51st run evicts the oldest finished run in one event', async (_name, end) => {
     const ctx = setup({ runs: finished(50) })
-    const runId = ctx.startRun('one-agent', '/wt/new')
+    const runId = await ctx.startRun('one-agent', '/wt/new')
     await flush()
     const types = ctx.eventsSince(() => end(ctx, runId))
     expect(types.slice(-1)).toEqual(['runsEvicted'])
@@ -1112,7 +1119,7 @@ describe('WorkflowRunner recent-run eviction', () => {
 
   it('does not evict while 50 or fewer runs are finished', async () => {
     const ctx = setup({ runs: finished(49) })
-    const runId = ctx.startRun('one-agent', '/wt/new')
+    const runId = await ctx.startRun('one-agent', '/wt/new')
     await flush()
     const types = ctx.eventsSince(() => ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done()))
     expect(types).not.toContain('runsEvicted')
@@ -1123,7 +1130,7 @@ describe('WorkflowRunner recent-run eviction', () => {
 describe('WorkflowRunner step tool seam', () => {
   it('describes the live agent step of an execution', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('reviewed')
+    const runId = await ctx.startRun('reviewed')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'review')
     expect(ctx.runner.stepForExecution(ctx.agent.executionFor(attemptId))).toEqual({
@@ -1136,8 +1143,8 @@ describe('WorkflowRunner step tool seam', () => {
 
   it('returns null for unknown executions, shell steps and while labs is off', async () => {
     const ctx = setup()
-    const shellRun = ctx.startRun('one-shell')
-    const agentRun = ctx.startRun('one-agent')
+    const shellRun = await ctx.startRun('one-shell')
+    const agentRun = await ctx.startRun('one-agent')
     await flush()
     expect(ctx.runner.stepForExecution('nobody')).toBeNull()
     expect(ctx.runner.stepForExecution(ctx.shell.executionFor(ctx.attemptOf(shellRun, 'test')))).toBeNull()
@@ -1153,7 +1160,7 @@ describe('WorkflowRunner step tool seam', () => {
 
   it('completes the attempt with completedBy tool and the validated data', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('reviewed')
+    const runId = await ctx.startRun('reviewed')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'review')
     const execution = ctx.agent.executionFor(attemptId)
@@ -1172,7 +1179,7 @@ describe('WorkflowRunner step tool seam', () => {
 
   it('reports an ended execution as already completed', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     const execution = ctx.agent.executionFor(attemptId)
@@ -1190,7 +1197,7 @@ describe('WorkflowRunner step tool seam', () => {
 
   it('a needs-input completion keeps the execution live so a later completion resumes', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     const execution = ctx.agent.executionFor(attemptId)
@@ -1287,7 +1294,7 @@ async function claudeRun(slug: DefSlug, configure: (claude: ReturnType<typeof cl
   const ctx = setup({ agentDriver: claude.factory })
   claude.attach(ctx.runner)
   configure(claude)
-  const runId = ctx.startRun(slug)
+  const runId = await ctx.startRun(slug)
   await flush()
   await flush()
   return { ctx, claude, runId }
@@ -1339,8 +1346,9 @@ describe('WorkflowRunner with the Claude driver', () => {
     const claude = claudeHarness()
     const ctx = setup({ agentDriver: claude.factory })
     claude.attach(ctx.runner)
-    const runId = ctx.startRun('one-agent')
+    const started = ctx.startRun('one-agent')
     claude.setConsent('pending')
+    const runId = await started
     await flush()
     await flush()
     expect(claude.tabs).toEqual([])
@@ -1449,7 +1457,7 @@ describe('WorkflowRunner with the Claude driver', () => {
     const claude = claudeHarness()
     const pty = exitingPty(0, 'shell output\r\n')
     const ctx = setup({ agentDriver: claude.factory, shellDriver: pty.driver })
-    const runId = ctx.startRun('one-shell')
+    const runId = await ctx.startRun('one-shell')
     await flush()
     expect(pty.tabs).toHaveLength(1)
     claude.exit(pty.tabs[0].tab.id, 0)
@@ -1471,7 +1479,7 @@ describe('WorkflowRunner driver release', () => {
     ['markDone', (ctx: Ctx, attemptId: string) => markDoneFor(ctx, ctx.runner.runIdForAttempt(attemptId) ?? '')]
   ] as const)('releases the execution when the attempt ends by %s', async (_name, act) => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     const execution = ctx.agent.executionFor(attemptId)
@@ -1481,7 +1489,7 @@ describe('WorkflowRunner driver release', () => {
 
   it('maps an execution bound before start resolves so its early events count', async () => {
     const ctx = setup({ agentScript: () => 'defer' })
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
     const attempt = ctx.agent.started[0]
@@ -1496,7 +1504,7 @@ describe('WorkflowRunner driver release', () => {
 
   it('refuses to bind an attempt that already ended', async () => {
     const ctx = setup({ agentScript: () => 'defer' })
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     const attempt = ctx.agent.started[0]
     ctx.runner.cancelRun(runId)
@@ -1614,13 +1622,13 @@ describe('WorkflowRunner Stop-hook continuation', () => {
 })
 
 describe('WorkflowRunner start refusals', () => {
-  const start = (ctx: Ctx, slug: DefSlug, worktreePath: string, inputs: Record<string, string>) =>
-    ctx.runner.start({ defId: `personal:${slug}`, worktreePath, inputs })
+  const start = async (ctx: Ctx, slug: DefSlug, worktreePath: string, inputs: Record<string, string>) =>
+    await ctx.runner.start({ defId: `personal:${slug}`, worktreePath, inputs })
 
-  it('refuses a worktree that is not in the worktree list', () => {
+  it('refuses a worktree that is not in the worktree list', async () => {
     const ctx = setup()
-    expect(start(ctx, 'one-shell', '/elsewhere', {})).toEqual({ ok: false, reason: 'unknown-worktree' })
-    expect(start(ctx, 'one-shell', '/wt/a/', {})).toEqual({ ok: false, reason: 'unknown-worktree' })
+    expect(await start(ctx, 'one-shell', '/elsewhere', {})).toEqual({ ok: false, reason: 'unknown-worktree' })
+    expect(await start(ctx, 'one-shell', '/wt/a/', {})).toEqual({ ok: false, reason: 'unknown-worktree' })
     expect(ctx.shell.started).toEqual([])
   })
 
@@ -1630,30 +1638,30 @@ describe('WorkflowRunner start refusals', () => {
     ['a non-string value', { task: 7 as unknown as string }],
     ['an oversize value', { task: 'x'.repeat(64 * 1024 + 1) }],
     ['too many keys', Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`k${i}`, 'v']))]
-  ])('refuses inputs with %s', (_name, inputs) => {
+  ])('refuses inputs with %s', async (_name, inputs) => {
     const ctx = setup()
-    expect(start(ctx, 'shell-input', '/wt/a', inputs)).toEqual({ ok: false, reason: 'invalid-inputs' })
+    expect(await start(ctx, 'shell-input', '/wt/a', inputs)).toEqual({ ok: false, reason: 'invalid-inputs' })
   })
 
   it.each([
     ['absent', {}],
     ['blank', { task: '  ' }]
-  ])('refuses a declared input that is %s', (_name, inputs) => {
+  ])('refuses a declared input that is %s', async (_name, inputs) => {
     const ctx = setup()
-    expect(start(ctx, 'shell-input', '/wt/a', inputs)).toEqual({ ok: false, reason: 'missing-input' })
+    expect(await start(ctx, 'shell-input', '/wt/a', inputs)).toEqual({ ok: false, reason: 'missing-input' })
   })
 
-  it('refuses an agent workflow until hooks consent is accepted, but not a shell-only one', () => {
+  it('refuses an agent workflow until hooks consent is accepted, but not a shell-only one', async () => {
     const ctx = setup()
     ctx.store.dispatch({ type: 'hooks/consentChanged', payload: 'pending' })
-    expect(start(ctx, 'one-agent', '/wt/a', {})).toEqual({ ok: false, reason: 'hooks-consent' })
-    expect(start(ctx, 'one-shell', '/wt/a', {}).ok).toBe(true)
+    expect(await start(ctx, 'one-agent', '/wt/a', {})).toEqual({ ok: false, reason: 'hooks-consent' })
+    expect((await start(ctx, 'one-shell', '/wt/a', {})).ok).toBe(true)
   })
 
-  it.each<DefSlug>(['full-agent', 'full-default'])('refuses %s without an explicit allowFull', (slug) => {
+  it.each<DefSlug>(['full-agent', 'full-default'])('refuses %s without an explicit allowFull', async (slug) => {
     const ctx = setup()
-    expect(start(ctx, slug, '/wt/a', {})).toEqual({ ok: false, reason: 'full-permission-unconfirmed' })
-    expect(ctx.runner.start({ defId: `personal:${slug}`, worktreePath: '/wt/a', inputs: {}, allowFull: false })).toEqual({
+    expect(await start(ctx, slug, '/wt/a', {})).toEqual({ ok: false, reason: 'full-permission-unconfirmed' })
+    expect(await ctx.runner.start({ defId: `personal:${slug}`, worktreePath: '/wt/a', inputs: {}, allowFull: false })).toEqual({
       ok: false,
       reason: 'full-permission-unconfirmed'
     })
@@ -1664,26 +1672,26 @@ describe('WorkflowRunner start refusals', () => {
     ['the string true', 'true'],
     ['the number 1', 1],
     ['an object', { allowFull: true }]
-  ])('does not count %s as allowFull', (_name, allowFull) => {
+  ])('does not count %s as allowFull', async (_name, allowFull) => {
     const ctx = setup()
     const request = { defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, allowFull }
-    expect(ctx.runner.start(request as unknown as Parameters<typeof ctx.runner.start>[0])).toEqual({
+    expect(await ctx.runner.start(request as unknown as Parameters<typeof ctx.runner.start>[0])).toEqual({
       ok: false,
       reason: 'full-permission-unconfirmed'
     })
   })
 
-  it('starts a full-access workflow when allowFull is true, and ignores allowFull without a full step', () => {
+  it('starts a full-access workflow when allowFull is true, and ignores allowFull without a full step', async () => {
     const ctx = setup()
-    expect(ctx.runner.start({ defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, allowFull: true }).ok).toBe(true)
-    expect(ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/b', inputs: {} }).ok).toBe(true)
+    expect((await ctx.runner.start({ defId: 'personal:full-agent', worktreePath: '/wt/a', inputs: {}, allowFull: true })).ok).toBe(true)
+    expect((await ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/b', inputs: {} })).ok).toBe(true)
   })
 })
 
 describe('WorkflowRunner step actions', () => {
-  it('refuses an action for a step that is not the current one, and retry on a running run', () => {
+  it('refuses an action for a step that is not the current one, and retry on a running run', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: false, reason: 'not-paused' })
     expect(ctx.runner.skipStep(runId, 'build')).toEqual({ ok: false, reason: 'wrong-step' })
     expect(ctx.runner.cancelStep(runId, 'build')).toEqual({ ok: false, reason: 'wrong-step' })
@@ -1703,9 +1711,9 @@ describe('WorkflowRunner step actions', () => {
     expect(ctx.runner.retryStep(runId, 'plan')).toEqual({ ok: true })
   })
 
-  it('refuses retry from clean without run artifacts', () => {
+  it('refuses retry from clean without run artifacts', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
     return expect(ctx.runner.retryFromClean(runId, 'plan')).resolves.toEqual({ ok: false, reason: 'no-snapshot' })
   })
@@ -1720,7 +1728,7 @@ describe('WorkflowRunner step actions', () => {
       }
     }
     const ctx = setup({ artifacts })
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), failed())
     expect(await ctx.runner.retryFromClean(runId, 'plan')).toEqual({ ok: false, reason: 'restore-failed' })
@@ -1733,8 +1741,8 @@ describe('WorkflowRunner step actions', () => {
 
   it('launches a queued agent step when reschedule runs after the cap is raised', async () => {
     const ctx = setup({ cap: 1 })
-    const runA = ctx.startRun('one-agent', '/wt/a')
-    const runB = ctx.startRun('one-agent', '/wt/b')
+    const runA = await ctx.startRun('one-agent', '/wt/a')
+    const runB = await ctx.startRun('one-agent', '/wt/b')
     await flush()
     expect(ctx.stepStatus(runB, 'plan')).toBe('queued')
     ctx.runner.reschedule()
@@ -1750,9 +1758,9 @@ describe('WorkflowRunner step actions', () => {
 })
 
 describe('WorkflowRunner markDone', () => {
-  it('refuses invalid, undeclared and status fields without touching the step', () => {
+  it('refuses invalid, undeclared and status fields without touching the step', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('review-then-act')
+    const runId = await ctx.startRun('review-then-act')
     ctx.runner.complete(ctx.attemptOf(runId, 'review'), failed())
     const refusals = [
       { summary: 's', fields: { verdict: 'maybe' } },
@@ -1772,7 +1780,7 @@ describe('WorkflowRunner markDone', () => {
 
   it('completes a paused failed step as the user and hands its summary and data to the next step', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('review-then-act')
+    const runId = await ctx.startRun('review-then-act')
     ctx.runner.complete(ctx.attemptOf(runId, 'review'), failed('tool failed'))
     const summary = `${'s'.repeat(STEP_SUMMARY_MAX_CHARS)}-CUT`
     expect(
@@ -1804,7 +1812,7 @@ describe('WorkflowRunner markDone', () => {
 
   it('completes a live attempt with the user result', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('review-then-act')
+    const runId = await ctx.startRun('review-then-act')
     await flush()
     const attemptId = ctx.attemptOf(runId, 'review')
     expect(ctx.runner.markDone(runId, 'review', { summary: 'by hand', fields: { verdict: 'fail' } })).toEqual({
@@ -1819,9 +1827,9 @@ describe('WorkflowRunner markDone', () => {
     expect(ctx.wf().runs[runId].steps.review.attemptIds).toEqual([attemptId])
   })
 
-  it('accepts only a summary for a shell step', () => {
+  it('accepts only a summary for a shell step', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('shell-then-agent')
+    const runId = await ctx.startRun('shell-then-agent')
     ctx.runner.complete(ctx.attemptOf(runId, 'test'), failed())
     expect(ctx.runner.markDone(runId, 'test', { summary: 's', fields: { verdict: 'pass' } })).toMatchObject({
       ok: false,
@@ -1845,14 +1853,14 @@ describe('WorkflowRunner restore in flight', () => {
         })
     }
     const ctx = setup({ artifacts })
-    const runId = ctx.startRun('one-shell')
+    const runId = await ctx.startRun('one-shell')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'test'), failed())
 
     const pending = ctx.runner.retryFromClean(runId, 'test')
     await flush()
     expect(ctx.runner.cancelRun(runId)).toEqual({ ok: false, reason: 'busy' })
-    expect(ctx.runner.start({ defId: 'personal:one-shell', worktreePath: '/wt/one-shell', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: 'personal:one-shell', worktreePath: '/wt/one-shell', inputs: {} })).toEqual({
       ok: false,
       reason: 'worktree-busy'
     })
@@ -1888,9 +1896,9 @@ describe('WorkflowRunner before boot reconcile', () => {
 
   it('refuses start until reconcile ran, then accepts it', async () => {
     const { runner, agent } = unready()
-    expect(runner.start(request)).toEqual({ ok: false, reason: 'starting' })
+    expect(await runner.start(request)).toEqual({ ok: false, reason: 'starting' })
     runner.reconcile([])
-    expect(runner.start(request)).toEqual({ ok: true, runId: 'run-new' })
+    expect(await runner.start(request)).toEqual({ ok: true, runId: 'run-new' })
     await flush()
     expect(agent.started).toHaveLength(1)
   })
@@ -1905,12 +1913,12 @@ describe('WorkflowRunner before boot reconcile', () => {
       attempts: null
     } as unknown as WorkflowRunRecord
     expect(() => runner.reconcile([malformed])).toThrow()
-    expect(runner.start(request)).toEqual({ ok: true, runId: 'run-new' })
+    expect(await runner.start(request)).toEqual({ ok: true, runId: 'run-new' })
     await flush()
     expect(agent.started).toHaveLength(1)
   })
 
-  it('refuses start on a worktree whose hydrated run is not reconciled yet', () => {
+  it('refuses start on a worktree whose hydrated run is not reconciled yet', async () => {
     const { runner } = unready({
       'run-old': {
         defId: 'personal:one-agent',
@@ -1921,16 +1929,16 @@ describe('WorkflowRunner before boot reconcile', () => {
         steps: { plan: { status: 'pending', attemptIds: [] } }
       }
     })
-    expect(runner.start(request)).toMatchObject({ ok: false })
+    expect(await runner.start(request)).toMatchObject({ ok: false })
     runner.reconcile([])
-    expect(runner.start(request)).toEqual({ ok: false, reason: 'worktree-busy' })
+    expect(await runner.start(request)).toEqual({ ok: false, reason: 'worktree-busy' })
   })
 })
 
 describe('WorkflowRunner slice step facts and cursor', () => {
-  it('starts the run with each step kind and agent and the first step as cursor', () => {
+  it('starts the run with each step kind and agent and the first step as cursor', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('shell-then-agent')
+    const runId = await ctx.startRun('shell-then-agent')
     const run = ctx.wf().runs[runId]
     expect(run.cursorStepId).toBe('test')
     expect(run.steps.test).toMatchObject({ kind: 'shell' })
@@ -1940,7 +1948,7 @@ describe('WorkflowRunner slice step facts and cursor', () => {
 
   it('moves the cursor when a step is skipped even if the next step is held with labs off', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     await flush()
     ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
     const types = ctx.eventsSince(() => expect(ctx.runner.skipStep(runId, 'plan')).toEqual({ ok: true }))
@@ -1951,7 +1959,7 @@ describe('WorkflowRunner slice step facts and cursor', () => {
 
   it('moves the cursor on completion and dispatches no cursor change past the last step', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('two-agent')
+    const runId = await ctx.startRun('two-agent')
     await flush()
     ctx.runner.complete(ctx.attemptOf(runId, 'plan'), done())
     expect(ctx.wf().runs[runId].cursorStepId).toBe('build')
@@ -1973,7 +1981,7 @@ describe('WorkflowRunner attemptSessionRecorded', () => {
         persistedAtDispatch.push(ctx.records.at(-1)?.attempts.at(-1)?.sessionId)
       }
     })
-    const runId = ctx.startRun('one-agent')
+    const runId = await ctx.startRun('one-agent')
     await flush()
     await flush()
     const attemptId = ctx.attemptOf(runId, 'plan')
@@ -1985,7 +1993,7 @@ describe('WorkflowRunner attemptSessionRecorded', () => {
 
   it('does not dispatch for an execution bound without a session', async () => {
     const ctx = setup()
-    const runId = ctx.startRun('one-shell')
+    const runId = await ctx.startRun('one-shell')
     await flush()
     expect(ctx.events.some((event) => event.type === 'workflows/attemptSessionRecorded')).toBe(false)
     expect('resumable' in ctx.wf().attempts[ctx.attemptOf(runId, 'test')]).toBe(false)

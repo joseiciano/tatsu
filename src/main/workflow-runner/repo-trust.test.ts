@@ -86,9 +86,9 @@ function setup(trust: Record<string, string> = {}) {
 const defId = (): string => `repo:${repoKeyOf(repo)}:ship`
 
 describe('repo definition trust at start', () => {
-  it('refuses an untrusted repo definition without dispatching or starting a step', () => {
+  it('refuses an untrusted repo definition without dispatching or starting a step', async () => {
     const ctx = setup()
-    expect(ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
       ok: false,
       reason: 'untrusted-definition'
     })
@@ -96,9 +96,9 @@ describe('repo definition trust at start', () => {
     expect(ctx.shell.started).toEqual([])
   })
 
-  it('starts a repo definition whose bytes match the trusted hash and reads the file exactly once', () => {
+  it('starts a repo definition whose bytes match the trusted hash and reads the file exactly once', async () => {
     const ctx = setup({ [defId()]: sha256(SHELL_YAML) })
-    expect(ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
       ok: true,
       runId: 'run-1'
     })
@@ -108,10 +108,10 @@ describe('repo definition trust at start', () => {
     expect(record?.definition.steps.map((step) => step.kind === 'shell' && step.run)).toEqual(['true'])
   })
 
-  it('refuses after the file is edited past the trusted hash and reads it once', () => {
+  it('refuses after the file is edited past the trusted hash and reads it once', async () => {
     const ctx = setup({ [defId()]: sha256(SHELL_YAML) })
     writeFileSync(file, EDITED_YAML)
-    expect(ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
       ok: false,
       reason: 'untrusted-definition'
     })
@@ -119,18 +119,18 @@ describe('repo definition trust at start', () => {
     expect(ctx.shell.started).toEqual([])
   })
 
-  it('ignores a trusted hash recorded under another definition id', () => {
+  it('ignores a trusted hash recorded under another definition id', async () => {
     const ctx = setup({ [`repo:${repoKeyOf(repo)}:other`]: sha256(SHELL_YAML) })
-    expect(ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
       ok: false,
       reason: 'untrusted-definition'
     })
   })
 
-  it('picks up a trust grant dispatched after the runner was built', () => {
+  it('picks up a trust grant dispatched after the runner was built', async () => {
     const ctx = setup()
     ctx.store.dispatch({ type: 'workflows/trustGranted', payload: { defId: defId(), hash: sha256(SHELL_YAML) } })
-    expect(ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
+    expect(await ctx.runner.start({ defId: defId(), worktreePath: '/wt/a', inputs: {} })).toEqual({
       ok: true,
       runId: 'run-1'
     })

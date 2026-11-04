@@ -3,6 +3,7 @@ import { getAttemptChangedFiles, getAttemptFileDiff } from './attempt-changes'
 import { RUN_ID_PATTERN, isRunId, type WorkflowRunLookup } from '../workflow-run-records'
 import {
   RUN_INPUTS_MAX,
+  type InputTrustFetcher,
   type MarkDoneRequest,
   type StartRefusal,
   type StartRunRequest,
@@ -13,8 +14,10 @@ import {
   type WorkflowRunner
 } from '../workflow-runner'
 import {
+  isWorkflowInputNumber,
   isWorkflowStepModel,
   type WorkflowActionResponse,
+  type WorkflowInputTrustResponse,
   type WorkflowStartRunResponse
 } from '../../shared/state/workflows'
 import type { PersistedWorkflowTrust } from '../persistence'
@@ -44,6 +47,7 @@ export interface RegisterWorkflowsRequestHandlersDeps {
   runner: WorkflowActionsRunner
   store: Pick<Store, 'getSnapshot' | 'dispatch'>
   persistTrust: (entry: PersistedWorkflowTrust) => void
+  inputTrust: InputTrustFetcher
   log: WorkflowLog
 }
 
@@ -57,6 +61,7 @@ const OVERRIDES_MAX = 64
 const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
 const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
+const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides'] as const
 
 const START_ERRORS: Record<StartRefusal, string> = {
   'labs-off': 'Workflows are turned off in Labs',
@@ -163,7 +168,7 @@ function pick(record: Record<string, unknown>, keys: readonly string[]): Record<
 }
 
 function parseStartRun(payload: unknown): StartRunRequest | null {
-  if (!isPlainObject(payload)) return null
+  if (!isPlainObject(payload) || !hasOnlyKeys(payload, START_RUN_KEYS)) return null
   const defId = ownValue(payload, 'defId')
   const worktreePath = ownValue(payload, 'worktreePath')
   const rawInputs = ownValue(payload, 'inputs', {})
@@ -219,6 +224,7 @@ export function registerWorkflowsRequestHandlers({
   runner,
   store,
   persistTrust,
+  inputTrust,
   log
 }: RegisterWorkflowsRequestHandlersDeps): void {
   transport.onRequest('workflows:reloadDefinitions', () => loader.reload())
@@ -249,11 +255,23 @@ export function registerWorkflowsRequestHandlers({
 
   guarded('workflows:getAttemptChangedFiles', ([attemptId]) => getAttemptChangedFiles(runs, attemptId))
   guarded('workflows:getAttemptFileDiff', ([attemptId, path]) => getAttemptFileDiff(runs, attemptId, path))
-  guarded('workflows:startRun', ([payload]): WorkflowStartRunResponse => {
+  guarded('workflows:startRun', async ([payload]): Promise<WorkflowStartRunResponse> => {
     const request = parseStartRun(payload)
     if (!request) return INVALID_REQUEST
-    const result = runner.start(request)
+    const result = await runner.start(request)
     return result.ok ? { runId: result.runId } : { error: START_ERRORS[result.reason] }
+  })
+  guarded('workflows:checkInputTrust', async ([root, type, number]): Promise<WorkflowInputTrustResponse> => {
+    const { settings, worktrees } = store.getSnapshot().state
+    if (!settings.labs.workflows) return { error: START_ERRORS['labs-off'] }
+    if (!boundedString(root, WORKTREE_PATH_MAX_CHARS) || (type !== 'issue' && type !== 'pr') || !isWorkflowInputNumber(number)) {
+      return INVALID_REQUEST
+    }
+    const known = worktrees.repoRoots.includes(root) || worktrees.list.some((worktree) => worktree.path === root)
+    if (!known) return { error: 'Unknown repository' }
+    const verdict = await inputTrust(root, type, number)
+    log('workflow', `input trust checked ${verdict === 'trusted' ? 'trusted' : 'untrusted'}`, { type, number })
+    return { trusted: verdict === 'trusted' }
   })
   guarded('workflows:trustDefinition', ([defId, hash]): WorkflowActionResponse => {
     if (!store.getSnapshot().state.settings.labs.workflows) return { error: START_ERRORS['labs-off'] }

@@ -159,6 +159,17 @@ describe('loadRunRecordsSync', () => {
     expect(loadRunRecordsSync(runsDir)).toEqual([withIds])
   })
 
+  it('keeps inputsUntrusted through a persist and reload and skips a non-boolean flag', async () => {
+    const runsDir = join(dir, 'workflow-runs')
+    const untrusted = record('untrusted', { inputsUntrusted: true })
+    records.persist(untrusted)
+    await records.flush()
+    writeFileSync(join(runsDir, 'badflag.json'), JSON.stringify({ ...record('badflag'), inputsUntrusted: 'yes' }))
+
+    expect(loadRunRecordsSync(runsDir)).toEqual([untrusted])
+    expect(await records.read('untrusted')).toEqual(untrusted)
+  })
+
   it('returns no records when the directory does not exist yet', () => {
     expect(loadRunRecordsSync(join(dir, 'missing'))).toEqual([])
   })

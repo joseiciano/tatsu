@@ -3,6 +3,8 @@ import { Loader2, Play, ShieldAlert, X } from 'lucide-react'
 import type { HooksConsent } from '../../../../shared/state/hooks'
 import { useFocusTrap } from '../../../hooks/useFocusTrap'
 import type { WorkflowAgent } from '../../../../shared/workflow-def'
+import type { WorkflowInputTrustType } from '../../../../shared/state/workflows'
+import { untrustedInputNotice } from '../launch-sheet-helpers'
 import type {
   ExistingWorktreeOption,
   LaunchInputField,
@@ -55,6 +57,11 @@ export interface LaunchSheetPickerRoots {
   filesRoot: string | null
 }
 
+export interface LaunchSheetUntrustedInput {
+  name: string
+  type: WorkflowInputTrustType
+}
+
 export interface LaunchSheetFormProps {
   target: LaunchSheetTargetView
   pickerRoots: LaunchSheetPickerRoots
@@ -67,6 +74,7 @@ export interface LaunchSheetFormProps {
   needsFull: boolean
   allowFull: boolean
   trust: LaunchSheetTrust | null
+  untrustedInputs: LaunchSheetUntrustedInput[]
   overrides: LaunchSheetOverrides | null
   blockReason: string | null
   submitting: boolean
@@ -113,6 +121,7 @@ export function LaunchSheetForm({
   needsFull,
   allowFull,
   trust,
+  untrustedInputs,
   overrides,
   blockReason,
   submitting,
@@ -319,6 +328,7 @@ export function LaunchSheetForm({
             const id = `${baseId}-input-${field.name}`
             const value = inputs[field.name] ?? ''
             const pickerRoot = field.type === 'file' ? pickerRoots.filesRoot : pickerRoots.repoRoot
+            const untrusted = untrustedInputs.find((input) => input.name === field.name)
             return (
               <div key={field.name} className="space-y-1.5">
                 <label htmlFor={id} className={LABEL_CLASS}>
@@ -349,6 +359,12 @@ export function LaunchSheetForm({
                     className={`${FIELD_CLASS} font-mono`}
                     onChange={(next) => onInputChange(field.name, next)}
                   />
+                )}
+                {untrusted !== undefined && (
+                  <p role="status" className="flex items-start gap-1.5 text-xs text-warning">
+                    <ShieldAlert className="icon-xs mt-0.5 shrink-0" />
+                    {untrustedInputNotice(untrusted.type)}
+                  </p>
                 )}
               </div>
             )

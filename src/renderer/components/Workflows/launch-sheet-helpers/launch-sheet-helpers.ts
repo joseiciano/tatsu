@@ -2,8 +2,11 @@ import type { CodexHookTrustSummary, HooksConsent } from '../../../../shared/sta
 import {
   WORKFLOW_STEP_MODEL_MAX_CHARS,
   applyOverrides,
+  isWorkflowInputNumber,
   isWorkflowStepModel,
   type WorkflowDefinitionSummary,
+  type WorkflowInputTrust,
+  type WorkflowInputTrustType,
   type WorkflowRun,
   type WorkflowRunStatus,
   type WorkflowScope,
@@ -105,6 +108,45 @@ export function buildInputFields(definition: ResolvedDefinition | null): LaunchI
 
 export function needsFull(definition: ResolvedDefinition | null): boolean {
   return !!definition?.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
+}
+
+export type InputTrustVerdict = WorkflowInputTrust | 'unknown'
+
+export interface InputTrustCheck {
+  name: string
+  type: WorkflowInputTrustType
+  number: string
+}
+
+export function inputTrustChecks(fields: readonly LaunchInputField[], inputs: Record<string, string>): InputTrustCheck[] {
+  const checks: InputTrustCheck[] = []
+  for (const { name, type } of fields) {
+    const number = Object.hasOwn(inputs, name) ? inputs[name] : ''
+    if ((type === 'issue' || type === 'pr') && number !== '') checks.push({ name, type, number })
+  }
+  return checks
+}
+
+export function inputTrustKey(repoRoot: string, { type, number }: Pick<InputTrustCheck, 'type' | 'number'>): string {
+  return `${repoRoot}\n${type}\n${number}`
+}
+
+export function untrustedInputs(
+  checks: readonly InputTrustCheck[],
+  repoRoot: string | null,
+  verdicts: Readonly<Record<string, InputTrustVerdict>>
+): InputTrustCheck[] {
+  return checks.filter((check) => {
+    if (!isWorkflowInputNumber(check.number)) return true
+    if (repoRoot === null) return false
+    const key = inputTrustKey(repoRoot, check)
+    return Object.hasOwn(verdicts, key) && verdicts[key] !== 'trusted'
+  })
+}
+
+export function untrustedInputNotice(type: WorkflowInputTrustType): string {
+  const subject = type === 'pr' ? 'This pull request' : 'This issue'
+  return `${subject}'s author is not a collaborator: steps will run with at most edit permissions`
 }
 
 export function trustNeeded({ scope, hash, trustedHash }: TrustNeededArgs): boolean {

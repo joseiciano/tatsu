@@ -41,11 +41,17 @@ import {
   RESUMABLE_AGENTS,
   WORKFLOW_RUN_RECORD_VERSION,
   applyOverrides,
+  capPermissions,
   harnessOf,
+  isWorkflowInputNumber,
   overriddenStep,
   runStepFacts,
   runsToEvict,
+  type AppliedStepOverrides,
   type WorkflowAttemptStatus,
+  type WorkflowDefinitionDetail,
+  type WorkflowInputTrust,
+  type WorkflowInputTrustType,
   type WorkflowPausedReason,
   type WorkflowRun,
   type WorkflowRunStatus,
@@ -55,6 +61,7 @@ import {
 } from '../../shared/state/workflows'
 
 const ENDED_EXECUTIONS_MAX = 256
+const INPUT_TRUST_TIMEOUT_MS = 10_000
 export const RUN_INPUTS_MAX = 64
 export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
 
@@ -113,6 +120,20 @@ function inputsRefusal(definition: ResolvedDefinition, inputs: Record<string, un
     if (typeof value !== 'string' || value.trim() === '') return 'missing-input'
   }
   return null
+}
+
+interface InputTrustLookup {
+  name: string
+  type: WorkflowInputTrustType
+  number: string
+}
+
+function trustLookups(definition: ResolvedDefinition, inputs: Record<string, string>): InputTrustLookup[] {
+  const lookups: InputTrustLookup[] = []
+  for (const [name, input] of Object.entries(definition.inputs)) {
+    if (input.type === 'issue' || input.type === 'pr') lookups.push({ name, type: input.type, number: inputs[name] })
+  }
+  return lookups
 }
 
 function userOutput(step: RunnableStep, request: MarkDoneRequest): StepOutputValidation {
@@ -266,11 +287,10 @@ export class WorkflowRunner {
     }
   }
 
-  start(request: StartRunRequest): StartRunResult {
-    const { store, loader, now, newId } = this.deps
+  async start(request: StartRunRequest): Promise<StartRunResult> {
     if (!this.labsOn()) return this.refuse('labs-off')
     if (!this.ready) return this.refuse('starting')
-    const detail = loader.getDefinition(request.defId)
+    const detail = this.deps.loader.getDefinition(request.defId)
     if (!detail) return this.refuse('unknown-definition')
     if (detail.summary.scope === 'repo' && !this.trusted(detail.summary.id, detail.summary.hash)) {
       return this.refuse('untrusted-definition')
@@ -279,15 +299,35 @@ export class WorkflowRunner {
     if (!detail.definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
     const applied = applyOverrides(detail.definition, request.overrides)
     if (!applied.ok) return this.refuse(applied.reason)
-    const { definition, overriddenFrom } = applied
+    const badInputs = inputsRefusal(applied.definition, request.inputs)
+    if (badInputs) return this.refuse(badInputs)
+    const placement = this.placementRefusal(request.worktreePath, applied.definition)
+    if (placement) return this.refuse(placement)
+    const lookups = trustLookups(applied.definition, request.inputs)
+    const verdicts =
+      lookups.length === 0
+        ? []
+        : await Promise.all(lookups.map((lookup) => this.inputVerdict(request.worktreePath, lookup)))
+    return this.createRun(request, detail, applied, lookups, verdicts)
+  }
+
+  private createRun(
+    request: StartRunRequest,
+    detail: WorkflowDefinitionDetail,
+    applied: Extract<AppliedStepOverrides, { ok: true }>,
+    lookups: readonly InputTrustLookup[],
+    verdicts: readonly WorkflowInputTrust[]
+  ): StartRunResult {
+    const { store, now, newId } = this.deps
+    if (!this.labsOn()) return this.refuse('labs-off')
+    if (!this.ready) return this.refuse('starting')
+    const placement = this.placementRefusal(request.worktreePath, applied.definition)
+    if (placement) return this.refuse(placement)
+    const inputsUntrusted = verdicts.some((verdict) => verdict !== 'trusted')
+    const definition = inputsUntrusted ? capPermissions(applied.definition) : applied.definition
+    const { overriddenFrom } = applied
     const needsFull = definition.steps.some((step) => step.kind === 'agent' && step.permissions === 'full')
     if (needsFull && request.allowFull !== true) return this.refuse('full-permission-unconfirmed')
-    if (!this.knownWorktree(request.worktreePath)) return this.refuse('unknown-worktree')
-    const badInputs = inputsRefusal(definition, request.inputs)
-    if (badInputs) return this.refuse(badInputs)
-    const hooksRefusal = this.agentHooksRefusal(definition.steps)
-    if (hooksRefusal) return this.refuse(hooksRefusal)
-    if (this.worktreeBusy(request.worktreePath)) return this.refuse('worktree-busy')
 
     const runId = newId()
     const steps: Record<string, WorkflowRunStep> = {}
@@ -321,7 +361,8 @@ export class WorkflowRunner {
         steps: stepStatus,
         startedAt: run.startedAt,
         attempts: [],
-        ...(overriddenFrom === undefined ? {} : { overriddenFrom })
+        ...(overriddenFrom === undefined ? {} : { overriddenFrom }),
+        ...(inputsUntrusted ? { inputsUntrusted } : {})
       },
       stepStatus,
       live: null,
@@ -330,6 +371,15 @@ export class WorkflowRunner {
     this.runs.set(runId, state)
     store.dispatch({ type: 'workflows/runStarted', payload: { runId, run } })
     this.log('run started', { runId })
+    lookups.forEach(({ name, type, number }, i) =>
+      this.log(`run input ${verdicts[i]}`, {
+        runId,
+        input: name,
+        type,
+        number: isWorkflowInputNumber(number) ? number : 'invalid'
+      })
+    )
+    if (inputsUntrusted) this.log('run capped at edit permissions', { runId })
     for (const stepId of Object.keys(overriddenFrom ?? {})) this.logHarness('step overridden', state, stepId)
     this.enterStep(state)
     this.settle(state)
@@ -656,6 +706,31 @@ export class WorkflowRunner {
       agent: step.agent,
       ...(step.model === undefined ? {} : { model: step.model })
     })
+  }
+
+  private placementRefusal(worktreePath: string, definition: ResolvedDefinition): StartRefusal | null {
+    if (!this.knownWorktree(worktreePath)) return 'unknown-worktree'
+    const hooksRefusal = this.agentHooksRefusal(definition.steps)
+    if (hooksRefusal) return hooksRefusal
+    if (this.worktreeBusy(worktreePath)) return 'worktree-busy'
+    return null
+  }
+
+  private async inputVerdict(worktreePath: string, { type, number }: InputTrustLookup): Promise<WorkflowInputTrust> {
+    const { inputTrust, inputTrustTimeoutMs = INPUT_TRUST_TIMEOUT_MS } = this.deps
+    if (!inputTrust) return 'untrusted'
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<WorkflowInputTrust>((resolve) => {
+      timer = setTimeout(() => resolve('untrusted'), inputTrustTimeoutMs)
+    })
+    try {
+      const fetched = Promise.resolve()
+        .then(() => inputTrust(worktreePath, type, number))
+        .catch((): WorkflowInputTrust => 'untrusted')
+      return (await Promise.race([fetched, timedOut])) === 'trusted' ? 'trusted' : 'untrusted'
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   private refuse(reason: StartRefusal): StartRunResult {

@@ -583,6 +583,7 @@ async function flowRepoTrust(page, backend) {
 }
 
 const PICKER_FILE = 'docs/picker-target.md'
+const UNTRUSTED_ISSUE_NOTICE = "This issue's author is not a collaborator: steps will run with at most edit permissions"
 
 async function flowInputPickers(page, backend) {
   await scenario(page, 'input-pickers', async (shot) => {
@@ -614,6 +615,8 @@ async function flowInputPickers(page, backend) {
     if ((await ticket.getAttribute('inputmode')) !== 'numeric') throw new Error('the issue fallback is not a number field')
     await ticket.fill('7')
     log(`input-pickers: chose ${PICKER_FILE} from the file picker with the keyboard; issue input fell back to a number field`)
+    await sheet.getByRole('status').filter({ hasText: UNTRUSTED_ISSUE_NOTICE }).waitFor()
+    log('input-pickers: the untrusted-author notice shows before Start (sandbox repo has no origin)')
     await shot('picked')
 
     await sheet.getByRole('button', { name: 'Start', exact: true }).click()
@@ -624,7 +627,10 @@ async function flowInputPickers(page, backend) {
     if (record.inputs?.target !== PICKER_FILE || record.inputs?.ticket !== '7') {
       throw new Error(`run inputs ${JSON.stringify(record.inputs)}, expected target ${PICKER_FILE} and ticket 7`)
     }
-    log(`input-pickers: run ${runId} done (test -f passed) with inputs ${JSON.stringify(record.inputs)}`)
+    if (record.inputsUntrusted !== true) {
+      throw new Error(`run record inputsUntrusted is ${JSON.stringify(record.inputsUntrusted)}, expected true`)
+    }
+    log(`input-pickers: run ${runId} done (test -f passed) with inputs ${JSON.stringify(record.inputs)} and inputsUntrusted true`)
     await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
     await shot('run-done')
   })

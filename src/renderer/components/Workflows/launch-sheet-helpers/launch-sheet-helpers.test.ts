@@ -4,6 +4,8 @@ import {
   canStart,
   definitionsForRepo,
   existingWorktreeOptions,
+  inputTrustChecks,
+  inputTrustKey,
   isWorktreeBusy,
   needsFull,
   overrideRows,
@@ -14,6 +16,8 @@ import {
   startBlockReason,
   trustNeeded,
   trustStepRows,
+  untrustedInputNotice,
+  untrustedInputs,
   type CanStartArgs
 } from '.'
 import { validateWorkflowDefinition, type ResolvedDefinition } from '../../../../shared/workflow-def'
@@ -470,5 +474,49 @@ describe('resolveOverrides', () => {
     expect(long.effective).toBe(MIXED)
     expect(resolveOverrides(MIXED, { fix: { model: 'bad\u0007model' } }).reason).toBe('Model for fix is invalid')
     expect(resolveOverrides(MIXED, { plan: { model: 'm'.repeat(200) } }).reason).toBeNull()
+  })
+})
+
+describe('input trust helpers', () => {
+  const fields = [
+    { name: 'task', type: 'text', control: 'textarea' },
+    { name: 'ticket', type: 'issue', control: 'picker' },
+    { name: 'change', type: 'pr', control: 'picker' },
+    { name: 'target', type: 'file', control: 'picker' }
+  ] as const
+
+  it('checks only filled issue and pr inputs', () => {
+    expect(inputTrustChecks([...fields], { task: '7', ticket: '7', change: '', target: 'a.md' })).toEqual([
+      { name: 'ticket', type: 'issue', number: '7' }
+    ])
+    expect(inputTrustChecks([...fields], { ticket: '7', change: '12' })).toEqual([
+      { name: 'ticket', type: 'issue', number: '7' },
+      { name: 'change', type: 'pr', number: '12' }
+    ])
+  })
+
+  it('reports untrusted and malformed inputs, and nothing for trusted or pending ones', () => {
+    const checks = [
+      { name: 'a', type: 'issue', number: '7' },
+      { name: 'b', type: 'pr', number: '8' },
+      { name: 'c', type: 'issue', number: '9' },
+      { name: 'd', type: 'issue', number: '0' }
+    ] as const
+    const verdicts = {
+      [inputTrustKey('/repo', checks[0])]: 'untrusted',
+      [inputTrustKey('/repo', checks[1])]: 'trusted',
+      [inputTrustKey('/other', checks[2])]: 'untrusted'
+    } as const
+    expect(untrustedInputs([...checks], '/repo', verdicts).map(({ name }) => name)).toEqual(['a', 'd'])
+    expect(untrustedInputs([...checks], null, verdicts).map(({ name }) => name)).toEqual(['d'])
+  })
+
+  it('words the notice for an issue or a pull request', () => {
+    expect(untrustedInputNotice('issue')).toBe(
+      "This issue's author is not a collaborator: steps will run with at most edit permissions"
+    )
+    expect(untrustedInputNotice('pr')).toBe(
+      "This pull request's author is not a collaborator: steps will run with at most edit permissions"
+    )
   })
 })

@@ -1,6 +1,12 @@
 import type { Store } from '../store'
 import type { WorkflowDefsLoader } from '../workflow-defs-loader'
-import type { WorkflowMarkDonePayload, WorkflowRunRecord, WorkflowSnapshotRef } from '../../shared/state/workflows'
+import type {
+  WorkflowInputTrust,
+  WorkflowInputTrustType,
+  WorkflowMarkDonePayload,
+  WorkflowRunRecord,
+  WorkflowSnapshotRef
+} from '../../shared/state/workflows'
 import type { StepDriver, StepDriverKind } from './drivers/types'
 import type { StepOutputFieldError, WorkflowOutputSchema } from '../../shared/workflow-def'
 
@@ -61,7 +67,15 @@ export interface WorkflowRunnerDeps {
   persist?: (run: WorkflowRunRecord) => void
   artifacts?: RunArtifacts
   hasExecution?: (executionId: string) => boolean
+  inputTrust?: InputTrustFetcher
+  inputTrustTimeoutMs?: number
 }
+
+export type InputTrustFetcher = (
+  worktreePath: string,
+  type: WorkflowInputTrustType,
+  number: string
+) => Promise<WorkflowInputTrust>
 
 export interface RunSnapshotRequest {
   worktreePath: string

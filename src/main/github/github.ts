@@ -6,6 +6,11 @@ import { trackedFetch } from '../github-recorder'
 import type { CheckStatus, PRReview, PRStatus } from '../../shared/state/prs'
 import type { IssueSummary, PRSummary, PRMetadata, RepoIssuesResult } from '../../shared/github-types'
 import {
+  isWorkflowInputNumber,
+  type WorkflowInputTrust,
+  type WorkflowInputTrustType
+} from '../../shared/state/workflows'
+import {
   type RepoContext,
   type PRStatusRequest,
   type ApiPRListItem,
@@ -677,6 +682,42 @@ export async function listRepoIssues(repoRoot: string, query = ''): Promise<Repo
   } catch (err) {
     log('github', `listRepoIssues failed for ${owner}/${repo}`, formatErr(err))
     return { status: 'error' }
+  }
+}
+
+const TRUSTED_ASSOCIATIONS: ReadonlySet<string> = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
+async function authorAssociation(url: string): Promise<unknown> {
+  const token = (await resolveGitHubToken())?.token ?? null
+  if (!token) return null
+  let res = await doFetch(url, token)
+  if (res.status === 401) {
+    invalidateTokenCache()
+    const retryToken = (await resolveGitHubToken())?.token ?? null
+    if (!retryToken) return null
+    res = await doFetch(url, retryToken)
+  }
+  if (!res.ok) return null
+  const body: unknown = await res.json()
+  return typeof body === 'object' && body !== null && 'author_association' in body ? body.author_association : null
+}
+
+export async function inputAuthorTrust(
+  worktreePath: string,
+  type: WorkflowInputTrustType,
+  number: string
+): Promise<WorkflowInputTrust> {
+  if (!isWorkflowInputNumber(number)) return 'untrusted'
+  const repoInfo = await getRepoInfo(worktreePath)
+  if (!repoInfo) return 'untrusted'
+  const owner = encodeURIComponent(repoInfo.owner)
+  const repo = encodeURIComponent(repoInfo.repo)
+  const kind = type === 'pr' ? 'pulls' : 'issues'
+  try {
+    const association = await authorAssociation(`https://api.github.com/repos/${owner}/${repo}/${kind}/${number}`)
+    return typeof association === 'string' && TRUSTED_ASSOCIATIONS.has(association) ? 'trusted' : 'untrusted'
+  } catch (err) {
+    log('github', `inputAuthorTrust failed for ${type} ${number}`, formatErr(err))
+    return 'untrusted'
   }
 }
 

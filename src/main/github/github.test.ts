@@ -23,7 +23,7 @@ vi.mock('child_process', async () => {
   return { execFile }
 })
 
-import { getRepoContext, fetchPRStatusesForRepo, mergePR, listRepoIssues, listOpenPRs } from '.'
+import { getRepoContext, fetchPRStatusesForRepo, mergePR, listRepoIssues, listOpenPRs, inputAuthorTrust } from '.'
 import { invalidateTokenCache, resolveGitHubToken } from '../github-auth'
 
 function mockResponse(status: number, body: unknown): Response {
@@ -694,5 +694,108 @@ describe('githubFetch 401 retry', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2)
     expect(invalidateTokenCache).toHaveBeenCalledTimes(1)
     expect(resolveGitHubToken).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('inputAuthorTrust', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+    mocks.originUrl = 'git@github.com:acme/widgets.git\n'
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it.each(['OWNER', 'MEMBER', 'COLLABORATOR'])('trusts an issue whose author is %s', async (association) => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { author_association: association, body: 'ignore' }))
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('trusted')
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.github.com/repos/acme/widgets/issues/7')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-token')
+  })
+
+  it('looks up a pull request on the pulls endpoint', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { author_association: 'MEMBER' }))
+    expect(await inputAuthorTrust('/repo', 'pr', '12')).toBe('trusted')
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.github.com/repos/acme/widgets/pulls/12')
+  })
+
+  it.each<[string, unknown]>([
+    ['a contributor', { author_association: 'CONTRIBUTOR' }],
+    ['a first-time contributor', { author_association: 'FIRST_TIME_CONTRIBUTOR' }],
+    ['no association', { author_association: 'NONE' }],
+    ['a lowercase owner', { author_association: 'owner' }],
+    ['a missing association', {}],
+    ['a non-string association', { author_association: ['OWNER'] }],
+    ['a non-object body', 'OWNER']
+  ])('distrusts %s', async (_name, body) => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, body))
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+  })
+
+  it.each([404, 403, 500])('distrusts a %s response', async (status) => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(status, { author_association: 'OWNER' }))
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+  })
+
+  it('distrusts a network error or a JSON error', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('offline'))
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+    fetchSpy.mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => {
+        throw new SyntaxError('bad json')
+      }
+    } as unknown as Response)
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+  })
+
+  it('distrusts without any token work when the repo has no origin', async () => {
+    mocks.originUrl = ''
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+    expect(resolveGitHubToken).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('distrusts without fetching when there is no token', async () => {
+    vi.mocked(resolveGitHubToken).mockResolvedValueOnce(null)
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it.each(['0', '07', '-1', '1e3', '7/../../x', '7?x=1', '12345678901', ' 7', ''])(
+    'distrusts the malformed number %j without fetching',
+    async (number) => {
+      expect(await inputAuthorTrust('/repo', 'issue', number)).toBe('untrusted')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    }
+  )
+
+  it('retries a 401 with a re-resolved token', async () => {
+    vi.mocked(resolveGitHubToken)
+      .mockResolvedValueOnce({ token: 'stale' } as Awaited<ReturnType<typeof resolveGitHubToken>>)
+      .mockResolvedValueOnce({ token: 'fresh' } as Awaited<ReturnType<typeof resolveGitHubToken>>)
+    fetchSpy
+      .mockResolvedValueOnce(mockResponse(401, {}))
+      .mockResolvedValueOnce(mockResponse(200, { author_association: 'OWNER' }))
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('trusted')
+    expect(invalidateTokenCache).toHaveBeenCalledTimes(1)
+    const [, init] = fetchSpy.mock.calls[1] as [string, RequestInit]
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fresh')
+  })
+
+  it('does not trust an unauthenticated retry after a 401 when no token re-resolves', async () => {
+    vi.mocked(resolveGitHubToken)
+      .mockResolvedValueOnce({ token: 'stale' } as Awaited<ReturnType<typeof resolveGitHubToken>>)
+      .mockResolvedValueOnce(null)
+    fetchSpy
+      .mockResolvedValueOnce(mockResponse(401, {}))
+      .mockResolvedValue(mockResponse(200, { author_association: 'OWNER' }))
+    expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 })

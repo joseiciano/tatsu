@@ -383,7 +383,7 @@ describe('WorkflowRunner.reconcile', () => {
     }
     const ctx = boot([], { loader: { getDefinition: () => detail } })
     ctx.runner.reconcile(ctx.records)
-    const started = ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/x', inputs: {} })
+    const started = await ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/x', inputs: {} })
     if (!started.ok) throw new Error(started.reason)
     await flush()
     expect(ctx.lastPersisted(started.runId)?.attempts[0].executionId).toBe('agent-exec-1')
