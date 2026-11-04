@@ -72,6 +72,15 @@ describe('deriveStepStrip', () => {
     expect(strip.map((s) => s.paused)).toEqual([false, true, false])
   })
 
+  it('marks the cursor step of a run paused at its loop cap even though that step is done', () => {
+    const strip = deriveStepStrip(
+      { ...run({ build: 'done', review: 'done', publish: 'pending' }, 'paused', 'loop-cap'), cursorStepId: 'review' },
+      ['build', 'review', 'publish']
+    )
+    expect(strip.map((s) => s.glyph)).toEqual(['✓', '!', '○'])
+    expect(strip.map((s) => s.paused)).toEqual([false, true, false])
+  })
+
   it('shows a gated step of a cancelled run as cancelled, not waiting at its gate', () => {
     const strip = deriveStepStrip(run({ plan: 'awaiting-gate', test: 'pending' }, 'cancelled'), ['plan', 'test'])
     expect(strip.map((s) => [s.status, s.glyph, s.paused])).toEqual([
@@ -172,7 +181,9 @@ describe('needsYouActions', () => {
     ['gate on a shell step', 'gate', SHELL, DONE, false, ['approve', 'cancel']],
     ['gate before the step loaded', 'gate', null, null, true, ['approve', 'cancel', 'jump']],
     ['budget', 'budget', null, null, false, ['cancel']],
-    ['loop-cap', 'loop-cap', null, null, false, ['cancel']],
+    ['loop-cap with a tab', 'loop-cap', CLAUDE, DONE, true, ['loop-again', 'loop-continue', 'cancel', 'jump']],
+    ['loop-cap on a shell step', 'loop-cap', SHELL, DONE, false, ['loop-again', 'loop-continue', 'cancel']],
+    ['loop-cap before the step loaded', 'loop-cap', null, null, false, ['loop-again', 'loop-continue', 'cancel']],
     ['timeout', 'timeout', null, null, false, ['cancel']],
     ['restack-conflict', 'restack-conflict', null, null, false, ['cancel']]
   ])('%s', (_name, reason, step, attempt, tabExists, expected) => {
@@ -293,7 +304,8 @@ describe('runNeedsYouAction', () => {
       resumeWorkflowStep: vi.fn(async () => ok),
       cancelWorkflowRun: vi.fn(async () => ok),
       retryWorkflowStepFromClean: vi.fn(async () => ok),
-      approveWorkflowGate: vi.fn(async () => ok)
+      approveWorkflowGate: vi.fn(async () => ok),
+      resolveWorkflowLoopCap: vi.fn(async () => ok)
     }
   }
 
@@ -302,7 +314,9 @@ describe('runNeedsYouAction', () => {
     ['skip', 'skipWorkflowStep', ['r', 's']],
     ['resume', 'resumeWorkflowStep', ['r', 's']],
     ['cancel', 'cancelWorkflowRun', ['r']],
-    ['approve', 'approveWorkflowGate', ['r', 's']]
+    ['approve', 'approveWorkflowGate', ['r', 's']],
+    ['loop-again', 'resolveWorkflowLoopCap', ['r', 's', 'again']],
+    ['loop-continue', 'resolveWorkflowLoopCap', ['r', 's', 'continue']]
   ] as const)('%s calls %s', async (kind, method, args) => {
     const backend = api()
     await expect(runNeedsYouAction(backend, kind, 'r', 's')).resolves.toEqual({ ok: true })

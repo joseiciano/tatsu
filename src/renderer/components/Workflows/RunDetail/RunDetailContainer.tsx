@@ -242,6 +242,8 @@ export function RunDetailContainer({
         if (stepId) setChanges({ busy: false, error: null })
         return
       case 'approve':
+      case 'loop-again':
+      case 'loop-continue':
       case 'retry':
       case 'skip':
       case 'resume':

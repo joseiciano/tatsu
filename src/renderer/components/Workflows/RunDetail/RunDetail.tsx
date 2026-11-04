@@ -11,6 +11,8 @@ import { AttemptTimeline } from './AttemptTimeline'
 export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
   approve: 'Approve',
   'request-changes': 'Request changes',
+  'loop-again': 'Loop again',
+  'loop-continue': 'Continue anyway',
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',

@@ -27,6 +27,8 @@ export type NeedsYouActionKind =
   | 'jump'
   | 'approve'
   | 'request-changes'
+  | 'loop-again'
+  | 'loop-continue'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -67,6 +69,7 @@ export type NeedsYouActionsApi = Pick<
   | 'cancelWorkflowRun'
   | 'retryWorkflowStepFromClean'
   | 'approveWorkflowGate'
+  | 'resolveWorkflowLoopCap'
 >
 
 export const STEP_GLYPHS: Record<WorkflowStepStatus, StepGlyph> = {
@@ -124,7 +127,8 @@ export function currentStepId(run: WorkflowRun, stepOrder: readonly string[]): s
 }
 
 export function deriveStepStrip(run: WorkflowRun, stepOrder: readonly string[]): StepStripEntry[] {
-  const pausedId = run.status === 'paused' ? currentStepId(run, stepOrder) : null
+  const cursor = run.cursorStepId !== undefined && stepOrder.includes(run.cursorStepId) ? run.cursorStepId : null
+  const pausedId = run.status === 'paused' ? cursor ?? currentStepId(run, stepOrder) : null
   const entries: StepStripEntry[] = []
   for (const id of stepOrder) {
     const step = run.steps[id]
@@ -162,8 +166,9 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
       return ['retry', 'cancel', ...jump]
     case 'gate':
       return ['approve', ...(step?.kind === 'agent' ? (['request-changes'] as const) : []), 'cancel', ...jump]
-    case 'budget':
     case 'loop-cap':
+      return ['loop-again', 'loop-continue', 'cancel', ...jump]
+    case 'budget':
     case 'timeout':
     case 'restack-conflict':
       return ['cancel', ...jump]
@@ -215,6 +220,10 @@ export function runNeedsYouAction(
       return api.cancelWorkflowRun(runId)
     case 'approve':
       return api.approveWorkflowGate(runId, stepId)
+    case 'loop-again':
+      return api.resolveWorkflowLoopCap(runId, stepId, 'again')
+    case 'loop-continue':
+      return api.resolveWorkflowLoopCap(runId, stepId, 'continue')
     default: {
       const _exhaustive: never = kind
       return _exhaustive
