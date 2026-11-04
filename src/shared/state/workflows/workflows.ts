@@ -288,7 +288,8 @@ const CHAIN_ITEM_PATCH_FIELDS: { [K in ChainItemPatchField]: K } = {
   baseBranch: 'baseBranch',
   prNumber: 'prNumber',
   prevItemId: 'prevItemId',
-  skipped: 'skipped'
+  skipped: 'skipped',
+  failed: 'failed'
 }
 
 function withItemField<K extends ChainItemPatchField>(
@@ -325,23 +326,28 @@ function samePr(a: WorkflowRunPr | undefined, b: WorkflowRunPr): boolean {
 
 const LIVE_CHILD_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['queued', 'running', 'paused'])
 
-export function deriveChainStatus(chain: WorkflowChain, runs: WorkflowsState['runs']): WorkflowChainStatusResult {
-  const children: Array<{ runId: string; run: WorkflowRun | undefined }> = []
+export function deriveChainStatus(
+  chain: WorkflowChain,
+  runs: Readonly<Record<string, Pick<WorkflowRun, 'status'>>>
+): WorkflowChainStatusResult {
+  const children: Array<{ runId: string; status: WorkflowRunStatus | undefined }> = []
   let allDone = true
+  let itemFailed = false
   for (const item of chain.items) {
     if (item.skipped) continue
     const runId = Object.hasOwn(chain.childRunIds, item.id) ? chain.childRunIds[item.id] : undefined
-    const run = runId !== undefined && Object.hasOwn(runs, runId) ? runs[runId] : undefined
-    if (run?.status !== 'done') allDone = false
-    if (runId !== undefined) children.push({ runId, run })
+    const status = runId !== undefined && Object.hasOwn(runs, runId) ? runs[runId].status : undefined
+    if (status !== 'done') allDone = false
+    if (runId !== undefined) children.push({ runId, status })
+    else if (item.failed) itemFailed = true
   }
   if (allDone) return { status: 'done' }
-  const paused = children.find(({ run }) => run?.status === 'paused')
+  const paused = children.find(({ status }) => status === 'paused')
   if (paused) return { status: 'paused', runId: paused.runId }
-  if (children.some(({ run }) => run?.status === 'running')) return { status: 'running' }
-  if (!children.some(({ run }) => run !== undefined && LIVE_CHILD_STATUSES.has(run.status))) {
-    if (children.some(({ run }) => run?.status === 'failed')) return { status: 'failed' }
-    if (children.some(({ run }) => run?.status === 'cancelled')) return { status: 'cancelled' }
+  if (children.some(({ status }) => status === 'running')) return { status: 'running' }
+  if (!children.some(({ status }) => status !== undefined && LIVE_CHILD_STATUSES.has(status))) {
+    if (itemFailed || children.some(({ status }) => status === 'failed')) return { status: 'failed' }
+    if (children.some(({ status }) => status === 'cancelled')) return { status: 'cancelled' }
   }
   return { status: 'queued' }
 }

@@ -20,6 +20,8 @@ export const WORKFLOW_INPUT_VALUE_MAX_CHARS = 64 * 1024
 export const WORKFLOW_CHAIN_ID_MAX_CHARS = 128
 export const WORKFLOW_CHAIN_BRANCH_MAX_CHARS = 255
 export const WORKFLOW_CHAIN_URL_MAX_CHARS = 2048
+export const WORKFLOW_CHAIN_ITEMS_MAX = 50
+export const WORKFLOW_CHAIN_ITEM_TITLE_MAX_CHARS = 200
 export const STEP_HARNESS_AGENTS: readonly WorkflowAgent[] = [
   'claude',
   ...(WORKFLOW_FEATURES['agent-codex'].supported ? (['codex'] as const) : []),
