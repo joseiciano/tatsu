@@ -9,6 +9,7 @@ import { getAttemptChangedFiles, getAttemptFileDiff } from './attempt-changes'
 import { RUN_ID_PATTERN, isRunId, type WorkflowRunLookup } from '../workflow-run-records'
 import {
   RUN_INPUTS_MAX,
+  RUN_INPUT_VALUE_MAX_CHARS,
   type InputTrustFetcher,
   sanitizePasteText,
   type MarkDoneRequest,
@@ -26,8 +27,13 @@ import {
   isBudgetUsd,
   isWorkflowInputNumber,
   isWorkflowStepModel,
+  WORKFLOW_CHAIN_ITEM_TITLE_MAX_CHARS,
+  WORKFLOW_CHAIN_ITEMS_MAX,
   WORKFLOW_NO_REPO_DIR_ERROR,
   type WorkflowActionResponse,
+  type WorkflowChainMode,
+  type WorkflowRunChainOrigin,
+  type WorkflowStartChainResponse,
   type WorkflowDefinitionSaveResponse,
   type WorkflowInputTrustResponse,
   type WorkflowLoopCapAction,
@@ -35,6 +41,7 @@ import {
 } from '../../shared/state/workflows'
 import type { PersistedWorkflowTrust } from '../persistence'
 import type { Store } from '../store'
+import type { ChainItemRequest, ChainScheduler, StartChainRequest } from '../workflow-chains'
 
 export interface WorkflowsTransportLike {
   onRequest(name: string, handler: (ctx: unknown, ...args: unknown[]) => unknown): void
@@ -72,6 +79,16 @@ export interface RegisterWorkflowsRequestHandlersDeps {
   log: WorkflowLog
 }
 
+export interface RegisterWorkflowChainRequestHandlersDeps {
+  transport: WorkflowsTransportLike
+  loader: Pick<WorkflowDefsLoader, 'getDefinition'>
+  runner: Pick<WorkflowRunner, 'checkStart'>
+  chains: Pick<ChainScheduler, 'start'>
+  store: Pick<Store, 'getSnapshot'>
+  getRepoRoots: () => readonly string[]
+  log: WorkflowLog
+}
+
 const DEF_ID_MAX_CHARS = 256
 const WORKTREE_PATH_MAX_CHARS = 4096
 const OUTPUT_ERRORS_SHOWN = 5
@@ -83,6 +100,11 @@ const INTERNAL_ERROR = { error: 'internal error' } as const
 const INVALID_REQUEST = { error: 'invalid request' } as const
 const DEFINITION_HASH_PATTERN = /^[0-9a-f]{64}$/
 const START_RUN_KEYS = ['defId', 'worktreePath', 'inputs', 'allowFull', 'overrides', 'autopilot', 'budgetUsd'] as const
+const START_CHAIN_KEYS = ['defId', 'repoRoot', 'mode', 'items', 'inputs', 'overrides', 'autopilot', 'allowFull', 'draftPrs'] as const
+const CHAIN_ITEM_KEYS = ['title', 'value', 'origin'] as const
+const CHAIN_ORIGIN_KEYS = ['kind', 'number'] as const
+const CHAIN_PROBE_ID = 'probe'
+const CHAIN_PROBE_BRANCH = 'wf/probe'
 const REQUEST_CHANGES_KEYS = ['feedback', 'fresh'] as const
 const SAVE_DEFINITION_KEYS = ['scope', 'repoRoot', 'defId', 'name', 'source'] as const
 const DEFINITION_NAME_MAX_CHARS = 200
@@ -120,6 +142,13 @@ const START_ERRORS: Record<StartRefusal, string> = {
   'parallel-writer': 'Steps that can run at the same time must not write; make them read-only or order them with "needs"',
   starting: 'Tatsu is still starting; try again'
 }
+
+const CHAIN_ERRORS = {
+  stacked: 'Stacked chains are not supported yet',
+  'unknown-repo': 'Unknown repository',
+  'no-item-input': 'The workflow definition has no item_input, so it cannot run over a list of items',
+  'invalid-items': 'Each item of this workflow must be an issue or pull request number'
+} as const
 
 const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], string> = {
   'unknown-run': 'Unknown or finished run',
@@ -216,6 +245,90 @@ function pick(record: Record<string, unknown>, keys: readonly string[]): Record<
   return out
 }
 
+function parseInputs(rawInputs: unknown): Record<string, string> | null {
+  if (!isPlainObject(rawInputs)) return null
+  const entries = Object.entries(rawInputs)
+  if (entries.length > RUN_INPUTS_MAX) return null
+  const inputs: Record<string, string> = {}
+  for (const [key, value] of entries) {
+    if (typeof value !== 'string') return null
+    Object.defineProperty(inputs, key, { value, enumerable: true, writable: true, configurable: true })
+  }
+  return inputs
+}
+
+function parseChainOrigin(value: unknown): WorkflowRunChainOrigin | null {
+  if (!isPlainObject(value) || !hasOnlyKeys(value, CHAIN_ORIGIN_KEYS)) return null
+  const kind = ownValue(value, 'kind')
+  const number = ownValue(value, 'number')
+  if (kind !== 'issue' && kind !== 'pr') return null
+  if (typeof number !== 'number' || !Number.isSafeInteger(number) || !isWorkflowInputNumber(String(number))) return null
+  return { kind, number }
+}
+
+function parseChainItem(value: unknown): ChainItemRequest | null {
+  if (!isPlainObject(value) || !hasOnlyKeys(value, CHAIN_ITEM_KEYS)) return null
+  const title = ownValue(value, 'title')
+  const itemValue = ownValue(value, 'value')
+  const rawOrigin = ownValue(value, 'origin')
+  if (!boundedString(title, WORKFLOW_CHAIN_ITEM_TITLE_MAX_CHARS) || title.trim() === '') return null
+  if (typeof itemValue !== 'string' || itemValue.length > RUN_INPUT_VALUE_MAX_CHARS) return null
+  if (rawOrigin === undefined) return { title, value: itemValue }
+  const origin = parseChainOrigin(rawOrigin)
+  return origin ? { title, value: itemValue, origin } : null
+}
+
+type ParsedStartChain = Omit<StartChainRequest, 'definitionName' | 'mode'> & { mode: WorkflowChainMode }
+
+function parseStartChain(payload: unknown): ParsedStartChain | null {
+  if (!isPlainObject(payload) || !hasOnlyKeys(payload, START_CHAIN_KEYS)) return null
+  const defId = ownValue(payload, 'defId')
+  const repoRoot = ownValue(payload, 'repoRoot')
+  const mode = ownValue(payload, 'mode')
+  const rawItems = ownValue(payload, 'items')
+  const rawOverrides = ownValue(payload, 'overrides')
+  const flags = { autopilot: ownValue(payload, 'autopilot'), allowFull: ownValue(payload, 'allowFull'), draftPrs: ownValue(payload, 'draftPrs') }
+  if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(repoRoot, WORKTREE_PATH_MAX_CHARS)) return null
+  if (mode !== 'independent' && mode !== 'stacked') return null
+  if (Object.values(flags).some((flag) => flag !== undefined && typeof flag !== 'boolean')) return null
+  if (!Array.isArray(rawItems) || rawItems.length === 0 || rawItems.length > WORKFLOW_CHAIN_ITEMS_MAX) return null
+  const items: ChainItemRequest[] = []
+  for (const raw of rawItems) {
+    const item = parseChainItem(raw)
+    if (!item) return null
+    items.push(item)
+  }
+  const inputs = parseInputs(ownValue(payload, 'inputs', {}))
+  const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
+  if (!inputs || overrides === null) return null
+  return {
+    defId,
+    repoRoot,
+    mode,
+    items,
+    inputs,
+    ...(overrides === undefined ? {} : { overrides }),
+    ...(flags.autopilot === true ? { autopilot: true } : {}),
+    ...(flags.allowFull === true ? { allowFull: true } : {}),
+    draftPrs: flags.draftPrs === true
+  }
+}
+
+function chainProbe(request: ParsedStartChain, item: ChainItemRequest): StartRunRequest {
+  return {
+    defId: request.defId,
+    worktreePath: request.repoRoot,
+    inputs: request.inputs,
+    ...(request.overrides === undefined ? {} : { overrides: request.overrides }),
+    ...(request.allowFull === true ? { allowFull: true } : {}),
+    chain: {
+      chainId: CHAIN_PROBE_ID,
+      item: { id: CHAIN_PROBE_ID, title: item.title, value: item.value, branch: CHAIN_PROBE_BRANCH, baseBranch: '' },
+      ...(item.origin === undefined ? {} : { origin: item.origin })
+    }
+  }
+}
+
 function parseStartRun(payload: unknown): StartRunRequest | null {
   if (!isPlainObject(payload) || !hasOnlyKeys(payload, START_RUN_KEYS)) return null
   const defId = ownValue(payload, 'defId')
@@ -231,14 +344,8 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
   const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
   if (overrides === null) return null
   if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(worktreePath, WORKTREE_PATH_MAX_CHARS)) return null
-  if (!isPlainObject(rawInputs)) return null
-  const entries = Object.entries(rawInputs)
-  if (entries.length > RUN_INPUTS_MAX) return null
-  const inputs: Record<string, string> = {}
-  for (const [key, value] of entries) {
-    if (typeof value !== 'string') return null
-    Object.defineProperty(inputs, key, { value, enumerable: true, writable: true, configurable: true })
-  }
+  const inputs = parseInputs(rawInputs)
+  if (!inputs) return null
   return {
     defId,
     worktreePath,
@@ -300,6 +407,58 @@ function actionResponse(result: StepActionResult): WorkflowActionResponse {
   return { error: `${ACTION_ERRORS['invalid-output']}: ${details}`.slice(0, ERROR_MAX_CHARS) }
 }
 
+function guardedRegistrar(transport: WorkflowsTransportLike, log: WorkflowLog) {
+  return <T>(name: string, handle: (args: unknown[]) => T | Promise<T>): void => {
+    transport.onRequest(name, async (_ctx, ...args) => {
+      try {
+        return await handle(args)
+      } catch (err) {
+        log('workflow', `request failed ${name}`, { error: err instanceof Error ? err.name : typeof err })
+        return INTERNAL_ERROR
+      }
+    })
+  }
+}
+
+export function registerWorkflowChainRequestHandlers({
+  transport,
+  loader,
+  runner,
+  chains,
+  store,
+  getRepoRoots,
+  log
+}: RegisterWorkflowChainRequestHandlersDeps): void {
+  const guarded = guardedRegistrar(transport, log)
+  guarded('workflows:startChain', ([payload]): WorkflowStartChainResponse => {
+    if (!store.getSnapshot().state.settings.labs.workflows) return { error: START_ERRORS['labs-off'] }
+    const request = parseStartChain(payload)
+    if (!request) return INVALID_REQUEST
+    if (request.mode !== 'independent') return { error: CHAIN_ERRORS.stacked }
+    if (!getRepoRoots().includes(request.repoRoot)) return { error: CHAIN_ERRORS['unknown-repo'] }
+    const [first] = request.items
+    const firstRefusal = runner.checkStart(chainProbe(request, first))
+    if (firstRefusal && firstRefusal !== 'invalid-inputs' && firstRefusal !== 'missing-input') {
+      return { error: START_ERRORS[firstRefusal] }
+    }
+    const detail = loader.getDefinition(request.defId)
+    const definition = detail?.definition
+    if (!detail || !definition) return { error: START_ERRORS['unknown-definition'] }
+    const itemInput = definition.item_input
+    if (itemInput === undefined) return { error: CHAIN_ERRORS['no-item-input'] }
+    const itemType = Object.hasOwn(definition.inputs, itemInput) ? definition.inputs[itemInput].type : undefined
+    if ((itemType === 'issue' || itemType === 'pr') && !request.items.every((item) => isWorkflowInputNumber(item.value))) {
+      return { error: CHAIN_ERRORS['invalid-items'] }
+    }
+    for (const item of request.items) {
+      const refusal = runner.checkStart(chainProbe(request, item))
+      if (refusal) return { error: START_ERRORS[refusal] }
+    }
+    const chainId = chains.start({ ...request, mode: 'independent', definitionName: detail.summary.name })
+    return { chainId }
+  })
+}
+
 export function registerWorkflowsRequestHandlers({
   transport,
   loader,
@@ -315,16 +474,7 @@ export function registerWorkflowsRequestHandlers({
   transport.onRequest('workflows:getRun', (_ctx, runId) => runs.getRun(runId))
   transport.onRequest('workflows:getAttemptResult', (_ctx, attemptId) => runs.getAttemptResult(attemptId))
 
-  const guarded = <T>(name: string, handle: (args: unknown[]) => T | Promise<T>): void => {
-    transport.onRequest(name, async (_ctx, ...args) => {
-      try {
-        return await handle(args)
-      } catch (err) {
-        log('workflow', `request failed ${name}`, { error: err instanceof Error ? err.name : typeof err })
-        return INTERNAL_ERROR
-      }
-    })
-  }
+  const guarded = guardedRegistrar(transport, log)
 
   const stepAction = (
     name: string,

@@ -19,6 +19,8 @@ import type {
   WorkflowRequestChangesPayload,
   WorkflowLoopCapAction,
   WorkflowRunRecord,
+  WorkflowStartChainPayload,
+  WorkflowStartChainResponse,
   WorkflowStartRunPayload,
   WorkflowStartRunResponse,
   WorkflowSwapStepPayload
@@ -420,6 +422,7 @@ export interface ElectronAPI {
   getWorkflowAttemptChangedFiles(attemptId: string): Promise<WorkflowAttemptChangedFilesResponse>
   getWorkflowAttemptFileDiff(attemptId: string, path: string): Promise<WorkflowAttemptFileDiffResponse>
   startWorkflowRun(payload: WorkflowStartRunPayload): Promise<WorkflowStartRunResponse>
+  startWorkflowChain(payload: WorkflowStartChainPayload): Promise<WorkflowStartChainResponse>
   trustWorkflowDefinition(defId: string, hash: string): Promise<WorkflowActionResponse>
   saveWorkflowDefinition(payload: WorkflowSaveDefinitionPayload): Promise<WorkflowDefinitionSaveResponse>
   duplicateWorkflowDefinition(defId: string): Promise<WorkflowDefinitionSaveResponse>

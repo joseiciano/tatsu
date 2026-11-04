@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync } from 'fs'
 import { createRequire } from 'module'
-import { randomUUID } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { join } from 'path'
 import { PtyManager } from './pty-manager'
 import { ChatRuntimeRegistry } from './chat-runtimes'
@@ -104,7 +104,8 @@ import { recordActivity, getActivityLog, clearAllActivity, clearActivityForWorkt
 import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
-import { registerWorkflowsRequestHandlers } from './workflows-transport'
+import { registerWorkflowChainRequestHandlers, registerWorkflowsRequestHandlers } from './workflows-transport'
+import { ChainScheduler, createWorkflowChainRecords, workflowChainsDir } from './workflow-chains'
 import {
   WorkflowRunner,
   claudeProfile,
@@ -348,6 +349,7 @@ try {
   log('workflow', 'initial scan failed')
 }
 const workflowRunRecords = createWorkflowRunRecords({ dir: workflowRunsDir(), log })
+const workflowChainRecords = createWorkflowChainRecords({ dir: workflowChainsDir(), log })
 const perfMonitor = new PerfMonitor()
 setGitHubApiRecorder(() => perfMonitor.recordGitHubApiCall())
 setGitHubApiLoggingEnabled(config.expandedDiagnosticLoggingEnabled === true)
@@ -901,7 +903,7 @@ function reconcileWorkflowRunsAfter(panesRestored: Promise<unknown>, controlServ
 const QUIT_FLUSH_TIMEOUT_MS = 2000
 function flushWorkflowRunRecords(): Promise<void> {
   return Promise.race([
-    workflowRunRecords.flush(),
+    Promise.all([workflowRunRecords.flush(), workflowChainRecords.flush()]).then(() => undefined),
     new Promise<void>((resolve) => setTimeout(resolve, QUIT_FLUSH_TIMEOUT_MS).unref())
   ])
 }
@@ -973,6 +975,30 @@ const worktreesFSM = new WorktreesFSM(store, {
   },
   onWorkflowWorktreeReserved: (path) => panesFSM.reserveForWorkflow(path),
   onWorkflowWorktreeReleased: (path) => panesFSM.releaseWorkflowReservation(path)
+})
+
+const workflowChainScheduler = new ChainScheduler({
+  store,
+  createWorktree: async ({ repoRoot, branchName }) => {
+    const outcome = await worktreesFSM.runPending({ id: randomUUID(), repoRoot, branchName, workflow: true })
+    if (outcome.outcome === 'success') return { ok: true, worktreePath: outcome.createdPath }
+    return { ok: false, reason: outcome.outcome === 'setup-failed' ? 'setup-failed' : 'worktree-failed' }
+  },
+  startRun: (request) => workflowRunner.start(request),
+  persist: (record) => workflowChainRecords.persist(record),
+  now: () => Date.now(),
+  newId: () => randomUUID(),
+  newShortId: () => randomBytes(4).toString('hex'),
+  log
+})
+registerWorkflowChainRequestHandlers({
+  transport,
+  loader: workflowDefsLoader,
+  runner: workflowRunner,
+  chains: workflowChainScheduler,
+  store,
+  getRepoRoots: () => config.repoRoots || [],
+  log
 })
 
 const worktreeDeletionFSM = new WorktreeDeletionFSM(store, {
@@ -3693,6 +3719,7 @@ if (desktopShellMod && desktopEarly) {
     onBeforeQuit: () => {
       codexHookTrustMonitor?.stop()
       workflowNotifier.dispose()
+      workflowChainScheduler.dispose()
       workflowRunner.dispose()
       workflowDefsLoader.dispose()
       shellStepDriver.dispose()
@@ -3719,6 +3746,7 @@ if (desktopShellMod && desktopEarly) {
     shuttingDown = true
     codexHookTrustMonitor?.stop()
     workflowNotifier.dispose()
+    workflowChainScheduler.dispose()
     workflowRunner.dispose()
     workflowDefsLoader.dispose()
     shellStepDriver.dispose()

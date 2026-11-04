@@ -47,6 +47,7 @@ import type {
   WorkflowMarkDonePayload,
   WorkflowRequestChangesPayload,
   WorkflowLoopCapAction,
+  WorkflowStartChainPayload,
   WorkflowStartRunPayload,
   WorkflowSwapStepPayload
 } from '../../shared/state/workflows'
@@ -308,6 +309,7 @@ export function buildBackend(
     getWorkflowAttemptFileDiff: (attemptId: string, path: string) =>
       req('workflows:getAttemptFileDiff', attemptId, path),
     startWorkflowRun: (payload: WorkflowStartRunPayload) => req('workflows:startRun', payload),
+    startWorkflowChain: (payload: WorkflowStartChainPayload) => req('workflows:startChain', payload),
     trustWorkflowDefinition: (defId: string, hash: string) => req('workflows:trustDefinition', defId, hash),
     saveWorkflowDefinition: (payload: WorkflowSaveDefinitionPayload) => req('workflows:saveDefinition', payload),
     duplicateWorkflowDefinition: (defId: string) => req('workflows:duplicateDefinition', defId),

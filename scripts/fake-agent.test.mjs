@@ -334,6 +334,7 @@ describe('fake-agent', () => {
       expect(completions()).toHaveLength(1)
       agent.child.stdin.write('\r')
       await waitFor(() => completions().length === 2, 'turn 2')
+      await waitFor(() => existsSync(join(dir, 'payload-4.json')), 'turn 2 stop hook payload')
       agent.child.kill('SIGHUP')
       const { code, stderr } = await agent.exited
 

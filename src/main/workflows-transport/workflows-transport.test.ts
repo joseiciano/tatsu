@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { registerWorkflowsRequestHandlers, type WorkflowActionsRunner } from '.'
+import { registerWorkflowChainRequestHandlers, registerWorkflowsRequestHandlers, type WorkflowActionsRunner } from '.'
 import { Store } from '../store'
 import {
   WorkflowRunner,
@@ -33,6 +33,7 @@ import {
 import { validateWorkflowDefinition } from '../../shared/workflow-def'
 import { takeSnapshot } from '../workflow-snapshots'
 import type { PersistedWorkflowTrust } from '../persistence'
+import type { StartChainRequest } from '../workflow-chains'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -1580,5 +1581,260 @@ describe('workflows:saveDefinition, duplicateDefinition and deleteDefinition', (
     expect(readFileSync(join(h.personal, 'keep.yaml'), 'utf8')).toBe(VALID_YAML)
     expect(await h.own.call('workflows:deleteDefinition', h.repoDefId)).toEqual({ ok: true })
     expect(() => readFileSync(h.file)).toThrow()
+  })
+})
+
+describe('workflows:startChain', () => {
+  const ITEM_YAML = `name: Item flow
+inputs:
+  name: { type: text }
+  notes: { type: text }
+item_input: name
+steps:
+  - id: say
+    kind: shell
+    run: echo {{item.title}}
+`
+  const ISSUE_ITEM_YAML = `name: Issue items
+inputs:
+  ticket: { type: issue }
+item_input: ticket
+steps:
+  - id: say
+    kind: shell
+    run: echo {{item.value}}
+`
+  const idle = (): StepDriver => ({
+    start: (attempt) => ({ executionId: `exec-${attempt.attemptId}` }),
+    continue: () => {},
+    cancel: () => {},
+    onEvent: () => () => {}
+  })
+
+  function detailOf(id: string, yaml: string, scope: 'personal' | 'repo' = 'personal'): WorkflowDefinitionDetail {
+    const validated = validateWorkflowDefinition(yaml)
+    return {
+      ...validated,
+      source: yaml,
+      summary: {
+        id,
+        name: validated.definition?.name ?? 'broken',
+        scope,
+        ...(scope === 'repo' ? { repoRoot: '/repo' } : {}),
+        path: `/defs/${id}.yaml`,
+        hash: 'h',
+        stepIds: [],
+        issues: []
+      }
+    }
+  }
+
+  const DETAILS: Record<string, WorkflowDefinitionDetail> = {
+    'personal:items': detailOf('personal:items', ITEM_YAML),
+    'personal:issues': detailOf('personal:issues', ISSUE_ITEM_YAML),
+    'personal:plain': detailOf('personal:plain', VALID_YAML),
+    'personal:broken': detailOf('personal:broken', 'name: Broken\nsteps: nope\n'),
+    'repo:untrusted': detailOf('repo:untrusted', ITEM_YAML, 'repo'),
+    'personal:agent-items': detailOf(
+      'personal:agent-items',
+      `name: Agent items\ninputs:\n  name: { type: text }\nitem_input: name\nsteps:\n  - id: plan\n    agent: claude\n    permissions: read-only\n    prompt: Do {{item.title}}\n`
+    ),
+    'personal:writers': writersDetail(),
+    'personal:full-items': detailOf(
+      'personal:full-items',
+      `name: Full items\ninputs:\n  name: { type: text }\nitem_input: name\nsteps:\n  - id: plan\n    agent: claude\n    permissions: full\n    prompt: Do {{item.title}}\n`
+    )
+  }
+
+  function writersDetail(): WorkflowDefinitionDetail {
+    const yaml = `name: Writers\ninputs:\n  name: { type: text }\nitem_input: name\nsteps:\n  - id: a\n    kind: shell\n    run: echo a\n    parallel_safe: true\n  - id: b\n    kind: shell\n    run: echo b\n    parallel_safe: true\n    needs: []\n`
+    const detail = detailOf('personal:writers', yaml)
+    const definition = detail.definition
+    if (!definition) throw new Error('writers fixture must validate')
+    const steps = definition.steps.map((step) => (step.id === 'b' && step.kind === 'shell' ? { ...step, parallel_safe: false } : step))
+    return { ...detail, definition: { ...definition, steps } }
+  }
+
+  function chainHarness(options: { labs?: boolean; consent?: 'accepted' | 'pending' } = {}) {
+    const own = new FakeTransport()
+    const chainStore = new Store({
+      ...initialState,
+      hooks: { ...initialState.hooks, consent: options.consent ?? 'accepted' },
+      settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: options.labs ?? true } }
+    })
+    const loader = { getDefinition: (id: string) => (Object.hasOwn(DETAILS, id) ? DETAILS[id] : null) }
+    const live = new WorkflowRunner({
+      store: chainStore,
+      loader,
+      drivers: { agent: idle(), shell: idle() },
+      now: () => 1,
+      newId: () => 'run-x',
+      log: () => {}
+    })
+    live.reconcile([])
+    const starts: StartChainRequest[] = []
+    const chainLogs: string[] = []
+    registerWorkflowChainRequestHandlers({
+      transport: own,
+      loader,
+      runner: live,
+      chains: {
+        start: (request) => {
+          starts.push(request)
+          return 'chain-new'
+        }
+      },
+      store: chainStore,
+      getRepoRoots: () => ['/repo'],
+      log: (_category, message) => chainLogs.push(message)
+    })
+    return { own, starts, chainLogs }
+  }
+
+  const valid = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+    defId: 'personal:items',
+    repoRoot: '/repo',
+    mode: 'independent',
+    items: [{ title: 'First', value: 'one' }, { title: 'Second', value: 'two', origin: { kind: 'issue', number: 7 } }],
+    inputs: { notes: 'n' },
+    ...overrides
+  })
+
+  it('starts the chain with the parsed request and returns its id', async () => {
+    const h = chainHarness()
+    expect(await h.own.call('workflows:startChain', valid({ autopilot: true, allowFull: false, draftPrs: true }))).toEqual({
+      chainId: 'chain-new'
+    })
+    expect(h.starts).toEqual([
+      {
+        defId: 'personal:items',
+        definitionName: 'Item flow',
+        repoRoot: '/repo',
+        mode: 'independent',
+        items: [{ title: 'First', value: 'one' }, { title: 'Second', value: 'two', origin: { kind: 'issue', number: 7 } }],
+        inputs: { notes: 'n' },
+        autopilot: true,
+        draftPrs: true
+      }
+    ])
+  })
+
+  it('accepts numeric item values for an issue-typed item_input', async () => {
+    const h = chainHarness()
+    const payload = valid({ defId: 'personal:issues', inputs: {}, items: [{ title: 'Bug', value: '42' }] })
+    expect(await h.own.call('workflows:startChain', payload)).toEqual({ chainId: 'chain-new' })
+    expect(h.starts[0].draftPrs).toBe(false)
+  })
+
+  it('accepts exactly 50 items and a 200-character title', async () => {
+    const h = chainHarness()
+    const items = Array.from({ length: 50 }, (_, i) => ({ title: i === 0 ? 'x'.repeat(200) : `t${i}`, value: 'v' }))
+    expect(await h.own.call('workflows:startChain', valid({ items }))).toEqual({ chainId: 'chain-new' })
+  })
+
+  const INVALID = { error: 'invalid request' }
+  it.each<[string, unknown, unknown]>([
+    ['an unknown top-level key', valid({ budgetUsd: 5 }), INVALID],
+    ['an unknown item key', valid({ items: [{ title: 'a', value: 'b', branch: 'wf/x' }] }), INVALID],
+    ['an unknown origin key', valid({ items: [{ title: 'a', value: 'b', origin: { kind: 'issue', number: 1, url: 'x' } }] }), INVALID],
+    ['a non-object payload', 'chain', INVALID],
+    ['no items', valid({ items: [] }), INVALID],
+    ['51 items', valid({ items: Array.from({ length: 51 }, () => ({ title: 't', value: 'v' })) }), INVALID],
+    ['items that are not an array', valid({ items: { 0: { title: 't', value: 'v' } } }), INVALID],
+    ['a title over 200 characters', valid({ items: [{ title: 'x'.repeat(201), value: 'v' }] }), INVALID],
+    ['a blank title', valid({ items: [{ title: '  ', value: 'v' }] }), INVALID],
+    ['a value over the input cap', valid({ items: [{ title: 't', value: 'v'.repeat(64 * 1024 + 1) }] }), INVALID],
+    ['a non-string value', valid({ items: [{ title: 't', value: 3 }] }), INVALID],
+    ['an origin with an unknown kind', valid({ items: [{ title: 't', value: 'v', origin: { kind: 'commit', number: 1 } }] }), INVALID],
+    ['an origin number given as a string', valid({ items: [{ title: 't', value: 'v', origin: { kind: 'pr', number: '1' } }] }), INVALID],
+    ['an origin number of zero', valid({ items: [{ title: 't', value: 'v', origin: { kind: 'pr', number: 0 } }] }), INVALID],
+    ['a missing mode', valid({ mode: undefined }), INVALID],
+    ['a non-boolean flag', valid({ draftPrs: 'yes' }), INVALID],
+    ['a non-string input', valid({ inputs: { notes: 1 } }), INVALID],
+    ['malformed overrides', valid({ overrides: { say: 'opus' } }), INVALID],
+    ['stacked mode', valid({ mode: 'stacked' }), { error: 'Stacked chains are not supported yet' }],
+    ['an unknown repo root', valid({ repoRoot: '/repo/' }), { error: 'Unknown repository' }],
+    ['an unknown definition', valid({ defId: 'personal:nope' }), { error: 'Unknown workflow definition' }],
+    ['an untrusted repo definition', valid({ defId: 'repo:untrusted' }), { error: 'Trust this definition before running it' }],
+    ['an invalid definition', valid({ defId: 'personal:broken' }), { error: 'The workflow definition is invalid' }],
+    [
+      'a definition without item_input',
+      valid({ defId: 'personal:plain', inputs: {} }),
+      { error: 'The workflow definition has no item_input, so it cannot run over a list of items' }
+    ],
+    [
+      'a non-numeric value for an issue-typed item_input',
+      valid({ defId: 'personal:issues', inputs: {}, items: [{ title: 'Bug', value: '42' }, { title: 'x', value: 'abc' }] }),
+      { error: 'Each item of this workflow must be an issue or pull request number' }
+    ],
+    ['inputs that set the item_input key', valid({ inputs: { notes: 'n', name: 'x' } }), { error: 'The workflow inputs are invalid' }],
+    ['an unknown input', valid({ inputs: { notes: 'n', other: 'x' } }), { error: 'The workflow inputs are invalid' }],
+    ['a missing required input', valid({ inputs: {} }), { error: 'A required workflow input is missing' }],
+    ['a blank item value', valid({ items: [{ title: 't', value: 'v' }, { title: 'u', value: ' ' }] }), { error: 'A required workflow input is missing' }],
+    [
+      'an override on a shell step',
+      valid({ overrides: { say: { model: 'opus' } } }),
+      { error: 'A step override names a step that is not an agent step, or has an invalid model' }
+    ]
+  ])('refuses %s before starting anything', async (_name, payload, expected) => {
+    const h = chainHarness()
+    expect(await h.own.call('workflows:startChain', payload)).toEqual(expected)
+    expect(h.starts).toEqual([])
+  })
+
+  it('refuses an agent-step chain while hooks consent is pending, before creating anything', async () => {
+    const h = chainHarness({ consent: 'pending' })
+    const payload = valid({ defId: 'personal:agent-items', inputs: {} })
+    expect(await h.own.call('workflows:startChain', payload)).toEqual({ error: 'Accept the hooks install before running agent steps' })
+    expect(h.starts).toEqual([])
+    expect(await h.own.call('workflows:startChain', valid({ inputs: { notes: 'n' } }))).toEqual({ chainId: 'chain-new' })
+  })
+
+  it('refuses a full-access definition without allowFull before starting anything, and starts it with allowFull', async () => {
+    const h = chainHarness()
+    const payload = valid({ defId: 'personal:full-items', inputs: {} })
+    expect(await h.own.call('workflows:startChain', payload)).toEqual({
+      error: 'This workflow has a full-access step; confirm full access to start it'
+    })
+    expect(await h.own.call('workflows:startChain', { ...payload, allowFull: false })).toEqual({
+      error: 'This workflow has a full-access step; confirm full access to start it'
+    })
+    expect(h.starts).toEqual([])
+    expect(await h.own.call('workflows:startChain', { ...payload, allowFull: true })).toEqual({ chainId: 'chain-new' })
+    expect(h.starts).toHaveLength(1)
+  })
+
+  it('refuses a definition whose writing steps can run at the same time', async () => {
+    const h = chainHarness()
+    expect(await h.own.call('workflows:startChain', valid({ defId: 'personal:writers', inputs: {} }))).toEqual({
+      error: 'Steps that can run at the same time must not write; make them read-only or order them with "needs"'
+    })
+    expect(h.starts).toEqual([])
+  })
+
+  it('refuses while Labs workflows is off', async () => {
+    const h = chainHarness({ labs: false })
+    expect(await h.own.call('workflows:startChain', valid())).toEqual({ error: 'Workflows are turned off in Labs' })
+    expect(h.starts).toEqual([])
+  })
+
+  it('returns an internal error without leaking the throw when the scheduler throws', async () => {
+    const own = new FakeTransport()
+    const chainLogs: string[] = []
+    registerWorkflowChainRequestHandlers({
+      transport: own,
+      loader: { getDefinition: (id: string) => (Object.hasOwn(DETAILS, id) ? DETAILS[id] : null) },
+      runner: { checkStart: () => null },
+      chains: {
+        start: () => {
+          throw new Error('secret failure')
+        }
+      },
+      store,
+      getRepoRoots: () => ['/repo'],
+      log: (_category, message, data) => chainLogs.push(`${message} ${JSON.stringify(data)}`)
+    })
+    expect(await own.call('workflows:startChain', valid())).toEqual({ error: 'internal error' })
+    expect(chainLogs.join('\n')).not.toContain('secret')
   })
 })

@@ -91,6 +91,7 @@ export interface WorkflowChainItem {
   prNumber?: number
   prevItemId?: string
   skipped?: true
+  failed?: true
 }
 
 export type WorkflowChainItemPatch = Pick<WorkflowChainItem, 'id'> & Partial<Omit<WorkflowChainItem, 'id'>>
@@ -321,6 +322,24 @@ export interface WorkflowStartRunPayload {
   budgetUsd?: number
 }
 
+export interface WorkflowStartChainItemPayload {
+  title: string
+  value: string
+  origin?: WorkflowRunChainOrigin
+}
+
+export interface WorkflowStartChainPayload {
+  defId: string
+  repoRoot: string
+  mode: WorkflowChainMode
+  items: WorkflowStartChainItemPayload[]
+  inputs: Record<string, string>
+  overrides?: Record<string, WorkflowStepOverride>
+  autopilot?: boolean
+  allowFull?: boolean
+  draftPrs?: boolean
+}
+
 export interface WorkflowMarkDonePayload {
   summary: string
   fields: Record<string, unknown>
@@ -334,6 +353,8 @@ export interface WorkflowRequestChangesPayload {
 export type WorkflowLoopCapAction = 'again' | 'continue'
 
 export type WorkflowStartRunResponse = { runId: string } | { error: string }
+
+export type WorkflowStartChainResponse = { chainId: string } | { error: string }
 
 export type WorkflowActionResponse = { ok: true } | { error: string }
 

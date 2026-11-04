@@ -1440,6 +1440,16 @@ describe('workflowsReducer chainItemsChanged', () => {
     expect(items[2].skipped).toBe(true)
   })
 
+  it('marks one item failed and keeps it failed when a later patch omits the field', () => {
+    const start = withChain()
+    const failed = workflowsReducer(start, itemsChanged([{ id: 'i2', failed: true }]))
+    expect(failed.chains['chain-1'].items[1]).toEqual({ id: 'i2', title: 'Second', prevItemId: 'i1', failed: true })
+    expect(failed.chains['chain-1'].items[0]).toBe(start.chains['chain-1'].items[0])
+    const renamed = workflowsReducer(failed, itemsChanged([{ id: 'i2', title: 'Renamed', failed: undefined }]))
+    expect(renamed.chains['chain-1'].items[1].failed).toBe(true)
+    expect(workflowsReducer(failed, itemsChanged([{ id: 'i2', failed: true }]))).toBe(failed)
+  })
+
   it('treats a field set to undefined as omitted and leaves the existing value', () => {
     const next = workflowsReducer(withChain(), itemsChanged([{ id: 'i1', title: 'Renamed', branch: undefined }]))
     const item = next.chains['chain-1'].items[0]
@@ -1590,7 +1600,43 @@ describe('deriveChainStatus', () => {
     ['nothing linked yet', {}, {}, { status: 'queued' }],
     ['done child and unlinked items', { childRunIds: { i1: 'r1' } }, { r1: 'done' }, { status: 'queued' }],
     ['linked run evicted from runs', { childRunIds: { i1: 'r1', i2: 'r2', i3: 'r3' } }, { r1: 'done', r3: 'done' }, { status: 'queued' }],
-    ['evicted run next to a failed child', { childRunIds: { i1: 'gone', i2: 'r2' } }, { r2: 'failed' }, { status: 'failed' }]
+    ['evicted run next to a failed child', { childRunIds: { i1: 'gone', i2: 'r2' } }, { r2: 'failed' }, { status: 'failed' }],
+    [
+      'other children done and one failed item',
+      { items: [ITEMS[0], { ...ITEMS[1], failed: true }, ITEMS[2]], childRunIds: { i1: 'r1', i3: 'r3' } },
+      { r1: 'done', r3: 'done' },
+      { status: 'failed' }
+    ],
+    [
+      'every item failed before a run started',
+      { items: ITEMS.map((item) => ({ ...item, failed: true as const })) },
+      {},
+      { status: 'failed' }
+    ],
+    [
+      'failed item while another child runs',
+      { items: [{ ...ITEMS[0], failed: true }, ITEMS[1], ITEMS[2]], childRunIds: { i2: 'r2', i3: 'r3' } },
+      { r2: 'running', r3: 'done' },
+      { status: 'running' }
+    ],
+    [
+      'failed item next to a queued child',
+      { items: [{ ...ITEMS[0], failed: true }, ITEMS[1]], childRunIds: { i2: 'r2' } },
+      { r2: 'queued' },
+      { status: 'queued' }
+    ],
+    [
+      'skipped failed item is ignored',
+      { items: [{ ...ITEMS[0], failed: true, skipped: true }, ITEMS[1]], childRunIds: { i2: 'r2' } },
+      { r2: 'done' },
+      { status: 'done' }
+    ],
+    [
+      'linked item uses its run status over the failed flag',
+      { items: [{ ...ITEMS[0], failed: true }], childRunIds: { i1: 'r1' } },
+      { r1: 'done' },
+      { status: 'done' }
+    ]
   ])('%s', (_name, overrides, statuses, expected) => {
     const runs: Record<string, WorkflowRun> = {}
     for (const [runId, status] of Object.entries(statuses)) runs[runId] = statusRun(status)
