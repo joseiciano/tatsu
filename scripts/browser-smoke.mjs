@@ -1086,7 +1086,7 @@ async function flowLaunchOverrides(page, backend) {
     await shot('opencode-tab')
     const runId = await newestPersonalRunId(backend, 'smoke')
     await waitForRunStatus(backend, runId, 'done')
-    const record = JSON.parse(readFileSync(join(dataDir, 'workflow-runs', `${runId}.json`), 'utf8'))
+    const record = await waitForDiskRecord(runId, (d) => d.status === 'done')
     if (record.overriddenFrom?.plan?.agent !== 'claude') {
       throw new Error(`overriddenFrom ${JSON.stringify(record.overriddenFrom)}, expected the original claude plan step`)
     }
@@ -1139,7 +1139,7 @@ async function launchAutopilot(page, backend, dataDir, shot) {
       if (Date.now() > deadline) throw new Error(`autopilot run ${runId} is ${record?.status}, expected done`)
       await new Promise((resolve) => setTimeout(resolve, 200))
     }
-    const disk = JSON.parse(readFileSync(join(dataDir, 'workflow-runs', `${runId}.json`), 'utf8'))
+    const disk = await waitForDiskRecord(runId, (d) => d.status === 'done' && d.autopilot === true)
     if (disk.autopilot !== true || disk.status !== 'done') {
       throw new Error(`autopilot record autopilot=${JSON.stringify(disk.autopilot)} status=${disk.status}, expected true/done`)
     }
