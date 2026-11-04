@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BUDGET_ALL_OPENCODE_NOTICE,
+  BUDGET_SOME_OPENCODE_NOTICE,
+  budgetCostNotice,
   buildInputFields,
   canStart,
   definitionsForRepo,
@@ -10,6 +13,7 @@ import {
   isWorktreeBusy,
   needsFull,
   overrideRows,
+  parseLaunchBudget,
   resolveOverrides,
   targetBlockReason,
   workflowBranchName,
@@ -542,5 +546,80 @@ describe('input trust helpers', () => {
     expect(untrustedInputNotice('pr')).toBe(
       "This pull request's author is not a collaborator: steps will run with at most edit permissions"
     )
+  })
+})
+
+describe('parseLaunchBudget', () => {
+  const NOT_A_NUMBER = { kind: 'invalid', message: 'Budget must be a number, like 5 or 2.50' }
+  const NOT_POSITIVE = { kind: 'invalid', message: 'Budget must be more than $0' }
+  const TOO_HIGH = { kind: 'invalid', message: 'Budget must be $10,000 or less' }
+
+  it.each([
+    ['', { kind: 'none' }],
+    ['   ', { kind: 'none' }],
+    ['5', { kind: 'ok', usd: 5 }],
+    [' 2.50 ', { kind: 'ok', usd: 2.5 }],
+    ['0.01', { kind: 'ok', usd: 0.01 }],
+    ['10000', { kind: 'ok', usd: 10000 }],
+    ['0', NOT_POSITIVE],
+    ['0.00', NOT_POSITIVE],
+    ['-1', NOT_POSITIVE],
+    ['10000.01', TOO_HIGH],
+    ['abc', NOT_A_NUMBER],
+    ['1e3', NOT_A_NUMBER],
+    ['1e999', NOT_A_NUMBER],
+    ['Infinity', NOT_A_NUMBER],
+    ['0x10', NOT_A_NUMBER],
+    ['.5', NOT_A_NUMBER],
+    ['5.', NOT_A_NUMBER],
+    ['$5', NOT_A_NUMBER],
+    ['1,000', NOT_A_NUMBER]
+  ])('reads %j as %j', (text, expected) => {
+    expect(parseLaunchBudget(text)).toStrictEqual(expected)
+  })
+})
+
+describe('budgetCostNotice', () => {
+  const OPENCODE_ONLY = resolve(`name: oc
+steps:
+  - id: plan
+    agent: opencode
+    prompt: go
+  - id: test
+    kind: shell
+    run: "true"
+`)
+
+  it('says the run cannot reach its budget when every agent step runs on opencode after overrides', () => {
+    expect(budgetCostNotice(resolveOverrides(MIXED, { plan: { agent: 'opencode' }, fix: { agent: 'opencode' } }))).toBe(
+      BUDGET_ALL_OPENCODE_NOTICE
+    )
+    expect(budgetCostNotice(resolveOverrides(OPENCODE_ONLY, {}))).toBe(BUDGET_ALL_OPENCODE_NOTICE)
+    expect(BUDGET_ALL_OPENCODE_NOTICE).toBe(
+      "Every agent step runs on opencode, which reports no cost, so this run can't reach its budget."
+    )
+  })
+
+  it('says some steps do not count when only some agent steps run on opencode', () => {
+    expect(budgetCostNotice(resolveOverrides(MIXED, { fix: { agent: 'opencode' } }))).toBe(BUDGET_SOME_OPENCODE_NOTICE)
+    expect(BUDGET_SOME_OPENCODE_NOTICE).toBe(
+      "Some steps run on opencode, which reports no cost; they don't count toward the budget."
+    )
+  })
+
+  it('shows nothing without opencode steps, without agent steps, or without a definition', () => {
+    expect(budgetCostNotice(resolveOverrides(MIXED, {}))).toBeNull()
+    expect(budgetCostNotice(resolveOverrides(OPENCODE_ONLY, { plan: { agent: 'claude' } }))).toBeNull()
+    expect(budgetCostNotice(resolveOverrides(SHELL_ONLY, {}))).toBeNull()
+    expect(budgetCostNotice(null)).toBeNull()
+  })
+
+  it('shows nothing while an override is invalid, since the effective steps are not known', () => {
+    const invalid = resolveOverrides(MIXED, {
+      plan: { agent: 'opencode' },
+      fix: { agent: 'opencode', model: 'm'.repeat(201) }
+    })
+    expect(invalid.reason).not.toBeNull()
+    expect(budgetCostNotice(invalid)).toBeNull()
   })
 })
