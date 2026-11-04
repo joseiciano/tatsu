@@ -203,6 +203,22 @@ describe('fake-agent', () => {
     expect(completions()).toEqual([])
   })
 
+  it('a Claude-scoped marker picks the Claude mode', async () => {
+    const mcpConfig = await setup()
+    const scoped = await runAgent({ home: dir, mcpConfig, prompt: 'FAKE_AGENT_MODE_CLAUDE=exit-no-complete Leave' })
+    expect(scoped.code).not.toBe(0)
+    expect(scoped.stderr).toContain('mode=exit-no-complete')
+    expect(completions()).toEqual([])
+  })
+
+  it('ignores a marker scoped to another kind', async () => {
+    const mcpConfig = await setup()
+    const other = await runAgent({ home: dir, mcpConfig, prompt: 'FAKE_AGENT_MODE_CODEX=hang Plan' })
+    expect(other.stderr).toContain('mode=default')
+    if (other.code !== 0) throw new Error(other.stderr)
+    expect(completions()).toHaveLength(1)
+  })
+
   it('exit-no-complete mode reports a missing block when curl is present', async () => {
     const mcpConfig = await setup({ firstReply: '' })
 

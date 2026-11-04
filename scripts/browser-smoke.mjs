@@ -457,6 +457,67 @@ async function flowAttemptDiff(page, backend) {
   })
 }
 
+const SWAP_MODEL = 'fake-codex-model'
+
+async function flowSwapStep(page, backend) {
+  await scenario(page, 'swap-step', async (shot) => {
+    if (curlArg !== 'yes') {
+      throw new Error('swap-step needs curl: without it the Claude Stop hook fails open and the step completes by fallback')
+    }
+    await startFromLaunchSheet(page, 'browser-swap', shot)
+    await needsYouRow(page, 'browser-swap').filter({ hasText: 'Step failed · swap' }).waitFor()
+    const runId = await liveRunId(backend, 'browser-swap')
+
+    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    const section = page.getByRole('region', { name: 'Workflows', exact: true })
+    await section.waitFor()
+    const card = section.getByRole('region', { name: 'Active runs' }).getByRole('article', { name: 'browser-swap on repo', exact: true })
+    await card.getByRole('button', { name: 'Open run: browser-swap on repo', exact: true }).click()
+    const detail = section.getByRole('region', { name: 'browser-swap', exact: true })
+    await detail.waitFor()
+    await shot('detail-failed')
+
+    await detail.getByRole('button', { name: 'Swap harness/model: swap', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Swap harness or model for “swap”', exact: true })
+    await dialog.waitFor()
+    if (!(await focusInside(dialog))) throw new Error('swap dialog opened without focus inside it')
+    await dialog.getByLabel('Agent', { exact: true }).selectOption('codex')
+    await dialog.getByLabel('Model', { exact: true }).fill(SWAP_MODEL)
+    await shot('swap-dialog')
+    await dialog.getByRole('button', { name: 'Swap and retry', exact: true }).click()
+    await dialog.waitFor({ state: 'detached' })
+
+    const record = await waitForRunStatus(backend, runId, 'done')
+    const step = record.definition.steps.find((s) => s.id === 'swap')
+    if (step?.agent !== 'codex' || step.model !== SWAP_MODEL || step.permissions !== 'read-only') {
+      throw new Error(`swapped step ${JSON.stringify(step)}, expected codex/${SWAP_MODEL}/read-only`)
+    }
+    if (record.overriddenFrom?.swap?.agent !== 'claude') {
+      throw new Error(`overriddenFrom ${JSON.stringify(record.overriddenFrom)}, expected the original claude step`)
+    }
+    const attempts = record.attempts.filter((a) => a.stepId === 'swap').map((a) => `${a.n}:${a.agent}:${a.status}`)
+    if (attempts.join(',') !== '1:claude:failed,2:codex:done') {
+      throw new Error(`swap attempts ${JSON.stringify(attempts)}, expected 1:claude:failed,2:codex:done`)
+    }
+    log(`swap-step: run ${runId} done after swapping Claude to Codex (${attempts.join(', ')})`)
+
+    const graph = detail.getByRole('group', { name: 'Workflow graph', exact: true })
+    await graph.getByRole('listitem', { name: 'swap: done', exact: true }).waitFor()
+    const rows = detail.getByRole('list', { name: 'Attempt timeline', exact: true }).getByRole('button')
+    const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+    while ((await rows.count()) !== 2) {
+      if (Date.now() > deadline) throw new Error(`timeline shows ${await rows.count()} attempts, expected 2`)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    await shot('detail-done')
+
+    await detail.getByRole('button', { name: 'All runs', exact: true }).click()
+    await detail.waitFor({ state: 'detached' })
+    await section.getByRole('button', { name: 'Back', exact: true }).click()
+    await section.waitFor({ state: 'detached' })
+  })
+}
+
 const BROWSER_REPO_FILE = '.harness/workflows/browser-repo.yaml'
 
 async function newestRepoRunId(backend, name) {
@@ -541,6 +602,7 @@ async function main() {
     await flowExitMarkDone(page, backend)
     await flowRunDetail(page)
     await flowAttemptDiff(page, backend)
+    await flowSwapStep(page, backend)
     await flowRepoTrust(page, backend)
   } catch {
     failed = true
