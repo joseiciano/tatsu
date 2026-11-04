@@ -551,6 +551,7 @@ export interface ElectronAPI {
   onSplitPaneRight(callback: () => void): () => void
   onSplitPaneDown(callback: () => void): () => void
   onOpenNewProject(callback: () => void): () => void
+  onOpenWorkflowsSection(callback: () => void): () => void
   onOpenReportIssue(callback: () => void): () => void
   onDebugCrashFocusedTab(callback: () => void): () => void
   onDebugPreviewOnboarding(callback: () => void): () => void

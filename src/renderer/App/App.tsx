@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type Dispatch, type SetStateAction } from 'react'
 import { useSettings, usePrs, useOnboarding, useHooks, useWorktrees, useTerminals, usePanes, useLastActive, useUpdater, useRepoConfigs, useSnooze, useAnnouncements } from '../store'
 import { useBackend } from '../backend'
+import { useOpenWorkflowsSignal } from '../hooks/useOpenWorkflowsSignal'
 import { useTabHandlers } from '../hooks/useTabHandlers'
 import { useHotkeyHandlers } from '../hooks/useHotkeyHandlers'
 import { useWorktreeHandlers } from '../hooks/useWorktreeHandlers'
@@ -629,6 +630,11 @@ const setQuestStep = useCallback((next: QuestStep) => {
     }
   }, [showWorkflows, closeFullscreenViews])
   const closeWorkflows = useCallback(() => setShowWorkflows(false), [])
+  useOpenWorkflowsSignal(backend, () => {
+    if (!settings.labs.workflows || showWorkflows) return
+    closeFullscreenViews()
+    setShowWorkflows(true)
+  })
 
   const toggleCommandCenter = useCallback(() => {
     if (showCommandCenter) {

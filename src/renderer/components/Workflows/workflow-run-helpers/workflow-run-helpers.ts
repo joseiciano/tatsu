@@ -9,6 +9,7 @@ import type {
   WorkflowStepStatus
 } from '../../../../shared/state/workflows'
 import { RESUMABLE_AGENTS } from '../../../../shared/state/workflows'
+export { PAUSED_REASON_LABELS, pausedReasonLabel } from '../../../../shared/state/workflows'
 import type { ElectronAPI } from '../../../types'
 import type { AgentKind } from '../../../../shared/state/terminals'
 
@@ -85,24 +86,6 @@ export const STEP_STATUS_LABELS: Record<WorkflowStepStatus, string> = {
   'awaiting-gate': 'waiting at gate',
   cancelled: 'cancelled',
   interrupted: 'interrupted'
-}
-
-export const PAUSED_REASON_LABELS: Record<WorkflowPausedReason, string> = {
-  'step-failed': 'Step failed',
-  'needs-input': 'Needs input',
-  'needs-approval': 'Needs approval',
-  interrupted: 'Interrupted',
-  trust: 'Folder not trusted',
-  gate: 'Waiting at gate',
-  budget: 'Budget reached',
-  'loop-cap': 'Loop limit reached',
-  timeout: 'Timed out',
-  'restack-conflict': 'Restack conflict'
-}
-
-export function pausedReasonLabel(reason: WorkflowPausedReason, stepStatus: WorkflowStepStatus | null): string {
-  if (reason === 'step-failed' && stepStatus === 'cancelled') return 'Cancelled by user'
-  return PAUSED_REASON_LABELS[reason]
 }
 
 const FINISHED_STEP_STATUSES: ReadonlySet<WorkflowStepStatus> = new Set(['done', 'skipped'])

@@ -1,5 +1,6 @@
 import type { AgentKind } from '../terminals'
 import { WORKFLOW_FEATURES, type WorkflowAgent } from '../../workflow-def'
+import type { WorkflowPausedReason, WorkflowStepStatus } from './types'
 
 export const SUMMARY_PREVIEW_MAX = 200
 export const WORKFLOW_NO_REPO_DIR_ERROR = 'The repository has no usable .harness/workflows folder in its primary checkout'
@@ -30,4 +31,22 @@ export function isWorkflowStepModel(value: unknown): value is string {
     value.length <= WORKFLOW_STEP_MODEL_MAX_CHARS &&
     !/[\u0000-\u001f\u007f]/.test(value)
   )
+}
+
+export const PAUSED_REASON_LABELS: Record<WorkflowPausedReason, string> = {
+  'step-failed': 'Step failed',
+  'needs-input': 'Needs input',
+  'needs-approval': 'Needs approval',
+  interrupted: 'Interrupted',
+  trust: 'Folder not trusted',
+  gate: 'Waiting at gate',
+  budget: 'Budget reached',
+  'loop-cap': 'Loop limit reached',
+  timeout: 'Timed out',
+  'restack-conflict': 'Restack conflict'
+}
+
+export function pausedReasonLabel(reason: WorkflowPausedReason, stepStatus: WorkflowStepStatus | null): string {
+  if (reason === 'step-failed' && stepStatus === 'cancelled') return 'Cancelled by user'
+  return PAUSED_REASON_LABELS[reason]
 }
