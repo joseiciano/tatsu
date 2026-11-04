@@ -52,6 +52,33 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   still shows the definition's own steps. Drafts reset when the workflow
   changes and survive the switch to `Existing worktree` after a refusal.
   The run record's `overriddenFrom.<stepId>` holds the original agent/model.
+- **Input pickers**: definition inputs of type `issue`, `pr` and `file`
+  render as one combobox (`role="combobox"`, `aria-expanded`,
+  `aria-controls` -> `role="listbox"` labelled `<input> options`,
+  `aria-activedescendant` on the active `role="option"`), labelled by the
+  input's `<name><type>` label (accessible name e.g. `targetfile`).
+  ArrowDown opens and moves, ArrowUp moves, Enter picks the active option
+  (does not submit), Escape closes only the list (a second Escape closes
+  the sheet). Typing after a pick clears the value, so Start shows
+  `Fill in <name>` until a listed option is picked.
+  - `file`: lists `listAllFiles` of the target (preset worktree, chosen
+    existing worktree, or the repo's primary checkout for a new worktree),
+    fuzzy-filtered, at most 50 options; absolute and `..` paths are never
+    offered. Value: the repo-relative path. A pick is cleared when the
+    target changes to one that does not list it.
+  - `pr`: `listRepoPRs(root, { requireToken: true })` (null without a
+    resolved token, no request) filtered by number, title or branch; value: the
+    number as a string. A typed `#<n>` not in the list is offered as
+    `#<n>` / `Use this number`.
+  - `issue`: `listRepoIssues` (`github:listIssues`, REST search, open issues
+    only, PRs excluded, at most 50; typed qualifiers like `repo:x`, quotes
+    and `AND`/`OR`/`NOT` are dropped), searched 250 ms after typing stops.
+  - Fallback: when the first load cannot list (no token, no GitHub
+    `origin`, any error; PR list `null`), the input is a plain number field
+    (`inputmode="numeric"`, digits only) with the hint `GitHub isn't
+    available here. Enter the <issue|pull request> number.` The scratch
+    sandbox has no token and no `origin`, so issue and PR inputs are always
+    number fields there.
 - **Step strip**: `role="img"` under the branch name, `aria-label`
   `Workflow steps: <id> <status>, …`. Only for a live run; it disappears when
   the run is done, failed or cancelled.
@@ -121,6 +148,16 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     Start -> a new `⚙ plan · opencode` step tab -> run record `done` with
     `overriddenFrom.plan.agent: claude`, `plan` step opencode with that model
     and attempts `1:opencode:done`.
+  - `input-pickers`: open the launch sheet -> pick `browser-file` (inputs
+    `target: file`, `ticket: issue`; shell step `test -f
+    {{inputs.target}}`) -> focus the `target` combobox -> type `picker` ->
+    option `docs/picker-target.md` (committed in the scratch repo) ->
+    ArrowDown makes it `aria-selected` -> Enter -> list closed, sheet still
+    open, input shows the path -> `ticket` is a numeric number field (no
+    token) -> fill `7` -> Start -> run record `done` with
+    `inputs: { target: "docs/picker-target.md", ticket: "7" }`. Run detail
+    does not show inputs; the record and the passing `test -f` are the
+    evidence.
   - `launch-target` (runs last): see workflows-section.md.
   - `repo-trust`: append a nonce comment to the committed
     `.harness/workflows/browser-repo.yaml` (fresh bytes, so it is untrusted on
@@ -138,7 +175,38 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
 End state that proves it: the screenshots in order, the strip `aria-label`
 lines in `journal.log`, and the run record in `workflow-runs/`.
 
+## Input pickers
+
+How to reach it: open the launch sheet (`Run workflow here…` on a worktree
+row, or `Run workflow…` in the Workflows section) and pick a definition with
+an `issue`, `pr` or `file` input. The seeded `browser-file` has `target`
+(file) and `ticket` (issue).
+
+How to drive it:
+
+1. Preset target (`input-pickers` in `workflow-flows.sh`): focus
+   `getByRole('combobox', { name: /^target/ })`, type `picker`, ArrowDown
+   (option `docs/picker-target.md` gets `aria-selected="true"`), Enter. The
+   list closes, the sheet stays open, the input shows the path. `ticket` is
+   a numeric field (`inputmode="numeric"`); fill `7`; Start.
+2. New worktree target (not in `workflow-flows.sh`; drive it with a small
+   `withApp` journey): Workflows -> `Run workflow…` -> keep `New worktree`
+   -> pick `browser-file` -> focus the `target` combobox -> ArrowDown. The
+   `target options` listbox lists the scratch repo's primary checkout
+   (`README.md`, `docs/picker-target.md`, the two committed repo
+   definitions). Escape closes only the list; a second Escape closes the
+   sheet.
+
+End state: the run record `workflow-runs/<runId>.json` is `done` (the
+`test -f {{inputs.target}}` step passed) with
+`inputs: { target: "docs/picker-target.md", ticket: "7" }`. Run detail does
+not show inputs.
+
 ## Gotchas
+
+- The input label renders `<name>` plus a `<type>` span with no space, so
+  the accessible name concatenates (`targetfile`, `ticketissue`). Match it
+  with `/^target/`, not the exact string.
 
 - The menu item is hidden while the worktree has a live run; finish or cancel
   the previous run before starting another on the same path.
