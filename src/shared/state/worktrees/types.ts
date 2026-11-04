@@ -32,6 +32,7 @@ export interface PendingWorktree {
   initialPrompt?: string
   /** One-shot teleport session id for the new Claude tab. In-memory only. */
   teleportSessionId?: string
+  workflow?: true
 }
 
 export type PendingDeletionPhase =

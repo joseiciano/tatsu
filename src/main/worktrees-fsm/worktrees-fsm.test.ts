@@ -149,3 +149,61 @@ describe('WorktreesFSM request validation', () => {
     expect(outcome).toEqual({ id: 'pending-r', outcome: 'error', error: 'Unknown repository: /nope' })
   })
 })
+
+describe('WorktreesFSM workflow worktrees', () => {
+  function makeFsm(): {
+    fsm: WorktreesFSM
+    store: Store
+    reserved: string[]
+    released: string[]
+  } {
+    const store = new Store()
+    const reserved: string[] = []
+    const released: string[] = []
+    const fsm = new WorktreesFSM(store, {
+      getRepoRoots: () => ['/r/repo'],
+      getWorktreeSetupCmd: () => '',
+      getWorktreeBaseMode: () => 'local',
+      onWorktreeCreated: vi.fn(),
+      onWorkflowWorktreeReserved: (path) => reserved.push(path),
+      onWorkflowWorktreeReleased: (path) => released.push(path)
+    })
+    return { fsm, store, reserved, released }
+  }
+
+  it('reserves the worktree path for the workflow before git creates it', async () => {
+    const { addWorktree } = await import('../worktree')
+    const { fsm, reserved } = makeFsm()
+    const reservedAtAdd: string[][] = []
+    vi.mocked(addWorktree).mockImplementationOnce(async () => {
+      reservedAtAdd.push([...reserved])
+      return CREATED
+    })
+
+    const outcome = await fsm.runPending({ id: 'pending-w', repoRoot: '/r/repo', branchName: 'feat', workflow: true })
+
+    expect(outcome).toEqual({ id: 'pending-w', outcome: 'success', createdPath: CREATED.path })
+    expect(reservedAtAdd).toEqual([['/r/wts/feat']])
+  })
+
+  it('reserves nothing for an ordinary worktree', async () => {
+    const { fsm, reserved } = makeFsm()
+    await fsm.runPending({ id: 'pending-n', repoRoot: '/r/repo', branchName: 'feat' })
+    expect(reserved).toEqual([])
+  })
+
+  it('releases the reservation when git fails and keeps the workflow flag for retry', async () => {
+    const { addWorktree } = await import('../worktree')
+    const { fsm, store, reserved, released } = makeFsm()
+    vi.mocked(addWorktree).mockRejectedValueOnce(new Error('git said no'))
+
+    const outcome = await fsm.runPending({ id: 'pending-f', repoRoot: '/r/repo', branchName: 'feat', workflow: true })
+
+    expect(outcome).toEqual({ id: 'pending-f', outcome: 'error', error: 'git said no' })
+    expect(released).toEqual(['/r/wts/feat'])
+    expect(store.getSnapshot().state.worktrees.pending).toMatchObject([{ id: 'pending-f', workflow: true }])
+
+    await fsm.retryPending('pending-f')
+    expect(reserved).toEqual(['/r/wts/feat', '/r/wts/feat'])
+  })
+})

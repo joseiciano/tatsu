@@ -305,7 +305,7 @@ export function LaunchSheet({ worktreePath, defId, onClose, onStarted }: LaunchS
   const createWorktree = useCallback(
     async (root: string, branch: string): Promise<string | null> => {
       const id = `pending:${crypto.randomUUID()}`
-      const created = await backend.runPendingWorktree({ id, repoRoot: root, branchName: branch })
+      const created = await backend.runPendingWorktree({ id, repoRoot: root, branchName: branch, workflow: true })
       if (!mounted.current) return null
       if (created.outcome !== 'success') void backend.dismissPendingWorktree(id)
       if (created.outcome === 'error') {

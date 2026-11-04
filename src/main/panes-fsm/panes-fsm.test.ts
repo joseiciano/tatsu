@@ -929,3 +929,55 @@ describe('PanesFSM step tab spawn extras (REQ-203, CON-205)', () => {
     expect(allTabs(store, '/wt').map((t) => t.workflow)).toEqual([workflow, workflow])
   })
 })
+
+describe('PanesFSM workflow-owned worktrees', () => {
+  const WORKTREE = { repoRoot: '/r/repo', branch: 'feat' }
+
+  it('initializes a reserved worktree with only a Shell tab and starts nothing', () => {
+    const startAgentTab = startSpy()
+    const startJsonClaudeWithPrompt = vi.fn()
+    const { fsm, store } = buildFSM({
+      startAgentTab,
+      startJsonClaudeWithPrompt,
+      getDefaultClaudeTabType: () => 'json'
+    })
+    fsm.reserveForWorkflow('/wt/flow')
+
+    fsm.ensureInitialized('/wt/flow', { fromMain: true, initialPrompt: 'go', worktree: WORKTREE })
+
+    expect(allTabs(store, '/wt/flow').map((t) => t.type)).toEqual(['shell'])
+    expect(startAgentTab).not.toHaveBeenCalled()
+    expect(startJsonClaudeWithPrompt).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Shell-only tree on later boot-style initialization', () => {
+    const { fsm, store } = buildFSM()
+    fsm.reserveForWorkflow('/wt/flow')
+    fsm.ensureInitialized('/wt/flow')
+    fsm.ensureInitialized('/wt/flow')
+    expect(allTabs(store, '/wt/flow').map((t) => t.type)).toEqual(['shell'])
+  })
+
+  it('leaves unreserved worktrees with the default agent and Shell pair', () => {
+    const { fsm, store } = buildFSM()
+    fsm.reserveForWorkflow('/wt/flow')
+    fsm.ensureInitialized('/wt/other')
+    expect(allTabs(store, '/wt/other').map((t) => t.type)).toEqual(['agent', 'shell'])
+  })
+
+  it('gives the default pair again after the reservation is released', () => {
+    const { fsm, store } = buildFSM()
+    fsm.reserveForWorkflow('/wt/flow')
+    fsm.releaseWorkflowReservation('/wt/flow')
+    fsm.ensureInitialized('/wt/flow')
+    expect(allTabs(store, '/wt/flow').map((t) => t.type)).toEqual(['agent', 'shell'])
+  })
+
+  it('drops an unused reservation when the worktree is cleared', () => {
+    const { fsm, store } = buildFSM()
+    fsm.reserveForWorkflow('/wt/flow')
+    fsm.clearForWorktree('/wt/flow')
+    fsm.ensureInitialized('/wt/flow')
+    expect(allTabs(store, '/wt/flow').map((t) => t.type)).toEqual(['agent', 'shell'])
+  })
+})
