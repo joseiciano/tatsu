@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as monaco from 'monaco-editor'
 import { detectMonacoLanguage } from '../../monaco-setup'
-import type { EditorMarker } from './types'
+import type { EditorCompletionProvider, EditorMarker } from './types'
 
 export const MARKER_OWNER = 'tatsu'
 
@@ -23,6 +23,7 @@ interface MonacoEditorProps {
   onReferenceLine?: (lineNumber: number) => void
   markers?: readonly EditorMarker[]
   ariaLabel?: string
+  completionProvider?: EditorCompletionProvider
 }
 
 export function MonacoEditor({
@@ -35,14 +36,17 @@ export function MonacoEditor({
   onSave,
   onReferenceLine,
   markers,
-  ariaLabel
+  ariaLabel,
+  completionProvider
 }: MonacoEditorProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const onChangeRef = useRef(onChange)
   const onSaveRef = useRef(onSave)
   const onRefRef = useRef(onReferenceLine)
+  const completionRef = useRef(completionProvider)
   onChangeRef.current = onChange
+  completionRef.current = completionProvider
   onSaveRef.current = onSave
   onRefRef.current = onReferenceLine
 
@@ -108,6 +112,35 @@ export function MonacoEditor({
       const ln = e.target.position?.lineNumber ?? null
       setHoverLine(ln)
     })
+    const ownModel = editor.getModel()
+    const completionSub =
+      completionRef.current && ownModel
+        ? monaco.languages.registerCompletionItemProvider(ownModel.getLanguageId(), {
+            triggerCharacters: [...completionRef.current.triggerCharacters],
+            provideCompletionItems: (model, position) => {
+              const provider = completionRef.current
+              if (model !== editor.getModel() || !provider) return { suggestions: [] }
+              const lineBefore = model.getLineContent(position.lineNumber).slice(0, position.column - 1)
+              const result = provider.provide(lineBefore)
+              if (!result) return { suggestions: [] }
+              const range = {
+                startLineNumber: position.lineNumber,
+                startColumn: result.start + 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+              }
+              return {
+                suggestions: result.items.map((item) => ({
+                  label: item.label,
+                  detail: item.detail,
+                  kind: monaco.languages.CompletionItemKind.Reference,
+                  insertText: item.label,
+                  range
+                }))
+              }
+            }
+          })
+        : null
     const leaveSub = editor.onMouseLeave(() => setHoverLine(null))
     const downSub = editor.onMouseDown((e) => {
       if (!onRefRef.current) return
@@ -121,6 +154,7 @@ export function MonacoEditor({
       moveSub.dispose()
       leaveSub.dispose()
       downSub.dispose()
+      completionSub?.dispose()
       glyphCollection.clear()
       // Dispose the editor before its model — reversing this order fires
       // "TextModel got disposed before ..." from Monaco's listeners.
