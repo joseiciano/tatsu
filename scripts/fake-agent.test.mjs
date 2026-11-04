@@ -54,14 +54,14 @@ function stopHook(dir, firstReply) {
   ].join('; ')
 }
 
-function spawnAgent({ home, mcpConfig, sessionId = 'sess-1', env = {}, prompt = 'Plan the work' }) {
+function spawnAgent({ home, mcpConfig, sessionId = 'sess-1', env = {}, prompt = 'Plan the work', stdin = false }) {
   const args = ['--allowedTools', 'Read,Grep', '--permission-mode', 'dontAsk', '--model', 'x', '--name', 'repo/main']
   if (mcpConfig) args.push('--mcp-config', mcpConfig)
   if (sessionId) args.push('--session-id', sessionId)
   args.push('--append-system-prompt', 'sys', '--', prompt)
   const child = spawn(process.execPath, [FAKE_AGENT, ...args], {
     env: { PATH: process.env.PATH, HOME: home, HARNESS_TERMINAL_ID: 'term-1', ...env },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe']
   })
   let stderr = ''
   child.stderr.on('data', (c) => (stderr += c))
@@ -71,6 +71,17 @@ function spawnAgent({ home, mcpConfig, sessionId = 'sess-1', env = {}, prompt = 
 
 function runAgent(options) {
   return spawnAgent(options).exited
+}
+
+const PASTE_START = '\x1b[200~'
+const PASTE_END = '\x1b[201~'
+
+async function waitFor(check, what) {
+  for (let i = 0; i < 200; i++) {
+    if (check()) return
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  throw new Error(`timed out waiting for ${what}`)
 }
 
 describe('fake-agent', () => {
@@ -232,5 +243,119 @@ describe('fake-agent', () => {
     expect(code).not.toBe(0)
     expect(stderr).toContain('did not return a block')
     expect(completions()).toEqual([])
+  })
+
+  it('adds FAKE_AGENT_DATA fields to complete_step, the numbered marker winning', async () => {
+    const mcpConfig = await setup()
+
+    const { code, stderr } = await runAgent({
+      home: dir,
+      mcpConfig,
+      sessionId: 'sess-d',
+      prompt: 'FAKE_AGENT_DATA={"verdict":"fail","n":{"a":"}"}} FAKE_AGENT_DATA_1={"verdict":"pass"} go'
+    })
+
+    if (code !== 0) throw new Error(stderr)
+    expect(completions()[0].body).toEqual({ summary: 'PLAN-OK sess-d', verdict: 'pass', n: { a: '}' } })
+  })
+
+  it('fails loudly on malformed data JSON without completing', async () => {
+    const mcpConfig = await setup()
+
+    for (const prompt of ['FAKE_AGENT_DATA={"verdict":', 'FAKE_AGENT_DATA_1=[1]', 'FAKE_AGENT_DATA={nope}']) {
+      const { code, stderr } = await runAgent({ home: dir, mcpConfig, prompt })
+      expect(code).not.toBe(0)
+      expect(stderr).toContain('FAKE_AGENT_DATA')
+    }
+    expect(completions()).toEqual([])
+  })
+
+  describe('multi-turn mode', () => {
+    async function setupMultiTurn({ turnTwoReply = BLOCK } = {}) {
+      const mcpConfig = await setup()
+      writeFileSync(join(dir, 'reply-3'), turnTwoReply)
+      writeFileSync(join(dir, 'reply-4'), '')
+      writeFileSync(join(dir, 'reply-5'), BLOCK)
+      writeFileSync(join(dir, 'reply-6'), '')
+      return mcpConfig
+    }
+
+    it('completes a second turn from a bracketed paste with that prompt markers, then exits on SIGHUP', async () => {
+      const mcpConfig = await setupMultiTurn()
+      const agent = spawnAgent({
+        home: dir,
+        mcpConfig,
+        sessionId: 'sess-m',
+        stdin: true,
+        prompt: 'FAKE_AGENT_MODE=multi-turn FAKE_AGENT_DATA_1={"verdict":"fail"} FAKE_AGENT_DATA_2={"verdict":"ignored"} one'
+      })
+
+      await waitFor(() => completions().length === 1, 'turn 1')
+      const half = `${PASTE_START}line one\nFAKE_AGENT_DATA_2={"verdict":"pass"}`
+      agent.child.stdin.write(half)
+      await new Promise((r) => setTimeout(r, 150))
+      expect(completions()).toHaveLength(1)
+      agent.child.stdin.write(`${PASTE_END}`)
+      await new Promise((r) => setTimeout(r, 150))
+      expect(completions()).toHaveLength(1)
+      agent.child.stdin.write('\r')
+      await waitFor(() => completions().length === 2, 'turn 2')
+      agent.child.kill('SIGHUP')
+      const { code, stderr } = await agent.exited
+
+      if (code !== 0) throw new Error(stderr)
+      expect(completions().map((c) => c.body)).toEqual([
+        { summary: 'PLAN-OK sess-m', verdict: 'fail' },
+        { summary: 'PLAN-OK sess-m', verdict: 'pass' }
+      ])
+      expect(payload(3).stop_hook_active).toBe(false)
+      expect(payload(4).stop_hook_active).toBe(true)
+    })
+
+    it('completes turn 2 when its Stop hook does not block, and accepts LF after the paste end', async () => {
+      const mcpConfig = await setupMultiTurn({ turnTwoReply: '' })
+      const agent = spawnAgent({ home: dir, mcpConfig, stdin: true, prompt: 'FAKE_AGENT_MODE=multi-turn one' })
+
+      await waitFor(() => completions().length === 1, 'turn 1')
+      agent.child.stdin.write(`${PASTE_START}FAKE_AGENT_DATA={"verdict":"pass"}${PASTE_END}\n`)
+      await waitFor(() => completions().length === 2, 'turn 2')
+      agent.child.kill('SIGHUP')
+      const { code, stderr } = await agent.exited
+
+      if (code !== 0) throw new Error(stderr)
+      expect(stderr).toContain('stop hook: no block on turn 2')
+      expect(completions()[1].body).toEqual({ summary: 'PLAN-OK sess-1', verdict: 'pass' })
+    })
+
+    it('completes a turn from a plain line and exits 0 when stdin closes', async () => {
+      const mcpConfig = await setupMultiTurn()
+      const agent = spawnAgent({
+        home: dir,
+        mcpConfig,
+        stdin: true,
+        prompt: 'FAKE_AGENT_MODE=multi-turn FAKE_AGENT_DATA={"round":0} one'
+      })
+
+      await waitFor(() => completions().length === 1, 'turn 1')
+      agent.child.stdin.write('\nFAKE_AGENT_DATA_2={"round":2}\n')
+      await waitFor(() => completions().length === 2, 'turn 2')
+      agent.child.stdin.end()
+      const { code, stderr } = await agent.exited
+
+      if (code !== 0) throw new Error(stderr)
+      expect(completions().map((c) => c.body.round)).toEqual([0, 2])
+    })
+
+    it('fails when a bracketed paste is not followed by CR', async () => {
+      const mcpConfig = await setupMultiTurn()
+      const agent = spawnAgent({ home: dir, mcpConfig, stdin: true, prompt: 'FAKE_AGENT_MODE=multi-turn one' })
+
+      await waitFor(() => completions().length === 1, 'turn 1')
+      agent.child.stdin.write(`${PASTE_START}x${PASTE_END}y`)
+      const { code, stderr } = await agent.exited
+
+      expect(code).not.toBe(0)
+      expect(stderr).toContain('not followed by CR or LF')
+    })
   })
 })
