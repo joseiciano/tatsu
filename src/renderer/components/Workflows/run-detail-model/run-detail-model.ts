@@ -13,6 +13,7 @@ export type RunDetailActionKind =
   | 'request-changes'
   | 'loop-again'
   | 'loop-continue'
+  | 'keep-waiting'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -53,6 +54,7 @@ export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
   'request-changes',
   'loop-again',
   'loop-continue',
+  'keep-waiting',
   'resume',
   'retry',
   'retry-from-clean',

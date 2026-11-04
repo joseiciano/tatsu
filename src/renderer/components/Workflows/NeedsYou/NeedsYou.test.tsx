@@ -24,7 +24,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     cancelWorkflowRun: vi.fn(),
     approveWorkflowGate: vi.fn(),
     requestWorkflowChanges: vi.fn(),
-    resolveWorkflowLoopCap: vi.fn()
+    resolveWorkflowLoopCap: vi.fn(),
+    keepWaitingWorkflowStep: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -159,7 +160,8 @@ beforeEach(() => {
     backendApi.cancelWorkflowRun,
     backendApi.approveWorkflowGate,
     backendApi.requestWorkflowChanges,
-    backendApi.resolveWorkflowLoopCap
+    backendApi.resolveWorkflowLoopCap,
+    backendApi.keepWaitingWorkflowStep
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -558,5 +560,38 @@ describe('NeedsYouGroup at a loop cap', () => {
     await render()
     await click(button('Continue anyway'))
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('This step is not waiting at its loop cap')
+  })
+})
+
+describe('NeedsYouGroup after a step timeout', () => {
+  function timedOutRun(): WorkflowRun {
+    const base = pausedRun('timeout', ['a1'])
+    return {
+      ...base,
+      cursorStepId: 'build',
+      steps: {
+        plan: { ...base.steps.plan, status: 'done', kind: 'shell' },
+        build: { status: 'running', attemptIds: ['a1'], kind: 'agent', agent: 'claude' }
+      }
+    }
+  }
+
+  it('offers Keep waiting named for the timed-out step and sends it', async () => {
+    setState({ runs: { r1: timedOutRun() }, attempts: { a1: attempt('build', 'running') } })
+    await render()
+    expect(container.textContent).toContain('feature · Timed out · build')
+    expect(buttonLabels()).toEqual(['Keep waiting', 'Cancel run'])
+    expect(button('Keep waiting').getAttribute('aria-label')).toBe('Keep waiting: build, Ship it on feature')
+    await click(button('Keep waiting'))
+    expect(backendApi.keepWaitingWorkflowStep).toHaveBeenCalledExactlyOnceWith('r1', 'build')
+    expect(backendApi.cancelWorkflowRun).not.toHaveBeenCalled()
+  })
+
+  it('shows the refusal from a stale Keep waiting', async () => {
+    backendApi.keepWaitingWorkflowStep.mockResolvedValue({ error: 'This step has not timed out' })
+    setState({ runs: { r1: timedOutRun() }, attempts: { a1: attempt('build', 'running') } })
+    await render()
+    await click(button('Keep waiting'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('This step has not timed out')
   })
 })

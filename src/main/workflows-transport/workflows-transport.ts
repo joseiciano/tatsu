@@ -53,6 +53,7 @@ export type WorkflowActionsRunner = Pick<
   | 'approveGate'
   | 'requestChanges'
   | 'resolveLoopCap'
+  | 'keepWaiting'
 >
 
 export interface RegisterWorkflowsRequestHandlersDeps {
@@ -145,6 +146,7 @@ const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], s
   'nothing-to-continue': 'This step has no earlier attempt to continue',
   'not-awaiting-gate': 'This step is not waiting at its gate',
   'not-at-loop-cap': 'This step is not waiting at its loop cap',
+  'not-timed-out': 'This step has not timed out',
   'invalid-output': 'Invalid step output'
 }
 
@@ -424,6 +426,7 @@ export function registerWorkflowsRequestHandlers({
     if (!isRunId(runId) || !isStepId(stepId) || !isLoopCapAction(action)) return INVALID_REQUEST
     return actionResponse(runner.resolveLoopCap(runId, stepId, action))
   })
+  stepAction('workflows:keepWaiting', (runId, stepId) => runner.keepWaiting(runId, stepId))
   guarded('workflows:markDone', ([runId, stepId, payload]): WorkflowActionResponse => {
     const request = parseMarkDone(payload)
     if (!isRunId(runId) || !isStepId(stepId) || !request) return INVALID_REQUEST

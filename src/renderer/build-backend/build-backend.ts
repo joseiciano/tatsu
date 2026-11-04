@@ -330,6 +330,7 @@ export function buildBackend(
       req('workflows:requestChanges', runId, stepId, payload),
     resolveWorkflowLoopCap: (runId: string, stepId: string, action: WorkflowLoopCapAction) =>
       req('workflows:resolveLoopCap', runId, stepId, action),
+    keepWaitingWorkflowStep: (runId: string, stepId: string) => req('workflows:keepWaiting', runId, stepId),
     openThemesFolder: () => reqLocal('config:openThemesFolder'),
     setCostsInterest: (expanded: boolean) => req('costs:setInterest', expanded),
     getAllSessionCosts: (sinceMs?: number) => req('costs:getAllSessions', sinceMs),

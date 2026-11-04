@@ -44,7 +44,7 @@ export const COMPLETED_BY_LABELS: Record<WorkflowCompletedBy, string> = {
   exit: 'process exit'
 }
 
-const MARK_DONE_REASONS: ReadonlySet<WorkflowPausedReason> = new Set(['needs-input', 'step-failed'])
+const MARK_DONE_REASONS: ReadonlySet<WorkflowPausedReason> = new Set(['needs-input', 'step-failed', 'timeout'])
 
 const MARK_DONE_STEP_STATUSES: ReadonlySet<WorkflowStepStatus> = new Set([
   'failed',

@@ -173,6 +173,11 @@ class FakeRunner implements WorkflowActionsRunner {
     this.record('resolveLoopCap', runId, stepId, action)
     return this.actionResult
   }
+
+  keepWaiting(runId: string, stepId: string): StepActionResult {
+    this.record('keepWaiting', runId, stepId)
+    return this.actionResult
+  }
 }
 
 function attempt(attemptId: string, summary: string): WorkflowAttemptRecord {
@@ -566,6 +571,7 @@ describe('workflow action requests', () => {
     ['workflows:approveGate', [RUN, STEP], ['approveGate', RUN, STEP]],
     ['workflows:resolveLoopCap', [RUN, STEP, 'again'], ['resolveLoopCap', RUN, STEP, 'again']],
     ['workflows:resolveLoopCap', [RUN, STEP, 'continue'], ['resolveLoopCap', RUN, STEP, 'continue']],
+    ['workflows:keepWaiting', [RUN, STEP], ['keepWaiting', RUN, STEP]],
     [
       'workflows:requestChanges',
       [RUN, STEP, { feedback: 'tighten the plan', fresh: false }],
@@ -801,6 +807,19 @@ describe('workflow action requests', () => {
     expect(await transport.call('workflows:resolveLoopCap', id, STEP, 'continue')).toEqual({ error: 'invalid request' })
     expect(await transport.call('workflows:resolveLoopCap', RUN, id, 'continue')).toEqual({ error: 'invalid request' })
     expect(runner.calls).toEqual([])
+  })
+
+  it.each(badIds)('rejects keepWaiting ids %#', async (id) => {
+    expect(await transport.call('workflows:keepWaiting', id, STEP)).toEqual({ error: 'invalid request' })
+    expect(await transport.call('workflows:keepWaiting', RUN, id)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('maps keep-waiting refusals to fixed messages', async () => {
+    runner.actionResult = { ok: false, reason: 'not-timed-out' }
+    expect(await transport.call('workflows:keepWaiting', RUN, STEP)).toEqual({ error: 'This step has not timed out' })
+    runner.actionResult = { ok: false, reason: 'labs-off' }
+    expect(await transport.call('workflows:keepWaiting', RUN, STEP)).toEqual({ error: 'Workflows are turned off in Labs' })
   })
 
   it('maps loop-cap refusals to fixed messages', async () => {
