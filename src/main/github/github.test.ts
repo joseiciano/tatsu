@@ -23,7 +23,16 @@ vi.mock('child_process', async () => {
   return { execFile }
 })
 
-import { getRepoContext, fetchPRStatusesForRepo, mergePR, listRepoIssues, listOpenPRs, inputAuthorTrust } from '.'
+import {
+  getRepoContext,
+  fetchPRStatusesForRepo,
+  mergePR,
+  listRepoIssues,
+  listOpenPRs,
+  inputAuthorTrust,
+  createPullRequest,
+  updatePullRequestBase
+} from '.'
 import { invalidateTokenCache, resolveGitHubToken } from '../github-auth'
 
 function mockResponse(status: number, body: unknown): Response {
@@ -797,5 +806,182 @@ describe('inputAuthorTrust', () => {
       .mockResolvedValue(mockResponse(200, { author_association: 'OWNER' }))
     expect(await inputAuthorTrust('/repo', 'issue', '7')).toBe('untrusted')
     expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+type ResolvedTokenMock = Awaited<ReturnType<typeof resolveGitHubToken>>
+
+const CREATE_INPUT = {
+  owner: 'acme',
+  repo: 'widgets',
+  head: 'feature/a',
+  base: 'main',
+  title: 'Add a',
+  body: 'Body text',
+  draft: true
+}
+
+describe('createPullRequest', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('POSTs the pull request and returns its number, url and draft flag', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      mockResponse(201, { number: 12, html_url: 'https://github.com/acme/widgets/pull/12', draft: true })
+    )
+    const res = await createPullRequest(CREATE_INPUT)
+    expect(res).toEqual({
+      ok: true,
+      pr: { number: 12, url: 'https://github.com/acme/widgets/pull/12', draft: true }
+    })
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.github.com/repos/acme/widgets/pulls')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({
+      head: 'feature/a',
+      base: 'main',
+      title: 'Add a',
+      body: 'Body text',
+      draft: true
+    })
+    const headers = init.headers as Record<string, string>
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(headers.Authorization).toBe('Bearer fake-token')
+  })
+
+  it('encodes owner and repo path segments', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'u', draft: false }))
+    await createPullRequest({ ...CREATE_INPUT, owner: 'a/b', repo: 'c?d' })
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.github.com/repos/a%2Fb/c%3Fd/pulls')
+  })
+
+  it('returns no-token without any request when no token resolves', async () => {
+    vi.mocked(resolveGitHubToken).mockResolvedValueOnce(null)
+    expect(await createPullRequest(CREATE_INPUT)).toEqual({ ok: false, error: { kind: 'no-token' } })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('re-resolves after a 401 and resends the same method and body', async () => {
+    vi.mocked(resolveGitHubToken)
+      .mockResolvedValueOnce({ token: 'stale' } as ResolvedTokenMock)
+      .mockResolvedValueOnce({ token: 'fresh' } as ResolvedTokenMock)
+    fetchSpy
+      .mockResolvedValueOnce(mockResponse(401, { message: 'Bad credentials' }))
+      .mockResolvedValueOnce(mockResponse(201, { number: 3, html_url: 'u3', draft: false }))
+    const res = await createPullRequest(CREATE_INPUT)
+    expect(res).toEqual({ ok: true, pr: { number: 3, url: 'u3', draft: false } })
+    expect(invalidateTokenCache).toHaveBeenCalledTimes(1)
+    const [first, second] = fetchSpy.mock.calls as Array<[string, RequestInit]>
+    expect(second[0]).toBe(first[0])
+    expect(second[1].method).toBe('POST')
+    expect(second[1].body).toBe(first[1].body)
+    expect((second[1].headers as Record<string, string>).Authorization).toBe('Bearer fresh')
+  })
+
+  it('does not resend the write unauthenticated when no token re-resolves after a 401', async () => {
+    vi.mocked(resolveGitHubToken)
+      .mockResolvedValueOnce({ token: 'stale' } as ResolvedTokenMock)
+      .mockResolvedValueOnce(null)
+    fetchSpy.mockResolvedValueOnce(mockResponse(401, { message: 'Bad credentials' }))
+    const res = await createPullRequest(CREATE_INPUT)
+    expect(res).toEqual({
+      ok: false,
+      error: { kind: 'http', status: 401, message: 'Bad credentials', errors: [] }
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces a 422 as a typed error carrying GitHub messages and no token', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      mockResponse(422, {
+        message: 'Validation Failed',
+        errors: [
+          { resource: 'PullRequest', code: 'custom', message: 'A pull request already exists for acme:feature/a.' },
+          { resource: 'PullRequest', field: 'base', code: 'invalid' }
+        ],
+        documentation_url: 'https://docs.github.com'
+      })
+    )
+    const res = await createPullRequest(CREATE_INPUT)
+    expect(res).toEqual({
+      ok: false,
+      error: {
+        kind: 'http',
+        status: 422,
+        message: 'Validation Failed',
+        errors: ['A pull request already exists for acme:feature/a.', 'base invalid']
+      }
+    })
+    expect(JSON.stringify(res)).not.toContain('fake-token')
+  })
+
+  it('falls back to the status line when the error body has no message', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(500, 'not json'))
+    expect(await createPullRequest(CREATE_INPUT)).toEqual({
+      ok: false,
+      error: { kind: 'http', status: 500, message: '500 status-500', errors: [] }
+    })
+  })
+
+  it('rejects a success body without a numeric PR number', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(201, { number: '12', html_url: 'u', draft: false }))
+    expect(await createPullRequest(CREATE_INPUT)).toEqual({ ok: false, error: { kind: 'bad-response' } })
+  })
+
+  it('maps a thrown fetch to a network error', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('fetch failed'))
+    expect(await createPullRequest(CREATE_INPUT)).toEqual({
+      ok: false,
+      error: { kind: 'network', message: 'fetch failed' }
+    })
+  })
+})
+
+describe('updatePullRequestBase', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('PATCHes only the base branch', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { number: 9, html_url: 'u9', draft: false }))
+    const res = await updatePullRequestBase({ owner: 'acme', repo: 'widgets', number: 9, base: 'release' })
+    expect(res).toEqual({ ok: true, pr: { number: 9, url: 'u9', draft: false } })
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.github.com/repos/acme/widgets/pulls/9')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body as string)).toEqual({ base: 'release' })
+  })
+
+  it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects the PR number %s without a request',
+    async (number) => {
+      const res = await updatePullRequestBase({ owner: 'acme', repo: 'widgets', number, base: 'main' })
+      expect(res.ok).toBe(false)
+      expect(res.ok === false && res.error.kind).toBe('invalid-input')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    }
+  )
+
+  it('surfaces a 422 with GitHub messages', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      mockResponse(422, { message: 'Validation Failed', errors: [{ message: 'base does not exist' }] })
+    )
+    expect(await updatePullRequestBase({ owner: 'acme', repo: 'widgets', number: 9, base: 'nope' })).toEqual({
+      ok: false,
+      error: { kind: 'http', status: 422, message: 'Validation Failed', errors: ['base does not exist'] }
+    })
   })
 })
