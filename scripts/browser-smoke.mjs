@@ -189,8 +189,8 @@ async function liveRunId(backend, defName) {
   return live[0][0]
 }
 
-async function waitForRunStatus(backend, runId, status) {
-  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+async function waitForRunStatus(backend, runId, status, timeoutMs = SCENARIO_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs
   for (;;) {
     const record = await backend.request('workflows:getRun', runId)
     if (record?.status === status) return record
@@ -353,8 +353,26 @@ async function flowExitMarkDone(page, backend) {
   })
 }
 
-async function flowRunDetail(page) {
+async function personalRunIds(backend, defName) {
+  const { state } = await backend.snapshot()
+  return Object.entries(state.workflows.runs)
+    .filter(([, run]) => run.defId === `personal:${defName}`)
+    .map(([runId]) => runId)
+}
+
+async function newRunId(backend, defName, before) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const fresh = (await personalRunIds(backend, defName)).filter((runId) => !before.has(runId))
+    if (fresh.length === 1) return fresh[0]
+    if (fresh.length > 1 || Date.now() > deadline) throw new Error(`expected one new ${defName} run, found ${fresh.length}`)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+async function flowRunDetail(page, backend) {
   await scenario(page, 'run-detail', async (shot) => {
+
     await page.getByRole('button', { name: 'Workflows', exact: true }).click()
     const section = page.getByRole('region', { name: 'Workflows', exact: true })
     await section.waitFor()
@@ -400,6 +418,33 @@ async function flowRunDetail(page) {
     await detail.getByRole('button', { name: 'All runs', exact: true }).click()
     await detail.waitFor({ state: 'detached' })
     await card.waitFor()
+    await section.getByRole('button', { name: 'Back', exact: true }).click()
+    await section.waitFor({ state: 'detached' })
+
+    const before = new Set(await personalRunIds(backend, 'smoke-diamond'))
+    await startFromLaunchSheet(page, 'smoke-diamond', shot)
+    const diamondRunId = await newRunId(backend, 'smoke-diamond', before)
+    await waitForRunStatus(backend, diamondRunId, 'done', 3 * SCENARIO_TIMEOUT_MS)
+    log(`run-detail: smoke-diamond run ${diamondRunId} done`)
+    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    await section.waitFor()
+    const diamondCard = section.getByRole('region', { name: 'Recent runs' }).getByRole('article', { name: 'smoke-diamond on repo', exact: true }).first()
+    await diamondCard.getByRole('button', { name: 'Open run: smoke-diamond on repo', exact: true }).click()
+    const diamond = section.getByRole('region', { name: 'smoke-diamond', exact: true })
+    await diamond.waitFor()
+    const diamondGraph = diamond.getByRole('group', { name: 'Workflow graph', exact: true })
+    for (const stepId of ['plan', 'left', 'right', 'join']) {
+      await diamondGraph.getByRole('listitem', { name: `${stepId}: done`, exact: true }).waitFor()
+    }
+    const edges = (await diamondGraph.locator('path[data-edge]').evaluateAll((paths) => paths.map((p) => p.getAttribute('data-edge')))).sort()
+    const expectedEdges = ['left->join', 'plan->left', 'plan->right', 'right->join']
+    if (JSON.stringify(edges) !== JSON.stringify(expectedEdges)) {
+      throw new Error(`diamond graph edges ${JSON.stringify(edges)}, expected ${JSON.stringify(expectedEdges)}`)
+    }
+    log(`run-detail: diamond graph edges ${JSON.stringify(edges)}`)
+    await shot('diamond-graph')
+    await diamond.getByRole('button', { name: 'All runs', exact: true }).click()
+    await diamond.waitFor({ state: 'detached' })
     await section.getByRole('button', { name: 'Back', exact: true }).click()
     await section.waitFor({ state: 'detached' })
   })
@@ -1030,7 +1075,7 @@ async function main() {
     await flowHangCancel(page, backend)
     await flowWorkflowsSection(page, backend)
     await flowExitMarkDone(page, backend)
-    await flowRunDetail(page)
+    await flowRunDetail(page, backend)
     await flowAttemptDiff(page, backend)
     await flowSwapStep(page, backend)
     await flowRepoTrust(page, backend)

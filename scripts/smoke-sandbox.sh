@@ -128,6 +128,28 @@ steps:
     kind: shell
     run: echo {{steps.plan.summary}}
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-diamond.yaml" <<'YAML'
+name: smoke-diamond
+steps:
+  - id: plan
+    agent: claude
+    permissions: read-only
+    prompt: "Reply PLAN-OK and call complete_step."
+  - id: left
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "Review the left half of {{steps.plan.summary}} and call complete_step."
+  - id: right
+    agent: claude
+    needs: [plan]
+    permissions: read-only
+    prompt: "Review the right half of {{steps.plan.summary}} and call complete_step."
+  - id: join
+    kind: shell
+    needs: [left, right]
+    run: echo {{steps.left.summary}} {{steps.right.summary}}
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-retry.yaml" <<'YAML'
 name: smoke-retry
 steps:

@@ -66,6 +66,7 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 | `smoke` | `plan` (claude) then `echo` (shell) | default: calls `complete_step` |
 | `smoke-codex` | `plan` (codex, `read-only`, `model: fake-codex-model`) then `echo` (shell) | codex mode: SessionStart + Stop through `$CODEX_HOME/harness-hook.sh`, calls `complete_step` |
 | `smoke-opencode` | `plan` (opencode, `read-only`, `model: fake/opencode-model`) then `echo` (shell) | opencode mode: needs `--agent harness-step`, loads the installed plugin, root `session.idle` -> `promptAsync` to `harness-step`, calls `complete_step` through the bridge in `OPENCODE_CONFIG_CONTENT` |
+| `smoke-diamond` | `plan` (claude, `read-only`) -> `left` and `right` (claude, `read-only`, both `needs: [plan]`) -> `join` (shell, `needs: [left, right]`, echoes both summaries) | default: calls `complete_step`; the branches run one at a time in definition order |
 | `smoke-retry` | `check` (shell `test -f flag`) | none |
 | `smoke-full` | `plan` (claude, `permissions: full`) | needs Allow full access |
 | `browser-hang` | `hang` (claude) | `FAKE_AGENT_MODE=hang`: stays alive, never completes |

@@ -8,7 +8,8 @@
 // shims for scripts/fake-agent.mjs, a scratch CODEX_HOME that trusts Tatsu's
 // hooks and the repo, and the personal definitions `smoke` (Claude step then
 // shell step), `smoke-codex` (Codex step then shell step), `smoke-opencode`
-// (opencode step then shell step), `smoke-retry` (one
+// (opencode step then shell step), `smoke-diamond` (Claude plan, two
+// read-only Claude branches, shell join), `smoke-retry` (one
 // `test -f flag` shell step) and `smoke-full`, plus the committed repo
 // definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
@@ -252,6 +253,22 @@ async function scenarioOpencodeThenShell(worktreePath) {
   )
 }
 
+async function scenarioDiamond(worktreePath) {
+  const runId = await startRun('personal:smoke-diamond', worktreePath)
+  const record = await runSettled(runId)
+  expectThat(record.status === 'done', `diamond scenario run ended ${record.status}/${record.pausedReason ?? ''}`, record)
+  const [plan, left, right, join] = ['plan', 'left', 'right', 'join'].map((stepId) => attemptsFor(record, stepId))
+  for (const [stepId, attempts] of Object.entries({ plan, left, right, join })) {
+    expectThat(attempts.length === 1 && attempts[0].status === 'done', `diamond ${stepId} has ${attempts.length} attempts, expected one done`, record)
+  }
+  expectThat(left[0].startedAt >= plan[0].endedAt && right[0].startedAt >= plan[0].endedAt, 'a diamond branch started before plan ended', record)
+  expectThat(right[0].startedAt >= left[0].endedAt, 'the right branch started before the left branch ended', record)
+  expectThat(join[0].startedAt >= right[0].endedAt, 'the join started before both branches ended', record)
+  const joined = join[0].result?.summary ?? ''
+  expectThat(joined.includes(left[0].result.summary) && joined.includes(right[0].result.summary), 'the join summary lacks a branch summary', record)
+  console.log('scenario diamond OK: run=%s done; plan -> left -> right -> join; join summary %j', runId, joined)
+}
+
 async function scenarioFailRetry(worktreePath) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const runId = await startRun('personal:smoke-retry', worktreePath)
@@ -341,6 +358,7 @@ async function main() {
     'personal:smoke',
     'personal:smoke-codex',
     'personal:smoke-opencode',
+    'personal:smoke-diamond',
     'personal:smoke-retry',
     'personal:smoke-full'
   ]
@@ -363,6 +381,7 @@ async function main() {
   await scenarioAgentThenShell(worktreePath)
   await scenarioCodexThenShell(worktreePath)
   await scenarioOpencodeThenShell(worktreePath)
+  await scenarioDiamond(worktreePath)
   await scenarioFailRetry(worktreePath)
   await scenarioRepoTrust(worktreePath)
   ws.close()
