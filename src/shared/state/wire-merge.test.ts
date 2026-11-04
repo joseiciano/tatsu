@@ -91,6 +91,45 @@ describe('mergeWireSnapshot', () => {
     expect(merged.workflows.trust).toEqual({})
   })
 
+  it('hydrates chains to an empty map for a workflows snapshot without chains', () => {
+    const merged = mergeWireSnapshot({ workflows: { definitions: {}, runs: {}, attempts: {}, trust: {} } })
+    expect(merged.workflows.chains).toEqual({})
+    const started = rootReducer(merged, {
+      type: 'workflows/chainStarted',
+      payload: {
+        chain: {
+          chainId: 'chain-1',
+          defId: 'personal:a',
+          repoRoot: '/repo',
+          mode: 'stacked',
+          items: [{ id: 'i1', title: 'One' }],
+          draftPrs: true,
+          childRunIds: {},
+          startedAt: 1
+        }
+      }
+    })
+    expect(Object.keys(started.workflows.chains)).toEqual(['chain-1'])
+  })
+
+  it('keeps the chains map of a new-server workflows snapshot', () => {
+    const chains = {
+      'chain-1': {
+        chainId: 'chain-1',
+        defId: 'personal:a',
+        repoRoot: '/repo',
+        mode: 'independent' as const,
+        items: [{ id: 'i1', title: 'One', branch: 'feat/one', prNumber: 3 }],
+        draftPrs: false,
+        childRunIds: { i1: 'run-1' },
+        startedAt: 1,
+        finishedAt: 2
+      }
+    }
+    const merged = mergeWireSnapshot({ workflows: { chains } })
+    expect(merged.workflows.chains).toBe(chains)
+  })
+
   it('keeps the trust map of a new-server workflows snapshot', () => {
     const trust = { 'repo:abcdefabcdef:ship': 'a'.repeat(64) }
     const merged = mergeWireSnapshot({ workflows: { trust } })
