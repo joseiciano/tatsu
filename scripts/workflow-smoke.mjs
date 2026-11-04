@@ -316,6 +316,75 @@ function paneTabs(node) {
   return node.type === 'leaf' ? node.tabs : [...paneTabs(node.children[0]), ...paneTabs(node.children[1])]
 }
 
+function nextEvent(label, matches, timeoutMs = SCENARIO_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const onEvent = (event) => {
+      if (!matches(event)) return
+      clearTimeout(timer)
+      listeners.delete(onEvent)
+      resolve(event)
+    }
+    const timer = setTimeout(() => {
+      listeners.delete(onEvent)
+      reject(new Error(`timed out after ${timeoutMs} ms waiting for ${label}`))
+    }, timeoutMs)
+    listeners.add(onEvent)
+  })
+}
+
+async function scenarioTimeout(worktreePath) {
+  const runId = await startRun('personal:smoke-timeout', worktreePath)
+  let cancelled = false
+  try {
+    const paused = await waitFor(`run ${runId} to pause timeout`, async () => {
+      const record = await request('workflows:getRun', runId)
+      if (!record) return undefined
+      if (['done', 'failed', 'cancelled'].includes(record.status)) fail(`timeout scenario run ended ${record.status}`, record)
+      return record.status === 'paused' ? record : undefined
+    })
+    expectThat(
+      paused.pausedReason === 'timeout' && paused.steps.wait === 'running',
+      `timeout scenario expected paused/timeout with the step running, got ${paused.status}/${paused.pausedReason ?? ''}/${paused.steps.wait}`,
+      paused
+    )
+    const [attempt] = attemptsFor(paused, 'wait')
+    expectThat(attempt?.status === 'running' && typeof attempt.executionId === 'string', 'timed-out attempt is not running on a terminal', paused)
+    const tab = await waitFor('the timed-out step terminal', () => {
+      const found = paneTabs(state.terminals.panes[worktreePath]).find((t) => t.id === attempt.executionId)
+      return found?.workflow?.attemptId === attempt.attemptId ? found : undefined
+    })
+    const resumed = nextEvent(`run ${runId} to resume`, (event) => event.type === 'workflows/runResumed' && event.payload.runId === runId)
+    const kept = await request('workflows:keepWaiting', runId, 'wait')
+    expectThat(kept?.ok === true, 'keepWaiting refused', kept)
+    await resumed
+    const again = await nextEvent(
+      `run ${runId} to time out again`,
+      (event) => event.type === 'workflows/runPaused' && event.payload.runId === runId
+    )
+    expectThat(again.payload.reason === 'timeout', `timeout scenario re-paused ${again.payload.reason}`, again)
+    const rearmed = await request('workflows:getRun', runId)
+    const attempts = attemptsFor(rearmed, 'wait')
+    expectThat(
+      attempts.length === 1 && attempts[0].status === 'running' && attempts[0].executionId === attempt.executionId,
+      'keep waiting did not keep the same live attempt',
+      rearmed
+    )
+    const stopped = await request('workflows:cancelRun', runId)
+    expectThat(stopped?.ok === true, 'cancelRun refused', stopped)
+    cancelled = true
+    const record = await request('workflows:getRun', runId)
+    expectThat(record?.status === 'cancelled', `timeout scenario run is ${record?.status} after cancel`, record)
+    expectThat(attemptsFor(record, 'wait')[0]?.status === 'cancelled', 'timed-out attempt was not cancelled', record)
+    console.log(
+      'scenario timeout OK: run=%s paused timeout with terminal %s alive, keep waiting resumed and re-armed, cancel run ended it',
+      runId,
+      tab.id
+    )
+  } finally {
+    if (!cancelled) await request('workflows:cancelRun', runId)
+  }
+}
+
 async function scenarioGate(worktreePath) {
   const runId = await startRun('personal:smoke-gate', worktreePath)
   const first = await runSettled(runId)
@@ -507,6 +576,7 @@ async function main() {
     'personal:smoke-opencode',
     'personal:smoke-diamond',
     'personal:smoke-parallel',
+    'personal:smoke-timeout',
     'personal:smoke-gate',
     'personal:smoke-loop',
     'personal:smoke-when',
@@ -534,6 +604,7 @@ async function main() {
   await scenarioOpencodeThenShell(worktreePath)
   await scenarioDiamond(worktreePath)
   await scenarioParallel(worktreePath)
+  await scenarioTimeout(worktreePath)
   await scenarioGate(worktreePath)
   await scenarioLoop(worktreePath)
   await scenarioWhen(worktreePath)
