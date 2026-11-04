@@ -27,7 +27,9 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     cancelWorkflowRun: vi.fn(),
     cancelWorkflowStep: vi.fn(),
     markWorkflowStepDone: vi.fn(),
-    swapWorkflowStep: vi.fn()
+    swapWorkflowStep: vi.fn(),
+    approveWorkflowGate: vi.fn(),
+    requestWorkflowChanges: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -199,7 +201,9 @@ beforeEach(() => {
     backendApi.cancelWorkflowRun,
     backendApi.cancelWorkflowStep,
     backendApi.markWorkflowStepDone,
-    backendApi.swapWorkflowStep
+    backendApi.swapWorkflowStep,
+    backendApi.approveWorkflowGate,
+    backendApi.requestWorkflowChanges
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -247,12 +251,12 @@ const actionButton = (label: string): HTMLButtonElement => {
 }
 
 describe('RunDetailContainer', () => {
-  it('draws the step graph from the record with live slice statuses', async () => {
+  it('draws the step graph from the record with live slice statuses and marks the paused step', async () => {
     setState(pausedRun(), DEFAULT_ATTEMPTS)
     await render()
     const graph = container.querySelector('[role="group"][aria-label="Workflow graph"]')
     const nodes = [...(graph?.querySelectorAll('[role="listitem"]') ?? [])].map((n) => n.getAttribute('aria-label'))
-    expect(nodes).toEqual(['plan: done', 'exit: failed'])
+    expect(nodes).toEqual(['plan: done', 'exit: failed, needs you'])
   })
 
   it('lists every attempt in order and shows the latest attempt result by default', async () => {
@@ -429,6 +433,88 @@ describe('RunDetailContainer', () => {
       setState(pausedRun({ cursorStepId: 'plan' }), DEFAULT_ATTEMPTS)
       await render()
       expect(actionButtons()).not.toContain('Swap harness/model')
+    })
+  })
+
+  describe('at a gate', () => {
+    const EXIT_DONE = attemptRecord({ attemptId: 'a-exit', stepId: 'exit', startedAt: NOW - 40_000, endedAt: NOW - 30_000, sessionId: 's1' })
+    const gatedRecord = (overrides: Partial<WorkflowRunRecord> = {}) =>
+      record([PLAN_ATTEMPT, EXIT_DONE], { pausedReason: 'gate', steps: { plan: 'done', exit: 'awaiting-gate' }, ...overrides })
+    const gatedRun = (overrides: Partial<WorkflowRun> = {}) =>
+      pausedRun({
+        pausedReason: 'gate',
+        steps: {
+          plan: { status: 'done', attemptIds: ['a-plan'], kind: 'shell' },
+          exit: { status: 'awaiting-gate', attemptIds: ['a-exit'], kind: 'agent', agent: 'claude' }
+        },
+        ...overrides
+      })
+    const gateAttempts = { 'a-plan': sliceAttempt('plan', 'done'), 'a-exit': sliceAttempt('exit', 'done') }
+    const graphLabels = (): (string | null)[] =>
+      [...container.querySelectorAll('[aria-label="Workflow graph"] [role="listitem"]')].map((n) => n.getAttribute('aria-label'))
+    const changesDialog = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')
+    const submitButton = () => changesDialog()?.querySelector<HTMLButtonElement>('button[type="submit"]') ?? null
+    async function typeFeedback(value: string): Promise<void> {
+      const box = changesDialog()?.querySelector('textarea')
+      if (!box) throw new Error('no feedback box')
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(box, value)
+        box.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+
+    beforeEach(() => {
+      backendApi.getWorkflowRun.mockResolvedValue(gatedRecord())
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => [PLAN_ATTEMPT, EXIT_DONE].find((a) => a.attemptId === id) ?? null)
+    })
+
+    it('marks the gated step in the graph as needing you and offers Approve and Request changes', async () => {
+      setState(gatedRun(), gateAttempts)
+      await render()
+      expect(graphLabels()).toEqual(['plan: done', 'exit: waiting at gate, needs you'])
+      expect(actionButtons()).toEqual(['Approve', 'Request changes', 'Cancel run'])
+      expect(actionButton('Approve').getAttribute('aria-label')).toBe('Approve: exit')
+      expect(actionButton('Request changes').getAttribute('aria-label')).toBe('Request changes: exit')
+      await click(actionButton('Approve'))
+      expect(backendApi.approveWorkflowGate).toHaveBeenCalledWith('r1', 'exit')
+    })
+
+    it('sends the feedback and fresh choice, and shows a refusal inside the dialog', async () => {
+      backendApi.requestWorkflowChanges.mockResolvedValueOnce({ error: 'This step is not waiting at its gate' })
+      setState(gatedRun(), gateAttempts)
+      await render()
+      await click(actionButton('Request changes'))
+      expect(submitButton()?.disabled).toBe(true)
+      await typeFeedback('add a test')
+      await click(changesDialog()?.querySelector('input[type="checkbox"]'))
+      await click(submitButton())
+      expect(backendApi.requestWorkflowChanges).toHaveBeenCalledWith('r1', 'exit', { feedback: 'add a test', fresh: true })
+      expect(changesDialog()?.querySelector('[role="alert"]')?.textContent).toBe('This step is not waiting at its gate')
+      await click(submitButton())
+      expect(changesDialog()).toBeNull()
+    })
+
+    it('closes on Escape and returns focus to the Request changes button', async () => {
+      setState(gatedRun(), gateAttempts)
+      await render()
+      const opener = actionButton('Request changes')
+      opener.focus()
+      await click(opener)
+      expect(document.activeElement).toBe(changesDialog()?.querySelector('textarea'))
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      })
+      expect(changesDialog()).toBeNull()
+      expect(document.activeElement).toBe(opener)
+      expect(backendApi.requestWorkflowChanges).not.toHaveBeenCalled()
+    })
+
+    it('shows a run cancelled at its gate as cancelled, without the needs-you mark or gate actions', async () => {
+      backendApi.getWorkflowRun.mockResolvedValue(gatedRecord({ status: 'cancelled', pausedReason: undefined }))
+      setState(gatedRun({ status: 'cancelled', pausedReason: undefined }), gateAttempts)
+      await render()
+      expect(graphLabels()).toEqual(['plan: done', 'exit: cancelled'])
+      expect(actionButtons()).toEqual([])
     })
   })
 

@@ -33,6 +33,22 @@ describe('WorkflowGraph', () => {
     expect(labels).toEqual(['plan: done', 'build: running', 'test: waiting at gate'])
   })
 
+  it('marks only the paused step as needing you, with a ring', () => {
+    render({ steps, statusByStep: { plan: 'done', build: 'awaiting-gate', test: 'pending' }, pausedStepId: 'build' })
+    const nodes = [...container.querySelectorAll<HTMLElement>('[role="listitem"]')]
+    expect(nodes.map((n) => n.getAttribute('aria-label'))).toEqual([
+      'plan: done',
+      'build: waiting at gate, needs you',
+      'test: pending'
+    ])
+    expect(nodes.map((n) => n.className.includes('ring-warning'))).toEqual([false, true, false])
+  })
+
+  it('marks a paused step that has no status yet', () => {
+    render({ steps, pausedStepId: 'plan' })
+    expect(container.querySelector('[role="listitem"]')?.getAttribute('aria-label')).toBe('plan, needs you')
+  })
+
   it('labels nodes with just the id when no status is given', () => {
     render({ steps })
     const labels = [...container.querySelectorAll('[role="listitem"]')].map((n) => n.getAttribute('aria-label'))

@@ -7,6 +7,7 @@ import {
   runNeedsYouAction,
   sliceStepContext,
   deriveStepStrip,
+  displayStepStatus,
   needsYouActions,
   stepOrderFor,
   type NeedsYouActionKind,
@@ -71,9 +72,33 @@ describe('deriveStepStrip', () => {
     expect(strip.map((s) => s.paused)).toEqual([false, true, false])
   })
 
+  it('shows a gated step of a cancelled run as cancelled, not waiting at its gate', () => {
+    const strip = deriveStepStrip(run({ plan: 'awaiting-gate', test: 'pending' }, 'cancelled'), ['plan', 'test'])
+    expect(strip.map((s) => [s.status, s.glyph, s.paused])).toEqual([
+      ['cancelled', '✕', false],
+      ['pending', '○', false]
+    ])
+  })
+
   it('follows the given order and drops ids the run does not have', () => {
     const strip = deriveStepStrip(run({ a: 'done', b: 'running' }), ['b', 'gone', 'a'])
     expect(strip.map((s) => s.id)).toEqual(['b', 'a'])
+  })
+})
+
+describe('displayStepStatus', () => {
+  it.each<[WorkflowRunStatus, WorkflowStepStatus, WorkflowStepStatus]>([
+    ['cancelled', 'awaiting-gate', 'cancelled'],
+    ['failed', 'awaiting-gate', 'cancelled'],
+    ['done', 'awaiting-gate', 'cancelled'],
+    ['paused', 'awaiting-gate', 'awaiting-gate'],
+    ['running', 'awaiting-gate', 'awaiting-gate'],
+    ['queued', 'awaiting-gate', 'awaiting-gate'],
+    ['cancelled', 'done', 'done'],
+    ['cancelled', 'pending', 'pending'],
+    ['paused', 'failed', 'failed']
+  ])('a %s run shows a %s step as %s', (runStatus, stepStatus, expected) => {
+    expect(displayStepStatus(runStatus, stepStatus)).toBe(expected)
   })
 })
 
@@ -107,6 +132,7 @@ const SHELL: NeedsYouStepInfo = { kind: 'shell' }
 const FAILED: NeedsYouAttemptInfo = { status: 'failed', resumable: false }
 const FAILED_WITH_SNAPSHOT: NeedsYouAttemptInfo = { status: 'failed', resumable: false, hasBaseSnapshot: true }
 const LIVE: NeedsYouAttemptInfo = { status: 'running', resumable: true }
+const DONE: NeedsYouAttemptInfo = { status: 'done', resumable: true }
 const INTERRUPTED_SESSION: NeedsYouAttemptInfo = { status: 'interrupted', resumable: true }
 
 describe('pausedReasonLabel', () => {
@@ -141,7 +167,10 @@ describe('needsYouActions', () => {
     ['interrupted step not loaded yet', 'interrupted', null, null, false, ['retry', 'cancel']],
     ['trust with no tab', 'trust', CLAUDE, FAILED, false, ['retry', 'cancel']],
     ['trust with a tab', 'trust', CLAUDE, FAILED, true, ['retry', 'cancel', 'jump']],
-    ['gate', 'gate', null, null, true, ['cancel', 'jump']],
+    ['gate on an agent step with a tab', 'gate', CLAUDE, DONE, true, ['approve', 'request-changes', 'cancel', 'jump']],
+    ['gate on an agent step without a tab', 'gate', CODEX, DONE, false, ['approve', 'request-changes', 'cancel']],
+    ['gate on a shell step', 'gate', SHELL, DONE, false, ['approve', 'cancel']],
+    ['gate before the step loaded', 'gate', null, null, true, ['approve', 'cancel', 'jump']],
     ['budget', 'budget', null, null, false, ['cancel']],
     ['loop-cap', 'loop-cap', null, null, false, ['cancel']],
     ['timeout', 'timeout', null, null, false, ['cancel']],
@@ -263,7 +292,8 @@ describe('runNeedsYouAction', () => {
       skipWorkflowStep: vi.fn(async () => ok),
       resumeWorkflowStep: vi.fn(async () => ok),
       cancelWorkflowRun: vi.fn(async () => ok),
-      retryWorkflowStepFromClean: vi.fn(async () => ok)
+      retryWorkflowStepFromClean: vi.fn(async () => ok),
+      approveWorkflowGate: vi.fn(async () => ok)
     }
   }
 
@@ -271,7 +301,8 @@ describe('runNeedsYouAction', () => {
     ['retry', 'retryWorkflowStep', ['r', 's']],
     ['skip', 'skipWorkflowStep', ['r', 's']],
     ['resume', 'resumeWorkflowStep', ['r', 's']],
-    ['cancel', 'cancelWorkflowRun', ['r']]
+    ['cancel', 'cancelWorkflowRun', ['r']],
+    ['approve', 'approveWorkflowGate', ['r', 's']]
   ] as const)('%s calls %s', async (kind, method, args) => {
     const backend = api()
     await expect(runNeedsYouAction(backend, kind, 'r', 's')).resolves.toEqual({ ok: true })

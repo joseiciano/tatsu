@@ -14,15 +14,16 @@ import type {
   WorkflowActionResponse,
   WorkflowAttemptRecord,
   WorkflowMarkDonePayload,
+  WorkflowRequestChangesPayload,
   WorkflowRunRecord,
   WorkflowStepStatus,
   WorkflowSwapStepPayload
 } from '../../../../shared/state/workflows'
-import { RetryFromCleanDialog, type JumpToTabHandler } from '../NeedsYou'
+import { RequestChangesDialog, RetryFromCleanDialog, type JumpToTabHandler } from '../NeedsYou'
 import { runCardModel } from '../run-card-model'
 import { latestAttemptId, runDetailModel, type RunDetailActionKind } from '../run-detail-model'
 import { CancelStepDialog, MarkDoneForm } from '../StepTab'
-import { confirmRetryFromClean, runNeedsYouAction } from '../workflow-run-helpers'
+import { confirmRetryFromClean, displayStepStatus, runNeedsYouAction } from '../workflow-run-helpers'
 import { AttemptChangesContainer } from './AttemptChangesContainer'
 import type { AttemptResultState } from './AttemptResult'
 import { RunDetail } from './RunDetail'
@@ -31,6 +32,7 @@ import { SwapStepDialog } from './SwapStepDialog'
 const ACTION_FAILED = 'Action failed'
 const CANCEL_STEP_FAILED = 'Could not cancel the step'
 const SWAP_FAILED = 'Could not swap the step'
+const REQUEST_CHANGES_FAILED = 'Could not request changes'
 
 export interface RunDetailContainerProps {
   runId: string
@@ -143,11 +145,13 @@ export function RunDetailContainer({
   const leaf = useWorkflowStepTabLeaf(run && selectedAttempt ? run.worktreePath : null, tabRef)
   const tab = leaf ? findWorkflowStepTab(leaf, tabRef) : null
 
+  const runStatus = run?.status
   const statusByStep = useMemo(() => {
     const out: Partial<Record<string, WorkflowStepStatus>> = {}
-    for (const [id, step] of Object.entries(run?.steps ?? {})) out[id] = step.status
+    if (!runStatus) return out
+    for (const [id, step] of Object.entries(run?.steps ?? {})) out[id] = displayStepStatus(runStatus, step.status)
     return out
-  }, [run?.steps])
+  }, [run?.steps, runStatus])
 
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -155,6 +159,7 @@ export function RunDetailContainer({
   const [cancelStep, setCancelStep] = useState<{ busy: boolean; error: string | null } | null>(null)
   const [markDoneOpen, setMarkDoneOpen] = useState(false)
   const [swap, setSwap] = useState<{ busy: boolean; error: string | null } | null>(null)
+  const [changes, setChanges] = useState<{ busy: boolean; error: string | null } | null>(null)
 
   const settle = useCallback(async (call: () => Promise<WorkflowActionResponse>) => {
     setBusy(true)
@@ -172,6 +177,7 @@ export function RunDetailContainer({
   const closeConfirmClean = useCallback(() => setConfirmingClean(false), [])
   const closeCancelStep = useCallback(() => setCancelStep(null), [])
   const closeSwap = useCallback(() => setSwap(null), [])
+  const closeChanges = useCallback(() => setChanges(null), [])
 
   const tabExists = tab !== null && !!onJumpToTab
   const model = useMemo(
@@ -181,6 +187,7 @@ export function RunDetailContainer({
   const stepId = model?.actionStepId ?? null
   const markDoneAvailable = model?.actions.includes('mark-done') ?? false
   const swapAvailable = model?.actions.includes('swap') ?? false
+  const changesAvailable = model?.actions.includes('request-changes') ?? false
 
   useEffect(() => {
     if (!markDoneAvailable) setMarkDoneOpen(false)
@@ -189,6 +196,10 @@ export function RunDetailContainer({
   useEffect(() => {
     if (!swapAvailable) setSwap((open) => (open?.busy ? open : null))
   }, [swapAvailable])
+
+  useEffect(() => {
+    if (!changesAvailable) setChanges((open) => (open?.busy ? open : null))
+  }, [changesAvailable])
 
   if (!run) {
     return (
@@ -227,6 +238,10 @@ export function RunDetailContainer({
       case 'swap':
         if (stepId) setSwap({ busy: false, error: null })
         return
+      case 'request-changes':
+        if (stepId) setChanges({ busy: false, error: null })
+        return
+      case 'approve':
       case 'retry':
       case 'skip':
       case 'resume':
@@ -266,6 +281,17 @@ export function RunDetailContainer({
     }
   }
 
+  const onRequestChanges = async (payload: WorkflowRequestChangesPayload): Promise<void> => {
+    if (!stepId) return
+    setChanges({ busy: true, error: null })
+    try {
+      const response = await backend.requestWorkflowChanges(runId, stepId, payload)
+      setChanges('error' in response ? { busy: false, error: response.error } : null)
+    } catch {
+      setChanges({ busy: false, error: REQUEST_CHANGES_FAILED })
+    }
+  }
+
   const markDone = (payload: WorkflowMarkDonePayload): Promise<WorkflowActionResponse> =>
     stepId ? backend.markWorkflowStepDone(runId, stepId, payload) : Promise.resolve({ error: ACTION_FAILED })
   const markDoneStep = record?.definition.steps.find((s) => s.id === stepId)
@@ -281,6 +307,7 @@ export function RunDetailContainer({
         worktreePath={run.worktreePath}
         steps={record?.definition.steps ?? null}
         statusByStep={statusByStep}
+        pausedStepId={run.status === 'paused' ? run.cursorStepId : undefined}
         model={model}
         loadError={loaded !== null && (loaded.error || loaded.record === null)}
         selectedAttemptId={effectiveAttemptId}
@@ -327,6 +354,15 @@ export function RunDetailContainer({
           error={swap.error}
           onConfirm={(payload) => void onConfirmSwap(payload)}
           onCancel={closeSwap}
+        />
+      )}
+      {changes && stepId && (
+        <RequestChangesDialog
+          stepId={stepId}
+          busy={changes.busy}
+          error={changes.error}
+          onSubmit={(payload) => void onRequestChanges(payload)}
+          onCancel={closeChanges}
         />
       )}
     </>

@@ -9,6 +9,8 @@ import { AttemptResult, type AttemptResultState } from './AttemptResult'
 import { AttemptTimeline } from './AttemptTimeline'
 
 export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
+  approve: 'Approve',
+  'request-changes': 'Request changes',
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',
@@ -40,6 +42,7 @@ export interface RunDetailProps {
   worktreePath: string
   steps: readonly ResolvedWorkflowStep[] | null
   statusByStep: Partial<Record<string, WorkflowStepStatus>>
+  pausedStepId?: string
   model: RunDetailModel | null
   loadError: boolean
   selectedAttemptId: string | null
@@ -88,7 +91,7 @@ function RunActions({
               onClick={() => onAction(kind)}
               aria-label={actionLabel(kind, stepId)}
               aria-expanded={kind === 'mark-done' ? markDoneOpen : undefined}
-              aria-haspopup={kind === 'swap' ? 'dialog' : undefined}
+              aria-haspopup={kind === 'swap' || kind === 'request-changes' ? 'dialog' : undefined}
               className={`text-xs px-2 py-1 rounded border border-border-strong hover:bg-surface transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                 DANGER_ACTIONS.has(kind) ? 'text-danger' : 'text-fg'
               }`}
@@ -115,6 +118,7 @@ export function RunDetail({
   worktreePath,
   steps,
   statusByStep,
+  pausedStepId,
   model,
   loadError,
   selectedAttemptId,
@@ -176,7 +180,7 @@ export function RunDetail({
         </p>
       )}
 
-      {steps && steps.length > 0 && <WorkflowGraph steps={steps} statusByStep={statusByStep} />}
+      {steps && steps.length > 0 && <WorkflowGraph steps={steps} statusByStep={statusByStep} pausedStepId={pausedStepId} />}
 
       {model === null ? (
         !loadError && <p className="text-xs text-dim">Loading run…</p>
