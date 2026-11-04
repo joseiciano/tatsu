@@ -405,6 +405,11 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
       if (state.trust[defId] === hash) return state
       return { ...state, trust: { ...state.trust, [defId]: hash } }
     }
+    case 'workflows/gateResolved': {
+      const { runId, stepId, decision } = event.payload
+      if (state.runs[runId]?.steps[stepId]?.status !== 'awaiting-gate') return state
+      return setStepStatus(state, runId, stepId, decision === 'approved' ? 'done' : 'pending')
+    }
     default: {
       const _exhaustive: never = event
       void _exhaustive

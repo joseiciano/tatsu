@@ -5,6 +5,7 @@ import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Store } from '../../store'
 import { initialState } from '../../../shared/state'
+import { GATE_FEEDBACK_MAX_CHARS } from '../../../shared/state/workflows'
 import type { TerminalTab } from '../../../shared/state/terminals'
 import type { HooksConsent } from '../../../shared/state/hooks'
 import type { StepSpawnExtras } from '../../agent-spawn'
@@ -535,6 +536,16 @@ describe('createClaudeStepDriver continue', () => {
     expect(statSync(path).mode & 0o777).toBe(0o600)
     expect(fake.writes[1].data).toBe(bracketedPaste(`Read ${path} and follow it.`))
     expect(fake.logs.join('\n')).not.toContain(PROMPT_SECRET)
+  })
+
+  it('writes the largest gate feedback (16384 three-byte characters) to the prompt file, not the PTY', async () => {
+    const fake = new FakeClaude()
+    const { execution, next } = await started(fake)
+    const feedback = '€'.repeat(GATE_FEEDBACK_MAX_CHARS)
+    await fake.driver.continue(next, execution.executionId, feedback)
+    const path = stepPromptPath(worktree, 'run-1', 'plan')
+    expect(readFileSync(path, 'utf8')).toBe(feedback)
+    expect(fake.writes).toEqual([{ id: execution.executionId, data: bracketedPaste(`Read ${path} and follow it.`) }])
   })
 
   it('refuses a dead tab or an ended attempt without writing to the PTY or the marker', async () => {

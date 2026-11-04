@@ -150,6 +150,18 @@ steps:
     needs: [left, right]
     run: echo {{steps.left.summary}} {{steps.right.summary}}
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-gate.yaml" <<'YAML'
+name: smoke-gate
+steps:
+  - id: plan
+    agent: claude
+    permissions: read-only
+    gate: approve
+    prompt: "FAKE_AGENT_MODE=multi-turn Reply PLAN-OK and call complete_step."
+  - id: echo
+    kind: shell
+    run: echo {{steps.plan.summary}}
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-retry.yaml" <<'YAML'
 name: smoke-retry
 steps:

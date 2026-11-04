@@ -776,3 +776,171 @@ describe('WorkflowRunner per-step scheduling', () => {
     ])
   })
 })
+
+const GATED_FAN_IN = FAN_IN.replace('    prompt: "a"\n', '    prompt: "a"\n    gate: approve\n').replace(
+  '    prompt: "b"\n',
+  '    prompt: "b"\n    gate: approve\n'
+)
+
+function gatedFanInRecord(runId: string, patch: Partial<WorkflowRunRecord> = {}): WorkflowRunRecord {
+  const { definition } = validateWorkflowDefinition(GATED_FAN_IN)
+  if (!definition) throw new Error('gated fan-in fixture invalid')
+  return record(runId, {
+    definition,
+    status: 'paused',
+    pausedReason: 'gate',
+    cursor: 0,
+    steps: { a: 'awaiting-gate', b: 'awaiting-gate', c: 'pending' },
+    attempts: [
+      attempt('att-a', { stepId: 'a', status: 'done', endedAt: 6, executionId: 'pty-a', sessionId: SESSION_A, result: { status: 'done', summary: 'a done', completedBy: 'tool' }, metrics: { continuations: 0, pauses: [{ reason: 'gate', at: 6 }] } }),
+      attempt('att-b', { stepId: 'b', status: 'done', endedAt: 7, executionId: 'pty-b', result: { status: 'done', summary: 'b done', completedBy: 'tool' }, metrics: { continuations: 0, pauses: [{ reason: 'gate', at: 7 }] } })
+    ],
+    ...patch
+  })
+}
+
+const SESSION_A = '0f8fad5b-d9cb-469f-a165-70867728950e'
+
+describe('WorkflowRunner gates after a restart', () => {
+  const ONE_GATED = ONE_AGENT.replace('    prompt: "plan"\n', '    prompt: "plan"\n    gate: approve\n') + '  - id: check\n    kind: shell\n    run: "true"\n'
+
+  function gatedRecord(): WorkflowRunRecord {
+    return record('run-g', {
+      definition: definitionOf(ONE_GATED),
+      status: 'paused',
+      pausedReason: 'gate',
+      cursor: 0,
+      steps: { plan: 'awaiting-gate', check: 'pending' },
+      attempts: [
+        attempt('att-1', {
+          status: 'done',
+          endedAt: 6,
+          executionId: 'pty-gone',
+          sessionId: SESSION_A,
+          result: { status: 'done', summary: 'planned', completedBy: 'tool' },
+          metrics: { continuations: 0, pauses: [{ reason: 'gate', at: 6 }] }
+        })
+      ]
+    })
+  }
+
+  it('reconciles a gate-paused v1 record without changing it, then approves it', async () => {
+    const onDisk = gatedRecord()
+    const ctx = boot([onDisk])
+    const seen = runEvents(ctx)
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.logs).toContain('[workflow] run reconciled paused {"runId":"run-g"}')
+    expect(ctx.persisted).toEqual([])
+    expect(ctx.runner.getRunRecord('run-g')).toEqual(onDisk)
+    expect(ctx.wf().runs['run-g']).toMatchObject({ status: 'paused', pausedReason: 'gate' })
+    expect(ctx.stepStatus('run-g', 'plan')).toBe('awaiting-gate')
+    expect(ctx.wf().attempts['att-1']).toMatchObject({ status: 'done' })
+    expect(ctx.agent.started).toEqual([])
+    expect(seen).toEqual([])
+
+    expect(ctx.runner.approveGate('run-g', 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.stepStatus('run-g', 'plan')).toBe('done')
+    expect(ctx.shell.started.map((started) => started.stepId)).toEqual(['check'])
+    expect(ctx.lastPersisted('run-g')).toMatchObject({ status: 'running', steps: { plan: 'done', check: 'running' } })
+
+    const again = boot([])
+    again.runner.reconcile([ctx.lastPersisted('run-g') as WorkflowRunRecord])
+    expect(again.runner.approveGate('run-g', 'plan')).toEqual({ ok: false, reason: 'not-awaiting-gate' })
+  })
+
+  it('requests changes after a restart by resuming the recorded session with the feedback', async () => {
+    const ctx = boot([gatedRecord()])
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.requestChanges('run-g', 'plan', { feedback: 'add tests', fresh: false })).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.continued).toEqual([])
+    expect(ctx.agent.started).toHaveLength(1)
+    expect(ctx.agent.started[0]).toMatchObject({ stepId: 'plan', n: 2, resumeSessionId: SESSION_A, prompt: 'add tests' })
+    expect(ctx.wf().runs['run-g'].status).toBe('running')
+  })
+
+  it('seeds a gate pause for every step awaiting its gate and keeps their ended attempts', async () => {
+    const ctx = boot([gatedFanInRecord('run-f')])
+    const seen = runEvents(ctx)
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.wf().attempts['att-a'].status).toBe('done')
+    expect(ctx.wf().attempts['att-b'].status).toBe('done')
+    expect(ctx.runner.approveGate('run-f', 'a')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.wf().runs['run-f']).toMatchObject({ status: 'paused', pausedReason: 'gate', cursorStepId: 'b' })
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.runner.approveGate('run-f', 'b')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started.map((started) => started.stepId)).toEqual(['c'])
+    expect(seen).toEqual(['cursorChanged b', 'cursorChanged c', 'runResumed'])
+  })
+
+  it('launches request changes on one gated sibling while the other gate still holds the run', async () => {
+    const ctx = boot([gatedFanInRecord('run-f')], { alive: new Set(['pty-a']) })
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.requestChanges('run-f', 'a', { feedback: 'again', fresh: false })).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.continued).toEqual([expect.objectContaining({ executionId: 'pty-a', prompt: 'again' })])
+    expect(ctx.stepStatus('run-f', 'a')).toBe('running')
+    expect(ctx.wf().runs['run-f']).toMatchObject({ status: 'paused', pausedReason: 'gate', cursorStepId: 'b' })
+    expect(ctx.stepStatus('run-f', 'b')).toBe('awaiting-gate')
+  })
+
+  it('launches a queued request changes once a slot frees while the other gate still holds the run', async () => {
+    const ctx = boot(
+      [
+        record('run-x', { steps: { plan: 'running' }, startedAt: 5, attempts: [attempt('att-x', { executionId: 'pty-live' })] }),
+        gatedFanInRecord('run-f', { startedAt: 10 })
+      ],
+      { cap: 1, alive: new Set(['pty-live']) }
+    )
+    ctx.runner.reconcile(ctx.records)
+    expect(ctx.runner.requestChanges('run-f', 'a', { feedback: 'again', fresh: false })).toEqual({ ok: true })
+    expect(ctx.stepStatus('run-f', 'a')).toBe('queued')
+    ctx.agent.emit({ type: 'exited', executionId: 'pty-live', code: 1 })
+    await flush()
+    expect(ctx.agent.started.map((started) => `${started.runId}/${started.stepId}`)).toEqual(['run-f/a'])
+    expect(ctx.agent.started[0]).toMatchObject({ resumeSessionId: SESSION_A, prompt: 'again' })
+    expect(ctx.stepStatus('run-f', 'b')).toBe('awaiting-gate')
+    expect(ctx.wf().runs['run-f']).toMatchObject({ status: 'paused', pausedReason: 'gate' })
+  })
+
+  it('keeps a queued step without a continuation blocked while another step holds the run, until that gate is approved', async () => {
+    const ctx = boot(
+      [
+        record('run-x', { steps: { plan: 'running' }, startedAt: 5, attempts: [attempt('att-x', { executionId: 'pty-live' })] }),
+        gatedFanInRecord('run-f', {
+          startedAt: 10,
+          steps: { a: 'awaiting-gate', b: 'queued', c: 'pending' },
+          attempts: gatedFanInRecord('run-f').attempts.slice(0, 1)
+        })
+      ],
+      { cap: 1, alive: new Set(['pty-live']) }
+    )
+    ctx.runner.reconcile(ctx.records)
+    ctx.agent.emit({ type: 'exited', executionId: 'pty-live', code: 1 })
+    await flush()
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.stepStatus('run-f', 'b')).toBe('queued')
+    expect(ctx.runner.approveGate('run-f', 'a')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started.map((started) => `${started.runId}/${started.stepId}`)).toEqual(['run-f/b'])
+  })
+
+  it('keeps a queued continuation blocked while its own step is paused', async () => {
+    const ctx = boot([
+      gatedFanInRecord('run-f', {
+        pausedReason: 'step-failed',
+        steps: { a: 'queued', b: 'awaiting-gate', c: 'pending' },
+        attempts: gatedFanInRecord('run-f').attempts.slice(1),
+        continuations: { a: { prompt: 'again' } }
+      })
+    ])
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+    expect(ctx.agent.started).toEqual([])
+    expect(ctx.stepStatus('run-f', 'a')).toBe('queued')
+  })
+})

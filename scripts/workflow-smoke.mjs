@@ -9,7 +9,8 @@
 // hooks and the repo, and the personal definitions `smoke` (Claude step then
 // shell step), `smoke-codex` (Codex step then shell step), `smoke-opencode`
 // (opencode step then shell step), `smoke-diamond` (Claude plan, two
-// read-only Claude branches, shell join), `smoke-retry` (one
+// read-only Claude branches, shell join), `smoke-gate` (gated multi-turn
+// Claude plan then shell step), `smoke-retry` (one
 // `test -f flag` shell step) and `smoke-full`, plus the committed repo
 // definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
 // runs every scenario and exits non-zero on the first failed assertion or
@@ -44,6 +45,13 @@ function applyEvent(event) {
   else if (event.type === 'hooks/consentChanged') state.hooks.consent = event.payload
   else if (event.type === 'hooks/codexTrustChanged') state.hooks.codexTrust = event.payload
   else if (event.type === 'workflows/attemptSessionRecorded') sessionRecorded.push(event.payload.attemptId)
+  else if (event.type === 'terminals/panesReplaced') state.terminals.panes = event.payload
+  else if (event.type === 'terminals/panesForWorktreeChanged') {
+    state.terminals.panes = { ...state.terminals.panes, [event.payload.worktreePath]: event.payload.panes }
+  } else if (event.type === 'terminals/panesForWorktreeCleared') {
+    const { [event.payload]: _cleared, ...rest } = state.terminals.panes
+    state.terminals.panes = rest
+  }
   else if (event.type === 'workflows/definitionsLoaded') {
     const { scope, repoRoot, definitions } = event.payload
     const inGroup = (d) => d.scope === scope && (scope !== 'repo' || d.repoRoot === repoRoot)
@@ -269,6 +277,64 @@ async function scenarioDiamond(worktreePath) {
   console.log('scenario diamond OK: run=%s done; plan -> left -> right -> join; join summary %j', runId, joined)
 }
 
+function paneTabs(node) {
+  if (!node) return []
+  return node.type === 'leaf' ? node.tabs : [...paneTabs(node.children[0]), ...paneTabs(node.children[1])]
+}
+
+async function scenarioGate(worktreePath) {
+  const runId = await startRun('personal:smoke-gate', worktreePath)
+  const first = await runSettled(runId)
+  expectThat(
+    first.status === 'paused' && first.pausedReason === 'gate' && first.steps.plan === 'awaiting-gate',
+    `gate scenario expected paused/gate, got ${first.status}/${first.pausedReason ?? ''}`,
+    first
+  )
+  const [one] = attemptsFor(first, 'plan')
+  expectThat(one?.status === 'done' && typeof one.executionId === 'string', 'gate scenario first attempt is not done with a terminal', first)
+  expectThat(attemptsFor(first, 'echo').length === 0, 'gate scenario echo started before the gate was resolved', first)
+
+  const changed = await request('workflows:requestChanges', runId, 'plan', { feedback: 'Tighten the plan.', fresh: false })
+  expectThat(changed?.ok === true, 'requestChanges refused', changed)
+  const second = await waitFor(`run ${runId} to stop at the gate again`, async () => {
+    const r = await request('workflows:getRun', runId)
+    if (!r) return undefined
+    if (['done', 'failed', 'cancelled'].includes(r.status)) return r
+    const plan = attemptsFor(r, 'plan')
+    return r.status === 'paused' && plan.length === 2 && plan[1].status !== 'running' ? r : undefined
+  })
+  const [, two] = attemptsFor(second, 'plan')
+  expectThat(
+    second.status === 'paused' && second.pausedReason === 'gate' && two.n === 2 && two.status === 'done',
+    `gate scenario expected attempt 2 done at the gate, got ${second.status}/${second.pausedReason ?? ''}`,
+    second
+  )
+  expectThat(two.executionId === one.executionId, 'requestChanges did not continue in the same terminal', second)
+  const tab = await waitFor('the step tab to carry attempt 2', () => {
+    const found = paneTabs(state.terminals.panes[worktreePath]).find((t) => t.id === one.executionId)
+    return found?.workflow?.attemptId === two.attemptId ? found : undefined
+  })
+
+  const approved = await request('workflows:approveGate', runId, 'plan')
+  expectThat(approved?.ok === true, 'approveGate refused', approved)
+  const record = await waitFor(`run ${runId} to finish after approve`, async () => {
+    const r = await request('workflows:getRun', runId)
+    return r && ['done', 'failed', 'cancelled'].includes(r.status) ? r : undefined
+  })
+  const echo = attemptsFor(record, 'echo')
+  expectThat(record.status === 'done', `gate scenario run ended ${record.status}`, record)
+  expectThat(echo.length === 1 && echo[0].status === 'done', 'gate scenario echo did not run once', record)
+  expectThat(echo[0].startedAt >= two.endedAt, 'gate scenario echo started before attempt 2 ended', record)
+  const again = await request('workflows:approveGate', runId, 'plan')
+  expectThat(typeof again?.error === 'string', 'a second approve was not refused', again)
+  console.log(
+    'scenario gate OK: run=%s paused gate, changes requested on terminal %s (tab attempt %s), paused gate, approved, done',
+    runId,
+    one.executionId,
+    tab.workflow.attemptId
+  )
+}
+
 async function scenarioFailRetry(worktreePath) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const runId = await startRun('personal:smoke-retry', worktreePath)
@@ -348,6 +414,7 @@ async function main() {
   state = snapshot.state
   state.worktrees.list ??= []
   state.workflows.definitions ??= {}
+  state.terminals.panes ??= {}
   for (const event of buffered.splice(0)) applyEvent(event)
 
   const added = await request('repo:addAtPath', repoPath)
@@ -359,6 +426,7 @@ async function main() {
     'personal:smoke-codex',
     'personal:smoke-opencode',
     'personal:smoke-diamond',
+    'personal:smoke-gate',
     'personal:smoke-retry',
     'personal:smoke-full'
   ]
@@ -382,6 +450,7 @@ async function main() {
   await scenarioCodexThenShell(worktreePath)
   await scenarioOpencodeThenShell(worktreePath)
   await scenarioDiamond(worktreePath)
+  await scenarioGate(worktreePath)
   await scenarioFailRetry(worktreePath)
   await scenarioRepoTrust(worktreePath)
   ws.close()

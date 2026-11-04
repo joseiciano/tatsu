@@ -2,6 +2,7 @@ import type {
   CompleteExecutionResult,
   ContinueStepOptions,
   MarkDoneRequest,
+  RequestChangesRequest,
   StepActionRefusal,
   StepActionResult,
   WorkflowExecutionStep,
@@ -17,6 +18,7 @@ import type {
 } from './types'
 import {
   isAgentSessionId,
+  sanitizePasteText,
   StepPauseError,
   StepStartError,
   type RunnableStep,
@@ -450,6 +452,10 @@ export class WorkflowRunner {
     if (result.status === 'needs-input') {
       live.record.result = result
       this.pause(state, stepId, 'needs-input')
+    } else if (result.status === 'done' && this.gated(state, stepId)) {
+      this.endAttempt(state, live, 'done', result, false)
+      this.setStep(state, stepId, 'awaiting-gate')
+      this.pause(state, stepId, 'gate')
     } else if (result.status === 'done') {
       this.resume(state, stepId)
       this.endAttempt(state, live, 'done', result, false)
@@ -639,21 +645,72 @@ export class WorkflowRunner {
     return ACTION_OK
   }
 
-  continueStep(runId: string, stepId: string, prompt: string, options: ContinueStepOptions = {}): StepActionResult {
+  approveGate(runId: string, stepId: string): StepActionResult {
     const ids = { runId, stepId }
-    const state = this.runs.get(runId)
-    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
-    if (!this.ready) return this.refuseAction('starting', ids)
-    if (!this.labsOn()) return this.refuseAction('labs-off', ids)
-    if (state.busy) return this.refuseAction('busy', ids)
-    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
-    if (!step || !isRunnable(step)) return this.refuseAction('wrong-step', ids)
-    if (step.kind !== 'agent') return this.refuseAction('not-continuable-step', ids)
-    if (state.live.has(stepId) || state.stepStatus[stepId] === 'queued') return this.refuseAction('live-attempt', ids)
-    const last = this.lastAttempt(state, stepId)
-    if (!last) return this.refuseAction('nothing-to-continue', ids)
+    const target = this.gateTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, ids)
+    const { state } = target
+    state.stepStatus[stepId] = 'done'
     this.resume(state, stepId)
-    const continuation: WorkflowContinuation = options.fresh === true ? { prompt, fresh: true } : { prompt }
+    this.deps.store.dispatch({ type: 'workflows/gateResolved', payload: { runId, stepId, decision: 'approved' } })
+    this.log('gate approved', ids)
+    this.schedule(state)
+    this.settle(state)
+    return ACTION_OK
+  }
+
+  requestChanges(runId: string, stepId: string, request: RequestChangesRequest): StepActionResult {
+    const ids = { runId, stepId }
+    const gate = this.gateTarget(runId, stepId)
+    if (typeof gate === 'string') return this.refuseAction(gate, ids)
+    const target = this.continueTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, ids)
+    const { state, step } = target
+    state.stepStatus[stepId] = 'pending'
+    this.deps.store.dispatch({ type: 'workflows/gateResolved', payload: { runId, stepId, decision: 'changes-requested' } })
+    this.log('gate changes requested', ids)
+    const prompt = sanitizePasteText(request.feedback)
+    this.applyContinue(state, step, request.fresh ? { prompt, fresh: true } : { prompt })
+    return ACTION_OK
+  }
+
+  continueStep(runId: string, stepId: string, prompt: string, options: ContinueStepOptions = {}): StepActionResult {
+    const target = this.continueTarget(runId, stepId)
+    if (typeof target === 'string') return this.refuseAction(target, { runId, stepId })
+    this.applyContinue(target.state, target.step, options.fresh === true ? { prompt, fresh: true } : { prompt })
+    return ACTION_OK
+  }
+
+  private gateTarget(runId: string, stepId: string): { state: RunState } | StepActionRefusal {
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return 'unknown-run'
+    if (!this.ready) return 'starting'
+    if (!this.labsOn()) return 'labs-off'
+    if (state.busy) return 'busy'
+    if (!state.record.definition.steps.some((candidate) => candidate.id === stepId)) return 'wrong-step'
+    if (state.stepStatus[stepId] !== 'awaiting-gate' || state.pauses.get(stepId) !== 'gate') return 'not-awaiting-gate'
+    return { state }
+  }
+
+  private continueTarget(runId: string, stepId: string): { state: RunState; step: ResolvedAgentStep } | StepActionRefusal {
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return 'unknown-run'
+    if (!this.ready) return 'starting'
+    if (!this.labsOn()) return 'labs-off'
+    if (state.busy) return 'busy'
+    const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
+    if (!step || !isRunnable(step)) return 'wrong-step'
+    if (step.kind !== 'agent') return 'not-continuable-step'
+    if (state.live.has(stepId) || state.stepStatus[stepId] === 'queued') return 'live-attempt'
+    if (!this.lastAttempt(state, stepId)) return 'nothing-to-continue'
+    return { state, step }
+  }
+
+  private applyContinue(state: RunState, step: ResolvedAgentStep, continuation: WorkflowContinuation): void {
+    const { runId } = state.record
+    const stepId = step.id
+    const ids = { runId, stepId }
+    this.resume(state, stepId)
     if (this.queue.length > 0 || this.agentSlots.size >= this.agentCap()) {
       this.queue.push({ runId, stepId, continuation })
       state.record.continuations = { ...state.record.continuations, [stepId]: continuation }
@@ -663,7 +720,10 @@ export class WorkflowRunner {
       this.startContinuation(state, step, continuation)
     }
     this.settle(state)
-    return ACTION_OK
+  }
+
+  private gated(state: RunState, stepId: string): boolean {
+    return state.record.definition.steps.some((step) => step.id === stepId && step.gate === 'approve')
   }
 
   private startContinuation(state: RunState, step: ResolvedAgentStep, continuation: WorkflowContinuation): void {
@@ -785,6 +845,11 @@ export class WorkflowRunner {
     const pausedStep = steps[record.cursor] ?? steps.at(-1)
     if (record.status === 'paused' && record.pausedReason !== undefined && pausedStep) {
       state.pauses.set(pausedStep.id, record.pausedReason)
+    }
+    if (record.status === 'paused') {
+      for (const step of steps) {
+        if (record.steps[step.id] === 'awaiting-gate' && !state.pauses.has(step.id)) state.pauses.set(step.id, 'gate')
+      }
     }
     for (const attempt of record.attempts) {
       const snapshot = attempt.headSnapshot ?? attempt.baseSnapshot
@@ -1496,7 +1561,7 @@ export class WorkflowRunner {
         this.queue.splice(i, 1)
         continue
       }
-      if (state.live.size > 0 || state.pauses.size > 0) {
+      if (state.live.size > 0 || (state.pauses.size > 0 && (!entry.continuation || state.pauses.has(step.id)))) {
         i += 1
         continue
       }
