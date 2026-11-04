@@ -140,6 +140,9 @@ export type WorkflowsEvent =
   | { type: 'workflows/cursorChanged'; payload: { runId: string; stepId: string } }
   | { type: 'workflows/attemptSessionRecorded'; payload: { attemptId: string } }
   | { type: 'workflows/trustGranted'; payload: { defId: string; hash: string } }
+  | { type: 'workflows/gateResolved'; payload: { runId: string; stepId: string; decision: WorkflowGateDecision } }
+
+export type WorkflowGateDecision = 'approved' | 'changes-requested'
 
 export interface StepResult {
   status: 'done' | 'failed' | 'needs-input'
@@ -237,6 +240,11 @@ export interface WorkflowStartRunPayload {
 export interface WorkflowMarkDonePayload {
   summary: string
   fields: Record<string, unknown>
+}
+
+export interface WorkflowRequestChangesPayload {
+  feedback: string
+  fresh: boolean
 }
 
 export type WorkflowStartRunResponse = { runId: string } | { error: string }

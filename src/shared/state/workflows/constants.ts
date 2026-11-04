@@ -8,6 +8,7 @@ export const RECENT_RUNS_MAX = 50
 export const WORKFLOW_RUN_RECORD_VERSION = 1
 export const RESUMABLE_AGENTS: ReadonlySet<AgentKind> = new Set<AgentKind>(['claude', 'codex', 'opencode'])
 export const WORKFLOW_STEP_MODEL_MAX_CHARS = 200
+export const GATE_FEEDBACK_MAX_CHARS = 16384
 export const STEP_HARNESS_AGENTS: readonly WorkflowAgent[] = [
   'claude',
   ...(WORKFLOW_FEATURES['agent-codex'].supported ? (['codex'] as const) : []),

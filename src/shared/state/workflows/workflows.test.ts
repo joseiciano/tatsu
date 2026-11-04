@@ -1039,6 +1039,59 @@ describe('workflowsReducer trustGranted', () => {
   })
 })
 
+describe('workflowsReducer gateResolved', () => {
+  const gated = () =>
+    fixture({
+      status: 'paused',
+      pausedReason: 'gate',
+      steps: {
+        plan: { status: 'awaiting-gate', attemptIds: ['att-a1'] },
+        build: { status: 'pending', attemptIds: [] }
+      }
+    })
+
+  it('approved moves an awaiting-gate step to done and keeps its attempts', () => {
+    const start = gated()
+    const next = workflowsReducer(start, {
+      type: 'workflows/gateResolved',
+      payload: { runId: 'run-a', stepId: 'plan', decision: 'approved' }
+    })
+    expect(next.runs['run-a'].steps.plan.status).toBe('done')
+    expect(next.runs['run-a'].steps.plan.attemptIds).toBe(start.runs['run-a'].steps.plan.attemptIds)
+    expect(next.runs['run-a'].steps.build).toBe(start.runs['run-a'].steps.build)
+    expect(next.runs['run-b']).toBe(start.runs['run-b'])
+  })
+
+  it('changes-requested moves an awaiting-gate step back to pending', () => {
+    const start = gated()
+    const next = workflowsReducer(start, {
+      type: 'workflows/gateResolved',
+      payload: { runId: 'run-a', stepId: 'plan', decision: 'changes-requested' }
+    })
+    expect(next.runs['run-a'].steps.plan).toEqual({ status: 'pending', attemptIds: ['att-a1'] })
+    expect(next.runs['run-a'].pausedReason).toBe('gate')
+  })
+
+  it.each(['approved', 'changes-requested'] as const)(
+    'returns the same state for %s when the step is not awaiting its gate, unknown, or the run is finished',
+    (decision) => {
+      const resolve = (state: ReturnType<typeof fixture>, runId: string, stepId: string) =>
+        workflowsReducer(state, { type: 'workflows/gateResolved', payload: { runId, stepId, decision } })
+      const running = fixture()
+      expect(resolve(running, 'run-a', 'plan')).toBe(running)
+      const start = gated()
+      expect(resolve(start, 'run-a', 'nope')).toBe(start)
+      expect(resolve(start, 'nope', 'plan')).toBe(start)
+      const cancelled = fixture({
+        status: 'cancelled',
+        finishedAt: 5000,
+        steps: { plan: { status: 'awaiting-gate', attemptIds: ['att-a1'] } }
+      })
+      expect(resolve(cancelled, 'run-a', 'plan')).toBe(cancelled)
+    }
+  )
+})
+
 describe('capPermissions', () => {
   function resolved(source: string) {
     const { definition } = validateWorkflowDefinition(source)

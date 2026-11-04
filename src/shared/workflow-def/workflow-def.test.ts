@@ -656,7 +656,6 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   it('reports each unsupported feature in the plan example once, in file order, at the key or offending value', () => {
     expect(featuresOf(PLAN_EXAMPLE)).toEqual([
       { code: 'unsupported-feature', feature: 'item_input', path: 'item_input', line: 4, col: 1 },
-      { code: 'unsupported-feature', feature: 'gate', path: 'steps[0].gate', line: 14, col: 5 },
       { code: 'unsupported-feature', feature: 'on_loop', path: 'steps[1].on_loop', line: 18, col: 5 },
       { code: 'unsupported-feature', feature: 'loop', path: 'steps[3].loop', line: 29, col: 5 }
     ])
@@ -666,6 +665,12 @@ describe('validateWorkflowDefinition: unsupported features', () => {
     const result = validateWorkflowDefinition(`name: x\nsteps:\n  - id: a\n    agent: ${agent}\n    prompt: go\n`)
     expect(result.diagnostics).toEqual([])
     expect(result.definition?.steps[0]).toMatchObject({ kind: 'agent', agent })
+  })
+
+  it('accepts an approve gate by default and keeps it on the resolved step', () => {
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    gate: approve\n')
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps[0]).toMatchObject({ kind: 'agent', gate: 'approve' })
   })
 
   it('keeps parsed but withholds the definition when only feature errors remain', () => {
@@ -687,8 +692,8 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it('reports only the features left out of supportedFeatures', () => {
-    const supported = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'gate')
-    expect(featuresOf(PLAN_EXAMPLE, supported).map((d) => d.feature)).toEqual(['gate'])
+    const supported = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'loop')
+    expect(featuresOf(PLAN_EXAMPLE, supported).map((d) => d.feature)).toEqual(['loop'])
   })
 
   it('defaults to the baseline from the feature table', () => {
@@ -697,7 +702,7 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it('skips feature checks while other errors remain', () => {
-    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: codex\n    prompt: "{{inputs.nope}}"\n    gate: approve\n')
+    const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    agent: codex\n    prompt: "{{inputs.nope}}"\n    timeout: 60\n')
     expect(result.diagnostics.map((d) => d.code)).toEqual(['unknown-ref'])
   })
 
