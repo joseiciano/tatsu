@@ -9,6 +9,8 @@ import { COMPLETED_BY_LABELS, stepTabOverlayMode } from '../StepTab'
 import { needsYouActions, recordStepContext, STEP_STATUS_LABELS, type NeedsYouActionKind } from '../workflow-run-helpers'
 
 export type RunDetailActionKind =
+  | 'approve'
+  | 'request-changes'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -45,6 +47,8 @@ export interface RunDetailModelArgs {
 }
 
 export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
+  'approve',
+  'request-changes',
   'resume',
   'retry',
   'retry-from-clean',

@@ -6,6 +6,7 @@ import type {
   WorkflowPausedReason,
   WorkflowRun,
   WorkflowRunRecord,
+  WorkflowRunStatus,
   WorkflowStepStatus
 } from '../../../../shared/state/workflows'
 import { RESUMABLE_AGENTS } from '../../../../shared/state/workflows'
@@ -22,7 +23,15 @@ export interface StepStripEntry {
   paused: boolean
 }
 
-export type NeedsYouActionKind = 'jump' | 'resume' | 'retry' | 'retry-from-clean' | 'skip' | 'cancel'
+export type NeedsYouActionKind =
+  | 'jump'
+  | 'approve'
+  | 'request-changes'
+  | 'resume'
+  | 'retry'
+  | 'retry-from-clean'
+  | 'skip'
+  | 'cancel'
 
 export interface NeedsYouStepInfo {
   kind: 'agent' | 'shell' | 'foreach' | 'orchestrator'
@@ -48,11 +57,16 @@ export interface RecordStepContext {
   attempt: NeedsYouAttemptInfo | null
 }
 
-export type BackendNeedsYouAction = Exclude<NeedsYouActionKind, 'jump' | 'retry-from-clean'>
+export type BackendNeedsYouAction = Exclude<NeedsYouActionKind, 'jump' | 'retry-from-clean' | 'request-changes'>
 
 export type NeedsYouActionsApi = Pick<
   ElectronAPI,
-  'retryWorkflowStep' | 'skipWorkflowStep' | 'resumeWorkflowStep' | 'cancelWorkflowRun' | 'retryWorkflowStepFromClean'
+  | 'retryWorkflowStep'
+  | 'skipWorkflowStep'
+  | 'resumeWorkflowStep'
+  | 'cancelWorkflowRun'
+  | 'retryWorkflowStepFromClean'
+  | 'approveWorkflowGate'
 >
 
 export const STEP_GLYPHS: Record<WorkflowStepStatus, StepGlyph> = {
@@ -90,6 +104,12 @@ export const STEP_STATUS_LABELS: Record<WorkflowStepStatus, string> = {
 
 const FINISHED_STEP_STATUSES: ReadonlySet<WorkflowStepStatus> = new Set(['done', 'skipped'])
 
+const TERMINAL_RUN_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
+
+export function displayStepStatus(runStatus: WorkflowRunStatus, status: WorkflowStepStatus): WorkflowStepStatus {
+  return status === 'awaiting-gate' && TERMINAL_RUN_STATUSES.has(runStatus) ? 'cancelled' : status
+}
+
 export function stepOrderFor(run: WorkflowRun, summary: WorkflowDefinitionSummary | null): string[] {
   if (summary && summary.hash === run.defHash) return summary.stepIds
   return Object.keys(run.steps)
@@ -110,7 +130,8 @@ export function deriveStepStrip(run: WorkflowRun, stepOrder: readonly string[]):
     const step = run.steps[id]
     if (!step) continue
     const paused = id === pausedId
-    entries.push({ id, status: step.status, glyph: paused ? '!' : STEP_GLYPHS[step.status], paused })
+    const status = displayStepStatus(run.status, step.status)
+    entries.push({ id, status, glyph: paused ? '!' : STEP_GLYPHS[status], paused })
   }
   return entries
 }
@@ -140,6 +161,7 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
     case 'trust':
       return ['retry', 'cancel', ...jump]
     case 'gate':
+      return ['approve', ...(step?.kind === 'agent' ? (['request-changes'] as const) : []), 'cancel', ...jump]
     case 'budget':
     case 'loop-cap':
     case 'timeout':
@@ -191,6 +213,8 @@ export function runNeedsYouAction(
       return api.resumeWorkflowStep(runId, stepId)
     case 'cancel':
       return api.cancelWorkflowRun(runId)
+    case 'approve':
+      return api.approveWorkflowGate(runId, stepId)
     default: {
       const _exhaustive: never = kind
       return _exhaustive

@@ -21,7 +21,9 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     retryWorkflowStepFromClean: vi.fn(),
     skipWorkflowStep: vi.fn(),
     resumeWorkflowStep: vi.fn(),
-    cancelWorkflowRun: vi.fn()
+    cancelWorkflowRun: vi.fn(),
+    approveWorkflowGate: vi.fn(),
+    requestWorkflowChanges: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -153,7 +155,9 @@ beforeEach(() => {
     backendApi.retryWorkflowStepFromClean,
     backendApi.skipWorkflowStep,
     backendApi.resumeWorkflowStep,
-    backendApi.cancelWorkflowRun
+    backendApi.cancelWorkflowRun,
+    backendApi.approveWorkflowGate,
+    backendApi.requestWorkflowChanges
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -409,5 +413,111 @@ describe('NeedsYouGroup from slice data', () => {
     await click(button('Retry'))
     expect(backendApi.retryWorkflowStep).toHaveBeenCalledWith('r1', 'build')
     expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+  })
+})
+
+function gatedRun(build: Pick<WorkflowRun['steps'][string], 'kind' | 'agent'>): WorkflowRun {
+  const base = pausedRun('gate', ['a1'])
+  return {
+    ...base,
+    cursorStepId: 'build',
+    steps: {
+      plan: { ...base.steps.plan, kind: 'shell' },
+      build: { status: 'awaiting-gate', attemptIds: ['a1'], ...build }
+    }
+  }
+}
+
+const changesDialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
+const feedbackBox = () => changesDialog()?.querySelector('textarea') ?? null
+const freshBox = () => changesDialog()?.querySelector<HTMLInputElement>('input[type="checkbox"]') ?? null
+const submitButton = () => changesDialog()?.querySelector<HTMLButtonElement>('button[type="submit"]') ?? null
+
+async function typeFeedback(value: string): Promise<void> {
+  const box = feedbackBox()
+  if (!box) throw new Error('no feedback box')
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(box, value)
+    box.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+async function pressEscape(): Promise<void> {
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+  })
+}
+
+describe('NeedsYouGroup at a gate', () => {
+  it('offers Approve and Request changes named for the gated agent step', async () => {
+    setState({ runs: { r1: gatedRun({ kind: 'agent', agent: 'claude' }) }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    expect(container.textContent).toContain('feature · Waiting at gate · build')
+    expect(buttonLabels()).toEqual(['Approve', 'Request changes', 'Cancel run'])
+    expect(button('Approve').getAttribute('aria-label')).toBe('Approve: build, Ship it on feature')
+    expect(button('Request changes').getAttribute('aria-label')).toBe('Request changes: build, Ship it on feature')
+    await click(button('Approve'))
+    expect(backendApi.approveWorkflowGate).toHaveBeenCalledWith('r1', 'build')
+    expect(backendApi.getWorkflowRun).not.toHaveBeenCalled()
+  })
+
+  it('offers only Approve on a gated shell step', async () => {
+    setState({ runs: { r1: gatedRun({ kind: 'shell' }) }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    expect(buttonLabels()).toEqual(['Approve', 'Cancel run'])
+  })
+
+  it('sends the feedback and the fresh-session choice from the Request changes dialog', async () => {
+    setState({ runs: { r1: gatedRun({ kind: 'agent', agent: 'claude' }) }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    await click(button('Request changes'))
+    expect(changesDialog()?.getAttribute('aria-modal')).toBe('true')
+    expect(document.activeElement).toBe(feedbackBox())
+    expect(submitButton()?.disabled).toBe(true)
+    await typeFeedback('   ')
+    expect(submitButton()?.disabled).toBe(true)
+    await typeFeedback('  tighten the tests  ')
+    expect(submitButton()?.disabled).toBe(false)
+    await click(submitButton()!)
+    expect(backendApi.requestWorkflowChanges).toHaveBeenCalledWith('r1', 'build', { feedback: 'tighten the tests', fresh: false })
+    expect(changesDialog()).toBeNull()
+
+    await click(button('Request changes'))
+    await typeFeedback('start over')
+    await click(freshBox()!)
+    await click(submitButton()!)
+    expect(backendApi.requestWorkflowChanges).toHaveBeenLastCalledWith('r1', 'build', { feedback: 'start over', fresh: true })
+  })
+
+  it('keeps the dialog open with the refusal inline', async () => {
+    backendApi.requestWorkflowChanges.mockResolvedValue({ error: 'This step is not waiting at its gate' })
+    setState({ runs: { r1: gatedRun({ kind: 'agent', agent: 'claude' }) }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    await click(button('Request changes'))
+    await typeFeedback('fix it')
+    await click(submitButton()!)
+    expect(changesDialog()?.querySelector('[role="alert"]')?.textContent).toBe('This step is not waiting at its gate')
+    expect(container.querySelector('li > [role="alert"]')).toBeNull()
+  })
+
+  it('ignores Escape while the request is in flight, then closes on Escape and returns focus to the opener', async () => {
+    let finish: (value: { error: string }) => void = () => {}
+    backendApi.requestWorkflowChanges.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    setState({ runs: { r1: gatedRun({ kind: 'agent', agent: 'claude' }) }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    const opener = button('Request changes')
+    opener.focus()
+    await click(opener)
+    await typeFeedback('fix it')
+    await click(submitButton()!)
+    expect(submitButton()?.disabled).toBe(true)
+    expect(submitButton()?.textContent).toBe('Sending…')
+    await pressEscape()
+    expect(changesDialog()).not.toBeNull()
+    await act(async () => finish({ error: 'Busy' }))
+    await pressEscape()
+    expect(changesDialog()).toBeNull()
+    expect(document.activeElement).toBe(opener)
+    expect(backendApi.requestWorkflowChanges).toHaveBeenCalledTimes(1)
   })
 })

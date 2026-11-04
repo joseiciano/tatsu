@@ -211,6 +211,18 @@ steps:
     kind: shell
     run: test -f {{inputs.target}}
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/browser-gate.yaml" <<'YAML'
+name: browser-gate
+steps:
+  - id: draft
+    agent: claude
+    permissions: read-only
+    gate: approve
+    prompt: "FAKE_AGENT_MODE=multi-turn Reply PLAN-OK and call complete_step."
+  - id: publish
+    kind: shell
+    run: echo {{steps.draft.summary}}
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/browser-diff.yaml" <<'YAML'
 name: browser-diff
 steps:

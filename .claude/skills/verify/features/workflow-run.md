@@ -118,9 +118,12 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   the run is done, failed or cancelled.
 - **Needs you**: sidebar section `NEEDS YOU` with one row per paused run:
   workflow name, `<worktree> · <reason> · <stepId>`, and action buttons
-  (`Jump to tab`, `Resume`, `Retry`, `Retry from clean`, `Skip`, `Cancel run`).
-  `Retry from clean` shows only once the run record says the failed step's
-  latest attempt has a base snapshot.
+  (`Jump to tab`, `Approve`, `Request changes`, `Resume`, `Retry`, `Retry
+  from clean`, `Skip`, `Cancel run`). `Retry from clean` shows only once the
+  run record says the failed step's latest attempt has a base snapshot.
+  A run paused at a gate (`Waiting at gate · <step>`) offers `Approve`,
+  `Request changes` (agent steps only) and `Cancel run`; see
+  [workflow-gates.md](workflow-gates.md).
 - **Step tab close**: closing a step tab whose attempt is running asks
   `Cancel step “<id>”?` (`alertdialog`); `Cancel step and close tab` cancels
   the step (run pauses step-failed, step cancelled), then closes the tab.

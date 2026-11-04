@@ -173,6 +173,33 @@ describe('runDetailModel actions', () => {
     expect(actionsFor(rec)).toEqual(['resume', 'retry', 'swap', 'cancel-run'])
   })
 
+  it('offers Approve, Request changes and Cancel run, but no Mark done or Swap, on an agent step at its gate', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done', sessionId: 's1' })], {
+      pausedReason: 'gate',
+      steps: { plan: 'done', exit: 'awaiting-gate' }
+    })
+    expect(actionsFor(rec)).toEqual(['approve', 'request-changes', 'cancel-run'])
+    expect(actionsFor(rec, true)).toEqual(['approve', 'request-changes', 'cancel-run', 'jump'])
+  })
+
+  it('offers only Approve and Cancel run on a shell step at its gate', () => {
+    const rec = record([attempt({ attemptId: 'a-plan', stepId: 'plan', status: 'done' })], {
+      pausedReason: 'gate',
+      cursor: 0,
+      steps: { plan: 'awaiting-gate', exit: 'pending' }
+    })
+    expect(actionsFor(rec)).toEqual(['approve', 'cancel-run'])
+  })
+
+  it('offers nothing but Jump to tab once a run cancelled at its gate', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
+      status: 'cancelled',
+      steps: { plan: 'done', exit: 'awaiting-gate' }
+    })
+    expect(actionsFor(rec)).toEqual([])
+    expect(actionsFor(rec, true)).toEqual(['jump'])
+  })
+
   it('offers Cancel step and Cancel run while a step runs, plus Jump to tab when its tab exists', () => {
     const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'running', endedAt: undefined })], {
       status: 'running',
