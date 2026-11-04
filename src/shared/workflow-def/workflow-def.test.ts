@@ -325,13 +325,14 @@ describe('validateWorkflowDefinition: reserved step kinds and fields', () => {
 
   it('accepts every condition shape', () => {
     const result = validateWorkflowDefinition(
-      'name: x\nsteps:\n  - id: a\n    agent: claude\n    prompt: go\n    when: { field: v, in: [1, two, true] }\n  - id: b\n    agent: claude\n    prompt: go\n    when: { field: v, not: fail }\n  - id: c\n    kind: shell\n    run: "true"\n    when: { exit: 0 }\n', ALL
+      'name: x\nsteps:\n  - id: s\n    kind: shell\n    run: "true"\n  - id: c\n    kind: shell\n    run: "true"\n    when: { exit: 0 }\n  - id: a\n    agent: claude\n    prompt: go\n    when: { field: v, in: [1, two, true] }\n  - id: b\n    agent: claude\n    prompt: go\n    when: { field: v, not: fail }\n', ALL
     )
     expect(result.diagnostics).toEqual([])
     expect(result.parsed?.steps.map((s) => s.when)).toEqual([
+      undefined,
+      { exit: 0 },
       { field: 'v', in: [1, 'two', true] },
-      { field: 'v', not: 'fail' },
-      { exit: 0 }
+      { field: 'v', not: 'fail' }
     ])
   })
 })
@@ -455,7 +456,8 @@ describe('validateWorkflowDefinition: graph and per-kind errors', () => {
     { name: 'agent step without agent', text: '  - id: a\n    prompt: go\n', expected: { code: 'missing-field', path: 'steps[0].agent', line: 3, col: 5 } },
     { name: 'agent: pi', text: '  - id: a\n    agent: pi\n    prompt: go\n', expected: { code: 'bad-value', path: 'steps[0].agent', line: 4, col: 12, message: 'pi is a tab harness, not a workflow step harness in v1' } },
     { name: 'unknown agent', text: '  - id: a\n    agent: gemini\n    prompt: go\n', expected: { code: 'bad-value', path: 'steps[0].agent', line: 4, col: 12 } },
-    { name: 'exit condition on an agent step', text: `  - id: a\n${A}    when: { exit: 0 }\n`, expected: { code: 'bad-condition', path: 'steps[0].when.exit', line: 6, col: 19 } },
+    { name: 'exit condition on a step that needs an agent step', text: `  - id: a\n${A}  - id: b\n${A}    when: { exit: 0 }\n`, expected: { code: 'bad-condition', path: 'steps[1].when.exit', line: 9, col: 19 } },
+    { name: 'exit until on an agent step', text: `  - id: a\n${A}  - id: b\n${A}    loop: { back_to: a, until: { exit: 0 }, max: 2 }\n`, expected: { code: 'bad-condition', path: 'steps[1].loop.until.exit', line: 9, col: 40 } },
     { name: 'item_input naming no input', text: `  - id: a\n${A}`, prefix: 'inputs:\n  task: { type: text }\nitem_input: tsk\n', expected: { code: 'unknown-ref', path: 'item_input', line: 4, col: 13 } },
     { name: 'required naming an undeclared output field', text: `  - id: a\n${A}    output:\n      verdict: { enum: [pass, fail] }\n      required: [verdikt]\n`, expected: { code: 'unknown-ref', path: 'steps[0].output.required[0]', line: 8, col: 18 } }
   ])('$name', ({ text, prefix, expected }) => {
@@ -477,6 +479,53 @@ describe('validateWorkflowDefinition: graph and per-kind errors', () => {
   it('skips the graph stage when the shape stage fails', () => {
     const result = validateWorkflowDefinition('name: x\nsteps:\n  - id: a\n    needs: [nope]\n    gate: later\n')
     expect(result.diagnostics.map((d) => d.code)).toEqual(['bad-value'])
+  })
+})
+
+describe('validateWorkflowDefinition: when conditions', () => {
+  const agent = (id: string, extra = '') => `  - id: ${id}\n    agent: claude\n    permissions: read-only\n    prompt: go\n${extra}`
+  const shell = (id: string, extra = '') => `  - id: ${id}\n    kind: shell\n    run: make\n${extra}`
+  const reviewWithVerdict = agent('review', '    output:\n      verdict: { enum: [pass, fail] }\n')
+  const validate = (steps: string) => validateWorkflowDefinition(`name: x\nsteps:\n${steps}`)
+  const errors = (steps: string) => validate(steps).diagnostics.map((d) => [d.code, d.path])
+
+  it('supports when by default and keeps it on the resolved step', () => {
+    expect(WORKFLOW_FEATURES.when.supported).toBe(true)
+    const result = validate(`${reviewWithVerdict}${agent('fix', '    when: { field: verdict, equals: fail }\n')}`)
+    expect(result.diagnostics).toEqual([])
+    expect(result.definition?.steps[1]).toMatchObject({ id: 'fix', needs: ['review'], when: { field: 'verdict', equals: 'fail' } })
+  })
+
+  it('rejects when on the first step, which has no need to read', () => {
+    expect(errors(agent('a', '    when: { field: v, equals: x }\n'))).toEqual([['bad-condition', 'steps[0].when']])
+  })
+
+  it('rejects when on a step with an explicit empty needs list', () => {
+    expect(errors(`${agent('a')}${agent('b', '    needs: []\n    when: { field: v, equals: x }\n')}`)).toEqual([['bad-condition', 'steps[1].when']])
+  })
+
+  it('rejects when on a step with two needs', () => {
+    const steps = `${agent('a')}${agent('b', '    needs: [a]\n')}${agent('c', '    needs: [a, b]\n    when: { field: v, equals: x }\n')}`
+    expect(errors(steps)).toEqual([['bad-condition', 'steps[2].when']])
+  })
+
+  it('accepts an exit condition on any step that needs a shell step', () => {
+    expect(validate(`${shell('test')}${agent('fix', '    when: { exit: 1 }\n')}`).diagnostics).toEqual([])
+    expect(validate(`${shell('test')}${shell('again', '    when: { exit: 0 }\n')}`).diagnostics).toEqual([])
+  })
+
+  it('rejects an exit condition on a shell step that needs an agent step', () => {
+    expect(errors(`${agent('a')}${shell('t', '    when: { exit: 0 }\n')}`)).toEqual([['bad-condition', 'steps[1].when.exit']])
+  })
+
+  it('rejects a field the need does not declare in its output', () => {
+    const result = validate(`${reviewWithVerdict}${agent('fix', '    when: { field: verdikt, equals: fail }\n')}`)
+    expect(result.diagnostics).toHaveLength(1)
+    expect(result.diagnostics[0]).toMatchObject({ code: 'unknown-ref', path: 'steps[1].when.field', line: 13, col: 20 })
+  })
+
+  it('accepts any field when the need declares no outputs', () => {
+    expect(validate(`${agent('a')}${agent('b', '    when: { field: anything, not: x }\n')}`).diagnostics).toEqual([])
   })
 })
 
@@ -778,7 +827,6 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   it.each([
     ['parallel_safe', `name: x\nsteps:\n${step('a')}  - id: b\n    kind: shell\n    run: make\n    parallel_safe: true\n`, 'steps[1].parallel_safe', 4],
     ['timeout', `name: x\nsteps:\n${step('a', '    timeout: 60\n')}`, 'steps[0].timeout', 4],
-    ['when', `name: x\nsteps:\n${step('a', '    output:\n      ok: { type: boolean }\n')}${step('b', '    when: { field: ok, equals: true }\n')}`, 'steps[1].when', 4],
     ['foreach', 'name: x\nsteps:\n  - id: each\n    kind: foreach\n    over: inputs.list\n', 'steps[0].kind', 6],
     ['orchestrator', 'name: x\nsteps:\n  - id: boss\n    kind: orchestrator\n    agent: claude\n    prompt: decide\n', 'steps[0].kind', 8]
   ] as const)('reports one %s error naming its phase', (feature, text, path, phase) => {

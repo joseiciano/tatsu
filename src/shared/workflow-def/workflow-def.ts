@@ -630,7 +630,10 @@ class GraphStage {
       this.report('unknown-ref', `"item_input" names "${def.item_input}", which is not a declared input`, 'item_input')
     }
     const needs = def.steps.map((step, i) => step.needs ?? (i === 0 ? [] : [def.steps[i - 1].id]))
-    if (this.checkIds()) this.checkGraph(needs)
+    if (this.checkIds()) {
+      this.checkGraph(needs)
+      this.checkWhen(needs)
+    }
     const defaultAllow = this.resolveAllow(def.defaults?.allow ?? [], 'defaults.allow')
     const steps = def.steps.map((step, i) => this.resolveStep(step, i, needs[i], defaultAllow))
     if (this.diagnostics.some((d) => d.severity === 'error')) return undefined
@@ -768,10 +771,35 @@ class GraphStage {
     return undefined
   }
 
+  checkWhen(needs: readonly string[][]): void {
+    const byId = new Map(this.def.steps.map((s) => [s.id, s]))
+    this.def.steps.forEach((step, i) => {
+      const cond = step.when
+      if (!cond) return
+      const path = `steps[${i}].when`
+      if (needs[i].length !== 1) {
+        this.report('bad-condition', `"when" reads the result of the one step this step needs; "${step.id}" needs ${needs[i].length} steps`, path)
+        return
+      }
+      const need = byId.get(needs[i][0])
+      if (!need) return
+      if ('exit' in cond) {
+        if ((need.kind ?? 'agent') !== 'shell') {
+          this.report('bad-condition', `An "exit" condition reads an exit code, but "${need.id}" (the step "${step.id}" needs) is not a shell step`, `${path}.exit`)
+        }
+        return
+      }
+      const fields = need.output?.fields
+      if (fields && !Object.hasOwn(fields, cond.field)) {
+        this.report('unknown-ref', `"when" names "${cond.field}", which is not declared in the "output" of step "${need.id}"`, `${path}.field`)
+      }
+    })
+  }
+
   checkExitConditions(step: ParsedWorkflowStep, i: number): void {
-    const message = 'An "exit" condition is only allowed on a shell step'
-    if (step.when && 'exit' in step.when) this.report('bad-condition', message, `steps[${i}].when.exit`)
-    if (step.loop && 'exit' in step.loop.until) this.report('bad-condition', message, `steps[${i}].loop.until.exit`)
+    if (step.loop && 'exit' in step.loop.until) {
+      this.report('bad-condition', 'An "exit" condition is only allowed on a shell step', `steps[${i}].loop.until.exit`)
+    }
   }
 
   checkRequiredOutput(step: ParsedWorkflowStep, i: number): void {
