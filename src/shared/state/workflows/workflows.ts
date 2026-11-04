@@ -68,6 +68,19 @@ function definitionsLoaded(state: WorkflowsState, payload: WorkflowDefinitionsGr
   return { ...state, definitions }
 }
 
+function definitionSaved(state: WorkflowsState, summary: WorkflowDefinitionSummary): WorkflowsState {
+  const existing = state.definitions[summary.id]
+  if (existing && sameSummary(existing, summary)) return state
+  return { ...state, definitions: { ...state.definitions, [summary.id]: summary } }
+}
+
+function definitionDeleted(state: WorkflowsState, defId: string): WorkflowsState {
+  if (!Object.hasOwn(state.definitions, defId)) return state
+  const definitions = { ...state.definitions }
+  delete definitions[defId]
+  return { ...state, definitions }
+}
+
 function withoutPausedReason(run: WorkflowRun): WorkflowRun {
   if (!('pausedReason' in run)) return run
   const next = { ...run }
@@ -259,6 +272,10 @@ export function workflowsReducer(state: WorkflowsState, event: WorkflowsEvent): 
   switch (event.type) {
     case 'workflows/definitionsLoaded':
       return definitionsLoaded(state, event.payload)
+    case 'workflows/definitionSaved':
+      return definitionSaved(state, event.payload)
+    case 'workflows/definitionDeleted':
+      return definitionDeleted(state, event.payload.defId)
     case 'workflows/runStarted': {
       const { runId, run } = event.payload
       if (state.runs[runId]) return state

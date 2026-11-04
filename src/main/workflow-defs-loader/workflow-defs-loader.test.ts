@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +15,15 @@ import {
   WORKFLOW_WATCH_DEBOUNCE_MS,
   type WorkflowDefsLoaderDeps
 } from '.'
-import type { WorkflowDefinitionSummary, WorkflowsEvent } from '../../shared/state/workflows'
+import {
+  initialWorkflows,
+  workflowsReducer,
+  type WorkflowDefinitionSummary,
+  type WorkflowsEvent,
+  type WorkflowsState
+} from '../../shared/state/workflows'
+import { renameDefinitionSource } from './definition-copy'
+import { parseDocument } from 'yaml'
 import type { WorkflowDiagnostic } from '../../shared/workflow-def'
 
 const VALID_YAML = `name: Valid flow
@@ -720,6 +728,271 @@ describe('definition watchers', () => {
     expect(dispatched).toEqual([])
     expect(liveWatchers()).toEqual([])
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+function folded(): WorkflowsState {
+  return dispatched.reduce((state, event) => workflowsReducer(state, event), initialWorkflows)
+}
+
+function expectReloadNoOp(loader: { reload(): number }): void {
+  const before = folded()
+  const mark = dispatched.length
+  loader.reload()
+  expect(dispatched.length).toBeGreaterThan(mark)
+  expect(dispatched.slice(mark).reduce((state, event) => workflowsReducer(state, event), before)).toBe(before)
+}
+
+function savedEvents(): WorkflowDefinitionSummary[] {
+  return dispatched.flatMap((event) => (event.type === 'workflows/definitionSaved' ? [event.payload] : []))
+}
+
+const EDITED_YAML = VALID_YAML.replace('pnpm test', 'pnpm build')
+
+describe('saveDefinition', () => {
+  it('writes a personal definition under its slug and matches what a rescan yields', () => {
+    const loader = makeLoader()
+    loader.reload()
+
+    const result = loader.saveDefinition({ scope: 'personal', name: 'Ship It!', source: VALID_YAML })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.summary).toMatchObject({ id: 'personal:ship-it', name: 'Valid flow', path: join(dir, 'ship-it.yaml'), hash: sha256(VALID_YAML) })
+    expect(readFileSync(join(dir, 'ship-it.yaml'), 'utf8')).toBe(VALID_YAML)
+    expect(readdirSync(dir)).toEqual(['ship-it.yaml'])
+    expect(savedEvents()).toEqual([result.summary])
+    expect(loader.getDefinition('personal:ship-it')?.source).toBe(VALID_YAML)
+    expectReloadNoOp(loader)
+  })
+
+  it('writes a repo definition in the primary checkout and leaves trust keyed to the old hash', () => {
+    const repo = makeRepo('repo')
+    writeRepoDef(repo, 'flow.yaml', VALID_YAML)
+    const loader = makeLoader(personalDir(), { repoRoots: [repo] })
+    loader.reload()
+    const id = `repo:${repoKeyOf(repo)}:flow`
+    const trusted = workflowsReducer(folded(), { type: 'workflows/trustGranted', payload: { defId: id, hash: sha256(VALID_YAML) } })
+
+    const created = loader.saveDefinition({ scope: 'repo', repoRoot: repo, name: 'second', source: VALID_YAML })
+    const edited = loader.saveDefinition({ scope: 'repo', repoRoot: repo, defId: id, name: 'flow', source: EDITED_YAML })
+
+    expect(created.ok && created.summary.path).toBe(join(realpathSync(repo), '.harness', 'workflows', 'second.yaml'))
+    expect(created.ok && created.summary.id).toBe(`repo:${repoKeyOf(repo)}:second`)
+    expect(readFileSync(join(repo, '.harness', 'workflows', 'flow.yaml'), 'utf8')).toBe(EDITED_YAML)
+    const state = dispatched.slice(-2).reduce((acc, event) => workflowsReducer(acc, event), trusted)
+    expect(state.definitions[id].hash).toBe(sha256(EDITED_YAML))
+    expect(state.trust[id]).toBe(sha256(VALID_YAML))
+    expectReloadNoOp(loader)
+  })
+
+  it('refuses an unregistered repo root and a repo without a workflows directory without creating one', () => {
+    const repo = makeRepo('bare-dirs')
+    const loader = makeLoader(personalDir(), { repoRoots: [repo] })
+    loader.reload()
+
+    expect(loader.saveDefinition({ scope: 'repo', repoRoot: `${repo}/`, name: 'x', source: VALID_YAML })).toEqual({ ok: false, reason: 'unknown-repo' })
+    expect(loader.saveDefinition({ scope: 'repo', repoRoot: join(dir, 'other'), name: 'x', source: VALID_YAML })).toEqual({ ok: false, reason: 'unknown-repo' })
+    expect(loader.saveDefinition({ scope: 'repo', repoRoot: repo, name: 'x', source: VALID_YAML })).toEqual({ ok: false, reason: 'no-repo-dir' })
+    expect(existsSync(join(repo, '.harness'))).toBe(false)
+  })
+
+  it('refuses to write through a symlinked .harness directory', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'workflow-outside-'))
+    try {
+      mkdirSync(join(outside, 'workflows'))
+      const repo = makeRepo('linked')
+      symlinkSync(outside, join(repo, '.harness'))
+      const loader = makeLoader(personalDir(), { repoRoots: [repo] })
+      loader.reload()
+
+      expect(loader.saveDefinition({ scope: 'repo', repoRoot: repo, name: 'x', source: VALID_YAML })).toEqual({ ok: false, reason: 'no-repo-dir' })
+      expect(readdirSync(join(outside, 'workflows'))).toEqual([])
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses path-like names and names with no usable slug, writing nothing', () => {
+    const personal = personalDir()
+    const loader = makeLoader(personal)
+    loader.reload()
+
+    for (const name of ['../../escape', '/etc/passwd', 'a/b', 'a\\b', '.hidden', 'nul\u0000byte', '..', 'x..y']) {
+      expect(loader.saveDefinition({ scope: 'personal', name, source: VALID_YAML })).toEqual({ ok: false, reason: 'unsafe-name' })
+    }
+    for (const name of ['', '---', '日本']) {
+      expect(loader.saveDefinition({ scope: 'personal', name, source: VALID_YAML })).toEqual({ ok: false, reason: 'invalid-name' })
+    }
+    expect(readdirSync(personal)).toEqual([])
+    expect(readdirSync(dir).sort()).toEqual(['personal'])
+    expect(loader.saveDefinition({ scope: 'personal', name: 'Ship It!', source: VALID_YAML }).ok).toBe(true)
+    expect(readdirSync(personal)).toEqual(['ship-it.yaml'])
+  })
+
+  it('refuses a source over the size cap and writes nothing', () => {
+    const loader = makeLoader()
+    loader.reload()
+    const source = `# ${'é'.repeat(MAX_WORKFLOW_FILE_BYTES / 2)}\n${VALID_YAML}`
+
+    expect(loader.saveDefinition({ scope: 'personal', name: 'big', source })).toEqual({ ok: false, reason: 'too-large' })
+    expect(readdirSync(dir)).toEqual([])
+    expect(savedEvents()).toEqual([])
+  })
+
+  it('refuses to overwrite another file sharing the slug in either extension unless defId names it', () => {
+    writeFileSync(join(dir, 'Flow.yml'), VALID_YAML)
+    const loader = makeLoader()
+    loader.reload()
+
+    expect(loader.saveDefinition({ scope: 'personal', name: 'flow', source: EDITED_YAML })).toEqual({ ok: false, reason: 'exists' })
+    expect(loader.saveDefinition({ scope: 'personal', name: 'FLOW!', source: EDITED_YAML })).toEqual({ ok: false, reason: 'exists' })
+    expect(readFileSync(join(dir, 'Flow.yml'), 'utf8')).toBe(VALID_YAML)
+
+    const result = loader.saveDefinition({ scope: 'personal', defId: 'personal:flow', name: 'renamed', source: EDITED_YAML })
+
+    expect(result.ok && result.summary.path).toBe(join(dir, 'Flow.yml'))
+    expect(readFileSync(join(dir, 'Flow.yml'), 'utf8')).toBe(EDITED_YAML)
+    expect(readdirSync(dir)).toEqual(['Flow.yml'])
+  })
+
+  it('refuses an unknown defId, a defId from another scope and a file replaced by a symlink', () => {
+    const repo = makeRepo('repo')
+    writeRepoDef(repo, 'flow.yaml', VALID_YAML)
+    const personal = personalDir()
+    const loader = makeLoader(personal, { repoRoots: [repo] })
+    mkdirSync(personal, { recursive: true })
+    writeFileSync(join(personal, 'mine.yaml'), VALID_YAML)
+    loader.reload()
+
+    expect(loader.saveDefinition({ scope: 'personal', defId: 'personal:nope', name: 'nope', source: VALID_YAML })).toEqual({ ok: false, reason: 'unknown-definition' })
+    expect(loader.saveDefinition({ scope: 'personal', defId: `repo:${repoKeyOf(repo)}:flow`, name: 'flow', source: VALID_YAML })).toEqual({ ok: false, reason: 'scope-mismatch' })
+    expect(loader.saveDefinition({ scope: 'repo', repoRoot: repo, defId: 'personal:mine', name: 'mine', source: VALID_YAML })).toEqual({ ok: false, reason: 'scope-mismatch' })
+
+    const target = join(dir, 'victim.yaml')
+    writeFileSync(target, 'untouched')
+    unlinkSync(join(personal, 'mine.yaml'))
+    symlinkSync(target, join(personal, 'mine.yaml'))
+    expect(loader.saveDefinition({ scope: 'personal', defId: 'personal:mine', name: 'mine', source: EDITED_YAML })).toEqual({ ok: false, reason: 'not-a-file' })
+    expect(readFileSync(target, 'utf8')).toBe('untouched')
+  })
+
+  it('refuses a new file once the directory holds the file cap', () => {
+    for (let i = 0; i < MAX_WORKFLOW_FILES; i++) writeFileSync(join(dir, `f${i}.yaml`), VALID_YAML)
+    const loader = makeLoader()
+    loader.reload()
+
+    expect(loader.saveDefinition({ scope: 'personal', name: 'one-more', source: VALID_YAML })).toEqual({ ok: false, reason: 'too-many-files' })
+    expect(existsSync(join(dir, 'one-more.yaml'))).toBe(false)
+  })
+})
+
+describe('duplicateDefinition', () => {
+  it('copies into the personal folder with a distinct name rewritten into the source', () => {
+    const repo = makeRepo('repo')
+    writeRepoDef(repo, 'flow.yaml', `# keep me\n${VALID_YAML}`)
+    const loader = makeLoader(personalDir(), { repoRoots: [repo] })
+    loader.reload()
+    const id = `repo:${repoKeyOf(repo)}:flow`
+
+    const first = loader.duplicateDefinition(id, () => true)
+    const second = loader.duplicateDefinition(id, () => true)
+
+    expect(first.ok && [first.summary.id, first.summary.name]).toEqual(['personal:valid-flow-copy', 'Valid flow-copy'])
+    expect(second.ok && [second.summary.id, second.summary.name]).toEqual(['personal:valid-flow-copy-2', 'Valid flow-copy-2'])
+    const copied = readFileSync(join(personalDir(), 'valid-flow-copy.yaml'), 'utf8')
+    expect(copied).toBe(`# keep me\n${VALID_YAML.replace('name: Valid flow', 'name: "Valid flow-copy"')}`)
+    expect(first.ok && first.summary.scope).toBe('personal')
+  })
+
+  it('slugs a display name with a slash when duplicating', () => {
+    writeFileSync(join(dir, 'deploy.yaml'), VALID_YAML.replace('name: Valid flow', 'name: ci/deploy'))
+    const loader = makeLoader()
+    loader.reload()
+
+    const copy = loader.duplicateDefinition('personal:deploy', () => true)
+
+    expect(copy.ok && [copy.summary.id, copy.summary.name]).toEqual(['personal:ci-deploy-copy', 'ci/deploy-copy'])
+    expect(readdirSync(dir).sort()).toEqual(['ci-deploy-copy.yaml', 'deploy.yaml'])
+  })
+
+  it('writes nothing when the caller refuses the definition', () => {
+    writeFileSync(join(dir, 'flow.yaml'), VALID_YAML)
+    const loader = makeLoader()
+    loader.reload()
+    const seen: string[] = []
+
+    expect(loader.duplicateDefinition('personal:flow', (detail) => (seen.push(detail.summary.hash), false))).toEqual({ ok: false, reason: 'not-allowed' })
+    expect(seen).toEqual([sha256(VALID_YAML)])
+    expect(readdirSync(dir)).toEqual(['flow.yaml'])
+    expect(loader.duplicateDefinition('personal:nope', () => true)).toEqual({ ok: false, reason: 'unknown-definition' })
+  })
+})
+
+describe('renameDefinitionSource', () => {
+  it('replaces only the top-level name scalar', () => {
+    const source = `name: old # trailing\nsteps:\n  - id: a\n    name: inner\n`
+    expect(renameDefinitionSource(source, 'new: "x"')).toBe(`name: "new: \\"x\\"" # trailing\nsteps:\n  - id: a\n    name: inner\n`)
+    expect(parseDocument(renameDefinitionSource(source, 'new: "x"')).get('name')).toBe('new: "x"')
+  })
+
+  it('handles a block scalar name and a map without a name', () => {
+    expect(parseDocument(renameDefinitionSource('name: |\n  multi\n  line\nsteps: []\n', 'copy')).toJS()).toEqual({ name: 'copy', steps: [] })
+    expect(parseDocument(renameDefinitionSource('steps: []\n', 'copy')).toJS()).toEqual({ steps: [], name: 'copy' })
+  })
+
+  it('leaves unparseable or non-map sources unchanged', () => {
+    expect(renameDefinitionSource('name: [unclosed', 'copy')).toBe('name: [unclosed')
+    expect(renameDefinitionSource('- a\n- b\n', 'copy')).toBe('- a\n- b\n')
+  })
+})
+
+describe('deleteDefinition', () => {
+  it('removes only the named definition file and dispatches its removal', () => {
+    writeFileSync(join(dir, 'a.yaml'), VALID_YAML)
+    writeFileSync(join(dir, 'b.yaml'), VALID_YAML)
+    const loader = makeLoader()
+    loader.reload()
+
+    expect(loader.deleteDefinition('personal:a')).toEqual({ ok: true })
+
+    expect(readdirSync(dir)).toEqual(['b.yaml'])
+    expect(dispatched.at(-1)).toEqual({ type: 'workflows/definitionDeleted', payload: { defId: 'personal:a' } })
+    expect(loader.getDefinition('personal:a')).toBeNull()
+    expect(Object.keys(folded().definitions)).toEqual(['personal:b'])
+    expectReloadNoOp(loader)
+  })
+
+  it('deletes a repo definition from the primary checkout', () => {
+    const repo = makeRepo('repo')
+    const path = writeRepoDef(repo, 'flow.yaml', VALID_YAML)
+    const loader = makeLoader(personalDir(), { repoRoots: [repo] })
+    loader.reload()
+
+    expect(loader.deleteDefinition(`repo:${repoKeyOf(repo)}:flow`)).toEqual({ ok: true })
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('refuses unknown, path-like and non-string ids and a file swapped for a symlink', () => {
+    writeFileSync(join(dir, 'a.yaml'), VALID_YAML)
+    const loader = makeLoader()
+    loader.reload()
+    for (const id of ['personal:nope', 'personal:../a', '../a.yaml', 42, null]) {
+      expect(loader.deleteDefinition(id)).toEqual({ ok: false, reason: 'unknown-definition' })
+    }
+    const outside = mkdtempSync(join(tmpdir(), 'workflow-outside-'))
+    try {
+      const victim = join(outside, 'victim.yaml')
+      writeFileSync(victim, VALID_YAML)
+      unlinkSync(join(dir, 'a.yaml'))
+      symlinkSync(victim, join(dir, 'a.yaml'))
+
+      expect(loader.deleteDefinition('personal:a')).toEqual({ ok: false, reason: 'not-a-file' })
+      expect(existsSync(victim)).toBe(true)
+      expect(existsSync(join(dir, 'a.yaml'))).toBe(true)
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 })
 

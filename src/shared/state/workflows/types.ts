@@ -103,6 +103,8 @@ export type WorkflowsEvent =
       type: 'workflows/definitionsLoaded'
       payload: WorkflowDefinitionsGroupPayload
     }
+  | { type: 'workflows/definitionSaved'; payload: WorkflowDefinitionSummary }
+  | { type: 'workflows/definitionDeleted'; payload: { defId: string } }
   | { type: 'workflows/runStarted'; payload: { runId: string; run: WorkflowRun } }
   | { type: 'workflows/runPaused'; payload: { runId: string; reason: WorkflowPausedReason } }
   | { type: 'workflows/runResumed'; payload: { runId: string } }
@@ -234,6 +236,14 @@ export interface WorkflowMarkDonePayload {
 export type WorkflowStartRunResponse = { runId: string } | { error: string }
 
 export type WorkflowActionResponse = { ok: true } | { error: string }
+
+export type WorkflowDefinitionSaveResponse = { defId: string } | { error: string }
+
+export type WorkflowSaveDefinitionPayload = ({ scope: 'personal' } | { scope: 'repo'; repoRoot: string }) & {
+  defId?: string
+  name: string
+  source: string
+}
 
 export type WorkflowInputTrustType = 'issue' | 'pr'
 
