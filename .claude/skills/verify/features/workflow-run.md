@@ -79,6 +79,17 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     available here. Enter the <issue|pull request> number.` The scratch
     sandbox has no token and no `origin`, so issue and PR inputs are always
     number fields there.
+  - Untrusted author: 250 ms after an `issue`/`pr` value settles, the sheet
+    calls `workflows:checkInputTrust(root, type, number)`. Any verdict other
+    than trusted (`OWNER`/`MEMBER`/`COLLABORATOR`), including no `origin`,
+    no token or an error, shows `role="status"` under the field: `This
+    issue's author is not a collaborator: steps will run with at most edit
+    permissions` (`This pull request's …` for `pr`). A definitive untrusted
+    verdict drops the `Allow full access` checkbox when every `full` step is
+    capped. At Start, main looks the author up again itself and, unless
+    trusted, caps every `full` agent step to `edit` in the run snapshot and
+    sets `inputsUntrusted: true` on the run record. The sandbox has no
+    `origin`, so the notice always shows there and no `gh` or network runs.
 - **Step strip**: `role="img"` under the branch name, `aria-label`
   `Workflow steps: <id> <status>, …`. Only for a live run; it disappears when
   the run is done, failed or cancelled.
@@ -188,7 +199,8 @@ How to drive it:
    `getByRole('combobox', { name: /^target/ })`, type `picker`, ArrowDown
    (option `docs/picker-target.md` gets `aria-selected="true"`), Enter. The
    list closes, the sheet stays open, the input shows the path. `ticket` is
-   a numeric field (`inputmode="numeric"`); fill `7`; Start.
+   a numeric field (`inputmode="numeric"`); fill `7`; wait for the
+   untrusted-author `role="status"` notice under it; Start.
 2. New worktree target (not in `workflow-flows.sh`; drive it with a small
    `withApp` journey): Workflows -> `Run workflow…` -> keep `New worktree`
    -> pick `browser-file` -> focus the `target` combobox -> ArrowDown. The
@@ -199,8 +211,8 @@ How to drive it:
 
 End state: the run record `workflow-runs/<runId>.json` is `done` (the
 `test -f {{inputs.target}}` step passed) with
-`inputs: { target: "docs/picker-target.md", ticket: "7" }`. Run detail does
-not show inputs.
+`inputs: { target: "docs/picker-target.md", ticket: "7" }` and
+`inputsUntrusted: true`. Run detail does not show inputs.
 
 ## Gotchas
 
