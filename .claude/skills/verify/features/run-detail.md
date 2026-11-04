@@ -102,7 +102,11 @@ selected attempt's full result and the files that attempt changed.
     -> region `smoke-diamond` -> graph listitems `plan: done`, `left:
     done`, `right: done`, `join: done` -> `path[data-edge]` set is exactly
     `left->join`, `plan->left`, `plan->right`, `right->join` -> `All runs`
-    -> `Back` closes the section.
+    -> `Back` closes the section. Then the conditional step: launch sheet
+    -> `smoke-when` -> Start -> wait for the new run to be `done` ->
+    `Open run: smoke-when on repo` -> graph listitems `review: done`, `fix:
+    skipped` (its `when: {field: verdict, equals: fail}` is false because
+    `review` reports `verdict: pass`), `join: done` -> `All runs` -> `Back`.
   - `attempt-diff` (right after `run-detail`, before `repo-trust`): launch
     sheet -> `browser-diff` -> Start -> wait for the run to be `done` ->
     sidebar `Workflows` -> `Recent runs` -> first `article` `browser-diff on
@@ -124,10 +128,12 @@ selected attempt's full result and the files that attempt changed.
 
 End state that proves it: `run-detail-01-detail-timeline.png`,
 `run-detail-02-detail-summary.png`, `run-detail-05-diamond-graph.png`,
+`run-detail-08-when-graph.png`,
 `attempt-diff-03-changed-files.png` and
 `attempt-diff-04-file-diff.png`, `swap-step-04-swap-dialog.png` and
 `swap-step-05-detail-done.png` in `$EVIDENCE/workflow-flows/`, and the
 `run-detail: timeline [...]`, `run-detail: diamond graph edges [...]`,
+`run-detail: smoke-when graph shows review: done, fix: skipped, join: done`,
 `attempt-diff: changed files [...]`,
 `attempt-diff: smoke.txt diff renders side by side…` and `swap-step: run
 <id> done after swapping Claude to Codex (1:claude:failed, 2:codex:done)`
