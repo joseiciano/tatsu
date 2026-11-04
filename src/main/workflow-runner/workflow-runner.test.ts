@@ -406,14 +406,7 @@ steps:
   - id: plan
     agent: claude
     prompt: "plan"
-    timeout: 3000000
-`,
-  'timed-huge': `name: timed-huge
-steps:
-  - id: plan
-    agent: claude
-    prompt: "plan"
-    timeout: 1e308
+    timeout: 2500000
 `,
   broken: `name: broken
 steps:
@@ -3613,7 +3606,7 @@ describe('WorkflowRunner step timeouts', () => {
     const runId = await ctx.startRun('timed-long')
     expect(timers.delays()).toEqual([2 ** 31 - 1])
     timers.fire()
-    expect(timers.delays()).toEqual([3_000_000_000 - (2 ** 31 - 1)])
+    expect(timers.delays()).toEqual([2_500_000_000 - (2 ** 31 - 1)])
     expect(ctx.wf().runs[runId].status).toBe('running')
     timers.fire()
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
@@ -3737,12 +3730,19 @@ describe('WorkflowRunner step timeouts', () => {
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'timeout' })
   })
 
-  it('treats a timeout too large to represent as no timeout', async () => {
+  it('treats an adopted timeout too large to represent as no timeout', async () => {
+    const { ctx, runId } = await timedRun({ deps: { hasExecution: () => true } })
+    const saved = ctx.records.filter((record) => record.runId === runId).at(-1)
+    if (!saved) throw new Error('no record')
+    const huge = structuredClone(saved)
+    huge.definition.steps[0] = { ...huge.definition.steps[0], timeout: 1e308 }
+    delete huge.attempts[0].timeoutAt
     const timers = fakeTimers()
-    const ctx = setup({ deps: { setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
-    const runId = await ctx.startRun('timed-huge')
+    const after = setup({ deps: { hasExecution: () => true, setTimer: timers.setTimer, clearTimer: timers.clearTimer } })
+    after.runner.reconcile([huge])
+    await flush()
+    expect(after.runner.getRunRecord(runId)?.attempts[0].status).toBe('running')
     expect(timers.delays()).toEqual([])
-    expect(ctx.runner.getRunRecord(runId)?.attempts[0].timeoutAt).toBeUndefined()
   })
 
   it('refuses keep waiting on unknown runs and steps, a step that has not timed out, labs off and a cancelled run', async () => {

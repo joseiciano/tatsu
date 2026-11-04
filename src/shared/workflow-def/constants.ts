@@ -29,6 +29,8 @@ export const STEP_OUTPUT_FORBIDDEN_KEYS: ReadonlySet<string> = new Set(['__proto
 
 export const STEP_SUMMARY_MAX_CHARS = 16384
 
+export const STEP_TIMEOUT_MAX_SECONDS = 30 * 24 * 60 * 60
+
 export const STEP_OUTPUT_STRING_MAX_CHARS = 16384
 
 export const STEP_OUTPUT_ARRAY_MAX_ITEMS = 256

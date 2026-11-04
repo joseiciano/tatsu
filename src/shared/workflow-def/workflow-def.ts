@@ -30,7 +30,7 @@ import type {
   WorkflowValidationResult
 } from './types'
 import { formatTemplateRef, tokenizeTemplate } from './templates'
-import { BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES } from './constants'
+import { BASELINE_SUPPORTED_FEATURES, STEP_TIMEOUT_MAX_SECONDS, WORKFLOW_FEATURES } from './constants'
 
 const MAX_SOURCE_LENGTH = 512 * 1024
 const MAX_ALIAS_COUNT = 100
@@ -213,7 +213,7 @@ class ShapeWalker {
     return undefined
   }
 
-  positiveInteger(entry: Entry | undefined, path: string): number | undefined {
+  positiveInteger(entry: Entry | undefined, path: string, max?: number): number | undefined {
     if (!entry) return undefined
     const got = this.scalar(entry, path)
     if (!got) return undefined
@@ -221,8 +221,9 @@ class ShapeWalker {
       this.report('wrong-type', `Expected a positive integer, got ${describeNode(got.node)}`, path, got.node, entry.key)
       return undefined
     }
-    if (Number.isInteger(got.value) && got.value > 0) return got.value
-    this.report('bad-value', `Expected a positive integer, got ${got.value}`, path, got.node, entry.key)
+    if (Number.isInteger(got.value) && got.value > 0 && (max === undefined || got.value <= max)) return got.value
+    const bound = max === undefined ? '' : ` up to ${max}`
+    this.report('bad-value', `Expected a positive integer${bound}, got ${got.value}`, path, got.node, entry.key)
     return undefined
   }
 
@@ -377,7 +378,7 @@ class ShapeWalker {
     set('when', this.condition(f.get('when'), at('when')))
     set('on_loop', this.string(f.get('on_loop'), at('on_loop')))
     set('parallel_safe', this.boolean(f.get('parallel_safe'), at('parallel_safe')))
-    set('timeout', this.positiveInteger(f.get('timeout'), at('timeout')))
+    set('timeout', this.positiveInteger(f.get('timeout'), at('timeout'), STEP_TIMEOUT_MAX_SECONDS))
     set('over', this.string(f.get('over'), at('over')))
     set('mode', this.oneOf(f.get('mode'), at('mode'), FOREACH_MODES))
     return id === undefined ? undefined : step
