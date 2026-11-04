@@ -1159,8 +1159,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
   const isOverridden = (action: Action): boolean => {
     if (!hotkeyOverrides || !(action in hotkeyOverrides)) return false
-    const defaultStr = bindingToString(DEFAULT_HOTKEYS[action])
-    return hotkeyOverrides[action] !== defaultStr
+    const fallback = DEFAULT_HOTKEYS[action]
+    return fallback === undefined || hotkeyOverrides[action] !== bindingToString(fallback)
   }
 
   const renderUpdaterStatus = (): JSX.Element | null => {
@@ -2979,7 +2979,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
               {(() => {
                 const renderRow = (action: Action, indent = false): JSX.Element => {
-                  const binding: HotkeyBinding = resolvedHotkeys[action]
+                  const binding: HotkeyBinding | undefined = resolvedHotkeys[action]
                   const isRebinding = rebindingAction === action
                   const overridden = isOverridden(action)
                   return (
@@ -3003,7 +3003,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                             : 'bg-panel text-fg border border-border-strong hover:border-fg'
                             }`}
                         >
-                          {isRebinding ? 'Press keys...' : formatBindingGlyphs(bindingToString(binding))}
+                          {isRebinding ? 'Press keys...' : binding ? formatBindingGlyphs(bindingToString(binding)) : 'Not set'}
                         </button>
                       </div>
                     </div>

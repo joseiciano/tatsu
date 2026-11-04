@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { Worktree, PRStatus, PaneNode, TerminalTab } from '../../types'
 import { getLeaves, findLeaf } from '../../../shared/state/terminals'
-import { resolveHotkeys, type Action, type HotkeyBinding } from '../../hotkeys'
+import { resolveHotkeys, type Action, type HotkeyBindings } from '../../hotkeys'
 import { useHotkeys } from '../useHotkeys'
 import { groupWorktrees, getGroupKey, type GroupKey } from '../../worktree-sort'
 import { focusTerminalById } from '../../components/XTerminal'
@@ -39,6 +39,8 @@ interface UseHotkeyHandlersArgs {
   setShowHotkeyCheatsheet: React.Dispatch<React.SetStateAction<boolean>>
   setShowReview: React.Dispatch<React.SetStateAction<boolean>>
   toggleWorkflows: () => void
+  openRunWorkflowHere: (worktreePath: string) => void
+  openRunWorkflow: () => void
   // Imperative hooks into other handlers — passed in to avoid this hook
   // depending on useTabHandlers + useWorktreeHandlers directly.
   handleAddTerminalTab: (worktreePath: string, paneId?: string) => void
@@ -55,7 +57,7 @@ interface UseHotkeyHandlersArgs {
  * dispatch) and the resolved binding map (for the HotkeysProvider). */
 export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
   hotkeyActions: Partial<Record<Action, () => void>>
-  resolvedHotkeys: Record<Action, HotkeyBinding>
+  resolvedHotkeys: HotkeyBindings
 } {
   const {
     worktrees,
@@ -85,6 +87,8 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
     setShowHotkeyCheatsheet,
     setShowReview,
     toggleWorkflows,
+    openRunWorkflowHere,
+    openRunWorkflow,
     handleAddTerminalTab,
     handleCloseTab,
     handleSelectTab,
@@ -292,6 +296,14 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
       toggleWorkflows: () => {
         if (labsWorkflows) toggleWorkflows()
       },
+      runWorkflow: () => {
+        if (!labsWorkflows) return
+        if (activeWorktreeId !== null && worktrees.some((w) => w.path === activeWorktreeId)) {
+          openRunWorkflowHere(activeWorktreeId)
+        } else {
+          openRunWorkflow()
+        }
+      },
       commandPalette: () => {
         setShowHotkeyCheatsheet(false)
         setCommandPaletteMode('root')
@@ -366,6 +378,9 @@ export function useHotkeyHandlers(args: UseHotkeyHandlersArgs): {
       setShowHotkeyCheatsheet,
       setShowReview,
       toggleWorkflows,
+      openRunWorkflowHere,
+      openRunWorkflow,
+      worktrees,
       labsWorkflows,
       setShowSettings,
       backend,

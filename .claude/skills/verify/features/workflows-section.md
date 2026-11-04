@@ -10,7 +10,9 @@ per active run, then recent finished and cancelled runs.
   `Workflow` icon, next to Command Center), the same button in the collapsed
   sidebar, the hotkey `toggleWorkflows` (default Cmd+Alt+W), and the command
   palette action `Toggle workflows`. All are hidden or no-op with Labs
-  workflows off. Opening the section closes Activity, Cleanup, Review, New
+  workflows off. The palette also lists `Run workflow…` with Labs workflows
+  on, which opens the launch sheet directly (see workflow-run.md). Opening
+  the section closes Activity, Cleanup, Review, New
   worktree and Report issue, and hides the workspace (terminals, right
   column).
 - **Section**: `role="region"` named `Workflows` (h1), a `Back` button, and a

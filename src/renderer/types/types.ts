@@ -243,6 +243,7 @@ export interface ElectronAPI {
     teleportSessionId?: string
     agentKind?: AgentKind
     model?: string
+    workflow?: boolean
   }): Promise<
     | { id: string; outcome: 'success'; createdPath: string }
     | { id: string; outcome: 'setup-failed'; createdPath: string }

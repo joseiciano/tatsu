@@ -16,6 +16,7 @@ interface UseWorktreeHandlersArgs {
   setActiveWorktreeId: React.Dispatch<React.SetStateAction<string | null>>
   setActivePaneId: React.Dispatch<React.SetStateAction<Record<string, string>>>
   setShowNewWorktree: React.Dispatch<React.SetStateAction<boolean>>
+  openWorkflowLaunch: (target: { worktreePath: string; defId: string }) => void
 }
 
 /** Worktree + repo + pending-creation handlers. Repo add/remove,
@@ -33,7 +34,8 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
     activeWorktreeId,
     setActiveWorktreeId,
     setActivePaneId,
-    setShowNewWorktree
+    setShowNewWorktree,
+    openWorkflowLaunch
   } = args
 
   const [repoPickerOpen, setRepoPickerOpen] = useState(false)
@@ -164,11 +166,21 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       initialPrompt: string,
       teleportSessionId?: string,
       agentKind?: AgentKind,
-      model?: string
+      model?: string,
+      workflowDefId?: string
     ) => {
       const id = `pending:${crypto.randomUUID()}`
       setActiveWorktreeId(id)
       setShowNewWorktree(false)
+
+      if (workflowDefId !== undefined) {
+        const created = await backend.runPendingWorktree({ id, repoRoot, branchName, workflow: true })
+        if (created.outcome === 'error') return
+        if (created.outcome === 'setup-failed') void backend.dismissPendingWorktree(id)
+        setActiveWorktreeId(created.createdPath)
+        openWorkflowLaunch({ worktreePath: created.createdPath, defId: workflowDefId })
+        return
+      }
 
       // Main handles everything: addWorktree → setup script → ensureInitialized
       // (with the prompt embedded in the new agent tab) → outcome.
@@ -189,7 +201,7 @@ export function useWorktreeHandlers(args: UseWorktreeHandlersArgs) {
       // "Continue anyway" which transitions to result.createdPath.
       // On 'error' we stay on the pending id so the error screen shows.
     },
-    [setActiveWorktreeId, setShowNewWorktree]
+    [setActiveWorktreeId, setShowNewWorktree, openWorkflowLaunch]
   )
 
   const handleSubmitNewPRWorktree = useCallback(

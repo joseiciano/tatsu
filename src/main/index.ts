@@ -953,7 +953,9 @@ const worktreesFSM = new WorktreesFSM(store, {
     if (teleportSessionId) {
       setTimeout(() => void worktreesFSM.refreshList(), 10_000)
     }
-  }
+  },
+  onWorkflowWorktreeReserved: (path) => panesFSM.reserveForWorkflow(path),
+  onWorkflowWorktreeReleased: (path) => panesFSM.releaseWorkflowReservation(path)
 })
 
 const worktreeDeletionFSM = new WorktreeDeletionFSM(store, {
@@ -1176,7 +1178,11 @@ function registerIpcHandlers(): void {
       teleportSessionId?: string
       agentKind?: AgentKind
       model?: string
+      workflow?: boolean
     }) => {
+      if (params.workflow !== undefined && typeof params.workflow !== 'boolean') {
+        return { id: params.id, outcome: 'error' as const, error: 'workflow must be a boolean' }
+      }
       return worktreesFSM.runPending(params)
     }
   )

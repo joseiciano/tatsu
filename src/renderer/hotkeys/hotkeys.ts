@@ -1,5 +1,5 @@
-import { DEFAULT_HOTKEYS } from './constants'
-import type { Action, HotkeyBinding, Modifiers } from './types'
+import { ACTION_LABELS, DEFAULT_HOTKEYS } from './constants'
+import type { Action, HotkeyBinding, HotkeyBindings, Modifiers } from './types'
 
 /** Check if a KeyboardEvent matches a hotkey binding */
 export function matchesBinding(e: KeyboardEvent, binding: HotkeyBinding): boolean {
@@ -93,12 +93,12 @@ export function eventToBinding(e: KeyboardEvent): HotkeyBinding | null {
 /** Build a resolved hotkey map by merging defaults with user overrides */
 export function resolveHotkeys(
   overrides?: Record<string, string>
-): Record<Action, HotkeyBinding> {
+): HotkeyBindings {
   if (!overrides) return { ...DEFAULT_HOTKEYS }
 
-  const resolved = { ...DEFAULT_HOTKEYS }
+  const resolved: HotkeyBindings = { ...DEFAULT_HOTKEYS }
   for (const [action, shortcut] of Object.entries(overrides)) {
-    if (action in DEFAULT_HOTKEYS) {
+    if (Object.hasOwn(ACTION_LABELS, action)) {
       resolved[action as Action] = parseBinding(shortcut)
     }
   }

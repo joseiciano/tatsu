@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Action } from '../../hotkeys'
 import { matchesBinding, resolveHotkeys } from '../../hotkeys'
-import type { HotkeyBinding } from '../../hotkeys'
+import type { HotkeyBindings } from '../../hotkeys'
 
 type ActionMap = Partial<Record<Action, () => void>>
 
@@ -16,7 +16,7 @@ export function useHotkeys(actions: ActionMap, overrides?: Record<string, string
   const actionsRef = useRef(actions)
   actionsRef.current = actions
 
-  const bindingsRef = useRef<Record<Action, HotkeyBinding>>(resolveHotkeys(overrides))
+  const bindingsRef = useRef<HotkeyBindings>(resolveHotkeys(overrides))
 
   useEffect(() => {
     bindingsRef.current = resolveHotkeys(overrides)
@@ -29,7 +29,7 @@ export function useHotkeys(actions: ActionMap, overrides?: Record<string, string
 
       for (const [action, binding] of Object.entries(bindings)) {
         const handler = handlers[action as Action]
-        if (!handler) continue
+        if (!handler || !binding) continue
 
         if (matchesBinding(e, binding)) {
           e.preventDefault()

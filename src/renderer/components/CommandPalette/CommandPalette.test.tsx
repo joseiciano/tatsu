@@ -87,3 +87,23 @@ describe('CommandPalette Workflows action', () => {
     expect(onAction).toHaveBeenCalledWith('toggleWorkflows')
   })
 })
+
+describe('CommandPalette Run workflow action', () => {
+  const runItem = (): HTMLButtonElement | undefined =>
+    [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.startsWith('Run workflow…'))
+
+  it('is absent with Labs workflows off', async () => {
+    setLabs(false)
+    await render()
+    expect(runItem()).toBeUndefined()
+  })
+
+  it('is listed with no shortcut hint with Labs workflows on and runs the runWorkflow action', async () => {
+    setLabs(true)
+    await render()
+    const item = runItem()
+    expect(item?.textContent).toBe('Run workflow…')
+    await act(async () => item?.click())
+    expect(onAction).toHaveBeenCalledWith('runWorkflow')
+  })
+})

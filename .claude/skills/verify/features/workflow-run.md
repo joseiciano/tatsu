@@ -10,7 +10,9 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   dialog `Run workflow` with a `Workflow` select and `Start`. Shown only with
   Labs workflows on and no live (queued, running, paused) run on that path.
   The sheet also opens from the Workflows section's `Run workflow…` button
-  (see workflows-section.md). After a successful Start the sheet closes,
+  (see workflows-section.md), from the command palette action `Run
+  workflow…` and from the New Worktree screen (see **Entry points**). After
+  a successful Start the sheet closes,
   Tatsu selects the target worktree (`aria-current="true"` on its sidebar
   row) and closes the Workflows section.
 - **Target**: depends on how the sheet opened.
@@ -28,7 +30,7 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   - The `Workflow` select lists personal definitions plus the target repo's
     definitions only.
   - New worktree: Start creates the worktree through `worktrees:runPending`
-    (no agent, no initial prompt), then starts the run on the created path.
+    with `workflow: true` (no agent, no initial prompt), then starts the run on the created path.
     A creation error shows inline and nothing starts. A start refusal after
     creation shows inline and switches the target to `Existing worktree` on
     the created worktree, so the next Start does not create another one.
@@ -38,6 +40,27 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     registered and for a branch name that fails `git check-ref-format
     --branch` or the shared rules (leading `-`, `..`, backslash, `@{`,
     empty, over 200 chars).
+- **Entry points**:
+  - Command palette `Run workflow…` (hotkey action `runWorkflow`, no
+    default binding, bindable in Settings > Hotkeys): opens the sheet preset
+    to the active worktree, or with no preset when no listed worktree is
+    active. Hidden from the palette and a no-op with Labs workflows off.
+  - New Worktree screen (Fresh start only): a `Workflow` select between
+    Branch name and the kickoff prompt, default `None`, listing personal definitions plus the
+    selected repo's (`<name> (repo)`), broken ones disabled with their
+    first issue. Hidden with Labs workflows off. Choosing one hides the
+    kickoff prompt, the Advanced (Agent/Model) row and the starter tasks.
+    `Create worktree` sends
+    `worktrees:runPending` with `workflow: true` and no prompt or agent;
+    on `success` or `setup-failed` (pending entry dismissed) Tatsu selects
+    the created worktree and opens the sheet preset to it with that
+    definition selected. On `error` the pending error screen shows as usual.
+- **Workflow-owned worktree**: `worktrees:runPending` with `workflow: true`
+  (strict boolean, else the request is refused) reserves the path before
+  `git worktree add`; the first pane init for it (creation callback, list
+  refresh, boot drain or renderer activation) builds a single `Shell` tab
+  and starts no agent. The flag stays on the pending entry, so Retry keeps
+  it; a creation error releases the reservation.
 - **Overrides**: a collapsed section in the launch sheet for a definition
   with agent steps (hidden otherwise). Toggle button `Overrides` (`Overrides
   (<n> changed)` once a value differs) with `aria-expanded` and
@@ -169,6 +192,14 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
     `inputs: { target: "docs/picker-target.md", ticket: "7" }`. Run detail
     does not show inputs; the record and the passing `test -f` are the
     evidence.
+  - `entry-points` (just before `launch-target`): select the scratch repo
+    row -> `Meta+k` -> fill `run workflow` -> click `Run workflow…` ->
+    dialog `Run workflow` shows `in <scratch repo>` and no `New worktree`
+    radio -> Escape -> `Meta+n` -> fill `fix-the-thing` with
+    `wf-entry-<base36 time>` -> `Workflow` = `browser-hang` -> `Create
+    worktree` -> dialog shows `in <branch>` with `browser-hang` selected ->
+    state pane tree of the new worktree holds only `shell` tabs -> Escape ->
+    scratch repo row selected again. The new worktree stays (no run).
   - `launch-target` (runs last): see workflows-section.md.
   - `repo-trust`: append a nonce comment to the committed
     `.harness/workflows/browser-repo.yaml` (fresh bytes, so it is untrusted on

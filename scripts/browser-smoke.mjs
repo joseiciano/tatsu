@@ -894,6 +894,61 @@ async function flowDefinitionEditor(page, backend) {
   })
 }
 
+async function assertPresetSheet(sheet, worktreeLabel, defName) {
+  await sheet.waitFor()
+  await sheet.getByText(`in ${worktreeLabel}`, { exact: true }).waitFor()
+  if (await sheet.getByRole('radio', { name: 'New worktree', exact: true }).count()) {
+    throw new Error(`the launch sheet for ${worktreeLabel} offers a New worktree target instead of the preset`)
+  }
+  if (defName) {
+    const chosen = await sheet.getByLabel('Workflow', { exact: true }).evaluate((el) => el.selectedOptions[0]?.textContent ?? '')
+    if (chosen !== defName) throw new Error(`the launch sheet selected ${JSON.stringify(chosen)}, expected ${JSON.stringify(defName)}`)
+  }
+}
+
+async function flowEntryPoints(page, backend) {
+  await scenario(page, 'entry-points', async (shot) => {
+    const original = worktreeRow(page)
+    await original.scrollIntoViewIfNeeded()
+    await original.click()
+    await page.keyboard.press('Meta+k')
+    await page.getByPlaceholder('Search worktrees and commands...').fill('run workflow')
+    await shot('palette')
+    await page.getByRole('button', { name: /^Run workflow…/ }).click()
+    const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+    await assertPresetSheet(sheet, worktreePath.split('/').pop(), null)
+    await shot('palette-sheet')
+    await page.keyboard.press('Escape')
+    await sheet.waitFor({ state: 'detached' })
+    log(`entry-points: palette Run workflow… opened the launch sheet on ${worktreePath}`)
+
+    const branch = `wf-entry-${Date.now().toString(36)}`
+    await page.keyboard.press('Meta+n')
+    await page.getByPlaceholder('fix-the-thing').fill(branch)
+    await page.getByLabel('Workflow', { exact: true }).selectOption({ label: 'browser-hang' })
+    await shot('new-worktree-form')
+    await page.getByRole('button', { name: 'Create worktree' }).click()
+    await assertPresetSheet(sheet, branch, 'browser-hang')
+    await shot('new-worktree-sheet')
+
+    const { state } = await backend.snapshot()
+    const created = state.worktrees.list.find((wt) => wt.branch === branch)
+    if (!created) throw new Error(`no worktree on branch ${branch} in the sidebar state`)
+    const tree = state.terminals.panes[created.path]
+    if (!tree) throw new Error(`no pane tree for ${created.path}`)
+    const tabs = []
+    const walk = (node) => (node.type === 'leaf' ? tabs.push(...node.tabs) : node.children.forEach(walk))
+    walk(tree)
+    const kinds = tabs.map((tab) => tab.type)
+    if (kinds.join(',') !== 'shell') throw new Error(`the workflow worktree opened tabs ${JSON.stringify(kinds)}, expected only a shell`)
+    log(`entry-points: New Worktree with a workflow created ${created.path} with tabs ${JSON.stringify(kinds)} and opened the sheet preset to it`)
+
+    await page.keyboard.press('Escape')
+    await sheet.waitFor({ state: 'detached' })
+    await original.click()
+  })
+}
+
 async function flowLaunchTarget(page, backend) {
   await scenario(page, 'launch-target', async (shot) => {
     const dataDir = process.env.HARNESS_DATA_DIR
@@ -983,6 +1038,7 @@ async function main() {
     await flowLaunchOverrides(page, backend)
     await flowLibrary(page, backend)
     await flowDefinitionEditor(page, backend)
+    await flowEntryPoints(page, backend)
     await flowLaunchTarget(page, backend)
   } catch {
     failed = true

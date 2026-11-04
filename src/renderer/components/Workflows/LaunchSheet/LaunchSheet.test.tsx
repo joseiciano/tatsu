@@ -499,6 +499,21 @@ describe('LaunchSheet target', () => {
     expect(byLabel<HTMLSelectElement>('Workflow').value).toBe('personal:full')
   })
 
+  it('keeps a preset worktree and a preset repo definition together, even when the worktree is listed late', async () => {
+    const listed = storeState.worktrees
+    storeState.worktrees = listed.filter((w) => w.path !== '/wt/feature')
+    await act(async () => {
+      root.render(<LaunchSheet worktreePath="/wt/feature" defId={REPO_ID} onClose={onClose} />)
+    })
+    storeState.worktrees = listed
+    await act(async () => {
+      root.render(<LaunchSheet worktreePath="/wt/feature" defId={REPO_ID} onClose={onClose} />)
+    })
+    expect(container.querySelector('fieldset')).toBeNull()
+    expect(container.textContent).toContain('in feature')
+    expect(byLabel<HTMLSelectElement>('Workflow').value).toBe(REPO_ID)
+  })
+
   it('filters definitions by the chosen repository', async () => {
     await mountUnset()
     expect(optionValues(byLabel<HTMLSelectElement>('Workflow'))).toContain(REPO_ID)
@@ -514,7 +529,8 @@ describe('LaunchSheet target', () => {
     expect(backendApi.runPendingWorktree).toHaveBeenCalledWith({
       id: 'pending:12345678-aaaa-bbbb-cccc-dddddddddddd',
       repoRoot: '/repo',
-      branchName: 'wf/full/12345678'
+      branchName: 'wf/full/12345678',
+      workflow: true
     })
     expect(backendApi.startWorkflowRun).toHaveBeenCalledWith({
       defId: 'personal:full',

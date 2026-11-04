@@ -121,6 +121,7 @@ export function buildBackend(
       teleportSessionId?: string
       agentKind?: AgentKind
       model?: string
+      workflow?: boolean
     }) => req('worktrees:runPending', params),
     runPendingPRWorktree: (params: {
       id: string

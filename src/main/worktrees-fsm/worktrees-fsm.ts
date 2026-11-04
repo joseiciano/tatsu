@@ -1,3 +1,4 @@
+import { join } from 'path'
 import {
   addWorktree,
   defaultWorktreeDir,
@@ -69,6 +70,8 @@ interface WorktreesFSMOptions {
     agentKind?: AgentKind
     model?: string
   }) => void
+  onWorkflowWorktreeReserved?: (worktreePath: string) => void
+  onWorkflowWorktreeReleased?: (worktreePath: string) => void
 }
 
 /** Owns the pending-creation state machine plus the "refresh the flat
@@ -119,26 +122,34 @@ export class WorktreesFSM {
     teleportSessionId?: string
     agentKind?: AgentKind
     model?: string
+    workflow?: boolean
   }): Promise<PendingOutcome> {
-    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model } = params
+    const { id, repoRoot, branchName, initialPrompt, teleportSessionId, agentKind, model, workflow } = params
     const pending: PendingWorktree = {
       id,
       repoRoot,
       branchName,
       status: 'creating',
       initialPrompt,
-      teleportSessionId
+      teleportSessionId,
+      ...(workflow ? { workflow: true } : {})
     }
     this.store.dispatch({ type: 'worktrees/pendingAdded', payload: pending })
 
+    let reservedPath: string | null = null
     try {
       this.assertKnownRepo(repoRoot)
       await this.assertBranchName(branchName)
       const wtDir = defaultWorktreeDir(repoRoot)
+      if (workflow) {
+        reservedPath = join(wtDir, branchName)
+        this.opts.onWorkflowWorktreeReserved?.(reservedPath)
+      }
       const mode = this.opts.getWorktreeBaseMode()
       const created = await addWorktree(repoRoot, wtDir, branchName, {
         fetchRemote: mode === 'remote'
       })
+      reservedPath = null
       return await this.finishCreate({
         id,
         repoRoot,
@@ -149,6 +160,7 @@ export class WorktreesFSM {
         model
       })
     } catch (err) {
+      if (reservedPath !== null) this.opts.onWorkflowWorktreeReleased?.(reservedPath)
       const message = err instanceof Error ? err.message : String(err)
       this.store.dispatch({
         type: 'worktrees/pendingUpdated',
@@ -359,7 +371,8 @@ export class WorktreesFSM {
       repoRoot: current.repoRoot,
       branchName: current.branchName,
       initialPrompt: current.initialPrompt,
-      teleportSessionId: current.teleportSessionId
+      teleportSessionId: current.teleportSessionId,
+      workflow: current.workflow
     })
   }
 

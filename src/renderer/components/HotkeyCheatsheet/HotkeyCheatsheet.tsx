@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { type Action, type HotkeyBinding, bindingToString } from '../../hotkeys'
+import { type Action, type HotkeyBindings, type UnboundAction, bindingToString } from '../../hotkeys'
 import { HotkeyBadge } from '../HotkeyBadge'
 
 interface ShortcutRow {
@@ -12,8 +12,8 @@ interface ShortcutGroup {
   rows: ShortcutRow[]
 }
 
-function buildGroups(hotkeys: Record<Action, HotkeyBinding>): ShortcutGroup[] {
-  const b = (action: Action): string => bindingToString(hotkeys[action])
+function buildGroups(hotkeys: HotkeyBindings): ShortcutGroup[] {
+  const b = (action: Exclude<Action, UnboundAction>): string => bindingToString(hotkeys[action])
 
   return [
     {
@@ -61,7 +61,7 @@ function buildGroups(hotkeys: Record<Action, HotkeyBinding>): ShortcutGroup[] {
 }
 
 interface HotkeyCheatsheetProps {
-  resolvedHotkeys: Record<Action, HotkeyBinding>
+  resolvedHotkeys: HotkeyBindings
   onClose: () => void
   onOpenCommandPalette: () => void
 }

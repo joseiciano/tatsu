@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Sparkles, Loader2, X, Map, ListChecks, BookOpen, Radio, GitPullRequest, ChevronRight, ChevronDown } from 'lucide-react'
 import iconUrl from '../../../../resources/icon.png'
 import { sanitizeBranchInput, isValidBranchName } from '../../branch-name'
 import { RepoIcon } from '../RepoIcon'
 import { useBackend } from '../../backend'
-import { useSettings } from '../../store'
+import { useSettings, useWorkflowDefinitions } from '../../store'
+import { definitionsForRepo } from '../Workflows/launch-sheet-helpers'
 import { CLAUDE_MODELS, CODEX_MODELS } from '../../../shared/agent-registry'
 import type { PRSummary } from '../../types'
 import type { AgentKind } from '../../../shared/state/terminals'
@@ -16,7 +17,8 @@ interface NewWorktreeScreenProps {
     initialPrompt: string,
     teleportSessionId?: string,
     agentKind?: AgentKind,
-    model?: string
+    model?: string,
+    workflowDefId?: string
   ) => Promise<void>
   onPRSubmit: (
     repoRoot: string,
@@ -29,6 +31,18 @@ interface NewWorktreeScreenProps {
   repoRoots: string[]
   /** Repo to pre-select in the picker. Usually the repo of the currently active worktree. */
   defaultRepoRoot?: string
+}
+
+interface WorkflowOption {
+  id: string
+  label: string
+  name: string
+  broken: boolean
+}
+
+function workflowOptionLabel(name: string, repo: boolean, issue: string | undefined): string {
+  const label = repo ? `${name} (repo)` : name
+  return issue === undefined ? label : `${label} (${issue})`
 }
 
 function relTime(iso: string | undefined): string {
@@ -103,6 +117,26 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
     settings.defaultAgent === 'codex' ? 'codex' : settings.defaultAgent === 'opencode' ? 'opencode' : settings.defaultAgent === 'pi' ? 'pi' : 'claude'
   )
   const [modelOverride, setModelOverride] = useState('')
+  const [workflowChoice, setWorkflowChoice] = useState('')
+  const definitions = useWorkflowDefinitions()
+  const showWorkflow = settings.labs.workflows && mode === 'fresh'
+  const workflowOptions = useMemo<WorkflowOption[]>(
+    () =>
+      showWorkflow
+        ? definitionsForRepo(definitions, selectedRepo || null)
+            .map((summary) => ({
+              id: summary.id,
+              label: workflowOptionLabel(summary.name, summary.scope === 'repo', summary.issues[0]),
+              name: summary.name,
+              broken: summary.issues.length > 0
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+        : [],
+    [showWorkflow, definitions, selectedRepo]
+  )
+  const workflowDefId = workflowOptions.some((option) => option.id === workflowChoice && !option.broken)
+    ? workflowChoice
+    : ''
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const branchRef = useRef<HTMLInputElement>(null)
@@ -203,13 +237,14 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
         prompt.trim(),
         parsedTeleport || undefined,
         effectiveAgent,
-        modelOverride.trim() || undefined
+        modelOverride.trim() || undefined,
+        workflowDefId || undefined
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create worktree')
       setSubmitting(false)
     }
-  }, [effectiveBranch, prompt, canSubmit, onSubmit, parsedTeleport, selectedRepo, mode, agentKindOverride, modelOverride])
+  }, [effectiveBranch, prompt, canSubmit, onSubmit, parsedTeleport, selectedRepo, mode, agentKindOverride, modelOverride, workflowDefId])
 
   const cycleRepo = useCallback((direction: 1 | -1) => {
     if (repoRoots.length <= 1) return
@@ -380,7 +415,38 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
               </label>
             )}
 
-            {mode === 'fresh' && (
+            {showWorkflow && (
+              <div className="flex items-center gap-2 mt-5">
+                <label
+                  htmlFor="new-worktree-workflow"
+                  className="text-xs font-semibold uppercase tracking-wider text-dim shrink-0"
+                >
+                  Workflow
+                </label>
+                <select
+                  id="new-worktree-workflow"
+                  value={workflowDefId}
+                  onChange={(e) => setWorkflowChoice(e.target.value)}
+                  disabled={submitting}
+                  className="flex-1 min-w-0 bg-app border border-border-strong rounded px-2 py-1 text-xs text-fg-bright outline-none focus:border-accent disabled:opacity-50 cursor-pointer"
+                >
+                  <option value="">None</option>
+                  {workflowOptions.map((option) => (
+                    <option key={option.id} value={option.id} disabled={option.broken}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {workflowDefId !== '' && (
+              <p className="mt-2 text-xs text-dim">
+                The launch sheet opens on the new worktree to start this workflow.
+              </p>
+            )}
+
+            {mode === 'fresh' && workflowDefId === '' && (
               <label className="block mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-dim">
@@ -485,7 +551,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
               </>
             )}
 
-            {mode !== 'pr' && (
+            {mode !== 'pr' && workflowDefId === '' && (
               <AgentModelRow
                 mode={mode}
                 agentKind={agentKindOverride}
@@ -554,7 +620,7 @@ export function NewWorktreeScreen({ onSubmit, onPRSubmit, onCancel, repoRoots, d
             )}
           </div>
 
-          {mode === 'fresh' && (
+          {mode === 'fresh' && workflowDefId === '' && (
           <div className="mt-10">
             <div className="mb-3 px-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-dim">

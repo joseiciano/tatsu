@@ -165,6 +165,7 @@ export class PanesFSM {
   private store: Store
   private opts: PanesFSMOptions
   private sleepingPanes = new Map<string, PaneNode>()
+  private workflowReserved = new Set<string>()
 
   constructor(store: Store, opts: PanesFSMOptions) {
     this.store = store
@@ -306,6 +307,13 @@ export class PanesFSM {
       this.sleepingPanes.delete(wtPath)
       this.commit(wtPath, sleeping)
       return sleeping
+    }
+
+    if (this.workflowReserved.delete(wtPath)) {
+      const shellTab: TerminalTab = { id: `shell-${wtPath}-${Date.now()}`, type: 'shell', label: 'Shell' }
+      const shellOnly: PaneLeaf = { type: 'leaf', id: newPaneId(), tabs: [shellTab], activeTabId: shellTab.id }
+      this.commit(wtPath, shellOnly)
+      return shellOnly
     }
 
     const agentKind = opts?.agentKind ?? this.opts.getDefaultAgentKind?.() ?? 'claude'
@@ -760,7 +768,16 @@ export class PanesFSM {
     this.opts.persist(this.buildPersistPayload())
   }
 
+  reserveForWorkflow(wtPath: string): void {
+    this.workflowReserved.add(wtPath)
+  }
+
+  releaseWorkflowReservation(wtPath: string): void {
+    this.workflowReserved.delete(wtPath)
+  }
+
   clearForWorktree(wtPath: string): void {
+    this.workflowReserved.delete(wtPath)
     const inLive = wtPath in this.getAllPanes()
     const inSleeping = this.sleepingPanes.delete(wtPath)
     if (!inLive && !inSleeping) return

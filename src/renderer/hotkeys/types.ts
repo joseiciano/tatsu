@@ -32,6 +32,7 @@ export type Action =
   | 'openInEditor'
   | 'toggleCommandCenter'
   | 'toggleWorkflows'
+  | 'runWorkflow'
   | 'commandPalette'
   | 'fileQuickOpen'
   | 'splitPaneRight'
@@ -58,6 +59,11 @@ export interface HotkeyBinding {
   key: string
   modifiers: Modifiers
 }
+
+export type UnboundAction = 'runWorkflow'
+
+export type HotkeyBindings = Record<Exclude<Action, UnboundAction>, HotkeyBinding> &
+  Partial<Record<UnboundAction, HotkeyBinding>>
 
 export type CategoryId =
   | 'navigation'
