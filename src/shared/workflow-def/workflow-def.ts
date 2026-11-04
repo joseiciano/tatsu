@@ -540,6 +540,15 @@ export function needsClosure(steps: readonly NeedsNode[], stepId: string): Set<s
   return seen
 }
 
+export function loopSpan(steps: readonly (NeedsNode & { loop?: Pick<WorkflowLoop, 'back_to'> })[], loopingId: string): string[] {
+  const backTo = steps.find((step) => step.id === loopingId)?.loop?.back_to
+  if (backTo === undefined) return []
+  const upstream = needsClosure(steps, loopingId)
+  return steps
+    .map((step) => step.id)
+    .filter((id) => (id === loopingId || upstream.has(id)) && (id === backTo || needsClosure(steps, id).has(backTo)))
+}
+
 export function concurrentPairs(steps: readonly NeedsNode[]): [string, string][] {
   const closures = steps.map((step) => needsClosure(steps, step.id))
   const pairs: [string, string][] = []
@@ -803,15 +812,11 @@ class TemplateStage {
     this.loopSpans = new Map()
     this.itemAvailable = def.item_input !== undefined || def.steps.some((s) => s.kind === 'foreach')
     for (const step of def.steps) {
-      if (step.loop) this.addLoopSpan(step.id, step.loop.back_to)
+      if (step.loop) this.addLoopSpan(loopSpan(def.steps, step.id))
     }
   }
 
-  addLoopSpan(looping: string, backTo: string): void {
-    const upstream = this.closures.get(looping) ?? new Set<string>()
-    const span = this.def.steps
-      .map((s) => s.id)
-      .filter((id) => (id === looping || upstream.has(id)) && (id === backTo || (this.closures.get(id)?.has(backTo) ?? false)))
+  addLoopSpan(span: readonly string[]): void {
     for (const id of span) {
       const set = this.loopSpans.get(id) ?? new Set<string>()
       for (const member of span) set.add(member)

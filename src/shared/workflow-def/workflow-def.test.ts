@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ALL_WORKFLOW_FEATURES, BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES, concurrentPairs, evaluateCondition, needsClosure, validateWorkflowDefinition, type ValidateWorkflowOptions, type WorkflowCondition, type WorkflowDiagnostic, type WorkflowFeature } from '.'
+import { ALL_WORKFLOW_FEATURES, BASELINE_SUPPORTED_FEATURES, WORKFLOW_FEATURES, concurrentPairs, evaluateCondition, loopSpan, needsClosure, validateWorkflowDefinition, type ValidateWorkflowOptions, type WorkflowCondition, type WorkflowDiagnostic, type WorkflowFeature } from '.'
 
 const PLAN_EXAMPLE = `name: plan-build-review
 inputs:
@@ -404,6 +404,36 @@ describe('needsClosure', () => {
   })
 })
 
+describe('loopSpan', () => {
+  const loop = { back_to: 'b' }
+  it.each([
+    {
+      name: 'linear chain from back_to through the looping step',
+      steps: [{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }, { id: 'c', needs: ['b'] }, { id: 'd', needs: ['c'], loop }, { id: 'e', needs: ['d'] }],
+      of: 'd',
+      expected: ['b', 'c', 'd']
+    },
+    {
+      name: 'diamond, leaving out a side branch and an upstream step that does not need back_to',
+      steps: [
+        { id: 'a', needs: [] },
+        { id: 'b', needs: ['a'] },
+        { id: 'l', needs: ['b'] },
+        { id: 'r', needs: ['b'] },
+        { id: 'x', needs: ['a'] },
+        { id: 'side', needs: ['b'] },
+        { id: 'd', needs: ['l', 'r', 'x'], loop }
+      ],
+      of: 'd',
+      expected: ['b', 'l', 'r', 'd']
+    },
+    { name: 'a step without a loop', steps: [{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }], of: 'b', expected: [] },
+    { name: 'an unknown step', steps: [{ id: 'a', needs: [] }], of: 'zz', expected: [] }
+  ])('$name', ({ steps, of, expected }) => {
+    expect(loopSpan(steps, of)).toEqual(expected)
+  })
+})
+
 describe('validateWorkflowDefinition: graph and per-kind errors', () => {
   const A = '    agent: claude\n    prompt: go\n'
   const loop = (target: string) => `    loop: { back_to: ${target}, until: { field: v, equals: x }, max: 2 }\n`
@@ -654,11 +684,18 @@ describe('validateWorkflowDefinition: unsupported features', () => {
     }))
 
   it('reports each unsupported feature in the plan example once, in file order, at the key or offending value', () => {
-    expect(featuresOf(PLAN_EXAMPLE)).toEqual([
+    const supported = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'item_input' && f !== 'loop' && f !== 'on_loop')
+    expect(featuresOf(PLAN_EXAMPLE, supported)).toEqual([
       { code: 'unsupported-feature', feature: 'item_input', path: 'item_input', line: 4, col: 1 },
       { code: 'unsupported-feature', feature: 'on_loop', path: 'steps[1].on_loop', line: 18, col: 5 },
       { code: 'unsupported-feature', feature: 'loop', path: 'steps[3].loop', line: 29, col: 5 }
     ])
+  })
+
+  it('supports loop and on_loop by default, leaving only item_input in the plan example', () => {
+    expect(WORKFLOW_FEATURES.loop.supported).toBe(true)
+    expect(WORKFLOW_FEATURES.on_loop.supported).toBe(true)
+    expect(featuresOf(PLAN_EXAMPLE).map((d) => d.feature)).toEqual(['item_input'])
   })
 
   it.each(['codex', 'opencode'])('accepts a %s agent step by default', (agent) => {
@@ -680,7 +717,8 @@ describe('validateWorkflowDefinition: unsupported features', () => {
   })
 
   it('names the phase that adds the feature in the message', () => {
-    const loop = validateWorkflowDefinition(PLAN_EXAMPLE).diagnostics.find((d) => d.feature === 'loop')
+    const supportedFeatures = ALL_WORKFLOW_FEATURES.filter((f) => f !== 'loop')
+    const loop = validateWorkflowDefinition(PLAN_EXAMPLE, { supportedFeatures }).diagnostics.find((d) => d.feature === 'loop')
     expect(loop?.message).toBe(WORKFLOW_FEATURES.loop.message)
     expect(loop?.message).toContain('phase 4')
   })
