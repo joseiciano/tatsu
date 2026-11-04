@@ -2,7 +2,15 @@ import { useEffect, useId, useRef } from 'react'
 import { Loader2, Play, ShieldAlert, X } from 'lucide-react'
 import type { HooksConsent } from '../../../../shared/state/hooks'
 import { useFocusTrap } from '../../../hooks/useFocusTrap'
-import type { ExistingWorktreeOption, LaunchInputField, TrustStepRow } from '../launch-sheet-helpers'
+import type { WorkflowAgent } from '../../../../shared/workflow-def'
+import type {
+  ExistingWorktreeOption,
+  LaunchInputField,
+  OverrideDraft,
+  OverrideRow,
+  TrustStepRow
+} from '../launch-sheet-helpers'
+import { OverridesPanel } from './OverridesPanel'
 import { TrustPanel } from './TrustPanel'
 
 export interface LaunchSheetOption {
@@ -16,6 +24,14 @@ export interface LaunchSheetTrust {
   source: string
   rows: TrustStepRow[]
   trusting: boolean
+}
+
+export interface LaunchSheetOverrides {
+  rows: OverrideRow[]
+  drafts: Record<string, OverrideDraft>
+  changedCount: number
+  expanded: boolean
+  invalidStep: string | null
 }
 
 export type TargetMode = 'new' | 'existing'
@@ -44,6 +60,7 @@ export interface LaunchSheetFormProps {
   needsFull: boolean
   allowFull: boolean
   trust: LaunchSheetTrust | null
+  overrides: LaunchSheetOverrides | null
   blockReason: string | null
   submitting: boolean
   error: string | null
@@ -56,6 +73,9 @@ export interface LaunchSheetFormProps {
   onInstallHooks: () => void
   onAllowFullChange: (allowFull: boolean) => void
   onTrust: () => void
+  onToggleOverrides: () => void
+  onOverrideAgentChange: (stepId: string, agent: WorkflowAgent) => void
+  onOverrideModelChange: (stepId: string, model: string) => void
   onStart: () => void
   onClose: () => void
 }
@@ -85,6 +105,7 @@ export function LaunchSheetForm({
   needsFull,
   allowFull,
   trust,
+  overrides,
   blockReason,
   submitting,
   error,
@@ -97,6 +118,9 @@ export function LaunchSheetForm({
   onInstallHooks,
   onAllowFullChange,
   onTrust,
+  onToggleOverrides,
+  onOverrideAgentChange,
+  onOverrideModelChange,
   onStart,
   onClose
 }: LaunchSheetFormProps): JSX.Element {
@@ -316,6 +340,21 @@ export function LaunchSheetForm({
               </div>
             )
           })}
+
+          {overrides !== null && (
+            <OverridesPanel
+              rows={overrides.rows}
+              drafts={overrides.drafts}
+              changedCount={overrides.changedCount}
+              expanded={overrides.expanded}
+              disabled={submitting}
+              invalidStep={overrides.invalidStep}
+              reasonId={reasonId}
+              onToggle={onToggleOverrides}
+              onAgentChange={onOverrideAgentChange}
+              onModelChange={onOverrideModelChange}
+            />
+          )}
 
           {needsFull && (
             <label className="flex items-start gap-2 rounded border border-warning/40 bg-warning/10 px-3 py-2 cursor-pointer">

@@ -3,18 +3,21 @@ import { useBackend } from '../../../backend'
 import { sanitizeBranchInput } from '../../../branch-name'
 import { useAppState, useHooks, useWorkflowDefinitions, useWorkflowTrust, useWorktreeRepoRoot } from '../../../store'
 import type { WorkflowDefinitionDetail, WorkflowScope } from '../../../../shared/state/workflows'
-import type { ResolvedDefinition } from '../../../../shared/workflow-def'
+import type { ResolvedDefinition, WorkflowAgent } from '../../../../shared/workflow-def'
 import {
   buildInputFields,
   definitionsForRepo,
   existingWorktreeOptions,
   needsFull as definitionNeedsFull,
+  overrideRows,
+  resolveOverrides,
   startBlockReason,
   targetBlockReason,
   trustNeeded,
   trustStepRows,
   workflowBranchName,
-  type LaunchTarget
+  type LaunchTarget,
+  type OverrideDraft
 } from '../launch-sheet-helpers'
 import {
   LaunchSheetForm,
@@ -38,6 +41,13 @@ interface LoadedDefinition {
   scope: WorkflowScope
   detailHash: string
 }
+
+interface OverrideDrafts {
+  key: string
+  drafts: Record<string, OverrideDraft>
+}
+
+const NO_DRAFTS: Record<string, OverrideDraft> = {}
 
 function basename(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path
@@ -65,6 +75,8 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
   const [loaded, setLoaded] = useState<LoadedDefinition | null>(null)
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [allowFullFor, setAllowFullFor] = useState<string | null>(null)
+  const [overrideDrafts, setOverrideDrafts] = useState<OverrideDrafts | null>(null)
+  const [overridesOpen, setOverridesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [installingHooks, setInstallingHooks] = useState(false)
   const [trusting, setTrusting] = useState(false)
@@ -132,7 +144,12 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
   const loading = !broken && (loaded?.id !== summaryId || loaded?.hash !== summaryHash)
   const definition = !broken && !loading ? loaded?.definition ?? null : null
   const fields = useMemo(() => buildInputFields(definition), [definition])
-  const needsFull = definitionNeedsFull(definition)
+  const drafts = confirmKey !== null && overrideDrafts?.key === confirmKey ? overrideDrafts.drafts : NO_DRAFTS
+  const resolved = useMemo(() => (definition ? resolveOverrides(definition, drafts) : null), [definition, drafts])
+  const effective = resolved?.effective ?? null
+  const overrides = resolved?.overrides
+  const overrideList = useMemo(() => overrideRows(definition), [definition])
+  const needsFull = definitionNeedsFull(effective)
   const needsTrust =
     loaded !== null && definition !== null
       ? trustNeeded({ scope: loaded.scope, hash: loaded.detailHash, trustedHash })
@@ -163,14 +180,46 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
     : targetReason ??
       (loading
         ? 'Loading workflow…'
-        : startBlockReason({ consent, codexTrust, inputs, needsFull, allowFull, trustNeeded: needsTrust, definition }))
+        : resolved?.reason ??
+          startBlockReason({
+            consent,
+            codexTrust,
+            inputs,
+            needsFull,
+            allowFull,
+            trustNeeded: needsTrust,
+            definition: effective
+          }))
 
   const handleSelect = useCallback((id: string) => {
     setChosenId(id)
     setInputs({})
     setAllowFullFor(null)
+    setOverrideDrafts(null)
     setError(null)
   }, [])
+
+  const updateDraft = useCallback(
+    (stepId: string, update: (draft: OverrideDraft) => OverrideDraft) => {
+      if (confirmKey === null) return
+      setOverrideDrafts((prev) => {
+        const base = prev?.key === confirmKey ? prev.drafts : {}
+        const current = Object.hasOwn(base, stepId) ? base[stepId] : {}
+        return { key: confirmKey, drafts: { ...base, [stepId]: update(current) } }
+      })
+    },
+    [confirmKey]
+  )
+
+  const handleOverrideAgent = useCallback(
+    (stepId: string, agent: WorkflowAgent) => updateDraft(stepId, () => ({ agent })),
+    [updateDraft]
+  )
+
+  const handleOverrideModel = useCallback(
+    (stepId: string, model: string) => updateDraft(stepId, (draft) => ({ ...draft, model })),
+    [updateDraft]
+  )
 
   const handleInputChange = useCallback((name: string, value: string) => {
     setInputs((prev) => ({ ...prev, [name]: value }))
@@ -239,7 +288,8 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
         defId: summaryId,
         worktreePath: path,
         inputs: declared,
-        ...(needsFull && allowFull ? { allowFull: true } : {})
+        ...(needsFull && allowFull ? { allowFull: true } : {}),
+        ...(overrides ? { overrides } : {})
       })
       if (!mounted.current) return
       if ('runId' in response) {
@@ -253,7 +303,20 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
     } finally {
       if (mounted.current) setSubmitting(false)
     }
-  }, [backend, blockReason, summaryId, fields, inputs, target, createWorktree, needsFull, allowFull, onStarted, onClose])
+  }, [
+    backend,
+    blockReason,
+    summaryId,
+    fields,
+    inputs,
+    target,
+    createWorktree,
+    needsFull,
+    allowFull,
+    overrides,
+    onStarted,
+    onClose
+  ])
 
   const targetView: LaunchSheetTargetView =
     worktreePath !== undefined
@@ -281,6 +344,17 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
       needsFull={needsFull}
       allowFull={allowFull}
       trust={trust}
+      overrides={
+        overrideList.length === 0
+          ? null
+          : {
+              rows: overrideList,
+              drafts,
+              changedCount: overrides ? Object.keys(overrides).length : 0,
+              expanded: overridesOpen,
+              invalidStep: resolved?.invalidStep ?? null
+            }
+      }
       blockReason={blockReason}
       submitting={submitting}
       error={error}
@@ -300,6 +374,9 @@ export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetPro
       onInstallHooks={() => void handleInstallHooks()}
       onAllowFullChange={(checked) => setAllowFullFor(checked ? confirmKey : null)}
       onTrust={() => void handleTrust()}
+      onToggleOverrides={() => setOverridesOpen((open) => !open)}
+      onOverrideAgentChange={handleOverrideAgent}
+      onOverrideModelChange={handleOverrideModel}
       onStart={() => void handleStart()}
       onClose={onClose}
     />

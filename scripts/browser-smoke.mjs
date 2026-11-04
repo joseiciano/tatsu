@@ -582,6 +582,56 @@ async function flowRepoTrust(page, backend) {
   })
 }
 
+const OVERRIDE_MODEL = 'fake/opencode-model'
+
+async function flowLaunchOverrides(page, backend) {
+  await scenario(page, 'launch-overrides', async (shot) => {
+    const dataDir = process.env.HARNESS_DATA_DIR
+    if (!dataDir) throw new Error('launch-overrides needs HARNESS_DATA_DIR to read the run record from disk')
+    const row = worktreeRow(page)
+    await row.scrollIntoViewIfNeeded()
+    await row.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Run workflow here…' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Run workflow' })
+    await sheet.getByLabel('Workflow', { exact: true }).selectOption({ label: 'smoke' })
+    const toggle = sheet.getByRole('button', { name: 'Overrides', exact: true })
+    if ((await toggle.getAttribute('aria-expanded')) !== 'false') throw new Error('Overrides is not collapsed by default')
+    await toggle.click()
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') throw new Error('Overrides did not expand')
+    await sheet.getByLabel('Agent for plan', { exact: true }).selectOption('opencode')
+    await sheet.getByLabel('Model for plan', { exact: true }).fill(OVERRIDE_MODEL)
+    await sheet.getByRole('button', { name: 'Overrides (1 changed)', exact: true }).waitFor()
+    await shot('overrides')
+    const opencodeTabs = page.getByRole('button', { name: 'Close tab ⚙ plan · opencode', exact: true })
+    const before = await opencodeTabs.count()
+    await sheet.getByRole('button', { name: 'Start', exact: true }).click()
+    await sheet.waitFor({ state: 'detached' })
+
+    const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+    while ((await opencodeTabs.count()) <= before) {
+      if (Date.now() > deadline) throw new Error(`no new ⚙ plan · opencode tab (still ${before})`)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    log(`launch-overrides: ⚙ plan · opencode tabs ${before} -> ${await opencodeTabs.count()}`)
+    await shot('opencode-tab')
+    const runId = await newestPersonalRunId(backend, 'smoke')
+    await waitForRunStatus(backend, runId, 'done')
+    const record = JSON.parse(readFileSync(join(dataDir, 'workflow-runs', `${runId}.json`), 'utf8'))
+    if (record.overriddenFrom?.plan?.agent !== 'claude') {
+      throw new Error(`overriddenFrom ${JSON.stringify(record.overriddenFrom)}, expected the original claude plan step`)
+    }
+    const plan = record.definition.steps.find((s) => s.id === 'plan')
+    if (plan?.agent !== 'opencode' || plan.model !== OVERRIDE_MODEL) {
+      throw new Error(`plan step ${JSON.stringify(plan)}, expected opencode/${OVERRIDE_MODEL}`)
+    }
+    const attempts = record.attempts.filter((a) => a.stepId === 'plan').map((a) => `${a.n}:${a.agent}:${a.status}`)
+    if (attempts.join(',') !== '1:opencode:done') throw new Error(`plan attempts ${JSON.stringify(attempts)}, expected 1:opencode:done`)
+    log(`launch-overrides: run ${runId} done with plan overridden from claude to opencode (${attempts.join(', ')})`)
+    await page.getByRole('img', { name: /^Workflow steps:/ }).waitFor({ state: 'detached' })
+    await shot('run-done')
+  })
+}
+
 async function flowLaunchTarget(page, backend) {
   await scenario(page, 'launch-target', async (shot) => {
     const dataDir = process.env.HARNESS_DATA_DIR
@@ -667,6 +717,7 @@ async function main() {
     await flowAttemptDiff(page, backend)
     await flowSwapStep(page, backend)
     await flowRepoTrust(page, backend)
+    await flowLaunchOverrides(page, backend)
     await flowLaunchTarget(page, backend)
   } catch {
     failed = true
