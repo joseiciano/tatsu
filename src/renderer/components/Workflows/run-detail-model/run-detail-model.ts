@@ -12,6 +12,7 @@ export type RunDetailActionKind =
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
+  | 'swap'
   | 'mark-done'
   | 'skip'
   | 'cancel-step'
@@ -47,6 +48,7 @@ export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
   'resume',
   'retry',
   'retry-from-clean',
+  'swap',
   'mark-done',
   'skip',
   'cancel-step',
@@ -55,6 +57,8 @@ export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
 ]
 
 const NO_VALUE = '—'
+
+const SWAPPABLE_STATUSES: ReadonlySet<WorkflowAttemptStatus> = new Set(['failed', 'cancelled', 'interrupted'])
 
 function fromNeedsYou(kind: Exclude<NeedsYouActionKind, 'jump'>): RunDetailActionKind {
   return kind === 'cancel' ? 'cancel-run' : kind
@@ -109,6 +113,7 @@ function runActions(record: WorkflowRunRecord, run: WorkflowRun, tabExists: bool
   for (const kind of needsYouActions({ reason: run.pausedReason, step: context.step, attempt: context.attempt, tabExists: false })) {
     if (kind !== 'jump') actions.add(fromNeedsYou(kind))
   }
+  if (context.step.kind === 'agent' && latest && SWAPPABLE_STATUSES.has(latest.status)) actions.add('swap')
   const workflow = { runId: record.runId, stepId: context.stepId, attemptId: latest?.attemptId ?? '' }
   if (latest && stepTabOverlayMode({ workflow }, latest, record) === 'result-with-mark-done') actions.add('mark-done')
   return actions

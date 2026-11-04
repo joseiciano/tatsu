@@ -26,7 +26,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     resumeWorkflowStep: vi.fn(),
     cancelWorkflowRun: vi.fn(),
     cancelWorkflowStep: vi.fn(),
-    markWorkflowStepDone: vi.fn()
+    markWorkflowStepDone: vi.fn(),
+    swapWorkflowStep: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -197,7 +198,8 @@ beforeEach(() => {
     backendApi.resumeWorkflowStep,
     backendApi.cancelWorkflowRun,
     backendApi.cancelWorkflowStep,
-    backendApi.markWorkflowStepDone
+    backendApi.markWorkflowStepDone,
+    backendApi.swapWorkflowStep
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -304,7 +306,7 @@ describe('RunDetailContainer', () => {
     backendApi.getWorkflowRun.mockResolvedValue(record([PLAN_ATTEMPT, { ...EXIT_FAILED, baseSnapshot: { commit: 'c', ref: 'r' } }]))
     setState(pausedRun(), DEFAULT_ATTEMPTS)
     await render()
-    expect(actionButtons()).toEqual(['Retry', 'Retry from clean', 'Mark done', 'Skip', 'Cancel run'])
+    expect(actionButtons()).toEqual(['Retry', 'Retry from clean', 'Swap harness/model', 'Mark done', 'Skip', 'Cancel run'])
     expect(actionButton('Retry').getAttribute('aria-label')).toBe('Retry: exit')
     await click(actionButton('Retry'))
     await click(actionButton('Skip'))
@@ -322,7 +324,7 @@ describe('RunDetailContainer', () => {
   it('hides Retry from clean when the latest attempt has no base snapshot', async () => {
     setState(pausedRun(), DEFAULT_ATTEMPTS)
     await render()
-    expect(actionButtons()).toEqual(['Retry', 'Mark done', 'Skip', 'Cancel run'])
+    expect(actionButtons()).toEqual(['Retry', 'Swap harness/model', 'Mark done', 'Skip', 'Cancel run'])
   })
 
   it('marks the cursor step done from the inline form', async () => {
@@ -356,6 +358,78 @@ describe('RunDetailContainer', () => {
     await click([...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel step'))
     expect(backendApi.cancelWorkflowStep).toHaveBeenCalledWith('r1', 'exit')
     expect(document.body.querySelector('[role="alertdialog"]')).toBeNull()
+  })
+
+  describe('swap harness/model', () => {
+    const swapDialog = (): HTMLElement => {
+      const dialog = document.body.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]')
+      if (!dialog) throw new Error('no swap dialog')
+      return dialog
+    }
+    const swapButton = (): HTMLButtonElement => {
+      const found = [...swapDialog().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Swap and retry')
+      if (!found) throw new Error('no Swap and retry button')
+      return found
+    }
+    async function change(el: HTMLInputElement | HTMLSelectElement | null, value: string, event = 'input'): Promise<void> {
+      if (!el) throw new Error('no field')
+      const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, value)
+        el.dispatchEvent(new Event(event, { bubbles: true }))
+      })
+    }
+    async function openSwap(): Promise<void> {
+      await click(actionButton('Swap harness/model'))
+      expect(actionButton('Swap harness/model').getAttribute('aria-label')).toBe('Swap harness/model: exit')
+    }
+
+    it('swaps the failed step to another agent and model and closes', async () => {
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      await openSwap()
+      const dialog = swapDialog()
+      expect(dialog.getAttribute('aria-labelledby')).toBeTruthy()
+      expect(document.activeElement).toBe(dialog.querySelector('select'))
+      expect(swapButton().disabled).toBe(true)
+      await change(dialog.querySelector('select'), 'codex', 'change')
+      await change(dialog.querySelector('input[type="text"]'), ' gpt-test ')
+      await click(swapButton())
+      expect(backendApi.swapWorkflowStep).toHaveBeenCalledWith('r1', 'exit', { agent: 'codex', model: 'gpt-test' })
+      expect(document.body.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull()
+    })
+
+    it('keeps the dialog open with the refusal message', async () => {
+      backendApi.swapWorkflowStep.mockResolvedValue({ error: 'Open a Codex tab and run /hooks' })
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      await openSwap()
+      await change(swapDialog().querySelector('select'), 'codex', 'change')
+      await click(swapButton())
+      expect(swapDialog().querySelector('[role="alert"]')?.textContent).toBe('Open a Codex tab and run /hooks')
+    })
+
+    it('needs the full-access box for a full step and sends allowFull', async () => {
+      const full: ResolvedWorkflowStep = { ...EXIT, permissions: 'full' }
+      backendApi.getWorkflowRun.mockResolvedValue(record([PLAN_ATTEMPT, EXIT_FAILED], { definition: { name: 'Ship it', inputs: {}, steps: [PLAN, full] } }))
+      setState(pausedRun(), DEFAULT_ATTEMPTS)
+      await render()
+      await openSwap()
+      await change(swapDialog().querySelector('select'), 'opencode', 'change')
+      expect(swapButton().disabled).toBe(true)
+      await click(swapDialog().querySelector('input[type="checkbox"]'))
+      await click(swapButton())
+      expect(backendApi.swapWorkflowStep).toHaveBeenCalledWith('r1', 'exit', { agent: 'opencode', allowFull: true })
+    })
+
+    it('is not offered for a failed shell step', async () => {
+      backendApi.getWorkflowRun.mockResolvedValue(
+        record([{ ...PLAN_ATTEMPT, status: 'failed' }], { cursor: 0, steps: { plan: 'failed', exit: 'pending' } })
+      )
+      setState(pausedRun({ cursorStepId: 'plan' }), DEFAULT_ATTEMPTS)
+      await render()
+      expect(actionButtons()).not.toContain('Swap harness/model')
+    })
   })
 
   it('goes back to the run list', async () => {

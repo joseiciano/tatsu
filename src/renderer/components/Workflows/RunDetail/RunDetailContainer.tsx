@@ -15,7 +15,8 @@ import type {
   WorkflowAttemptRecord,
   WorkflowMarkDonePayload,
   WorkflowRunRecord,
-  WorkflowStepStatus
+  WorkflowStepStatus,
+  WorkflowSwapStepPayload
 } from '../../../../shared/state/workflows'
 import { RetryFromCleanDialog, type JumpToTabHandler } from '../NeedsYou'
 import { runCardModel } from '../run-card-model'
@@ -25,9 +26,11 @@ import { confirmRetryFromClean, runNeedsYouAction } from '../workflow-run-helper
 import { AttemptChangesContainer } from './AttemptChangesContainer'
 import type { AttemptResultState } from './AttemptResult'
 import { RunDetail } from './RunDetail'
+import { SwapStepDialog } from './SwapStepDialog'
 
 const ACTION_FAILED = 'Action failed'
 const CANCEL_STEP_FAILED = 'Could not cancel the step'
+const SWAP_FAILED = 'Could not swap the step'
 
 export interface RunDetailContainerProps {
   runId: string
@@ -151,6 +154,7 @@ export function RunDetailContainer({
   const [confirmingClean, setConfirmingClean] = useState(false)
   const [cancelStep, setCancelStep] = useState<{ busy: boolean; error: string | null } | null>(null)
   const [markDoneOpen, setMarkDoneOpen] = useState(false)
+  const [swap, setSwap] = useState<{ busy: boolean; error: string | null } | null>(null)
 
   const settle = useCallback(async (call: () => Promise<WorkflowActionResponse>) => {
     setBusy(true)
@@ -167,6 +171,7 @@ export function RunDetailContainer({
 
   const closeConfirmClean = useCallback(() => setConfirmingClean(false), [])
   const closeCancelStep = useCallback(() => setCancelStep(null), [])
+  const closeSwap = useCallback(() => setSwap(null), [])
 
   const tabExists = tab !== null && !!onJumpToTab
   const model = useMemo(
@@ -175,10 +180,15 @@ export function RunDetailContainer({
   )
   const stepId = model?.actionStepId ?? null
   const markDoneAvailable = model?.actions.includes('mark-done') ?? false
+  const swapAvailable = model?.actions.includes('swap') ?? false
 
   useEffect(() => {
     if (!markDoneAvailable) setMarkDoneOpen(false)
   }, [markDoneAvailable])
+
+  useEffect(() => {
+    if (!swapAvailable) setSwap((open) => (open?.busy ? open : null))
+  }, [swapAvailable])
 
   if (!run) {
     return (
@@ -214,6 +224,9 @@ export function RunDetailContainer({
       case 'cancel-step':
         if (stepId) setCancelStep({ busy: false, error: null })
         return
+      case 'swap':
+        if (stepId) setSwap({ busy: false, error: null })
+        return
       case 'retry':
       case 'skip':
       case 'resume':
@@ -242,10 +255,22 @@ export function RunDetailContainer({
     }
   }
 
+  const onConfirmSwap = async (payload: WorkflowSwapStepPayload): Promise<void> => {
+    if (!stepId) return
+    setSwap({ busy: true, error: null })
+    try {
+      const response = await backend.swapWorkflowStep(runId, stepId, payload)
+      setSwap('error' in response ? { busy: false, error: response.error } : null)
+    } catch {
+      setSwap({ busy: false, error: SWAP_FAILED })
+    }
+  }
+
   const markDone = (payload: WorkflowMarkDonePayload): Promise<WorkflowActionResponse> =>
     stepId ? backend.markWorkflowStepDone(runId, stepId, payload) : Promise.resolve({ error: ACTION_FAILED })
   const markDoneStep = record?.definition.steps.find((s) => s.id === stepId)
   const showMarkDone = markDoneOpen && markDoneAvailable && stepId !== null
+  const agentStep = markDoneStep?.kind === 'agent' ? markDoneStep : null
 
   return (
     <>
@@ -290,6 +315,18 @@ export function RunDetailContainer({
           confirmLabel="Cancel step"
           onConfirm={() => void onConfirmCancelStep()}
           onCancel={closeCancelStep}
+        />
+      )}
+      {swap && stepId && agentStep && (
+        <SwapStepDialog
+          stepId={stepId}
+          agent={agentStep.agent}
+          model={agentStep.model}
+          full={agentStep.permissions === 'full'}
+          busy={swap.busy}
+          error={swap.error}
+          onConfirm={(payload) => void onConfirmSwap(payload)}
+          onCancel={closeSwap}
         />
       )}
     </>

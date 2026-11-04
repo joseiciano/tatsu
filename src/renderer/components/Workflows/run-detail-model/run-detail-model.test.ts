@@ -130,9 +130,9 @@ describe('runDetailModel actions', () => {
   const failedExit = (extra: Partial<WorkflowAttemptRecord> = {}) =>
     attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'failed', ...extra })
 
-  it('offers Retry, Retry from clean, Mark done, Skip and Cancel run on a failed agent step with a base snapshot', () => {
+  it('offers Retry, Retry from clean, Swap, Mark done, Skip and Cancel run on a failed agent step with a base snapshot', () => {
     const rec = record([PLAN_DONE, failedExit({ baseSnapshot: SNAPSHOT })], { pausedReason: 'step-failed' })
-    expect(actionsFor(rec)).toEqual(['retry', 'retry-from-clean', 'mark-done', 'skip', 'cancel-run'])
+    expect(actionsFor(rec)).toEqual(['retry', 'retry-from-clean', 'swap', 'mark-done', 'skip', 'cancel-run'])
     expect(runDetailModel({ record: rec, run: sliceRun(rec), tabExists: false, now: NOW }).actionStepId).toBe('exit')
   })
 
@@ -140,7 +140,21 @@ describe('runDetailModel actions', () => {
     const rec = record([PLAN_DONE, failedExit({ baseSnapshot: SNAPSHOT, attemptId: 'a-old' }), failedExit({ n: 2 })], {
       pausedReason: 'step-failed'
     })
-    expect(actionsFor(rec)).toEqual(['retry', 'mark-done', 'skip', 'cancel-run'])
+    expect(actionsFor(rec)).toEqual(['retry', 'swap', 'mark-done', 'skip', 'cancel-run'])
+  })
+
+  it('offers Swap on a cancelled agent step but not on a failed shell step', () => {
+    const cancelled = record([PLAN_DONE, failedExit({ status: 'cancelled' })], {
+      pausedReason: 'step-failed',
+      steps: { plan: 'done', exit: 'cancelled' }
+    })
+    expect(actionsFor(cancelled)).toContain('swap')
+    const shellFailed = record([attempt({ attemptId: 'a-plan', stepId: 'plan', status: 'failed' })], {
+      pausedReason: 'step-failed',
+      cursor: 0,
+      steps: { plan: 'failed', exit: 'pending' }
+    })
+    expect(actionsFor(shellFailed)).not.toContain('swap')
   })
 
   it('offers Mark done, Retry, Skip and Cancel run when the step needs input', () => {
@@ -156,7 +170,7 @@ describe('runDetailModel actions', () => {
       pausedReason: 'interrupted',
       steps: { plan: 'done', exit: 'interrupted' }
     })
-    expect(actionsFor(rec)).toEqual(['resume', 'retry', 'cancel-run'])
+    expect(actionsFor(rec)).toEqual(['resume', 'retry', 'swap', 'cancel-run'])
   })
 
   it('offers Cancel step and Cancel run while a step runs, plus Jump to tab when its tab exists', () => {
