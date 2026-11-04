@@ -1,0 +1,83 @@
+{
+  "files": {
+    "repos/app/.harness.json": "{\n  \"hidePrPanel\": true,\n  \"hiddenRightPanels\": {\n    \"merge\": false\n  },\n  \"setupCommand\": \"a\"\n}\n"
+  },
+  "steps": [
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "",
+        {
+          "setupCommand": "make"
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "$SANDBOX/repos/app",
+        {
+          "setupCommand": "  pnpm i  "
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "$SANDBOX/repos/app",
+        {
+          "teardownCommand": null,
+          "mergeStrategy": "fast-forward"
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "$SANDBOX/repos/app",
+        {
+          "setupCommand": null
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "$SANDBOX/repos/app",
+        {
+          "hiddenRightPanels": {
+            "scratchpad": false,
+            "commits": false
+          }
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "$SANDBOX/repos/fresh",
+        {
+          "setupCommand": "make"
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        "$SANDBOX/repos/missing/deeper",
+        {
+          "setupCommand": "make"
+        }
+      ]
+    },
+    {
+      "channel": "repoConfig:set",
+      "args": [
+        5,
+        {
+          "setupCommand": "make"
+        }
+      ]
+    }
+  ]
+}

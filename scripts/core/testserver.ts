@@ -76,7 +76,7 @@ function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
 
 // The test server runs the login-shell PATH fix on macOS; a passthrough fake
 // shell and a temp HOME keep the user's real shell and rc files out of it.
-function passthroughShellHome(): string {
+export function passthroughShellHome(): string {
   const home = mkdtempSync(join(tmpdir(), 'tatsu-core-home-'))
   const shell = join(home, 'fake-login-shell')
   writeFileSync(shell, '#!/bin/sh\nexec /bin/sh -c "$2"\n')
@@ -84,13 +84,21 @@ function passthroughShellHome(): string {
   return home
 }
 
-export async function startTestServer(): Promise<TestServer> {
-  const dataDir = mkdtempSync(join(tmpdir(), 'tatsu-core-parity-'))
+export interface StartOptions {
+  dataDir?: string
+  tokenInDataDir?: string
+  env?: NodeJS.ProcessEnv
+}
+
+export async function startTestServer(opts: StartOptions = {}): Promise<TestServer> {
+  const ownsDataDir = opts.dataDir === undefined
+  const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), 'tatsu-core-parity-'))
   const home = passthroughShellHome()
-  const token = randomBytes(24).toString('hex')
-  const child = spawn(BINARY, ['--data-dir', dataDir, '--token', token, '--test-hooks', '--port', '0'], {
+  const token = opts.tokenInDataDir ?? randomBytes(24).toString('hex')
+  const tokenArgs = opts.tokenInDataDir === undefined ? ['--token', token] : []
+  const child = spawn(BINARY, ['--data-dir', dataDir, ...tokenArgs, '--test-hooks', '--port', '0'], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, HOME: home, SHELL: join(home, 'fake-login-shell') }
+    env: { ...(opts.env ?? process.env), HOME: home, SHELL: join(home, 'fake-login-shell') }
   })
   const stop = async (): Promise<void> => {
     child.kill('SIGINT')
@@ -98,7 +106,7 @@ export async function startTestServer(): Promise<TestServer> {
       child.kill('SIGKILL')
       await waitForExit(child, STOP_TIMEOUT_MS)
     }
-    rmSync(dataDir, { recursive: true, force: true })
+    if (ownsDataDir) rmSync(dataDir, { recursive: true, force: true })
     rmSync(home, { recursive: true, force: true })
   }
   try {

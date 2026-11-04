@@ -1,0 +1,47 @@
+{
+  "note": "The seed config has no repo roots and the core test server has no worktree module, so both worktree lists are empty and only the event path runs. The config-write branch is covered by the recorded handler fixtures.",
+  "steps": [
+    {
+      "channel": "scratchpad:setText",
+      "args": [
+        "$SANDBOX/repos/app-wt1",
+        "hello"
+      ]
+    },
+    {
+      "channel": "scratchpad:setText",
+      "args": [
+        "$SANDBOX/repos/app-wt1",
+        ""
+      ]
+    },
+    {
+      "channel": "scratchpad:setText",
+      "args": [
+        "/w/unknown",
+        "note"
+      ]
+    },
+    {
+      "channel": "scratchpad:setText",
+      "args": [
+        42,
+        "note"
+      ]
+    },
+    {
+      "channel": "scratchpad:setText",
+      "args": [
+        "",
+        "note"
+      ]
+    },
+    {
+      "channel": "scratchpad:setText",
+      "args": [
+        "/w/a",
+        7
+      ]
+    }
+  ]
+}

@@ -34,6 +34,7 @@
     "test:watch": "vitest",
     "test:wire": "vitest run --config vitest.wire.config.ts scripts/wire/fixtures.wire.test.ts",
     "test:wire-diff": "node scripts/wire/diff.mjs",
+    "test:core-diff": "node scripts/core/diff.mjs",
     "test:core-parity": "vitest run --config vitest.core.config.ts src/renderer/store/core-parity.core.test.ts",
     "fixtures:record": "node scripts/wire/record-fixtures.mjs",
     "fixtures:record-core": "node scripts/core/record-core.mjs",

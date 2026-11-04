@@ -1,0 +1,118 @@
+{
+  "note": "A successful connections:add and setLastConnected without `when` are left out: Node stamps randomUUID() and Date.now() with no seam in headless, so the id and addedAt can never match. The recorded handler fixtures cover them with fixed ids and clocks.",
+  "steps": [
+    {
+      "channel": "connections:list"
+    },
+    {
+      "channel": "connections:getActive"
+    },
+    {
+      "channel": "connections:getToken",
+      "args": [
+        "local"
+      ]
+    },
+    {
+      "channel": "connections:getToken",
+      "args": [
+        "nope"
+      ]
+    },
+    {
+      "channel": "connections:hasToken",
+      "args": [
+        "local"
+      ]
+    },
+    {
+      "channel": "connections:hasToken",
+      "args": [
+        "nope"
+      ]
+    },
+    {
+      "channel": "connections:add",
+      "args": [
+        {
+          "label": "Box",
+          "url": "ws://box",
+          "kind": "local"
+        },
+        "tok"
+      ]
+    },
+    {
+      "channel": "connections:add",
+      "args": [
+        {
+          "label": "Box",
+          "kind": "remote"
+        },
+        "tok"
+      ]
+    },
+    {
+      "channel": "connections:rename",
+      "args": [
+        "local",
+        "  Laptop  "
+      ]
+    },
+    {
+      "channel": "connections:rename",
+      "args": [
+        "nope",
+        "x"
+      ]
+    },
+    {
+      "channel": "connections:rename",
+      "args": [
+        "local",
+        "   "
+      ]
+    },
+    {
+      "channel": "connections:setLastConnected",
+      "args": [
+        "local",
+        1767225600123
+      ]
+    },
+    {
+      "channel": "connections:setLastConnected",
+      "args": [
+        "nope",
+        1
+      ]
+    },
+    {
+      "channel": "connections:setActive",
+      "args": [
+        "nope"
+      ]
+    },
+    {
+      "channel": "connections:setActive",
+      "args": [
+        "local"
+      ]
+    },
+    {
+      "channel": "connections:remove",
+      "args": [
+        "local"
+      ]
+    },
+    {
+      "channel": "connections:remove",
+      "args": [
+        "nope"
+      ]
+    },
+    {
+      "channel": "connections:list"
+    }
+  ]
+}

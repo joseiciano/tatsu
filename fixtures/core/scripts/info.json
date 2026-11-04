@@ -1,0 +1,17 @@
+{
+  "note": "config:getWsTransportInfo and config:rotateWsToken are left out: the bound port and token differ between the two servers by design.",
+  "steps": [
+    {
+      "channel": "updater:getVersion"
+    },
+    {
+      "channel": "net:getLanAddresses"
+    },
+    {
+      "channel": "config:getDefaultClaudeCommand"
+    },
+    {
+      "channel": "config:getDefaultTerminalFontFamily"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "data": {
+    "themes/Paper.json": "{\n  \"name\": \"  Paper  \",\n  \"mode\": \"light\",\n  \"colors\": {\n    \"b\": \"#111111\",\n    \"2\": \"#222222\",\n    \"a\": \"#333333\",\n    \"1\": \"#444444\",\n    \"01\": \"#555555\",\n    \"empty\": \"\",\n    \"num\": 5,\n    \"__proto__\": \"#ffffff\",\n    \"nested\": { \"x\": \"y\" },\n    \"nil\": null\n  }\n}\n",
+    "themes/ocean.json": "{\n  \"name\": \"Ocean\",\n  \"mode\": \"dark\",\n  \"colors\": {\n    \"background\": \"#001122\",\n    \"accent\": \"\"\n  }\n}\n",
+    "themes/broken.json": "{ \"name\": \"No mode\" }\n"
+  },
+  "steps": [
+    {
+      "channel": "config:getAvailableThemes"
+    },
+    {
+      "channel": "config:setThemeMode",
+      "args": [
+        "light"
+      ]
+    },
+    {
+      "channel": "config:setThemeMode",
+      "args": [
+        "sepia"
+      ]
+    },
+    {
+      "channel": "config:setThemeLight",
+      "args": [
+        "paper"
+      ]
+    },
+    {
+      "channel": "config:setThemeLight",
+      "args": [
+        "no-such-theme"
+      ]
+    },
+    {
+      "channel": "config:setThemeDark",
+      "args": [
+        "ocean"
+      ]
+    },
+    {
+      "channel": "config:setThemeDark",
+      "args": [
+        "dracula"
+      ]
+    },
+    {
+      "channel": "config:reloadCustomThemes"
+    },
+    {
+      "channel": "config:getAvailableThemes"
+    },
+    {
+      "channel": "config:setThemeMode",
+      "args": [
+        "system"
+      ]
+    }
+  ]
+}

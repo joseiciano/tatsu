@@ -1,0 +1,54 @@
+{
+  "note": "activity:record only repeats the current state: a state change stamps Date.now() on Node, which has no clock seam in headless. The recorded handler fixtures cover state changes with a fixed clock. The waits outlast the 1000 ms activity.json save delay on both sides.",
+  "data": {
+    "activity.json": "{\"/w/a\": {\"branch\": \"a\", \"repoRoot\": \"/w\", \"createdAt\": 1767225595000, \"events\": [{\"t\": 1767225595000, \"s\": \"processing\"}]}, \"/w/b\": {\"branch\": \"b\", \"createdAt\": 1767225596000, \"removedAt\": 1767225599000, \"prNumber\": 7, \"prState\": \"merged\", \"events\": [{\"t\": 1767225596000, \"s\": \"idle\"}, {\"t\": 1767225599000, \"s\": \"merged\"}]}, \"/w/legacy\": [{\"t\": 1767225590000, \"s\": \"waiting\"}]}"
+  },
+  "steps": [
+    {
+      "wait": 1500
+    },
+    {
+      "channel": "activity:get"
+    },
+    {
+      "signal": "activity:record",
+      "args": [
+        "/w/a",
+        "processing"
+      ]
+    },
+    {
+      "channel": "activity:clear",
+      "args": [
+        "/w/b"
+      ]
+    },
+    {
+      "channel": "activity:clear",
+      "args": [
+        "/w/none"
+      ]
+    },
+    {
+      "channel": "activity:clear",
+      "args": [
+        7
+      ]
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "channel": "activity:get"
+    },
+    {
+      "channel": "activity:clear"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "channel": "activity:get"
+    }
+  ]
+}

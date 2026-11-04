@@ -1,0 +1,208 @@
+{
+  "note": "debug:* and perf:logSlowRender are left out: log lines carry wall-clock timestamps.",
+  "steps": [
+    {
+      "channel": "config:setClaudeCommand",
+      "args": [
+        ""
+      ]
+    },
+    {
+      "channel": "config:setClaudeCommand",
+      "args": [
+        "  claude --x  "
+      ]
+    },
+    {
+      "channel": "config:getDefaultClaudeCommand"
+    },
+    {
+      "channel": "config:setClaudeCommand",
+      "args": [
+        5
+      ]
+    },
+    {
+      "channel": "config:setHotkeys",
+      "args": [
+        {
+          "nextWorktree": "Cmd+J",
+          "prevWorktree": "Cmd+K"
+        }
+      ]
+    },
+    {
+      "channel": "config:resetHotkeys"
+    },
+    {
+      "channel": "config:setHotkeys",
+      "args": [
+        {
+          "nextWorktree": "Cmd+N"
+        }
+      ]
+    },
+    {
+      "channel": "config:setTerminalFontSize",
+      "args": [
+        15
+      ]
+    },
+    {
+      "channel": "config:setTerminalFontFamily",
+      "args": [
+        "  Fira Code  "
+      ]
+    },
+    {
+      "channel": "config:getDefaultTerminalFontFamily"
+    },
+    {
+      "channel": "config:setUiScale",
+      "args": [
+        1.25
+      ]
+    },
+    {
+      "channel": "config:setOnboardingQuest",
+      "args": [
+        "done"
+      ]
+    },
+    {
+      "channel": "config:setOnboardingQuest",
+      "args": [
+        3
+      ]
+    },
+    {
+      "channel": "config:setWorktreeBase",
+      "args": [
+        "remote"
+      ]
+    },
+    {
+      "channel": "config:setMergeStrategy",
+      "args": [
+        "squash"
+      ]
+    },
+    {
+      "channel": "config:setWorktreeScripts",
+      "args": [
+        {
+          "setup": "  pnpm install \n",
+          "teardown": "\tpnpm clean "
+        }
+      ]
+    },
+    {
+      "channel": "config:setWorktreeDetail",
+      "args": [
+        "compact"
+      ]
+    },
+    {
+      "channel": "config:setDefaultAgent",
+      "args": [
+        "codex"
+      ]
+    },
+    {
+      "channel": "config:setCodexModel",
+      "args": [
+        "gpt-5"
+      ]
+    },
+    {
+      "channel": "config:setOpencodeCommand",
+      "args": [
+        "  opencode  "
+      ]
+    },
+    {
+      "channel": "config:setClaudeEnvVars",
+      "args": [
+        {
+          "FOO": "bar",
+          " ": "x"
+        }
+      ]
+    },
+    {
+      "channel": "config:setHarnessSystemPrompt",
+      "args": [
+        "  Be brief.\n"
+      ]
+    },
+    {
+      "channel": "config:setHarnessSystemPromptEnabled",
+      "args": [
+        false
+      ]
+    },
+    {
+      "channel": "config:setShareClaudeSettings",
+      "args": [
+        false
+      ]
+    },
+    {
+      "channel": "config:setHarnessMcpEnabled",
+      "args": [
+        false
+      ]
+    },
+    {
+      "channel": "config:setDefaultClaudeTabType",
+      "args": [
+        "json"
+      ]
+    },
+    {
+      "channel": "config:setJsonModeChatDensity",
+      "args": [
+        "compact"
+      ]
+    },
+    {
+      "channel": "config:setJsonModeSendOnEnter",
+      "args": [
+        false
+      ]
+    },
+    {
+      "channel": "config:setAutoSleepMinutes",
+      "args": [
+        30
+      ]
+    },
+    {
+      "channel": "config:setSnoozeDefaultDays",
+      "args": [
+        3
+      ]
+    },
+    {
+      "channel": "config:setBrowserToolsMode",
+      "args": [
+        "off"
+      ]
+    },
+    {
+      "channel": "config:setChatPromotionDismissed",
+      "args": [
+        true
+      ]
+    },
+    {
+      "signal": "config:setLastEffectiveAppBg",
+      "args": [
+        "#101010"
+      ]
+    },
+    {
+      "channel": "nope:missing"
+    }
+  ]
+}

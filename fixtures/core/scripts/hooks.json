@@ -1,0 +1,11 @@
+{
+  "note": "hooks:decline only: the agent hooks installer is real on Node and absent on the Rust core test server, so hooks:accept and hooks:uninstall are covered by the recorded handler fixtures instead.",
+  "steps": [
+    {
+      "channel": "hooks:decline"
+    },
+    {
+      "channel": "hooks:decline"
+    }
+  ]
+}
