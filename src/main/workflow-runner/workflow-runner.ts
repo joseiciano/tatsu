@@ -30,7 +30,10 @@ import {
 import { runContextPath } from './run-artifacts'
 import {
   STEP_SUMMARY_MAX_CHARS,
+  evaluateCondition,
+  loopSpan,
   parallelWriterPairs,
+  renderTemplate,
   validateStepOutput,
   type ResolvedAgentStep,
   type ResolvedDefinition,
@@ -38,7 +41,8 @@ import {
   type StepOutputValidation,
   type StepOutputValue,
   type TemplateScope,
-  type TemplateStepScope
+  type TemplateStepScope,
+  type WorkflowLoop
 } from '../../shared/workflow-def'
 import type { StateEvent } from '../../shared/state'
 import {
@@ -191,6 +195,19 @@ function needsOf(steps: readonly ResolvedWorkflowStep[], index: number): readonl
 interface LiveStep {
   state: RunState
   live: LiveAttempt
+}
+
+interface LoopingStep {
+  step: ResolvedWorkflowStep & { loop: WorkflowLoop }
+  summary: string
+}
+
+function hasLoop(step: ResolvedWorkflowStep): step is ResolvedWorkflowStep & { loop: WorkflowLoop } {
+  return step.loop !== undefined
+}
+
+function untilMet(loop: WorkflowLoop, result: StepResult): boolean {
+  return evaluateCondition(loop.until, { status: result.status, data: result.data, exitCode: result.exitCode })
 }
 
 export class WorkflowRunner {
@@ -452,9 +469,13 @@ export class WorkflowRunner {
     const { state, live } = found
     const { stepId } = live.record
     this.log(`completion received ${result.status}`, { runId: state.record.runId, stepId, attemptId })
+    const looping = state.record.definition.steps.find((step) => step.id === stepId)
     if (result.status === 'needs-input') {
       live.record.result = result
       this.pause(state, stepId, 'needs-input')
+    } else if (result.status === 'done' && looping && hasLoop(looping) && !untilMet(looping.loop, result)) {
+      this.endAttempt(state, live, 'done', result, false)
+      this.loopBack(state, looping)
     } else if (result.status === 'done' && this.gated(state, stepId) && state.record.autopilot === true) {
       this.endAttempt(state, live, 'done', result, false)
       this.passGate(state, stepId, 'autopilot')
@@ -731,6 +752,51 @@ export class WorkflowRunner {
       this.startContinuation(state, step, continuation)
     }
     this.settle(state)
+  }
+
+  private loopBack(state: RunState, step: ResolvedWorkflowStep & { loop: WorkflowLoop }): void {
+    const ids = { runId: state.record.runId, stepId: step.id }
+    const passes = state.record.attempts.filter((attempt) => attempt.stepId === step.id).length
+    if (passes >= step.loop.max) {
+      this.setStep(state, step.id, 'done')
+      this.pause(state, step.id, 'loop-cap')
+      this.log('loop cap reached', ids)
+      return
+    }
+    this.resume(state, step.id)
+    this.log('loop back', { ...ids, backTo: step.loop.back_to })
+    for (const id of this.spanOf(state, step.id)) this.setStep(state, id, 'pending')
+    this.schedule(state)
+  }
+
+  private spanOf(state: RunState, loopingId: string): string[] {
+    const { steps } = state.record.definition
+    return loopSpan(
+      steps.map((step, i) => ({ id: step.id, needs: needsOf(steps, i), loop: step.loop })),
+      loopingId
+    )
+  }
+
+  private reenteringLoop(state: RunState, stepId: string): LoopingStep | undefined {
+    for (const step of state.record.definition.steps) {
+      if (!hasLoop(step) || state.stepStatus[step.id] !== 'pending') continue
+      const result = this.lastAttempt(state, step.id)?.result
+      if (result?.status !== 'done' || untilMet(step.loop, result)) continue
+      if (this.spanOf(state, step.id).includes(stepId)) return { step, summary: result.summary }
+    }
+    return undefined
+  }
+
+  private loopContinuation(state: RunState, step: RunnableStep): WorkflowContinuation | undefined {
+    if (step.kind !== 'agent') return undefined
+    const last = this.lastAttempt(state, step.id)
+    const looping = last === undefined ? undefined : this.reenteringLoop(state, step.id)
+    if (last === undefined || looping === undefined) return undefined
+    const prompt =
+      step.on_loop === undefined
+        ? `Your previous result was:\n${last.result?.summary ?? ''}\n\nAddress this feedback from ${looping.step.id}:\n${looping.summary}`
+        : renderTemplate(step.on_loop, this.scopeFor(state)).text
+    return looping.step.loop.fresh === true ? { prompt, fresh: true } : { prompt }
   }
 
   private gated(state: RunState, stepId: string): boolean {
@@ -1047,13 +1113,15 @@ export class WorkflowRunner {
     return this.deps.store.getSnapshot().state.settings.workflows.maxConcurrentAgents
   }
 
-  private enterStep(state: RunState, step: RunnableStep, options: LaunchOptions = {}): void {
+  private enterStep(state: RunState, step: RunnableStep, options: LaunchOptions = {}, continuation?: WorkflowContinuation): void {
     if (step.kind === 'shell' || (this.queue.length === 0 && this.agentSlots.size < this.agentCap())) {
-      this.launch(state, step, options)
+      if (continuation && step.kind === 'agent') this.startContinuation(state, step, continuation)
+      else this.launch(state, step, options)
       return
     }
     this.clearContinuation(state, step.id)
-    this.queue.push({ ...options, runId: state.record.runId, stepId: step.id })
+    this.queue.push({ ...options, runId: state.record.runId, stepId: step.id, ...(continuation ? { continuation } : {}) })
+    if (continuation) state.record.continuations = { ...state.record.continuations, [step.id]: continuation }
     this.setStep(state, step.id, 'queued')
   }
 
@@ -1062,7 +1130,7 @@ export class WorkflowRunner {
     if (state.pauses.size > 0 || state.live.size > 0) return
     if (Object.values(state.stepStatus).includes('queued')) return
     const next = this.firstReady(state)
-    if (next) this.enterStep(state, next)
+    if (next) this.enterStep(state, next, {}, this.loopContinuation(state, next))
     else if (this.allSettled(state)) this.finish(state)
   }
 
