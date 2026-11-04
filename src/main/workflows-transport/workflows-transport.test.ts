@@ -704,6 +704,12 @@ describe('workflow action requests', () => {
     { defId: 'personal:plan', worktreePath: '/wt/a', autopilot: null },
     { defId: 'personal:plan', worktreePath: '/wt/a', inputsUntrusted: false },
     { defId: 'personal:plan', worktreePath: '/wt/a', trusted: true },
+    {
+      defId: 'personal:plan',
+      worktreePath: '/wt/a',
+      chain: { chainId: 'c', item: { id: 'i', title: 't', value: 'v', branch: 'b', baseBranch: 'main' } }
+    },
+    { defId: 'personal:plan', worktreePath: '/wt/a', chain: undefined },
     { defId: 'personal:plan', worktreePath: '/wt/a', definition: { steps: [] } },
     new Map([['defId', 'personal:plan']])
   ]

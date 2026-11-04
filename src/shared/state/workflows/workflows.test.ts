@@ -7,6 +7,7 @@ import {
   capPermissions,
   deriveChainStatus,
   hydrateWorkflowRuns,
+  parseWorkflowRunChain,
   projectRunRecord,
   runStepFacts,
   runsToEvict,
@@ -17,6 +18,7 @@ import {
   type WorkflowChainStatusResult,
   type WorkflowDefinitionSummary,
   type WorkflowRun,
+  type WorkflowRunChain,
   type WorkflowRunRecord,
   type WorkflowsEvent,
   type WorkflowsState
@@ -1293,6 +1295,70 @@ describe('projectRunRecord budget', () => {
   it('leaves the budget absent when the record has none or an invalid one', () => {
     expect(projectRunRecord(runRecord('run-1')).run).not.toHaveProperty('budgetUsd')
     expect(projectRunRecord(runRecord('run-1', { budgetUsd: -2 })).run).not.toHaveProperty('budgetUsd')
+  })
+})
+
+function runChain(): WorkflowRunChain {
+  return {
+    chainId: 'chain-1',
+    item: { id: 'i1', title: 'Fix login', value: 'Fix login', branch: 'wf/x/fix-login-0123abcd', baseBranch: 'main', number: 42, url: 'https://github.com/o/r/issues/42' },
+    origin: { kind: 'issue', number: 42 }
+  }
+}
+
+describe('projectRunRecord chain tags', () => {
+  it('keeps the chain and item ids of a record through hydration', () => {
+    const hydrated = hydrateWorkflowRuns([runRecord('run-1', { chain: runChain() })])
+    expect(hydrated.runs['run-1']).toMatchObject({ chainId: 'chain-1', itemId: 'i1' })
+  })
+
+  it('leaves the tags absent on a record without a chain', () => {
+    const { run } = projectRunRecord(runRecord('run-1'))
+    expect(run).not.toHaveProperty('chainId')
+    expect(run).not.toHaveProperty('itemId')
+  })
+})
+
+describe('parseWorkflowRunChain', () => {
+  it('returns a copy holding only the known fields', () => {
+    const extra = { ...runChain(), extra: 1, item: { ...runChain().item, extra: 2 }, origin: { kind: 'pr', number: 7, extra: 3 } }
+    const parsed = parseWorkflowRunChain(extra)
+    expect(parsed).toEqual({ ...runChain(), origin: { kind: 'pr', number: 7 } })
+    expect(parsed?.item).not.toBe(extra.item)
+  })
+
+  it('accepts a chain with no number, url or origin and an empty base branch', () => {
+    const minimal = { chainId: 'c', item: { id: 'i', title: '', value: 'v', branch: 'b', baseBranch: '' } }
+    expect(parseWorkflowRunChain(minimal)).toEqual(minimal)
+  })
+
+  const item = runChain().item
+  it.each<[string, unknown]>([
+    ['not an object', 'chain'],
+    ['null', null],
+    ['empty chain id', { ...runChain(), chainId: '' }],
+    ['overlong chain id', { ...runChain(), chainId: 'c'.repeat(129) }],
+    ['missing item', { chainId: 'c' }],
+    ['empty item id', { ...runChain(), item: { ...item, id: '' } }],
+    ['non-string title', { ...runChain(), item: { ...item, title: 3 } }],
+    ['overlong title', { ...runChain(), item: { ...item, title: 'x'.repeat(64 * 1024 + 1) } }],
+    ['overlong value', { ...runChain(), item: { ...item, value: 'x'.repeat(64 * 1024 + 1) } }],
+    ['empty branch', { ...runChain(), item: { ...item, branch: '' } }],
+    ['overlong branch', { ...runChain(), item: { ...item, branch: 'b'.repeat(256) } }],
+    ['overlong base branch', { ...runChain(), item: { ...item, baseBranch: 'b'.repeat(256) } }],
+    ['missing base branch', { ...runChain(), item: { id: 'i', title: 't', value: 'v', branch: 'b' } }],
+    ['zero number', { ...runChain(), item: { ...item, number: 0 } }],
+    ['fractional number', { ...runChain(), item: { ...item, number: 1.5 } }],
+    ['string number', { ...runChain(), item: { ...item, number: '42' } }],
+    ['huge number', { ...runChain(), item: { ...item, number: 1e10 } }],
+    ['non-string url', { ...runChain(), item: { ...item, url: 5 } }],
+    ['overlong url', { ...runChain(), item: { ...item, url: 'u'.repeat(2049) } }],
+    ['unknown origin kind', { ...runChain(), origin: { kind: 'commit', number: 1 } }],
+    ['negative origin number', { ...runChain(), origin: { kind: 'issue', number: -1 } }],
+    ['string origin number', { ...runChain(), origin: { kind: 'issue', number: '1' } }],
+    ['null origin', { ...runChain(), origin: null }]
+  ])('rejects %s', (_name, value) => {
+    expect(parseWorkflowRunChain(value)).toBeNull()
   })
 })
 

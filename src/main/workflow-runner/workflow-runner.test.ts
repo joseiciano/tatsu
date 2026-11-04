@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Store } from '../store'
+import { spawnSync } from 'child_process'
+import { existsSync, mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
   WorkflowRunner,
+  buildShellCommand,
   createClaudeStepDriver,
   createShellStepDriver,
   StepStartError,
@@ -24,6 +29,7 @@ import type {
   WorkflowAttemptStatus,
   WorkflowDefinitionDetail,
   WorkflowRun,
+  WorkflowRunChain,
   WorkflowStepStatus
 } from '../../shared/state/workflows'
 import { STEP_SUMMARY_MAX_CHARS, renderTemplate, validateWorkflowDefinition } from '../../shared/workflow-def'
@@ -407,6 +413,18 @@ steps:
     agent: claude
     prompt: "plan"
     timeout: 2500000
+`,
+  'chain-item': `name: chain-item
+inputs:
+  task: { type: text }
+item_input: task
+steps:
+  - id: plan
+    agent: claude
+    prompt: "Do {{item.title}} ({{inputs.task}}) on {{item.branch}} from {{item.baseBranch}} #{{item.number}}"
+  - id: echo
+    kind: shell
+    run: echo {{item.title}}
 `,
   broken: `name: broken
 steps:
@@ -4317,5 +4335,137 @@ describe('WorkflowRunner run budget', () => {
     expect(ctx.stepStatus(runId, 'plan')).toBe('running')
     expect(ctx.agent.started).toHaveLength(2)
     expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'budget' })
+  })
+})
+
+describe('WorkflowRunner chain items', () => {
+  const INJECTION_TITLE = 'a"; touch /tmp/x #'
+
+  function itemChain(title = 'Fix login', overrides: Partial<WorkflowRunChain> = {}): WorkflowRunChain {
+    return {
+      chainId: 'chain-1',
+      item: { id: 'item-1', title, value: `${title} body`, branch: 'wf/chain-item/fix-login-0123abcd', baseBranch: 'main', number: 42 },
+      ...overrides
+    }
+  }
+
+  async function startChained(ctx: Ctx, chain: unknown, inputs: Record<string, string> = {}) {
+    return ctx.runner.start({ defId: 'personal:chain-item', worktreePath: '/wt/chain-item', inputs, chain: chain as WorkflowRunChain })
+  }
+
+  it('fills the item input, tags the run and persists the chain on the record', async () => {
+    const ctx = setup()
+    const result = await startChained(ctx, itemChain())
+    if (!result.ok) throw new Error(result.reason)
+    const record = ctx.records.at(-1)
+    expect(record?.inputs).toEqual({ task: 'Fix login body' })
+    expect(record?.chain).toEqual(itemChain())
+    expect(ctx.wf().runs[result.runId]).toMatchObject({ chainId: 'chain-1', itemId: 'item-1' })
+  })
+
+  it('renders item fields in an agent prompt', async () => {
+    const ctx = setup()
+    const result = await startChained(ctx, itemChain())
+    if (!result.ok) throw new Error(result.reason)
+    await flush()
+    const attempt = ctx.agent.started[0]
+    expect(attempt.scope.item).toEqual(itemChain().item)
+    const step = ctx.runner.getRunRecord(result.runId)?.definition.steps[0]
+    if (step?.kind !== 'agent') throw new Error('expected agent step')
+    expect(renderTemplate(step.prompt, attempt.scope)).toEqual({
+      text: 'Do Fix login (Fix login body) on wf/chain-item/fix-login-0123abcd from main #42',
+      missing: []
+    })
+  })
+
+  it('passes a hostile item title to a shell step as one env-bound argument', async () => {
+    const ctx = setup()
+    const result = await startChained(ctx, itemChain(INJECTION_TITLE))
+    if (!result.ok) throw new Error(result.reason)
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(result.runId, 'plan'), done())
+    await flush()
+    const attempt = ctx.shell.started[0]
+    const step = ctx.runner.getRunRecord(result.runId)?.definition.steps[1]
+    if (step?.kind !== 'shell') throw new Error('expected shell step')
+    const { command, env } = buildShellCommand(step.run, attempt.scope)
+    expect(command).toBe('echo "${HARNESS_WF_0}"')
+    expect(env).toEqual({ HARNESS_WF_0: INJECTION_TITLE })
+  })
+
+  it('keeps the hostile title inert in a real /bin/sh', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'chain-item-'))
+    try {
+      const marker = join(dir, 'x')
+      const title = `a"; touch ${marker} #`
+      const scope = { item: { ...itemChain(title).item } }
+      const sh = (run: string) => {
+        const { command, env } = buildShellCommand(run, scope)
+        const out = spawnSync('/bin/sh', ['-c', command], { cwd: dir, env: { PATH: '/usr/bin:/bin', ...env }, encoding: 'utf8' })
+        expect(out.status).toBe(0)
+        return out.stdout
+      }
+      expect(sh('echo {{item.title}}')).toBe(`${title}\n`)
+      expect(sh('printf "<%s>" {{item.title}}')).toBe(`<${title}>`)
+      expect(existsSync(marker)).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('renders item.* empty and lists it as missing for a plain start of an item_input definition', async () => {
+    const ctx = setup()
+    const result = await ctx.runner.start({ defId: 'personal:chain-item', worktreePath: '/wt/chain-item', inputs: { task: 'direct' } })
+    if (!result.ok) throw new Error(result.reason)
+    await flush()
+    const attempt = ctx.agent.started[0]
+    expect(attempt.scope).not.toHaveProperty('item')
+    expect(ctx.runner.getRunRecord(result.runId)).not.toHaveProperty('chain')
+    expect(ctx.wf().runs[result.runId]).not.toHaveProperty('chainId')
+    const step = ctx.runner.getRunRecord(result.runId)?.definition.steps[0]
+    if (step?.kind !== 'agent') throw new Error('expected agent step')
+    expect(renderTemplate(step.prompt, attempt.scope)).toEqual({
+      text: 'Do  (direct) on  from  #',
+      missing: ['item.title', 'item.branch', 'item.baseBranch', 'item.number']
+    })
+  })
+
+  it('re-renders item fields on a retry', async () => {
+    const ctx = setup()
+    const result = await startChained(ctx, itemChain())
+    if (!result.ok) throw new Error(result.reason)
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(result.runId, 'plan'), failed())
+    await flush()
+    expect(ctx.runner.retryStep(result.runId, 'plan')).toEqual({ ok: true })
+    await flush()
+    expect(ctx.agent.started).toHaveLength(2)
+    expect(ctx.agent.started[1].scope.item).toMatchObject({ title: 'Fix login' })
+  })
+
+  it.each<[string, unknown, Record<string, string>]>([
+    ['the caller also supplies the item input', itemChain(), { task: 'other' }],
+    ['the chain item number is not a GitHub number', { ...itemChain(), item: { ...itemChain().item, number: '42' } }, {}],
+    ['the chain title is too long', itemChain('t'.repeat(64 * 1024 + 1)), {}],
+    ['the chain id is empty', { ...itemChain(), chainId: '' }, {}],
+    ['the origin kind is unknown', { ...itemChain(), origin: { kind: 'commit', number: 1 } }, {}],
+    ['the origin number is not a GitHub number', { ...itemChain(), origin: { kind: 'issue', number: 0 } }, {}],
+    ['the chain is not an object', 'chain-1', {}]
+  ])('refuses invalid-inputs when %s', async (_name, chain, inputs) => {
+    const ctx = setup()
+    expect(await startChained(ctx, chain, inputs)).toEqual({ ok: false, reason: 'invalid-inputs' })
+    expect(ctx.wf().runs).toEqual({})
+  })
+
+  it('refuses a chain for a definition without item_input', async () => {
+    const ctx = setup()
+    const result = await ctx.runner.start({ defId: 'personal:one-agent', worktreePath: '/wt/one-agent', inputs: {}, chain: itemChain() })
+    expect(result).toEqual({ ok: false, reason: 'invalid-inputs' })
+  })
+
+  it('refuses missing-input when the item value is blank', async () => {
+    const ctx = setup()
+    const blank = { ...itemChain(), item: { ...itemChain().item, value: '  ' } }
+    expect(await startChained(ctx, blank)).toEqual({ ok: false, reason: 'missing-input' })
   })
 })

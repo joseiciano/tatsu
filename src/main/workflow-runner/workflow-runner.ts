@@ -51,6 +51,7 @@ import { totalForSession, type SessionUsage } from '../../shared/state/costs'
 import {
   RECENT_RUNS_MAX,
   RESUMABLE_AGENTS,
+  WORKFLOW_INPUT_VALUE_MAX_CHARS,
   WORKFLOW_RUN_RECORD_VERSION,
   applyOverrides,
   capPermissions,
@@ -58,6 +59,7 @@ import {
   isBudgetUsd,
   isWorkflowInputNumber,
   overriddenStep,
+  parseWorkflowRunChain,
   runStepFacts,
   runsToEvict,
   type AppliedStepOverrides,
@@ -69,6 +71,8 @@ import {
   type WorkflowLoopCapAction,
   type WorkflowPausedReason,
   type WorkflowRun,
+  type WorkflowRunChain,
+  type WorkflowRunChainItem,
   type WorkflowRunStatus,
   type WorkflowRunStep,
   type WorkflowSnapshotRef,
@@ -81,7 +85,7 @@ const INPUT_TRUST_TIMEOUT_MS = 10_000
 const MAX_TIMER_MS = 2 ** 31 - 1
 const BUDGET_PAUSE = '$budget'
 export const RUN_INPUTS_MAX = 64
-export const RUN_INPUT_VALUE_MAX_CHARS = 64 * 1024
+export const RUN_INPUT_VALUE_MAX_CHARS = WORKFLOW_INPUT_VALUE_MAX_CHARS
 
 const ACTION_OK: StepActionResult = { ok: true }
 
@@ -158,16 +162,39 @@ function inputsRefusal(definition: ResolvedDefinition, inputs: Record<string, un
   return null
 }
 
+function chainedRequest(definition: ResolvedDefinition, request: StartRunRequest): StartRunRequest | null {
+  if (request.chain === undefined) return request
+  const chain = parseWorkflowRunChain(request.chain)
+  const name = definition.item_input
+  if (!chain || name === undefined || Object.hasOwn(request.inputs, name)) return null
+  return { ...request, inputs: { ...request.inputs, [name]: chain.item.value }, chain }
+}
+
+function itemScope({ id, title, value, branch, baseBranch, number, url }: WorkflowRunChainItem): Record<string, unknown> {
+  return { id, title, value, branch, baseBranch, ...(number === undefined ? {} : { number }), ...(url === undefined ? {} : { url }) }
+}
+
 interface InputTrustLookup {
   name: string
   type: WorkflowInputTrustType
   number: string
 }
 
-function trustLookups(definition: ResolvedDefinition, inputs: Record<string, string>): InputTrustLookup[] {
+function trustLookups(
+  definition: ResolvedDefinition,
+  inputs: Record<string, string>,
+  chain: WorkflowRunChain | undefined
+): InputTrustLookup[] {
   const lookups: InputTrustLookup[] = []
   for (const [name, input] of Object.entries(definition.inputs)) {
     if (input.type === 'issue' || input.type === 'pr') lookups.push({ name, type: input.type, number: inputs[name] })
+  }
+  const origin = chain?.origin
+  const name = definition.item_input
+  if (origin && name !== undefined) {
+    const number = String(origin.number)
+    const known = lookups.some((lookup) => lookup.name === name && lookup.type === origin.kind && lookup.number === number)
+    if (!known) lookups.push({ name, type: origin.kind, number })
   }
   return lookups
 }
@@ -424,16 +451,18 @@ export class WorkflowRunner {
     if (!detail.definition.steps.every(isRunnable)) return this.refuse('unsupported-step')
     const applied = applyOverrides(detail.definition, request.overrides)
     if (!applied.ok) return this.refuse(applied.reason)
-    const badInputs = inputsRefusal(applied.definition, request.inputs)
+    const chained = chainedRequest(applied.definition, request)
+    if (!chained) return this.refuse('invalid-inputs')
+    const badInputs = inputsRefusal(applied.definition, chained.inputs)
     if (badInputs) return this.refuse(badInputs)
-    const placement = this.placementRefusal(request.worktreePath, applied.definition)
+    const placement = this.placementRefusal(chained.worktreePath, applied.definition)
     if (placement) return this.refuse(placement)
-    const lookups = trustLookups(applied.definition, request.inputs)
+    const lookups = trustLookups(applied.definition, chained.inputs, chained.chain)
     const verdicts =
       lookups.length === 0
         ? []
-        : await Promise.all(lookups.map((lookup) => this.inputVerdict(request.worktreePath, lookup)))
-    return this.createRun(request, detail, applied, lookups, verdicts)
+        : await Promise.all(lookups.map((lookup) => this.inputVerdict(chained.worktreePath, lookup)))
+    return this.createRun(chained, detail, applied, lookups, verdicts)
   }
 
   private createRun(
@@ -473,6 +502,7 @@ export class WorkflowRunner {
       startedAt: now(),
       ...(cursorStepId === undefined ? {} : { cursorStepId }),
       ...budget,
+      ...(request.chain === undefined ? {} : { chainId: request.chain.chainId, itemId: request.chain.item.id }),
       steps
     }
     const state: RunState = {
@@ -493,7 +523,8 @@ export class WorkflowRunner {
         ...(overriddenFrom === undefined ? {} : { overriddenFrom }),
         ...(inputsUntrusted ? { inputsUntrusted } : {}),
         ...(autopilot ? { autopilot } : {}),
-        ...budget
+        ...budget,
+        ...(request.chain === undefined ? {} : { chain: request.chain })
       },
       stepStatus,
       live: new Map(),
@@ -1454,7 +1485,8 @@ export class WorkflowRunner {
     return {
       inputs: { ...record.inputs },
       steps,
-      run: { id: record.runId, worktree: record.worktreePath, contextPath: record.contextPath }
+      run: { id: record.runId, worktree: record.worktreePath, contextPath: record.contextPath },
+      ...(record.chain === undefined ? {} : { item: itemScope(record.chain.item) })
     }
   }
 
