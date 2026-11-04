@@ -814,6 +814,7 @@ const agentStepDriver = createAgentStepDriver({
   },
   removeMarker: (id) => removeStepMarker(id),
   writePromptFile: writeStepPromptFile,
+  write: (id, data) => ptyManager.write(id, data),
   newTabId: () => `agent-${randomUUID()}`,
   newSessionId: () => randomUUID(),
   log
@@ -828,6 +829,9 @@ const workflowRunner = new WorkflowRunner({
   persist: (run) => workflowRunRecords.persist(run),
   artifacts: createGitRunArtifacts(),
   hasExecution: (executionId) => ptyManager.hasTerminal(executionId),
+  retagStepTab: (wtPath, tabId, workflow) => {
+    panesFSM.setTabWorkflow(wtPath, tabId, workflow)
+  },
   inputTrust: inputAuthorTrust
 })
 registerWorkflowsRequestHandlers({

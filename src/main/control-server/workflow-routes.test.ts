@@ -3,7 +3,16 @@ import type { Server } from 'http'
 import { getControlServerInfo, startControlServer, type ControlServerDeps, type WorkflowStepControl } from '.'
 import { CONTROL_WORKFLOW_MAX_BODY_BYTES } from './constants'
 import { outputJsonSchema, type StepOutputValue, type WorkflowOutputSchema } from '../../shared/workflow-def'
-import type { StopCheckDecision, WorkflowExecutionStep } from '../workflow-runner'
+import {
+  WorkflowRunner,
+  type StepAttempt,
+  type StepDriver,
+  type StopCheckDecision,
+  type WorkflowExecutionStep
+} from '../workflow-runner'
+import { Store } from '../store'
+import { initialState } from '../../shared/state'
+import { validateWorkflowDefinition } from '../../shared/workflow-def'
 
 vi.mock('../debug', () => ({ log: vi.fn() }))
 
@@ -48,6 +57,7 @@ const unused = (): never => {
 
 const workflow = new FakeWorkflow()
 let withWorkflow = true
+let runnerControl: WorkflowStepControl | undefined
 
 const deps: ControlServerDeps = {
   getRepoRoots: () => [],
@@ -61,7 +71,7 @@ const deps: ControlServerDeps = {
   browser: new Proxy({} as ControlServerDeps['browser'], { get: () => unused }),
   shell: new Proxy({} as ControlServerDeps['shell'], { get: () => unused }),
   get workflow() {
-    return withWorkflow ? workflow : undefined
+    return withWorkflow ? (runnerControl ?? workflow) : undefined
   }
 }
 
@@ -81,6 +91,7 @@ afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())))
 
 beforeEach(() => {
   withWorkflow = true
+  runnerControl = undefined
   workflow.labs = true
   workflow.steps.clear()
   workflow.completed.length = 0
@@ -307,5 +318,95 @@ describe('POST /workflow/stop-check', () => {
     })
     expect(res.status).toBe(401)
     expect(workflow.stopChecks).toEqual([])
+  })
+})
+
+describe('workflow routes against a continued attempt', () => {
+  const SOURCE = `name: loop
+steps:
+  - id: plan
+    agent: claude
+    prompt: "plan"
+  - id: build
+    agent: claude
+    prompt: "build"
+`
+
+  it('lands a completion through a step lookup cached before the continue on the new attempt', async () => {
+    const definition = validateWorkflowDefinition(SOURCE)
+    const store = new Store({
+      ...initialState,
+      hooks: { ...initialState.hooks, consent: 'accepted' },
+      worktrees: {
+        ...initialState.worktrees,
+        list: [{ path: '/wt/loop', branch: 'main', head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot: '/wt/loop' }]
+      },
+      settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: true } }
+    })
+    const launched: StepAttempt[] = []
+    const driver = (): StepDriver => ({
+      start: (attempt) => {
+        launched.push(attempt)
+        return { executionId: `exec-${attempt.attemptId}` }
+      },
+      continue: (attempt, executionId) => {
+        attempt.bind({ executionId })
+      },
+      cancel: () => {},
+      onEvent: () => () => {}
+    })
+    let ids = 0
+    const runner = new WorkflowRunner({
+      store,
+      loader: {
+        getDefinition: () => ({
+          ...definition,
+          source: SOURCE,
+          summary: { id: 'personal:loop', name: 'loop', scope: 'personal', path: '/defs/loop.yaml', hash: 'h', stepIds: ['plan', 'build'], issues: [] }
+        })
+      },
+      drivers: { agent: driver(), shell: driver() },
+      now: () => Date.now(),
+      newId: () => `id-${++ids}`,
+      log: () => {},
+      hasExecution: () => true
+    })
+    runner.reconcile([])
+    runnerControl = {
+      enabled: () => true,
+      stepFor: (terminalId) => runner.stepForExecution(terminalId),
+      complete: (terminalId, value) => runner.completeExecution(terminalId, value),
+      stopCheck: (terminalId, active) => runner.stopCheck(terminalId, active)
+    }
+    const started = await runner.start({ defId: 'personal:loop', worktreePath: '/wt/loop', inputs: {} })
+    if (!started.ok) throw new Error(started.reason)
+    const { runId } = started
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const firstAttempt = launched[0].attemptId
+    const terminalId = `exec-${firstAttempt}`
+
+    const cached = await call('GET', '/workflow/step', { terminalId })
+    expect(cached.status).toBe(200)
+    expect(await call('POST', '/workflow/complete', { terminalId, body: { summary: 'turn one' } })).toEqual({
+      status: 200,
+      json: { ok: true }
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    runner.complete(launched[1].attemptId, { status: 'failed', summary: 'no', completedBy: 'tool' })
+
+    expect(runner.continueStep(runId, 'plan', 'again')).toEqual({ ok: true })
+    const continued = store.getSnapshot().state.workflows.runs[runId].steps.plan.attemptIds.at(-1) ?? ''
+    expect(continued).not.toBe(firstAttempt)
+    const { attemptId: _cachedAttempt, ...cachedStep } = cached.json as Record<string, unknown>
+    const { attemptId: liveAttempt, ...liveStep } = (await call('GET', '/workflow/step', { terminalId })).json as Record<string, unknown>
+    expect(liveStep).toEqual(cachedStep)
+    expect(liveAttempt).toBe(continued)
+    expect(await call('POST', '/workflow/complete', { terminalId, body: { summary: 'turn two' } })).toEqual({
+      status: 200,
+      json: { ok: true }
+    })
+    expect(store.getSnapshot().state.workflows.attempts[continued]).toMatchObject({ status: 'done', completedBy: 'tool' })
+    expect(store.getSnapshot().state.workflows.attempts[firstAttempt].summaryPreview).toBe('turn one')
+    runner.dispose()
   })
 })

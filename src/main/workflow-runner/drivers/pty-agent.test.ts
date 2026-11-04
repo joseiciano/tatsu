@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,8 +16,10 @@ import {
   validateWorkflowDefinition
 } from '../../../shared/workflow-def'
 import {
+  AGENT_START_SUMMARIES,
   CLAUDE_START_SUMMARIES,
   PROMPT_INLINE_MAX_BYTES,
+  bracketedPaste,
   StepPauseError,
   StepStartError,
   createClaudeStepDriver,
@@ -89,6 +91,7 @@ class FakeClaude {
   readonly logs: string[] = []
   readonly bound: StepExecution[] = []
   readonly events: StepDriverEvent[] = []
+  readonly writes: Array<{ id: string; data: string }> = []
   trust: TrustStatus | 'throw' = 'trusted'
   trustChecks = 0
   failSpawn = false
@@ -135,6 +138,9 @@ class FakeClaude {
     },
     removeMarker: (id) => removeStepMarker(id, markerDir),
     writePromptFile: writeStepPromptFile,
+    write: (id, data) => {
+      this.writes.push({ id, data })
+    },
     newTabId: () => `agent-tab-${++this.ids}`,
     newSessionId: () => randomUUID(),
     log: (category, message, data) => {
@@ -172,8 +178,10 @@ class FakeClaude {
     this.store.dispatch({ type: 'terminals/statusChanged', payload: { id, status, pendingTool: null } })
   }
 
-  stop(terminalId: string, lastAssistantMessage: string | null, continued?: boolean): void {
-    for (const listener of [...this.stopListeners]) listener({ terminalId, lastAssistantMessage, continued })
+  stop(terminalId: string, lastAssistantMessage: string | null, continued?: boolean, stopHookActive?: boolean): void {
+    for (const listener of [...this.stopListeners]) {
+      listener({ terminalId, lastAssistantMessage, continued, stopHookActive })
+    }
   }
 
   promptSubmit(terminalId: string): void {
@@ -205,7 +213,16 @@ describe('createClaudeStepDriver start', () => {
     expect(resumed).toEqual({ executionId: 'agent-tab-2', sessionId: stored })
     expect(resumed.executionId).not.toBe(first.executionId)
     expect(fake.tabs[1].spawn.sessionId).toBe(stored)
+    expect(fake.tabs[1].spawn).not.toHaveProperty('promptOnResume')
     expect(fake.bound.at(-1)).toEqual({ executionId: 'agent-tab-2', sessionId: stored })
+  })
+
+  it('asks the resumed session to take a continuation prompt override', async () => {
+    const fake = new FakeClaude()
+    const plan = resolvedStep(DEFAULTS_SOURCE, 'plan')
+    const stored = randomUUID()
+    await fake.driver.start(fake.attempt(plan, { resumeSessionId: stored, prompt: `${PROMPT_SECRET} fix` }))
+    expect(fake.tabs[0].spawn).toMatchObject({ sessionId: stored, initialPrompt: `${PROMPT_SECRET} fix`, promptOnResume: true })
   })
 
   it('opens a tagged Claude tab with the step permissions, a fresh session and the rendered prompt', async () => {
@@ -461,5 +478,113 @@ describe('createClaudeStepDriver events', () => {
     fake.exit(executionId, 0)
     expect(fake.events).toEqual([])
     expect(fake.listenerCount).toBe(0)
+  })
+})
+
+describe('bracketedPaste', () => {
+  it('frames sanitized text in paste markers and a CR, so an embedded paste end cannot close the paste early', () => {
+    const text = 'a\x1b[201~b\x9b201~c\r\n\td\x00\x07\x7f\x85é漢 z'
+    expect(bracketedPaste(text)).toBe('\x1b[200~a[201~b201~c\n\tdé漢 z\x1b[201~\r')
+    expect(Buffer.from(bracketedPaste('x\x1b[201~'))).toEqual(
+      Buffer.from([0x1b, 0x5b, 0x32, 0x30, 0x30, 0x7e, 0x78, 0x5b, 0x32, 0x30, 0x31, 0x7e, 0x1b, 0x5b, 0x32, 0x30, 0x31, 0x7e, 0x0d])
+    )
+  })
+})
+
+describe('createClaudeStepDriver continue', () => {
+  async function started(fake: FakeClaude) {
+    const plan = resolvedStep(DEFAULTS_SOURCE, 'plan')
+    const execution = await fake.driver.start(fake.attempt(plan))
+    fake.driver.release(execution.executionId)
+    const next = fake.attempt(plan, { attemptId: 'att-plan-2', n: 2 })
+    return { plan, execution, next }
+  }
+
+  it('pastes the prompt into the live tab, rewrites the marker for the new attempt and owns the tab again', async () => {
+    const fake = new FakeClaude()
+    const { execution, next } = await started(fake)
+    const { executionId } = execution
+
+    await fake.driver.continue(next, executionId, `${PROMPT_SECRET}\nfix it`)
+
+    expect(fake.writes).toEqual([{ id: executionId, data: `\x1b[200~${PROMPT_SECRET}\nfix it\x1b[201~\r` }])
+    expect(fake.bound.at(-1)).toEqual({ executionId })
+    expect(JSON.parse(readFileSync(stepMarkerPath(executionId, markerDir), 'utf8'))).toEqual({
+      runId: 'run-1',
+      stepId: 'plan',
+      attemptId: 'att-plan-2'
+    })
+    expect(fake.tabs).toHaveLength(1)
+    fake.stop(executionId, 'second', false, true)
+    expect(fake.events).toEqual([{ type: 'turnEnded', executionId, lastMessage: 'second', stopHookActive: true }])
+    expect(fake.logs.join('\n')).not.toContain(PROMPT_SECRET)
+  })
+
+  it('sanitizes before the 8 KiB threshold, then writes a longer prompt to the run folder and pastes the read line', async () => {
+    const fake = new FakeClaude()
+    const { execution, next } = await started(fake)
+    const inline = `${'\x1b'.repeat(PROMPT_INLINE_MAX_BYTES)}${'z'.repeat(PROMPT_INLINE_MAX_BYTES)}`
+    await fake.driver.continue(next, execution.executionId, inline)
+    expect(fake.writes[0].data).toBe(bracketedPaste('z'.repeat(PROMPT_INLINE_MAX_BYTES)))
+    const path = stepPromptPath(worktree, 'run-1', 'plan')
+    expect(existsSync(path)).toBe(false)
+
+    const long = `${PROMPT_SECRET}\x1b[201~ ${'x'.repeat(10 * 1024)}`
+    await fake.driver.continue(next, execution.executionId, long)
+    expect(readFileSync(path, 'utf8')).toBe(`${PROMPT_SECRET}[201~ ${'x'.repeat(10 * 1024)}`)
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(fake.writes[1].data).toBe(bracketedPaste(`Read ${path} and follow it.`))
+    expect(fake.logs.join('\n')).not.toContain(PROMPT_SECRET)
+  })
+
+  it('refuses a dead tab or an ended attempt without writing to the PTY or the marker', async () => {
+    const fake = new FakeClaude()
+    const { execution, next } = await started(fake)
+    const { executionId } = execution
+
+    await expect(fake.driver.continue({ ...next, bind: () => false }, executionId, 'p')).rejects.toEqual(
+      new StepStartError(AGENT_START_SUMMARIES.ended)
+    )
+    expect(fake.markerExists(executionId)).toBe(false)
+    fake.exit(executionId, 0)
+    await expect(fake.driver.continue(next, executionId, 'p')).rejects.toEqual(
+      new StepStartError(AGENT_START_SUMMARIES.gone)
+    )
+    expect(fake.writes).toEqual([])
+    expect(fake.markerExists(executionId)).toBe(false)
+  })
+
+  it('starts a new execution from a prompt override without rendering it as a template', async () => {
+    const fake = new FakeClaude()
+    const plan = resolvedStep(DEFAULTS_SOURCE, 'plan')
+    await fake.driver.start(fake.attempt(plan, { prompt: `${PROMPT_SECRET} keep {{inputs.task}} literal` }))
+    expect(fake.tabs[0].spawn.initialPrompt).toBe(`${PROMPT_SECRET} keep {{inputs.task}} literal`)
+    expect(fake.logs.join('\n')).not.toContain(PROMPT_SECRET)
+  })
+})
+
+describe('writeStepPromptFile', () => {
+  it('replaces an existing prompt file with a 0600 file', async () => {
+    const path = stepPromptPath(worktree, 'run-1', 'plan')
+    mkdirSync(join(worktree, '.harness', 'runs', 'run-1'), { recursive: true })
+    writeFileSync(path, 'old', { mode: 0o644 })
+    await writeStepPromptFile(path, 'new')
+    expect(readFileSync(path, 'utf8')).toBe('new')
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(readdirSync(join(worktree, '.harness', 'runs', 'run-1'))).toEqual(['plan.prompt.md'])
+  })
+
+  it('replaces a planted symlink instead of writing through it', async () => {
+    const outside = join(markerDir, 'outside.txt')
+    writeFileSync(outside, 'keep me', { mode: 0o644 })
+    const path = stepPromptPath(worktree, 'run-1', 'plan')
+    mkdirSync(join(worktree, '.harness', 'runs', 'run-1'), { recursive: true })
+    symlinkSync(outside, path)
+    await writeStepPromptFile(path, 'new')
+    expect(readFileSync(outside, 'utf8')).toBe('keep me')
+    expect(statSync(outside).mode & 0o777).toBe(0o644)
+    expect(lstatSync(path).isSymbolicLink()).toBe(false)
+    expect(lstatSync(path).mode & 0o777).toBe(0o600)
+    expect(readFileSync(path, 'utf8')).toBe('new')
   })
 })

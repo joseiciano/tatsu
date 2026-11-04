@@ -161,6 +161,14 @@ describe('buildSpawnArgs with a permission level (TEST-003)', () => {
 describe('buildSpawnArgs', () => {
   const base = { command: 'claude', cwd: '/tmp/test' }
 
+  it('passes the prompt on --resume only when the caller asks for it', () => {
+    const sessionId = '0f8fad5b-d9cb-469f-a165-70867728950e'
+    fsState.files.set(join(homedir(), '.claude', 'projects', '-tmp-test', `${sessionId}.jsonl`), '')
+    const opts = { ...base, sessionId, initialPrompt: "fix it's broken" }
+    expect(buildSpawnArgs(opts)).toBe(`claude --resume ${sessionId}`)
+    expect(buildSpawnArgs({ ...opts, promptOnResume: true })).toBe(`claude --resume ${sessionId} -- 'fix it'\\''s broken'`)
+  })
+
   it('includes --append-system-prompt when systemPrompt is provided', () => {
     const result = buildSpawnArgs({ ...base, systemPrompt: 'You are in Harness.' })
     expect(result).toContain('--append-system-prompt')

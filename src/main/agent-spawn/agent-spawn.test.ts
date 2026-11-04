@@ -229,6 +229,14 @@ describe('AgentSpawner.buildAgentCommand', () => {
       })
     }
 
+    it('forwards promptOnResume to the agent only when the request sets it', () => {
+      const { spawner, buildSpawnArgs } = build()
+      spawner.buildAgentCommand({ terminalId: 't1', cwd: '/wt', agentKind: 'claude', initialPrompt: 'go', promptOnResume: true })
+      spawner.buildAgentCommand({ terminalId: 't2', cwd: '/wt', agentKind: 'claude', initialPrompt: 'go' })
+      expect(buildSpawnArgs.mock.calls[0][0].promptOnResume).toBe(true)
+      expect(buildSpawnArgs.mock.calls[1][0]).not.toHaveProperty('promptOnResume')
+    })
+
     it('codex and opencode get the MCP config file; pi never writes one', () => {
       for (const kind of ['codex', 'opencode'] as const) {
         const { spawner, buildSpawnArgs, writeMcpConfig } = build()
@@ -1004,6 +1012,7 @@ describe('main-only spawn extras (REQ-203)', () => {
           sessionId: 'step-session',
           model: 'step-model',
           initialPrompt: 'step prompt',
+          promptOnResume: true,
           permissionLevel: 'edit',
           bashAllow: ['npm test'],
           env: { A: '1' },
@@ -1019,6 +1028,7 @@ describe('main-only spawn extras (REQ-203)', () => {
         sessionId: 'step-session',
         modelOverride: 'step-model',
         initialPrompt: 'step prompt',
+        promptOnResume: true,
         permissionLevel: 'edit',
         bashAllow: ['npm test'],
         env: { A: '1' },
@@ -1044,6 +1054,7 @@ describe('main-only spawn extras (REQ-203)', () => {
       })
       expect(req.env).toBeUndefined()
       expect(req.command).toBeUndefined()
+      expect(req).not.toHaveProperty('promptOnResume')
     })
   })
 

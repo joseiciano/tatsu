@@ -601,6 +601,22 @@ export class PanesFSM {
     return true
   }
 
+  setTabWorkflow(wtPath: string, tabId: string, workflow: TerminalTabWorkflow): boolean {
+    const tree = this.getTree(wtPath)
+    const target = tree && getLeaves(tree).flatMap((leaf) => leaf.tabs).find((t) => t.id === tabId)
+    if (!tree || !target?.workflow) return false
+    const { runId, stepId, attemptId } = target.workflow
+    if (runId === workflow.runId && stepId === workflow.stepId && attemptId === workflow.attemptId) return true
+    const updated = mapLeaves(tree, (leaf) => {
+      const i = leaf.tabs.findIndex((t) => t.id === tabId)
+      if (i < 0) return leaf
+      const tabs = [...leaf.tabs.slice(0, i), { ...leaf.tabs[i], workflow: { ...workflow } }, ...leaf.tabs.slice(i + 1)]
+      return { ...leaf, tabs }
+    })
+    this.commit(wtPath, updated)
+    return true
+  }
+
   selectTab(wtPath: string, paneId: string, tabId: string): void {
     const tree = this.getTree(wtPath)
     if (!tree || !findLeaf(tree, paneId)) return

@@ -625,6 +625,12 @@ describe('codex buildSpawnArgs MCP overrides', () => {
       expect(seen).toEqual([['/wt', SESSION_ID, '/scratch/codex']])
     })
 
+    it('passes the prompt after resume <id> only when the caller asks for it', () => {
+      const opts = { command: 'codex', cwd: '/wt', sessionId: SESSION_ID, initialPrompt: 'fix it', promptOnResume: true }
+      expect(buildSpawnArgs(opts, () => true)).toBe(`codex resume '${SESSION_ID}' 'fix it'`)
+      expect(buildSpawnArgs({ ...opts, promptOnResume: false }, () => true)).toBe(`codex resume '${SESSION_ID}'`)
+    })
+
     it('treats a non-UUID session id as a fresh spawn without asking the check', () => {
       const check = vi.fn(() => true)
       const out = buildSpawnArgs({ command: 'codex', cwd: '/wt', sessionId: 'x; touch /tmp/p', initialPrompt: 'go' }, check)

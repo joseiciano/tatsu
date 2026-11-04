@@ -308,6 +308,7 @@ describe('WorkflowRunner.reconcile', () => {
           removedMarkers.push(id)
         },
         writePromptFile: async () => {},
+        write: () => {},
         newTabId: () => 'unused',
         newSessionId: () => 'unused',
         log: () => {}

@@ -204,6 +204,12 @@ export interface WorkflowRunRecord {
   attempts: WorkflowAttemptRecord[]
   overriddenFrom?: Record<string, WorkflowStepHarness>
   inputsUntrusted?: boolean
+  continuations?: Record<string, WorkflowContinuation>
+}
+
+export interface WorkflowContinuation {
+  prompt: string
+  fresh?: true
 }
 
 export interface WorkflowStepHarness {

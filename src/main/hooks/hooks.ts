@@ -177,6 +177,7 @@ export interface StopEvent {
   transcriptPath: string | null
   lastAssistantMessage: string | null
   continued: boolean
+  stopHookActive: boolean
   ts: number
 }
 
@@ -230,7 +231,16 @@ function emitStopIfRelevant(terminalId: string, ev: HookEvent): void {
     `stop terminal=${terminalId} transcript=${transcriptPath ? 'yes' : 'no'} lastMessageChars=${lastAssistantMessage?.length ?? 0}`
   )
   const continued = ev.continued === true
-  const payload: StopEvent = { terminalId, sessionId, transcriptPath, lastAssistantMessage, continued, ts: ev.ts }
+  const stopHookActive = p.stop_hook_active === true
+  const payload: StopEvent = {
+    terminalId,
+    sessionId,
+    transcriptPath,
+    lastAssistantMessage,
+    continued,
+    stopHookActive,
+    ts: ev.ts
+  }
   for (const l of stopListeners) {
     try {
       l(payload)

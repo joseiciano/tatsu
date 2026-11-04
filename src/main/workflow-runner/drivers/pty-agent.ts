@@ -1,4 +1,6 @@
-import { mkdir, writeFile } from 'fs/promises'
+import { randomUUID } from 'crypto'
+import { constants } from 'fs'
+import { mkdir, open, rename, unlink } from 'fs/promises'
 import { dirname, join } from 'path'
 import { renderTemplate, type WorkflowAgent } from '../../../shared/workflow-def'
 import { isPermissionLevel, sanitizeBashAllow } from '../../../shared/permission-level'
@@ -22,6 +24,10 @@ import {
 
 export const AGENT_CANCEL_SIGNAL: NodeJS.Signals = 'SIGHUP'
 export const PROMPT_INLINE_MAX_BYTES = 8192
+export const PASTE_START = '\x1b[200~'
+export const PASTE_END = '\x1b[201~'
+
+const PASTE_UNSAFE = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
 
 const FILE_SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
 
@@ -31,7 +37,8 @@ export const AGENT_START_SUMMARIES = {
   unsafeId: 'step or run id is not a safe file name',
   consent: 'hooks consent required',
   codexHooks: 'codex hooks need /hooks approval',
-  ended: 'attempt ended before spawn'
+  ended: 'attempt ended before spawn',
+  gone: 'agent is no longer running'
 } as const
 
 export const CLAUDE_START_SUMMARIES = {
@@ -68,6 +75,7 @@ export interface AgentStopEvent {
   terminalId: string
   lastAssistantMessage: string | null
   continued?: boolean
+  stopHookActive?: boolean
 }
 
 export interface AgentStepDriverDeps {
@@ -82,6 +90,7 @@ export interface AgentStepDriverDeps {
   writeMarker(terminalId: string, marker: StepMarker): void
   removeMarker(terminalId: string): void
   writePromptFile(path: string, text: string): Promise<void>
+  write(terminalId: string, data: string): void
   newTabId(): string
   newSessionId(): string
   log: WorkflowLog
@@ -101,7 +110,28 @@ export interface AgentStepDriver extends StepDriver {
 
 export async function writeStepPromptFile(path: string, text: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, text, { encoding: 'utf8', mode: 0o600 })
+  const temp = `${path}.${randomUUID()}.tmp`
+  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW
+  try {
+    const handle = await open(temp, flags, 0o600)
+    try {
+      await handle.writeFile(text, 'utf8')
+    } finally {
+      await handle.close()
+    }
+    await rename(temp, path)
+  } catch (err) {
+    await unlink(temp).catch(() => {})
+    throw err
+  }
+}
+
+export function sanitizePasteText(text: string): string {
+  return text.replace(PASTE_UNSAFE, '')
+}
+
+export function bracketedPaste(text: string): string {
+  return `${PASTE_START}${sanitizePasteText(text)}${PASTE_END}\r`
 }
 
 export function stepPromptPath(worktreePath: string, runId: string, stepId: string): string {
@@ -168,13 +198,14 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
     deps.onExit((id, exitCode, signal) => {
       emit({ type: 'exited', executionId: id, code: signal ? null : exitCode })
     }),
-    deps.onStopEvent(({ terminalId, lastAssistantMessage, continued }) => {
+    deps.onStopEvent(({ terminalId, lastAssistantMessage, continued, stopHookActive }) => {
       if (!owned.has(terminalId)) return
       emit({
         type: 'turnEnded',
         executionId: terminalId,
         ...(lastAssistantMessage === null ? {} : { lastMessage: lastAssistantMessage }),
-        ...(continued === true ? { continued } : {})
+        ...(continued === true ? { continued } : {}),
+        ...(stopHookActive === true ? { stopHookActive } : {})
       })
     }),
     deps.onPromptSubmit(({ terminalId }) => {
@@ -200,6 +231,25 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
     owned.delete(executionId)
     lastStatus.delete(executionId)
     deps.removeMarker(executionId)
+  }
+
+  const profileFor = (attempt: StepAttempt): AgentProfile => {
+    const { step, runId, stepId } = attempt
+    const profile = step.kind === 'agent' ? profiles.get(step.agent) : undefined
+    if (step.kind !== 'agent' || profile === undefined) throw new StepStartError(AGENT_START_SUMMARIES.unsupported)
+    if (!FILE_SAFE_ID.test(runId) || !FILE_SAFE_ID.test(stepId)) {
+      throw new StepStartError(AGENT_START_SUMMARIES.unsafeId)
+    }
+    return profile
+  }
+
+  const deliverable = async (attempt: StepAttempt, text: string): Promise<string> => {
+    if (Buffer.byteLength(text, 'utf8') <= PROMPT_INLINE_MAX_BYTES) return text
+    const { worktreePath, runId, stepId, attemptId } = attempt
+    const path = stepPromptPath(worktreePath, runId, stepId)
+    await deps.writePromptFile(path, text)
+    log('prompt written to file', { runId, stepId, attemptId })
+    return `Read ${path} and follow it.`
   }
 
   return {
@@ -229,15 +279,13 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
         log(`step blocked trust ${trust}`, ids)
         throw new StepPauseError('trust', profile.startSummaries.trust)
       }
-      const rendered = renderTemplate(step.prompt, scope)
-      if (rendered.missing.length > 0) log(`prompt refs missing ${rendered.missing.length}`, ids)
-      let initialPrompt = rendered.text
-      if (Buffer.byteLength(initialPrompt, 'utf8') > PROMPT_INLINE_MAX_BYTES) {
-        const path = stepPromptPath(worktreePath, runId, stepId)
-        await deps.writePromptFile(path, initialPrompt)
-        initialPrompt = `Read ${path} and follow it.`
-        log('prompt written to file', ids)
+      let text = attempt.prompt
+      if (text === undefined) {
+        const rendered = renderTemplate(step.prompt, scope)
+        if (rendered.missing.length > 0) log(`prompt refs missing ${rendered.missing.length}`, ids)
+        text = rendered.text
       }
+      const initialPrompt = await deliverable(attempt, text)
       const executionId = deps.newTabId()
       const sessionId =
         profile.session === 'preassigned' ? (attempt.resumeSessionId ?? deps.newSessionId()) : attempt.resumeSessionId
@@ -256,6 +304,7 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
         permissionLevel: step.permissions,
         bashAllow: sanitizeBashAllow(step.allow.filter((entry): entry is string => typeof entry === 'string')),
         initialPrompt,
+        ...(attempt.prompt !== undefined && attempt.resumeSessionId !== undefined ? { promptOnResume: true } : {}),
         ...(sessionId === undefined ? {} : { sessionId }),
         ...(step.model === undefined ? {} : { model: step.model })
       })
@@ -263,7 +312,20 @@ export function createAgentStepDriver(deps: AgentStepDriverDeps): AgentStepDrive
       log('step spawned', { ...ids, executionId })
       return execution
     },
-    continue() {},
+    async continue(attempt: StepAttempt, executionId: string, prompt: string): Promise<void> {
+      const { runId, stepId, attemptId } = attempt
+      const ids = { runId, stepId, attemptId }
+      const profile = profileFor(attempt)
+      if (!deps.hasTerminal(executionId)) throw new StepStartError(AGENT_START_SUMMARIES.gone)
+      const text = await deliverable(attempt, sanitizePasteText(prompt))
+      if (!attempt.bind({ executionId })) throw new StepStartError(AGENT_START_SUMMARIES.ended)
+      if (!deps.hasTerminal(executionId)) throw new StepStartError(AGENT_START_SUMMARIES.gone)
+      owned.set(executionId, profile)
+      lastStatus.delete(executionId)
+      deps.writeMarker(executionId, ids)
+      deps.write(executionId, bracketedPaste(text))
+      log('step continued', { ...ids, executionId })
+    },
     cancel(executionId: string) {
       deps.kill(executionId, owned.get(executionId)?.cancelSignal ?? AGENT_CANCEL_SIGNAL)
       release(executionId)
