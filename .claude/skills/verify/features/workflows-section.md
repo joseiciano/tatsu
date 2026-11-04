@@ -28,7 +28,12 @@ per active run, then recent finished and cancelled runs.
   `Step <id> · <agent>` (a running run names its first running agent step
   in definition order, so parallel branches show the earliest; a paused run
   names its cursor step), `Elapsed` (ticks every second) and `Cost` (`—`
-  when no attempt reported a cost) as `dt`/`dd` pairs.
+  when no attempt reported a cost) as `dt`/`dd` pairs. Cost is the sum of
+  the attempts' measured cost: the runner holds cost interest in its own
+  agent step terminals, so it is filled from each Stop's transcript with no
+  client watching (no `costs:setInterest`). It keeps updating after a run
+  ends, because the Stop that follows `complete_step` lands after the
+  attempt ended. Opencode steps (no transcript) stay `—`.
 - **Run workflow…**: a button at the top of the Runs tab opens the launch
   sheet with no preset target (Repository, New or Existing worktree; see
   workflow-run.md). A successful Start closes the section and selects the
@@ -73,6 +78,12 @@ per active run, then recent finished and cancelled runs.
     repo row is selected again. `workflow-flows.sh` passes `DATA_DIR` as
     `HARNESS_DATA_DIR`.
 
+  - A measured `$` cost on a card is driven in the `run-detail` scenario
+    (see run-detail.md): the `Recent runs` card `smoke-diamond on repo`
+    shows a `Cost` of `$0.27` (three fake Claude steps at `$0.09`) before it
+    is opened; journal line `run-detail: smoke-diamond card "…Cost$0.27"`
+    and `run-detail-05-diamond-card-cost.png`.
+
 End state that proves it: `workflows-section-*.png` in
 `$EVIDENCE/workflow-flows/`, the `active card` line in the journal, and the
 cancelled run record in `workflow-runs/`.
@@ -87,7 +98,13 @@ cancelled run record in `workflow-runs/`.
 - Earlier `browser-hang` runs (from `hang-cancel`) already sit under Recent
   runs with the same card name; compare counts instead of waiting for one
   card.
-- Cost reads `—` for the fake agent: it reports no cost.
+- The fake `claude` writes a Claude-format transcript under the sandbox
+  HOME (`FAKE_AGENT_TRANSCRIPT_DIR`, exported by `smoke_sandbox`) priced at
+  `$0.06` before `complete_step` and `$0.09` after the post-complete Stop,
+  so a completing fake Claude step costs `$0.09`. `hang` steps never Stop
+  and read `—`; `exit-no-complete` exits right after its only Stop, and the
+  server deletes the status file on exit, so it may read `—`. The fake
+  codex and opencode pass no transcript and read `—`.
 - Elapsed reads `0s` on the fake runs: they finish in about 0.5 s (compare
   `startedAt`/`finishedAt` in the run records). Ticking is covered by the
   jsdom fake-timer test in `WorkflowsView.test.tsx`.

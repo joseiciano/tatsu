@@ -55,7 +55,10 @@ selected attempt's full result and the files that attempt changed.
 - **Attempt timeline**: list `Attempt timeline`, one `aria-pressed` button
   per attempt in definition step order then attempt number, named
   `<step> #<n>: <status>, completed by <who>, <duration>, cost <cost>`.
-  The latest attempt is selected by default.
+  The latest attempt is selected by default. The cost comes from the live
+  slice attempt (`workflows/attemptCostChanged`) when it has one, else from
+  the fetched record's `metrics.costUsd`, so a cost that lands after the
+  attempt ended shows without a record refetch.
 - **Attempt result**: region `Attempt result`: step and attempt, status,
   `Completed by`, exit code, the summary as plain text in a `pre`
   (`Attempt summary`), and one `pre` per output field (strings as is,
@@ -98,8 +101,10 @@ selected attempt's full result and the files that attempt changed.
     files` reads `No snapshot for this attempt` -> `All runs` -> `Back`.
     Then the diamond: launch sheet -> `smoke-diamond` -> Start -> wait for
     the new run to be `done` -> sidebar `Workflows` -> `Recent runs` ->
-    first `article` `smoke-diamond on repo` -> `Open run: smoke-diamond on repo`
-    -> region `smoke-diamond` -> graph listitems `plan: done`, `left:
+    first `article` `smoke-diamond on repo`, whose `Cost` reads `$0.27`
+    (screenshot `diamond-card-cost`) -> `Open run: smoke-diamond on repo`
+    -> region `smoke-diamond` -> timeline row `plan #1: done, completed by
+    the agent (complete_step), …, cost $0.09` -> graph listitems `plan: done`, `left:
     done`, `right: done`, `join: done` -> `path[data-edge]` set is exactly
     `left->join`, `plan->left`, `plan->right`, `right->join` -> `All runs`
     -> `Back` closes the section. Then the conditional step: launch sheet
@@ -136,12 +141,15 @@ selected attempt's full result and the files that attempt changed.
     and two timeline rows -> `All runs` -> `Back`.
 
 End state that proves it: `run-detail-01-detail-timeline.png`,
-`run-detail-02-detail-summary.png`, `run-detail-05-diamond-graph.png`,
-`run-detail-08-when-graph.png`, `run-detail-11-parallel-graph.png`,
+`run-detail-02-detail-summary.png`, `run-detail-05-diamond-card-cost.png`,
+`run-detail-06-diamond-graph.png`, `run-detail-09-when-graph.png`,
+`run-detail-12-parallel-graph.png`,
 `attempt-diff-03-changed-files.png` and
 `attempt-diff-04-file-diff.png`, `swap-step-04-swap-dialog.png` and
 `swap-step-05-detail-done.png` in `$EVIDENCE/workflow-flows/`, and the
-`run-detail: timeline [...]`, `run-detail: diamond graph edges [...]`,
+`run-detail: timeline [...]`, `run-detail: smoke-diamond card "…Cost$0.27"`,
+`run-detail: diamond plan row "plan #1: …, cost $0.09"`,
+`run-detail: diamond graph edges [...]`,
 `run-detail: smoke-when graph shows review: done, fix: skipped, join: done`,
 `run-detail: smoke-parallel graph shows left: running, right: running`,
 `run-detail: smoke-parallel run <id> cancelled from the detail; left and
@@ -163,8 +171,10 @@ lines in the journal.
   each get a graph node in `running` and a `●` in the step strip.
 - Mark done records a new attempt, so the Mark-done step has two timeline
   rows, not one updated row.
-- The fake agent reports no cost and finishes in well under a second:
-  rows read `0s` and `cost —`.
+- The fake agent finishes in well under a second, so rows read `0s`. A
+  completing fake Claude step costs `$0.09` (its transcript, see
+  workflows-section.md); `exit-no-complete`, Mark-done and shell rows read
+  `cost —`.
 - The run record is refetched only when the run status, a step status or
   the attempt id/status set changes (`workflowRunRecordKey`), not per
   streamed summary update.
