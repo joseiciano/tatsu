@@ -180,6 +180,23 @@ steps:
       verdict: { enum: [pass, fail] }
     loop: { back_to: build, until: { field: verdict, equals: pass }, max: 3 }
 YAML
+  cat > "$HARNESS_DATA_DIR/workflows/smoke-when.yaml" <<'YAML'
+name: smoke-when
+steps:
+  - id: review
+    agent: claude
+    permissions: read-only
+    prompt: 'FAKE_AGENT_DATA={"verdict":"pass"} Review the change and call complete_step.'
+    output:
+      verdict: { enum: [pass, fail] }
+  - id: fix
+    agent: claude
+    prompt: "Fix what the review found and call complete_step."
+    when: { field: verdict, equals: fail }
+  - id: join
+    kind: shell
+    run: echo JOINED {{steps.review.summary}}
+YAML
   cat > "$HARNESS_DATA_DIR/workflows/smoke-retry.yaml" <<'YAML'
 name: smoke-retry
 steps:
