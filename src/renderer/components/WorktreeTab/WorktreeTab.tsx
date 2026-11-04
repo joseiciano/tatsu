@@ -151,6 +151,7 @@ export function WorktreeTab({ worktree, isActive, status, pendingTool, shellActi
   return (
     <div
       onClick={onClick}
+      aria-current={isActive ? 'true' : undefined}
       onContextMenu={(e) => {
         if (!canRunWorkflow) return
         e.preventDefault()

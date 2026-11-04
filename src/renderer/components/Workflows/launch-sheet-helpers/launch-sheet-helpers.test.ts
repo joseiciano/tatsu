@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildInputFields,
   canStart,
+  definitionsForRepo,
+  existingWorktreeOptions,
+  isWorktreeBusy,
   needsFull,
+  targetBlockReason,
+  workflowBranchName,
   showRunWorkflowItem,
   startBlockReason,
   trustNeeded,
@@ -10,7 +15,8 @@ import {
   type CanStartArgs
 } from '.'
 import { validateWorkflowDefinition, type ResolvedDefinition } from '../../../../shared/workflow-def'
-import type { WorkflowRun, WorkflowRunStatus } from '../../../../shared/state/workflows'
+import type { WorkflowDefinitionSummary, WorkflowRun, WorkflowRunStatus } from '../../../../shared/state/workflows'
+import type { Worktree } from '../../../../shared/state/worktrees'
 import type { CodexHookTrustSummary } from '../../../../shared/state/hooks'
 
 function resolve(yaml: string): ResolvedDefinition {
@@ -259,5 +265,123 @@ describe('showRunWorkflowItem', () => {
   it('ignores busy runs in other worktrees, including path prefixes', () => {
     const runs = { r1: run('/wt/ab', 'running'), r2: run('/wt/a/', 'paused'), r3: run('/wt', 'queued') }
     expect(showRunWorkflowItem({ labsWorkflows: true, worktreePath: '/wt/a', runs })).toBe(true)
+  })
+})
+
+function liveRun(worktreePath: string, status: WorkflowRunStatus): WorkflowRun {
+  return { defId: 'personal:x', defHash: 'h', worktreePath, status, startedAt: 1, steps: {} }
+}
+
+function worktree(path: string, repoRoot: string, extra: Partial<Worktree> = {}): Worktree {
+  return { path, branch: path.split('/').pop() ?? path, head: 'abc', isBare: false, isMain: false, createdAt: 0, repoRoot, ...extra }
+}
+
+describe('isWorktreeBusy', () => {
+  it('is true only for a queued, running or paused run on the exact path', () => {
+    const runs = { a: liveRun('/wt/a', 'paused'), b: liveRun('/wt/b', 'done'), c: liveRun('/wt/ab', 'running') }
+    expect(isWorktreeBusy(runs, '/wt/a')).toBe(true)
+    expect(isWorktreeBusy(runs, '/wt/b')).toBe(false)
+    expect(isWorktreeBusy(runs, '/wt')).toBe(false)
+  })
+})
+
+describe('definitionsForRepo', () => {
+  function def(id: string, scope: 'personal' | 'repo', repoRoot?: string): WorkflowDefinitionSummary {
+    return { id, name: id, scope, ...(repoRoot ? { repoRoot } : {}), path: `/x/${id}.yaml`, hash: 'h', stepIds: [], issues: [] }
+  }
+  const defs = {
+    p: def('p', 'personal'),
+    a: def('a', 'repo', '/repo/a'),
+    b: def('b', 'repo', '/repo/b')
+  }
+
+  it('lists personal definitions and the chosen repo’s definitions only', () => {
+    expect(definitionsForRepo(defs, '/repo/a').map((d) => d.id)).toEqual(['p', 'a'])
+    expect(definitionsForRepo(defs, '/repo/b').map((d) => d.id)).toEqual(['p', 'b'])
+  })
+
+  it('lists only personal definitions without a repo', () => {
+    expect(definitionsForRepo(defs, null).map((d) => d.id)).toEqual(['p'])
+  })
+})
+
+describe('existingWorktreeOptions', () => {
+  it('lists the repo’s non-bare worktrees without a live run', () => {
+    const worktrees = [
+      worktree('/repo/a', '/repo/a', { isMain: true }),
+      worktree('/wts/busy', '/repo/a'),
+      worktree('/wts/free', '/repo/a'),
+      worktree('/wts/bare', '/repo/a', { isBare: true }),
+      worktree('/wts/other', '/repo/b')
+    ]
+    const runs = { r: liveRun('/wts/busy', 'running'), d: liveRun('/wts/free', 'done') }
+    expect(existingWorktreeOptions({ worktrees, repoRoot: '/repo/a', runs })).toEqual([
+      { path: '/repo/a', label: 'a' },
+      { path: '/wts/free', label: 'free' }
+    ])
+  })
+
+  it('is empty without a repo', () => {
+    expect(existingWorktreeOptions({ worktrees: [worktree('/repo/a', '/repo/a')], repoRoot: null, runs: {} })).toEqual([])
+  })
+})
+
+describe('workflowBranchName', () => {
+  it('builds wf/<definition>/<suffix> from a sanitized definition name', () => {
+    expect(workflowBranchName('Plan & Ship!', 'k3x9ab12')).toBe('wf/plan-ship/k3x9ab12')
+    expect(workflowBranchName('browser-hang', 'abc')).toBe('wf/browser-hang/abc')
+  })
+
+  it('falls back to "workflow" when nothing usable is left and caps the length', () => {
+    expect(workflowBranchName('…', 'abc')).toBe('wf/workflow/abc')
+    expect(workflowBranchName('x'.repeat(100), 'abc')).toBe(`wf/${'x'.repeat(40)}/abc`)
+  })
+
+  it('never produces a name the branch rules reject', () => {
+    for (const name of ['.hidden', 'a..b', 'end.lock', '-lead', 'a/b', 'ünï cödé', '__']) {
+      expect(targetBlockReason({
+        target: { kind: 'new', repoRoot: '/repo/a', branchName: workflowBranchName(name, 'abc') },
+        repoRoots: ['/repo/a'],
+        worktrees: [],
+        runs: {}
+      })).toBeNull()
+    }
+  })
+})
+
+describe('targetBlockReason', () => {
+  const repoRoots = ['/repo/a']
+  const worktrees = [worktree('/repo/a', '/repo/a', { isMain: true }), worktree('/wts/busy', '/repo/a')]
+  const runs = { r: liveRun('/wts/busy', 'paused') }
+  const base = { repoRoots, worktrees, runs }
+
+  it('accepts a preset target', () => {
+    expect(targetBlockReason({ ...base, target: { kind: 'preset', worktreePath: '/repo/a' } })).toBeNull()
+  })
+
+  it('requires a registered repo', () => {
+    expect(targetBlockReason({ ...base, target: { kind: 'new', repoRoot: null, branchName: 'x' } })).toBe('Choose a repository')
+    expect(targetBlockReason({ ...base, target: { kind: 'new', repoRoot: '/gone', branchName: 'x' } })).toBe('Choose a repository')
+  })
+
+  it('applies the branch name rules to a new worktree', () => {
+    expect(targetBlockReason({ ...base, target: { kind: 'new', repoRoot: '/repo/a', branchName: 'wf/plan/abc' } })).toBeNull()
+    expect(targetBlockReason({ ...base, target: { kind: 'new', repoRoot: '/repo/a', branchName: '' } })).toBe('Enter a branch name')
+    expect(targetBlockReason({ ...base, target: { kind: 'new', repoRoot: '/repo/a', branchName: 'a..b' } })).toBe(
+      'A branch name can’t contain “..”'
+    )
+  })
+
+  it('requires an existing worktree of the repo without a live run', () => {
+    expect(targetBlockReason({ ...base, target: { kind: 'existing', repoRoot: '/repo/a', worktreePath: '/repo/a' } })).toBeNull()
+    expect(targetBlockReason({ ...base, target: { kind: 'existing', repoRoot: '/repo/a', worktreePath: null } })).toBe(
+      'Choose a worktree'
+    )
+    expect(targetBlockReason({ ...base, target: { kind: 'existing', repoRoot: '/repo/a', worktreePath: '/wts/busy' } })).toBe(
+      'Choose a worktree'
+    )
+    expect(targetBlockReason({ ...base, target: { kind: 'existing', repoRoot: '/repo/a', worktreePath: '/elsewhere' } })).toBe(
+      'Choose a worktree'
+    )
   })
 })

@@ -1,20 +1,33 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBackend } from '../../../backend'
-import { useHooks, useWorkflowDefinitions, useWorkflowTrust } from '../../../store'
+import { sanitizeBranchInput } from '../../../branch-name'
+import { useAppState, useHooks, useWorkflowDefinitions, useWorkflowTrust, useWorktreeRepoRoot } from '../../../store'
 import type { WorkflowDefinitionDetail, WorkflowScope } from '../../../../shared/state/workflows'
 import type { ResolvedDefinition } from '../../../../shared/workflow-def'
 import {
   buildInputFields,
+  definitionsForRepo,
+  existingWorktreeOptions,
   needsFull as definitionNeedsFull,
   startBlockReason,
+  targetBlockReason,
   trustNeeded,
-  trustStepRows
+  trustStepRows,
+  workflowBranchName,
+  type LaunchTarget
 } from '../launch-sheet-helpers'
-import { LaunchSheetForm, type LaunchSheetOption, type LaunchSheetTrust } from './LaunchSheetForm'
+import {
+  LaunchSheetForm,
+  type LaunchSheetOption,
+  type LaunchSheetTargetView,
+  type LaunchSheetTrust,
+  type TargetMode
+} from './LaunchSheetForm'
 
 interface LaunchSheetProps {
-  worktreePath: string
+  worktreePath?: string
   onClose: () => void
+  onStarted?: (worktreePath: string) => void
 }
 
 interface LoadedDefinition {
@@ -26,10 +39,28 @@ interface LoadedDefinition {
   detailHash: string
 }
 
-export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.Element {
+function basename(path: string): string {
+  return path.split('/').filter(Boolean).pop() ?? path
+}
+
+function newBranchSuffix(): string {
+  return crypto.randomUUID().slice(0, 8)
+}
+
+export function LaunchSheet({ worktreePath, onClose, onStarted }: LaunchSheetProps): JSX.Element {
   const backend = useBackend()
   const definitions = useWorkflowDefinitions()
   const { consent, codexTrust } = useHooks()
+  const repoRoots = useAppState((s) => s.worktrees.repoRoots)
+  const worktrees = useAppState((s) => s.worktrees.list)
+  const runs = useAppState((s) => s.workflows.runs)
+  const presetRepo = useWorktreeRepoRoot(worktreePath ?? null)
+  const [repoChoice, setRepoChoice] = useState<string | null>(null)
+  const [mode, setMode] = useState<TargetMode>('new')
+  const [branchDraft, setBranchDraft] = useState<string | null>(null)
+  const [branchSuffix] = useState(newBranchSuffix)
+  const [existingChoice, setExistingChoice] = useState<string | null>(null)
+  const mounted = useRef(true)
   const [chosenId, setChosenId] = useState<string | null>(null)
   const [loaded, setLoaded] = useState<LoadedDefinition | null>(null)
   const [inputs, setInputs] = useState<Record<string, string>>({})
@@ -39,9 +70,23 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
   const [trusting, setTrusting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  const repoRoot =
+    worktreePath !== undefined
+      ? presetRepo
+      : repoChoice !== null && repoRoots.includes(repoChoice)
+        ? repoChoice
+        : repoRoots[0] ?? null
+
   const options = useMemo<LaunchSheetOption[]>(
     () =>
-      Object.values(definitions)
+      definitionsForRepo(definitions, repoRoot)
         .map((summary) => ({
           id: summary.id,
           name: summary.name,
@@ -49,11 +94,11 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
           repo: summary.scope === 'repo'
         }))
         .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
-    [definitions]
+    [definitions, repoRoot]
   )
 
   const selectedId =
-    chosenId !== null && Object.hasOwn(definitions, chosenId)
+    chosenId !== null && options.some((option) => option.id === chosenId)
       ? chosenId
       : options.find((option) => option.issue === null)?.id ?? ''
   const summary = selectedId === '' ? null : definitions[selectedId]
@@ -96,11 +141,29 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
   const trust: LaunchSheetTrust | null =
     needsTrust && loaded !== null ? { source: loaded.source, rows: trustRows, trusting } : null
 
+  const existingOptions = useMemo(
+    () => (worktreePath === undefined ? existingWorktreeOptions({ worktrees, repoRoot, runs }) : []),
+    [worktreePath, worktrees, repoRoot, runs]
+  )
+  const existingPath =
+    existingChoice !== null && existingOptions.some((option) => option.path === existingChoice)
+      ? existingChoice
+      : existingOptions[0]?.path ?? null
+  const branchName = branchDraft ?? workflowBranchName(summary?.name ?? '', branchSuffix)
+  const target: LaunchTarget =
+    worktreePath !== undefined
+      ? { kind: 'preset', worktreePath }
+      : mode === 'new'
+        ? { kind: 'new', repoRoot, branchName }
+        : { kind: 'existing', repoRoot, worktreePath: existingPath }
+  const targetReason = targetBlockReason({ target, repoRoots, worktrees, runs })
+
   const blockReason = submitting
     ? 'Starting…'
-    : loading
-      ? 'Loading workflow…'
-      : startBlockReason({ consent, codexTrust, inputs, needsFull, allowFull, trustNeeded: needsTrust, definition })
+    : targetReason ??
+      (loading
+        ? 'Loading workflow…'
+        : startBlockReason({ consent, codexTrust, inputs, needsFull, allowFull, trustNeeded: needsTrust, definition }))
 
   const handleSelect = useCallback((id: string) => {
     setChosenId(id)
@@ -141,33 +204,74 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
     }
   }, [backend, trustId, trustHash])
 
+  const createWorktree = useCallback(
+    async (root: string, branch: string): Promise<string | null> => {
+      const id = `pending:${crypto.randomUUID()}`
+      const created = await backend.runPendingWorktree({ id, repoRoot: root, branchName: branch })
+      if (!mounted.current) return null
+      if (created.outcome !== 'success') void backend.dismissPendingWorktree(id)
+      if (created.outcome === 'error') {
+        setError(created.error)
+        return null
+      }
+      setRepoChoice(root)
+      setMode('existing')
+      setExistingChoice(created.createdPath)
+      return created.createdPath
+    },
+    [backend]
+  )
+
   const handleStart = useCallback(async () => {
     if (blockReason !== null || summaryId === undefined) return
     const declared = Object.fromEntries(fields.map(({ name }) => [name, inputs[name] ?? '']))
     setSubmitting(true)
     setError(null)
     try {
+      const path =
+        target.kind === 'new'
+          ? target.repoRoot === null
+            ? null
+            : await createWorktree(target.repoRoot, target.branchName)
+          : target.worktreePath
+      if (path === null || !mounted.current) return
       const response = await backend.startWorkflowRun({
         defId: summaryId,
-        worktreePath,
+        worktreePath: path,
         inputs: declared,
         ...(needsFull && allowFull ? { allowFull: true } : {})
       })
+      if (!mounted.current) return
       if ('runId' in response) {
+        onStarted?.(path)
         onClose()
         return
       }
       setError(response.error)
     } catch {
-      setError('Could not start the workflow')
+      if (mounted.current) setError('Could not start the workflow')
     } finally {
-      setSubmitting(false)
+      if (mounted.current) setSubmitting(false)
     }
-  }, [backend, blockReason, summaryId, fields, inputs, worktreePath, needsFull, allowFull, onClose])
+  }, [backend, blockReason, summaryId, fields, inputs, target, createWorktree, needsFull, allowFull, onStarted, onClose])
+
+  const targetView: LaunchSheetTargetView =
+    worktreePath !== undefined
+      ? { kind: 'preset', label: basename(worktreePath) }
+      : {
+          kind: 'choose',
+          repos: repoRoots.map((root) => ({ root, label: basename(root) })),
+          repoRoot,
+          mode,
+          branchName,
+          branchInvalid: mode === 'new' && targetReason !== null,
+          existing: existingOptions,
+          existingPath
+        }
 
   return (
     <LaunchSheetForm
-      worktreeLabel={worktreePath.split('/').filter(Boolean).pop() ?? worktreePath}
+      target={targetView}
       options={options}
       selectedId={selectedId}
       fields={fields}
@@ -181,6 +285,17 @@ export function LaunchSheet({ worktreePath, onClose }: LaunchSheetProps): JSX.El
       submitting={submitting}
       error={error}
       onSelect={handleSelect}
+      onRepoChange={(root) => {
+        setRepoChoice(root)
+        setExistingChoice(null)
+        setError(null)
+      }}
+      onModeChange={(next) => {
+        setMode(next)
+        setError(null)
+      }}
+      onBranchChange={(value) => setBranchDraft(sanitizeBranchInput(value))}
+      onExistingChange={setExistingChoice}
       onInputChange={handleInputChange}
       onInstallHooks={() => void handleInstallHooks()}
       onAllowFullChange={(checked) => setAllowFullFor(checked ? confirmKey : null)}

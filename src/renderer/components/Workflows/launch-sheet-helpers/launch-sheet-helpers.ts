@@ -1,5 +1,12 @@
 import type { CodexHookTrustSummary, HooksConsent } from '../../../../shared/state/hooks'
-import type { WorkflowRun, WorkflowRunStatus, WorkflowScope } from '../../../../shared/state/workflows'
+import type {
+  WorkflowDefinitionSummary,
+  WorkflowRun,
+  WorkflowRunStatus,
+  WorkflowScope
+} from '../../../../shared/state/workflows'
+import type { Worktree } from '../../../../shared/state/worktrees'
+import { branchNameProblem } from '../../../../shared/branch-name-rules'
 import type { ResolvedDefinition, WorkflowInputType } from '../../../../shared/workflow-def'
 
 export type LaunchInputControl = 'textarea' | 'text'
@@ -37,6 +44,31 @@ export interface RunWorkflowItemArgs {
   worktreePath: string
   runs: Record<string, WorkflowRun>
 }
+
+export type LaunchTarget =
+  | { kind: 'preset'; worktreePath: string }
+  | { kind: 'new'; repoRoot: string | null; branchName: string }
+  | { kind: 'existing'; repoRoot: string | null; worktreePath: string | null }
+
+export interface ExistingWorktreeOption {
+  path: string
+  label: string
+}
+
+export interface ExistingWorktreeOptionsArgs {
+  worktrees: readonly Worktree[]
+  repoRoot: string | null
+  runs: Record<string, WorkflowRun>
+}
+
+export interface TargetBlockReasonArgs {
+  target: LaunchTarget
+  repoRoots: readonly string[]
+  worktrees: readonly Worktree[]
+  runs: Record<string, WorkflowRun>
+}
+
+const BRANCH_DEFINITION_MAX_CHARS = 40
 
 const BUSY_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['queued', 'running', 'paused'])
 
@@ -105,7 +137,56 @@ export function canStart(args: CanStartArgs): boolean {
   return startBlockReason(args) === null
 }
 
+export function isWorktreeBusy(runs: Record<string, WorkflowRun>, worktreePath: string): boolean {
+  return Object.values(runs).some((run) => run.worktreePath === worktreePath && BUSY_STATUSES.has(run.status))
+}
+
 export function showRunWorkflowItem({ labsWorkflows, worktreePath, runs }: RunWorkflowItemArgs): boolean {
-  if (!labsWorkflows) return false
-  return !Object.values(runs).some((run) => run.worktreePath === worktreePath && BUSY_STATUSES.has(run.status))
+  return labsWorkflows && !isWorktreeBusy(runs, worktreePath)
+}
+
+export function definitionsForRepo(
+  definitions: Record<string, WorkflowDefinitionSummary>,
+  repoRoot: string | null
+): WorkflowDefinitionSummary[] {
+  return Object.values(definitions).filter(
+    (summary) => summary.scope === 'personal' || (repoRoot !== null && summary.repoRoot === repoRoot)
+  )
+}
+
+export function existingWorktreeOptions({ worktrees, repoRoot, runs }: ExistingWorktreeOptionsArgs): ExistingWorktreeOption[] {
+  if (repoRoot === null) return []
+  return worktrees
+    .filter((wt) => wt.repoRoot === repoRoot && !wt.isBare && !isWorktreeBusy(runs, wt.path))
+    .map((wt) => ({ path: wt.path, label: wt.branch || (wt.path.split('/').filter(Boolean).pop() ?? wt.path) }))
+}
+
+export function workflowBranchName(definitionName: string, suffix: string): string {
+  const slug = definitionName
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, BRANCH_DEFINITION_MAX_CHARS)
+    .replace(/-+$/, '')
+  return `wf/${slug || 'workflow'}/${suffix}`
+}
+
+export function targetBlockReason({ target, repoRoots, worktrees, runs }: TargetBlockReasonArgs): string | null {
+  switch (target.kind) {
+    case 'preset':
+      return null
+    case 'new':
+      if (target.repoRoot === null || !repoRoots.includes(target.repoRoot)) return 'Choose a repository'
+      return branchNameProblem(target.branchName)
+    case 'existing': {
+      if (target.repoRoot === null || !repoRoots.includes(target.repoRoot)) return 'Choose a repository'
+      const allowed = existingWorktreeOptions({ worktrees, repoRoot: target.repoRoot, runs })
+      return allowed.some((option) => option.path === target.worktreePath) ? null : 'Choose a worktree'
+    }
+    default: {
+      const _exhaustive: never = target
+      return _exhaustive
+    }
+  }
 }

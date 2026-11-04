@@ -74,6 +74,18 @@ function rightClick(): MouseEvent {
 
 const menuItem = () => document.body.querySelector<HTMLButtonElement>('[role="menuitem"]')
 
+describe('WorktreeTab selection', () => {
+  it('marks only the active row with aria-current', () => {
+    setState(true)
+    render()
+    expect(container.firstElementChild?.hasAttribute('aria-current')).toBe(false)
+    act(() => {
+      root.render(<WorktreeTab worktree={WORKTREE} isActive status="idle" onClick={onClick} />)
+    })
+    expect(container.firstElementChild?.getAttribute('aria-current')).toBe('true')
+  })
+})
+
 describe('WorktreeTab context menu', () => {
   it('opens on right-click and runs the workflow without selecting the row', () => {
     setState(true)

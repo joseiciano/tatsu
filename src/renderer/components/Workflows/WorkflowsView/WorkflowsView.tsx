@@ -13,9 +13,10 @@ const selectRunLists = createRunListsSelector()
 export interface WorkflowsViewProps {
   onClose: () => void
   onJumpToTab?: JumpToTabHandler
+  onRunWorkflow?: () => void
 }
 
-export function WorkflowsView({ onClose, onJumpToTab }: WorkflowsViewProps): JSX.Element {
+export function WorkflowsView({ onClose, onJumpToTab, onRunWorkflow }: WorkflowsViewProps): JSX.Element {
   const [tab, setTab] = useState<WorkflowsTab>('runs')
   const [now, setNow] = useState(() => Date.now())
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
@@ -76,6 +77,7 @@ export function WorkflowsView({ onClose, onJumpToTab }: WorkflowsViewProps): JSX
             onOpenRun={openRun}
             focusRunId={returnFocusRunId}
             onFocused={clearReturnFocus}
+            onRunWorkflow={onRunWorkflow}
           />
         ))}
     </WorkflowsSection>

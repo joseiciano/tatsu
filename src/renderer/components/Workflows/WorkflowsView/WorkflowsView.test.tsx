@@ -188,6 +188,18 @@ describe('WorkflowsView', () => {
     expect(container.textContent).not.toContain('NEEDS YOU')
   })
 
+  it('opens the launch sheet with no preset from the Run workflow… button', async () => {
+    setState({})
+    const onRunWorkflow = vi.fn()
+    await act(async () => {
+      root.render(<WorkflowsView onClose={onClose} onRunWorkflow={onRunWorkflow} />)
+    })
+    const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Run workflow…')
+    await act(async () => button?.click())
+    expect(onRunWorkflow).toHaveBeenCalledOnce()
+    expect(onRunWorkflow).toHaveBeenCalledWith()
+  })
+
   it('closes from the Back button', async () => {
     setState({})
     await render()

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef } from 'react'
 import { Loader2, Play, ShieldAlert, X } from 'lucide-react'
 import type { HooksConsent } from '../../../../shared/state/hooks'
 import { useFocusTrap } from '../../../hooks/useFocusTrap'
-import type { LaunchInputField, TrustStepRow } from '../launch-sheet-helpers'
+import type { ExistingWorktreeOption, LaunchInputField, TrustStepRow } from '../launch-sheet-helpers'
 import { TrustPanel } from './TrustPanel'
 
 export interface LaunchSheetOption {
@@ -18,8 +18,23 @@ export interface LaunchSheetTrust {
   trusting: boolean
 }
 
+export type TargetMode = 'new' | 'existing'
+
+export type LaunchSheetTargetView =
+  | { kind: 'preset'; label: string }
+  | {
+      kind: 'choose'
+      repos: { root: string; label: string }[]
+      repoRoot: string | null
+      mode: TargetMode
+      branchName: string
+      branchInvalid: boolean
+      existing: ExistingWorktreeOption[]
+      existingPath: string | null
+    }
+
 export interface LaunchSheetFormProps {
-  worktreeLabel: string
+  target: LaunchSheetTargetView
   options: LaunchSheetOption[]
   selectedId: string
   fields: LaunchInputField[]
@@ -33,6 +48,10 @@ export interface LaunchSheetFormProps {
   submitting: boolean
   error: string | null
   onSelect: (id: string) => void
+  onRepoChange: (repoRoot: string) => void
+  onModeChange: (mode: TargetMode) => void
+  onBranchChange: (value: string) => void
+  onExistingChange: (worktreePath: string) => void
   onInputChange: (name: string, value: string) => void
   onInstallHooks: () => void
   onAllowFullChange: (allowFull: boolean) => void
@@ -50,8 +69,13 @@ function optionLabel({ name, issue, repo }: LaunchSheetOption): string {
   return issue === null ? label : `${label} (${issue})`
 }
 
+const MODE_OPTIONS: { mode: TargetMode; label: string }[] = [
+  { mode: 'new', label: 'New worktree' },
+  { mode: 'existing', label: 'Existing worktree' }
+]
+
 export function LaunchSheetForm({
-  worktreeLabel,
+  target,
   options,
   selectedId,
   fields,
@@ -65,6 +89,10 @@ export function LaunchSheetForm({
   submitting,
   error,
   onSelect,
+  onRepoChange,
+  onModeChange,
+  onBranchChange,
+  onExistingChange,
   onInputChange,
   onInstallHooks,
   onAllowFullChange,
@@ -78,11 +106,16 @@ export function LaunchSheetForm({
 
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const selectRef = useRef<HTMLSelectElement | null>(null)
+  const repoRef = useRef<HTMLSelectElement | null>(null)
   const startRef = useRef<HTMLButtonElement | null>(null)
   const trustShown = trust !== null
   const trustWasShown = useRef(trustShown)
 
-  useFocusTrap(dialogRef, { active: true, onEscape: onClose, initialFocus: selectRef })
+  useFocusTrap(dialogRef, {
+    active: true,
+    onEscape: onClose,
+    initialFocus: target.kind === 'preset' ? selectRef : repoRef
+  })
 
   useEffect(() => {
     if (trustWasShown.current && !trustShown && !startRef.current?.disabled) startRef.current?.focus()
@@ -105,7 +138,9 @@ export function LaunchSheetForm({
             <h2 id={titleId} className="text-sm font-semibold text-fg-bright">
               Run workflow
             </h2>
-            <div className="text-xs text-dim truncate">in {worktreeLabel}</div>
+            <div className="text-xs text-dim truncate">
+              {target.kind === 'preset' ? `in ${target.label}` : 'Choose where it runs'}
+            </div>
           </div>
           <button
             type="button"
@@ -124,6 +159,93 @@ export function LaunchSheetForm({
             if (blockReason === null) onStart()
           }}
         >
+          {target.kind === 'choose' && (
+            <fieldset className="space-y-3 rounded border border-border px-3 pt-2 pb-3">
+              <legend className={`${LABEL_CLASS} px-1`}>Target</legend>
+              {target.repos.length === 0 ? (
+                <p className="text-xs text-dim leading-relaxed">Add a repository to Tatsu first.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  <label htmlFor={`${baseId}-repo`} className={LABEL_CLASS}>
+                    Repository
+                  </label>
+                  <select
+                    ref={repoRef}
+                    id={`${baseId}-repo`}
+                    value={target.repoRoot ?? ''}
+                    onChange={(e) => onRepoChange(e.target.value)}
+                    disabled={submitting}
+                    className={`${FIELD_CLASS} cursor-pointer`}
+                  >
+                    {target.repos.map(({ root, label }) => (
+                      <option key={root} value={root} title={root}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div role="radiogroup" aria-label="Where to run" className="flex gap-4">
+                {MODE_OPTIONS.map(({ mode, label }) => (
+                  <label key={mode} className="flex items-center gap-1.5 text-xs text-fg cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`${baseId}-mode`}
+                      value={mode}
+                      checked={target.mode === mode}
+                      onChange={() => onModeChange(mode)}
+                      disabled={submitting}
+                      className="icon-base cursor-pointer"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {target.mode === 'new' ? (
+                <div className="space-y-1.5">
+                  <label htmlFor={`${baseId}-branch`} className={LABEL_CLASS}>
+                    Branch name
+                  </label>
+                  <input
+                    id={`${baseId}-branch`}
+                    type="text"
+                    value={target.branchName}
+                    onChange={(e) => onBranchChange(e.target.value)}
+                    disabled={submitting}
+                    spellCheck={false}
+                    autoComplete="off"
+                    aria-invalid={target.branchInvalid || undefined}
+                    aria-describedby={target.branchInvalid && blockReason !== null ? reasonId : undefined}
+                    className={`${FIELD_CLASS} font-mono`}
+                  />
+                </div>
+              ) : target.existing.length === 0 ? (
+                <p className="text-xs text-dim leading-relaxed">
+                  Every worktree in this repository has a workflow in progress.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  <label htmlFor={`${baseId}-existing`} className={LABEL_CLASS}>
+                    Worktree
+                  </label>
+                  <select
+                    id={`${baseId}-existing`}
+                    value={target.existingPath ?? ''}
+                    onChange={(e) => onExistingChange(e.target.value)}
+                    disabled={submitting}
+                    className={`${FIELD_CLASS} cursor-pointer`}
+                  >
+                    {target.existing.map(({ path, label }) => (
+                      <option key={path} value={path} title={path}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </fieldset>
+          )}
+
           {options.length === 0 ? (
             <p className="text-xs text-dim leading-relaxed">
               No workflows found. Add a workflow definition to your personal workflows folder, then try again.

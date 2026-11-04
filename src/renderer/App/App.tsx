@@ -250,8 +250,10 @@ function DesktopApp(): JSX.Element {
   const [showNewProject, setShowNewProject] = useState(false)
   const [reportIssueState, setReportIssueState] = useState<OpenReportIssueDetail | null>(null)
   const [showAddBackend, setShowAddBackend] = useState(false)
-  const [runWorkflowPath, setRunWorkflowPath] = useState<string | null>(null)
-  const closeRunWorkflow = useCallback(() => setRunWorkflowPath(null), [])
+  const [launchTarget, setLaunchTarget] = useState<{ worktreePath?: string } | null>(null)
+  const closeRunWorkflow = useCallback(() => setLaunchTarget(null), [])
+  const openRunWorkflowHere = useCallback((worktreePath: string) => setLaunchTarget({ worktreePath }), [])
+  const openRunWorkflow = useCallback(() => setLaunchTarget({}), [])
   // Dev-only: forces the welcome / onboarding form to render even when
   // the user already has repos added, so the layout can be inspected
   // without wiping `userData/config.json`. Toggled from Help → Debug:
@@ -712,6 +714,18 @@ const setQuestStep = useCallback((next: QuestStep) => {
       handleSelectTab(worktreePath, paneId, tabId)
     },
     [handleSelectTab, setShowCommandCenter]
+  )
+
+  const handleWorkflowStarted = useCallback(
+    (worktreePath: string) => {
+      setShowNewWorktree(false)
+      setShowActivity(false)
+      setShowCleanup(false)
+      setShowWorkflows(false)
+      setShowCommandCenter(false)
+      setActiveWorktreeId(worktreePath)
+    },
+    [setShowCommandCenter]
   )
 
   // Sidebar-aware hotkey handlers + the resolved binding map for tooltips.
@@ -1404,7 +1418,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
             snoozeDefaultDays={settings.snoozeDefaultDays}
             prLoading={prLoading}
             agentCount={agentWorktreeCount}
-            onRunWorkflow={setRunWorkflowPath}
+            onRunWorkflow={openRunWorkflowHere}
             onJumpToWorkflowTab={handleJumpToWorkflowTab}
             onSelectWorktree={(path) => {
               setShowNewWorktree(false)
@@ -1609,7 +1623,11 @@ const setQuestStep = useCallback((next: QuestStep) => {
         )}
         {workflowsVisible && (
           <div className="flex-1 min-w-0 flex">
-            <WorkflowsView onClose={closeWorkflows} onJumpToTab={handleJumpToWorkflowTab} />
+            <WorkflowsView
+              onClose={closeWorkflows}
+              onJumpToTab={handleJumpToWorkflowTab}
+              onRunWorkflow={openRunWorkflow}
+            />
           </div>
         )}
         {showReview && activeWorktreeId && (() => {
@@ -1762,8 +1780,12 @@ const setQuestStep = useCallback((next: QuestStep) => {
       isOpen={showAddBackend}
       onClose={() => setShowAddBackend(false)}
     />
-    {runWorkflowPath !== null && (
-      <LaunchSheet worktreePath={runWorkflowPath} onClose={closeRunWorkflow} />
+    {launchTarget !== null && (
+      <LaunchSheet
+        worktreePath={launchTarget.worktreePath}
+        onClose={closeRunWorkflow}
+        onStarted={handleWorkflowStarted}
+      />
     )}
     {pendingStepClose && (
       <CancelStepDialog
