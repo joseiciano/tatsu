@@ -266,6 +266,7 @@ export interface WorkflowRunChain {
   chainId: string
   item: WorkflowRunChainItem
   origin?: WorkflowRunChainOrigin
+  stackedOn?: number
 }
 
 export interface WorkflowRunRecord {
@@ -361,6 +362,8 @@ export interface WorkflowRequestChangesPayload {
 }
 
 export type WorkflowLoopCapAction = 'again' | 'continue'
+
+export type WorkflowChainSkipChoice = 'onto-previous' | 'cancel-rest'
 
 export type WorkflowStartRunResponse = { runId: string } | { error: string }
 

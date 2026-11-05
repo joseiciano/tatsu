@@ -61,6 +61,8 @@ function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions 
   const worktreeRequests: Array<{ repoRoot: string; branchName: string }> = []
   const startRequests: StartRunRequest[] = []
   const runIds: string[] = []
+  const cancelRequests: string[] = []
+  let cancelRefusal: 'busy' | undefined
   let maxLive = 0
   let nextId = 0
   let nextShort = 0
@@ -92,11 +94,19 @@ function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions 
     store,
     createWorktree: async (request) => {
       worktreeRequests.push(request)
-      return createWorktree ? createWorktree(request) : { ok: true, worktreePath: `/repo/.worktrees/${request.branchName}`, baseBranch: 'main' }
+      return createWorktree
+        ? createWorktree(request)
+        : { ok: true, worktreePath: `/repo/.worktrees/${request.branchName}`, baseBranch: request.baseBranch ?? 'main' }
     },
     startRun: async (request) => {
       startRequests.push(request)
       return startRun ? startRun(request, started) : started(request)
+    },
+    cancelRun: (runId) => {
+      cancelRequests.push(runId)
+      if (cancelRefusal) return { ok: false, reason: cancelRefusal }
+      store.dispatch({ type: 'workflows/runCancelled', payload: { runId, finishedAt: 9 } })
+      return { ok: true }
     },
     persist: (record) => persisted.push(structuredClone(record)),
     now: () => 5000,
@@ -107,6 +117,18 @@ function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions 
 
   const finish = (runId: string, status: 'done' | 'failed' = 'done'): void =>
     store.dispatch({ type: 'workflows/runFinished', payload: { runId, status, finishedAt: 9 } })
+  const pause = (runId: string): void =>
+    store.dispatch({ type: 'workflows/runPaused', payload: { runId, reason: 'step-failed' } })
+  const cancel = (runId: string): void =>
+    store.dispatch({ type: 'workflows/runCancelled', payload: { runId, finishedAt: 9 } })
+  const recordPr = (runId: string, number: number): void =>
+    store.dispatch({
+      type: 'workflows/prRecorded',
+      payload: { runId, pr: { number, url: `https://github.com/acme/widgets/pull/${number}`, draft: false } }
+    })
+  const refuseCancel = (): void => {
+    cancelRefusal = 'busy'
+  }
   const chainOf = (chainId: string) => store.getSnapshot().state.workflows.chains[chainId]
   const finishedEvents = () => events.filter((event) => event.type === 'workflows/chainFinished')
 
@@ -122,6 +144,11 @@ function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions 
     maxLive: () => maxLive,
     liveChildren,
     finish,
+    pause,
+    cancel,
+    recordPr,
+    refuseCancel,
+    cancelRequests,
     chainOf,
     finishedEvents
   }
@@ -440,6 +467,237 @@ describe('ChainScheduler failure isolation', () => {
     t.finish('run-2')
     await settle()
     expect(t.finishedEvents()).toEqual([{ type: 'workflows/chainFinished', payload: { chainId, status: 'done', finishedAt: 5000 } }])
+  })
+})
+
+const B1 = 'wf/fix-bug/item-1-00000001'
+const B2 = 'wf/fix-bug/item-2-00000002'
+const B3 = 'wf/fix-bug/item-3-00000003'
+
+describe('ChainScheduler stacked mode', () => {
+  it('runs items one at a time, each branching from the previous item with its PR number', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(3, { mode: 'stacked' }))
+    await settle()
+    expect(t.worktreeRequests).toEqual([{ repoRoot: '/repo', branchName: B1 }])
+    expect(t.runIds).toEqual(['run-1'])
+    expect(t.startRequests[0].chain).not.toHaveProperty('stackedOn')
+    t.recordPr('run-1', 41)
+    t.finish('run-1')
+    await settle()
+    expect(t.worktreeRequests[1]).toEqual({ repoRoot: '/repo', branchName: B2, baseBranch: B1 })
+    expect(t.startRequests[1].chain).toMatchObject({ item: { id: 'id-3', branch: B2, baseBranch: B1 }, stackedOn: 41 })
+    expect(t.chainOf(chainId).items[0]).toMatchObject({ prNumber: 41 })
+    expect(t.chainOf(chainId).items[1]).toMatchObject({ prevItemId: 'id-2', baseBranch: B1 })
+    expect(t.persisted.at(-1)?.items[0]).toMatchObject({ prNumber: 41 })
+    expect(t.persisted.at(-1)?.items[1]).toMatchObject({ prevItemId: 'id-2', stackedOn: 41, baseBranch: B1 })
+    t.recordPr('run-2', 42)
+    t.finish('run-2')
+    await settle()
+    expect(t.worktreeRequests[2]).toEqual({ repoRoot: '/repo', branchName: B3, baseBranch: B2 })
+    expect(t.startRequests[2].chain).toMatchObject({ item: { baseBranch: B2 }, stackedOn: 42 })
+    t.finish('run-3')
+    await settle()
+    expect(t.maxLive()).toBe(1)
+    expect(t.finishedEvents()).toEqual([
+      { type: 'workflows/chainFinished', payload: { chainId, status: 'done', finishedAt: 5000 } }
+    ])
+  })
+
+  it.each([
+    ['paused', 'paused'],
+    ['failed', 'failed'],
+    ['cancelled', 'cancelled']
+  ] as const)('keeps later items queued and the chain open while item 1 is %s', async (outcome, derived) => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(3, { mode: 'stacked' }))
+    await settle()
+    if (outcome === 'paused') t.pause('run-1')
+    else if (outcome === 'failed') t.finish('run-1', 'failed')
+    else t.cancel('run-1')
+    await settle()
+    expect(t.worktreeRequests).toHaveLength(1)
+    expect(t.finishedEvents()).toHaveLength(0)
+    const chain = t.chainOf(chainId)
+    expect(chain.finishedAt).toBeUndefined()
+    expect(deriveChainStatus(chain, t.store.getSnapshot().state.workflows.runs).status).toBe(derived)
+  })
+
+  it('retries a cancelled item in its existing worktree and then unblocks the next item', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(2, { mode: 'stacked' }))
+    await settle()
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: false, reason: 'not-retryable' })
+    t.cancel('run-1')
+    await settle()
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: true })
+    expect(t.worktreeRequests).toHaveLength(1)
+    expect(t.startRequests[1].worktreePath).toBe(t.startRequests[0].worktreePath)
+    expect(t.startRequests[1].chain).toEqual(t.startRequests[0].chain)
+    expect(t.chainOf(chainId).childRunIds).toEqual({ 'id-2': 'run-2' })
+    expect(t.persisted.at(-1)?.items[0].runId).toBe('run-2')
+    t.finish('run-2')
+    await settle()
+    expect(t.worktreeRequests[1]).toEqual({ repoRoot: '/repo', branchName: B2, baseBranch: B1 })
+    t.finish('run-3')
+    await settle()
+    expect(t.finishedEvents()[0]?.payload).toMatchObject({ chainId, status: 'done' })
+  })
+
+  it('ignores the replaced run after a retry', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(2, { mode: 'stacked' }))
+    await settle()
+    t.finish('run-1', 'failed')
+    await settle()
+    await t.scheduler.retryItem(chainId, 'id-2')
+    t.pause('run-2')
+    await settle()
+    expect(t.worktreeRequests).toHaveLength(1)
+    expect(t.finishedEvents()).toHaveLength(0)
+  })
+
+  it('reports a runner refusal on retry without failing the item', async () => {
+    let refuse = false
+    const t = setup({
+      startRun: async (startRequest, started) => (refuse ? { ok: false, reason: 'worktree-busy' } : started(startRequest))
+    })
+    const chainId = t.scheduler.start(request(2, { mode: 'stacked' }))
+    await settle()
+    t.cancel('run-1')
+    await settle()
+    refuse = true
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: false, reason: 'start-refused', refusal: 'worktree-busy' })
+    expect(t.chainOf(chainId).items[0]).not.toHaveProperty('failed')
+    refuse = false
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: true })
+  })
+
+  it('skips onto the previous item: item 3 branches from item 1 with its PR number', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(3, { mode: 'stacked' }))
+    await settle()
+    t.recordPr('run-1', 41)
+    t.finish('run-1')
+    await settle()
+    t.finish('run-2', 'failed')
+    await settle()
+    expect(t.scheduler.skipItem(chainId, 'id-3', 'onto-previous')).toEqual({ ok: true })
+    await settle()
+    expect(t.chainOf(chainId).items[1]).toMatchObject({ skipped: true })
+    expect(t.worktreeRequests[2]).toEqual({ repoRoot: '/repo', branchName: B3, baseBranch: B1 })
+    expect(t.startRequests[2].chain).toMatchObject({ item: { baseBranch: B1 }, stackedOn: 41 })
+    expect(t.chainOf(chainId).items[2]).toMatchObject({ prevItemId: 'id-2' })
+    t.finish('run-3')
+    await settle()
+    expect(t.finishedEvents()[0]?.payload).toMatchObject({ chainId, status: 'done' })
+  })
+
+  it('keeps the previous PR number for the stack after the previous run leaves the slice', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(3, { mode: 'stacked' }))
+    await settle()
+    t.recordPr('run-1', 41)
+    t.finish('run-1')
+    await settle()
+    t.store.dispatch({ type: 'workflows/runsEvicted', payload: { runIds: ['run-1'] } })
+    t.cancel('run-2')
+    await settle()
+    expect(t.scheduler.skipItem(chainId, 'id-3', 'onto-previous')).toEqual({ ok: true })
+    await settle()
+    expect(t.startRequests[2].chain).toMatchObject({ item: { baseBranch: B1 }, stackedOn: 41 })
+  })
+
+  it('skips a paused item by cancelling its child first, and starts the next item from the repo base', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(2, { mode: 'stacked' }))
+    await settle()
+    t.pause('run-1')
+    await settle()
+    expect(t.scheduler.skipItem(chainId, 'id-2', 'onto-previous')).toEqual({ ok: true })
+    await settle()
+    expect(t.cancelRequests).toEqual(['run-1'])
+    expect(t.worktreeRequests[1]).toEqual({ repoRoot: '/repo', branchName: B2 })
+    expect(t.chainOf(chainId).items[1]).not.toHaveProperty('prevItemId')
+    expect(t.maxLive()).toBe(1)
+  })
+
+  it('skips an item that failed before it had a run, which cannot be retried', async () => {
+    let calls = 0
+    const t = setup({
+      createWorktree: async ({ branchName, baseBranch }) =>
+        ++calls === 1
+          ? { ok: false, reason: 'worktree-failed' }
+          : { ok: true, worktreePath: `/repo/.worktrees/${branchName}`, baseBranch: baseBranch ?? 'main' }
+    })
+    const chainId = t.scheduler.start(request(2, { mode: 'stacked' }))
+    await settle()
+    expect(t.chainOf(chainId).items[0]).toMatchObject({ failed: true })
+    expect(t.finishedEvents()).toHaveLength(0)
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: false, reason: 'not-retryable' })
+    expect(t.scheduler.skipItem(chainId, 'id-2', 'onto-previous')).toEqual({ ok: true })
+    await settle()
+    expect(t.runIds).toEqual(['run-1'])
+    expect(t.startRequests[0].chain?.item.id).toBe('id-3')
+  })
+
+  it('cancel-rest cancels the live child, skips this and every later item, and finishes the chain', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(3, { mode: 'stacked' }))
+    await settle()
+    t.finish('run-1')
+    await settle()
+    expect(t.scheduler.skipItem(chainId, 'id-3', 'cancel-rest')).toEqual({ ok: true })
+    await settle()
+    expect(t.cancelRequests).toEqual(['run-2'])
+    expect(t.chainOf(chainId).items.map((item) => item.skipped)).toEqual([undefined, true, true])
+    expect(t.worktreeRequests).toHaveLength(2)
+    expect(t.finishedEvents()).toHaveLength(1)
+    expect(t.persisted.at(-1)).toMatchObject({ finishedAt: 5000, status: 'done' })
+  })
+
+  it('refuses to skip anything but the blocking item of a live stacked chain', async () => {
+    const t = setup({ cap: 3 })
+    const chainId = t.scheduler.start(request(3, { mode: 'stacked' }))
+    await settle()
+    t.finish('run-1')
+    await settle()
+    expect(t.scheduler.skipItem(chainId, 'id-2', 'onto-previous')).toEqual({ ok: false, reason: 'not-blocking' })
+    expect(t.scheduler.skipItem(chainId, 'id-4', 'cancel-rest')).toEqual({ ok: false, reason: 'not-blocking' })
+    expect(t.scheduler.skipItem(chainId, 'nope', 'cancel-rest')).toEqual({ ok: false, reason: 'unknown-item' })
+    expect(t.scheduler.skipItem('nope', 'id-3', 'cancel-rest')).toEqual({ ok: false, reason: 'unknown-chain' })
+    t.refuseCancel()
+    expect(t.scheduler.skipItem(chainId, 'id-3', 'cancel-rest')).toEqual({ ok: false, reason: 'busy' })
+    expect(t.chainOf(chainId).items.some((item) => item.skipped)).toBe(false)
+  })
+
+  it('refuses retry and skip while Labs workflows is off', async () => {
+    const t = setup()
+    const chainId = t.scheduler.start(request(2, { mode: 'stacked' }))
+    await settle()
+    t.cancel('run-1')
+    await settle()
+    t.store.dispatch({ type: 'settings/labsChanged', payload: { ...t.store.getSnapshot().state.settings.labs, workflows: false } })
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: false, reason: 'labs-off' })
+    expect(t.scheduler.skipItem(chainId, 'id-2', 'cancel-rest')).toEqual({ ok: false, reason: 'labs-off' })
+  })
+})
+
+describe('ChainScheduler independent retry', () => {
+  it('retries a failed item while a sibling still runs and refuses skip', async () => {
+    const t = setup({ cap: 2 })
+    const chainId = t.scheduler.start(request(2))
+    await settle()
+    t.finish('run-1', 'failed')
+    await settle()
+    expect(t.scheduler.skipItem(chainId, 'id-2', 'onto-previous')).toEqual({ ok: false, reason: 'not-stacked' })
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: true })
+    expect(t.startRequests[2].worktreePath).toBe(t.startRequests[0].worktreePath)
+    t.finish('run-2')
+    t.finish('run-3')
+    await settle()
+    expect(t.finishedEvents()[0]?.payload).toMatchObject({ chainId, status: 'done' })
+    expect(await t.scheduler.retryItem(chainId, 'id-2')).toEqual({ ok: false, reason: 'unknown-chain' })
   })
 })
 

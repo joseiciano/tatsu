@@ -1339,6 +1339,10 @@ describe('parseWorkflowRunChain', () => {
     expect(parseWorkflowRunChain(minimal)).toEqual(minimal)
   })
 
+  it('keeps the PR number a stacked item sits on', () => {
+    expect(parseWorkflowRunChain({ ...runChain(), stackedOn: 41 })).toEqual({ ...runChain(), stackedOn: 41 })
+  })
+
   const item = runChain().item
   it.each<[string, unknown]>([
     ['not an object', 'chain'],
@@ -1363,7 +1367,10 @@ describe('parseWorkflowRunChain', () => {
     ['unknown origin kind', { ...runChain(), origin: { kind: 'commit', number: 1 } }],
     ['negative origin number', { ...runChain(), origin: { kind: 'issue', number: -1 } }],
     ['string origin number', { ...runChain(), origin: { kind: 'issue', number: '1' } }],
-    ['null origin', { ...runChain(), origin: null }]
+    ['null origin', { ...runChain(), origin: null }],
+    ['zero stackedOn', { ...runChain(), stackedOn: 0 }],
+    ['string stackedOn', { ...runChain(), stackedOn: '41' }],
+    ['null stackedOn', { ...runChain(), stackedOn: null }]
   ])('rejects %s', (_name, value) => {
     expect(parseWorkflowRunChain(value)).toBeNull()
   })

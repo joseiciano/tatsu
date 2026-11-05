@@ -1,6 +1,6 @@
 import type { Store } from '../store'
-import type { StartRunRequest, StartRunResult, StepOverrideRequest, WorkflowLog } from '../workflow-runner'
-import type { WorkflowChainMode, WorkflowRunChainOrigin } from '../../shared/state/workflows'
+import type { StartRefusal, StartRunRequest, StartRunResult, StepActionResult, StepOverrideRequest, WorkflowLog } from '../workflow-runner'
+import type { WorkflowChainMode, WorkflowChainSkipChoice, WorkflowRunChainOrigin } from '../../shared/state/workflows'
 
 export const WORKFLOW_CHAIN_RECORD_VERSION = 1
 
@@ -14,7 +14,7 @@ export interface StartChainRequest {
   defId: string
   definitionName: string
   repoRoot: string
-  mode: Extract<WorkflowChainMode, 'independent'>
+  mode: WorkflowChainMode
   items: ChainItemRequest[]
   inputs: Record<string, string>
   overrides?: Record<string, StepOverrideRequest>
@@ -32,6 +32,10 @@ export interface WorkflowChainItemRecord extends ChainItemRequest {
   worktreePath?: string
   runId?: string
   failed?: ChainItemFailure
+  skipped?: true
+  prevItemId?: string
+  stackedOn?: number
+  prNumber?: number
 }
 
 export interface WorkflowChainRecord {
@@ -58,11 +62,29 @@ export type ChainWorktreeResult =
 
 export interface ChainSchedulerDeps {
   store: Pick<Store, 'dispatch' | 'getSnapshot' | 'subscribe'>
-  createWorktree: (request: { repoRoot: string; branchName: string }) => Promise<ChainWorktreeResult>
+  createWorktree: (request: { repoRoot: string; branchName: string; baseBranch?: string }) => Promise<ChainWorktreeResult>
   startRun: (request: StartRunRequest) => Promise<StartRunResult>
+  cancelRun: (runId: string) => StepActionResult
   persist: (record: WorkflowChainRecord) => void
   now: () => number
   newId: () => string
   newShortId: () => string
   log: WorkflowLog
 }
+
+export type ChainSkipChoice = WorkflowChainSkipChoice
+
+export type ChainItemActionRefusal =
+  | 'unknown-chain'
+  | 'unknown-item'
+  | 'labs-off'
+  | 'not-stacked'
+  | 'not-blocking'
+  | 'not-retryable'
+  | 'item-starting'
+  | 'busy'
+
+export type ChainItemActionResult =
+  | { ok: true }
+  | { ok: false; reason: ChainItemActionRefusal }
+  | { ok: false; reason: 'start-refused'; refusal: StartRefusal }
