@@ -25,6 +25,12 @@ if kill -0 "$PID" 2>/dev/null; then
     *) echo "pid $PID is not this run's server (HOME mismatch); not killing it" >&2 ;;
   esac
 fi
+if [ -n "${GITHUB_STUB_PID:-}" ] && kill -0 "$GITHUB_STUB_PID" 2>/dev/null; then
+  case " $(ps eww -o command= -p "$GITHUB_STUB_PID" 2>/dev/null) " in
+    *github-stub.mjs*) kill "$GITHUB_STUB_PID" && echo "stopped GitHub stub pid $GITHUB_STUB_PID" ;;
+    *) echo "pid $GITHUB_STUB_PID is not this run's GitHub stub; not killing it" >&2 ;;
+  esac
+fi
 STRAYS="$(sandbox_pids)"
 if [ -n "$STRAYS" ]; then
   echo "killing sandbox processes: $(echo $STRAYS)"
@@ -38,6 +44,7 @@ mkdir -p "$EVIDENCE"
 [ -f "$LOG" ] && cp "$LOG" "$EVIDENCE/server.log"
 [ -f "$FAKE_AGENT_LOG" ] && cp "$FAKE_AGENT_LOG" "$EVIDENCE/fake-agent.log"
 [ -f "$DATA_DIR/debug.log" ] && cp "$DATA_DIR/debug.log" "$EVIDENCE/debug.log"
+[ -f "${GITHUB_STUB_LOG:-}" ] && cp "$GITHUB_STUB_LOG" "$EVIDENCE/github-stub.jsonl"
 [ -d "$DATA_DIR/workflow-runs" ] && cp -R "$DATA_DIR/workflow-runs" "$EVIDENCE/" 2>/dev/null
 GUARD=0
 "$SKILL_DIR/scripts/home-guard.sh" check "$EVIDENCE/real-home-before.txt" > "$EVIDENCE/real-home-check.txt" 2>&1 || GUARD=1

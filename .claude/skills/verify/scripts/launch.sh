@@ -7,7 +7,9 @@
 # uses: scratch HOME/ZDOTDIR/XDG_CONFIG_HOME/CODEX_HOME, SHELL=/bin/bash,
 # CLAUDE_CONFIG_DIR unset, and claudeCommand pointed at a shim for
 # scripts/fake-agent.mjs, so step tabs (login-shell PTYs) never run a real
-# agent or the user's rc files. The seeded repo is in repoRoots.
+# agent or the user's rc files. The seeded repo is in repoRoots. Starts the
+# loopback GitHub stub (smoke_github_stub) before the server, so GITHUB_TOKEN
+# only ever reaches the stub; cleanup.sh stops it.
 # Prints the state file path as the last line of stdout.
 set -euo pipefail
 
@@ -49,6 +51,7 @@ git -C "$REPO" rev-parse HEAD > "$EVIDENCE/git-rev.txt"
 # shellcheck source=../../../../scripts/smoke-sandbox.sh
 . "$REPO/scripts/smoke-sandbox.sh"
 smoke_sandbox "$SCRATCH" "$REPO" yes
+smoke_github_stub "$SCRATCH" "$REPO"
 
 LOG="$SCRATCH/server.log"
 node dist-headless/main/index.js --port 0 --host 127.0.0.1 > "$LOG" 2>&1 &
@@ -64,7 +67,7 @@ done
 if [ -z "$URL" ]; then
   echo "server did not advertise a URL within 15s; log follows" >&2
   cat "$LOG" >&2
-  kill "$PID" 2>/dev/null || true
+  kill "$PID" "$GITHUB_STUB_PID" 2>/dev/null || true
   exit 1
 fi
 PORT="${URL#http://127.0.0.1:}"
@@ -82,6 +85,11 @@ WORKTREE=$WORKTREE
 EVIDENCE=$EVIDENCE
 LOG=$LOG
 FAKE_AGENT_LOG=$FAKE_AGENT_LOG
+GITHUB_STUB_PID=$GITHUB_STUB_PID
+GITHUB_STUB_URL=$HARNESS_GITHUB_API_URL
+GITHUB_STUB_LOG=$GITHUB_STUB_LOG
+REMOTE_REPO=$SMOKE_REMOTE_REPO
+REMOTE_BARE=$SMOKE_REMOTE_BARE
 STATE_EOF
 
 echo "tatsu-verify $RUN_ID up: pid $PID, $URL" >&2
