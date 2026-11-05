@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { readFileSync } from 'fs'
 import { mkdir, rename, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { userDataDir } from '../paths'
@@ -19,6 +20,20 @@ interface Slot {
 
 export function workflowChainsDir(): string {
   return join(userDataDir(), 'workflow-chains')
+}
+
+export function readWorkflowChainDraftPrs(dir: string, chainId: string): boolean | undefined {
+  if (!isRunId(chainId)) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(join(dir, `${chainId}.json`), 'utf8'))
+  } catch {
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined
+  const draftPrs = 'draftPrs' in parsed ? parsed.draftPrs : undefined
+  const recordId = 'chainId' in parsed ? parsed.chainId : undefined
+  return recordId === chainId && typeof draftPrs === 'boolean' ? draftPrs : undefined
 }
 
 export function createWorkflowChainRecords({ dir, log }: { dir: string; log: WorkflowLog }): WorkflowChainRecords {

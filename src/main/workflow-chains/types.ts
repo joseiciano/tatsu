@@ -53,7 +53,7 @@ export interface WorkflowChainRecord {
 }
 
 export type ChainWorktreeResult =
-  | { ok: true; worktreePath: string }
+  | { ok: true; worktreePath: string; baseBranch: string }
   | { ok: false; reason: Extract<ChainItemFailure, 'worktree-failed' | 'setup-failed'> }
 
 export interface ChainSchedulerDeps {

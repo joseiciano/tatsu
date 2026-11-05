@@ -9,6 +9,7 @@ import type { StartRunRequest, StartRunResult } from '../workflow-runner'
 import {
   ChainScheduler,
   createWorkflowChainRecords,
+  readWorkflowChainDraftPrs,
   type ChainSchedulerDeps,
   type ChainWorktreeResult,
   type StartChainRequest,
@@ -91,7 +92,7 @@ function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions 
     store,
     createWorktree: async (request) => {
       worktreeRequests.push(request)
-      return createWorktree ? createWorktree(request) : { ok: true, worktreePath: `/repo/.worktrees/${request.branchName}` }
+      return createWorktree ? createWorktree(request) : { ok: true, worktreePath: `/repo/.worktrees/${request.branchName}`, baseBranch: 'main' }
     },
     startRun: async (request) => {
       startRequests.push(request)
@@ -160,7 +161,7 @@ describe('ChainScheduler start', () => {
     expect(t.persisted.at(-1)?.items[0]).toMatchObject({ runId: 'run-1', worktreePath: expect.stringContaining('/repo/') })
   })
 
-  it('creates each item worktree on a chain branch without a base and starts its child run with the item', async () => {
+  it('creates each item worktree on a chain branch and starts its child run with the item and its resolved base', async () => {
     const t = setup()
     const chainId = t.scheduler.start(request(1, { items: [{ title: 'Add Login!', value: 'v', origin: { kind: 'pr', number: 3 } }] }))
     await settle()
@@ -172,12 +173,24 @@ describe('ChainScheduler start', () => {
       inputs: { notes: 'n' },
       chain: {
         chainId,
-        item: { id: 'id-2', title: 'Add Login!', value: 'v', branch: 'wf/fix-bug/add-login-00000001', baseBranch: '' },
+        item: { id: 'id-2', title: 'Add Login!', value: 'v', branch: 'wf/fix-bug/add-login-00000001', baseBranch: 'main' },
         origin: { kind: 'pr', number: 3 }
       }
     })
-    expect(t.chainOf(chainId).items[0].branch).toBe('wf/fix-bug/add-login-00000001')
+    expect(t.chainOf(chainId).items[0]).toMatchObject({ branch: 'wf/fix-bug/add-login-00000001', baseBranch: 'main' })
+    expect(t.persisted.at(-1)?.items[0].baseBranch).toBe('main')
     expect(t.chainOf(chainId).childRunIds).toEqual({ 'id-2': 'run-1' })
+  })
+
+  it('keeps an empty base when none resolves so publish can refuse it', async () => {
+    const t = setup({
+      createWorktree: async ({ branchName }) => ({ ok: true, worktreePath: `/repo/.worktrees/${branchName}`, baseBranch: '' })
+    })
+    const chainId = t.scheduler.start(request(1))
+    await settle()
+    expect(t.startRequests[0].chain?.item.baseBranch).toBe('')
+    expect(t.chainOf(chainId).items[0]).not.toHaveProperty('baseBranch')
+    expect(t.logs).toContainEqual({ message: 'chain item base unresolved', data: { chainId, itemId: 'id-2' } })
   })
 
   it('passes overrides, allowFull and autopilot through to every child run', async () => {
@@ -222,7 +235,7 @@ describe('ChainScheduler slots', () => {
     t.scheduler.start(request(3))
     await settle()
     expect(t.worktreeRequests).toHaveLength(1)
-    gate.resolve({ ok: true, worktreePath: '/repo/.worktrees/one' })
+    gate.resolve({ ok: true, worktreePath: '/repo/.worktrees/one', baseBranch: 'main' })
     await settle()
     expect(t.runIds).toEqual(['run-1'])
     expect(t.worktreeRequests).toHaveLength(1)
@@ -340,7 +353,7 @@ describe('ChainScheduler failure isolation', () => {
       createWorktree: async ({ branchName }) =>
         branchName.includes('item-2-')
           ? { ok: false, reason: 'worktree-failed' }
-          : { ok: true, worktreePath: `/repo/.worktrees/${branchName}` }
+          : { ok: true, worktreePath: `/repo/.worktrees/${branchName}`, baseBranch: 'main' }
     })
     const chainId = t.scheduler.start(request(3))
     await settle()
@@ -363,7 +376,7 @@ describe('ChainScheduler failure isolation', () => {
         call++
         if (call === 1) return { ok: false, reason: 'setup-failed' }
         if (call === 2) throw new Error('git exploded on wf/secret-branch')
-        return { ok: true, worktreePath: '/repo/.worktrees/three' }
+        return { ok: true, worktreePath: '/repo/.worktrees/three', baseBranch: 'main' }
       }
     })
     const chainId = t.scheduler.start(request(3))
@@ -436,7 +449,7 @@ describe('ChainScheduler logging and disposal', () => {
       cap: 2,
       createWorktree: async ({ branchName }) =>
         t.worktreeRequests.length === 1
-          ? { ok: true, worktreePath: `/repo/.worktrees/${branchName}` }
+          ? { ok: true, worktreePath: `/repo/.worktrees/${branchName}`, baseBranch: 'main' }
           : { ok: false, reason: 'worktree-failed' }
     })
     t.scheduler.start(
@@ -475,7 +488,7 @@ describe('ChainScheduler logging and disposal', () => {
     await settle()
     const before = t.events.length
     t.scheduler.dispose()
-    gate.resolve({ ok: true, worktreePath: '/repo/.worktrees/one' })
+    gate.resolve({ ok: true, worktreePath: '/repo/.worktrees/one', baseBranch: 'main' })
     await settle()
     expect(t.startRequests).toHaveLength(0)
     expect(t.events.length).toBe(before)
@@ -512,6 +525,16 @@ describe('createWorkflowChainRecords', () => {
     await records.flush()
     expect(await readdir(dir)).toEqual(['chain-1.json'])
     expect(JSON.parse(await readFile(join(dir, 'chain-1.json'), 'utf8'))).toEqual(record('chain-1', 9))
+  })
+
+  it('reads the draft flag back from a persisted record and nothing for a missing or unsafe id', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'chain-records-'))
+    const records = createWorkflowChainRecords({ dir, log: () => {} })
+    records.persist({ ...record('chain-2'), draftPrs: true })
+    await records.flush()
+    expect(readWorkflowChainDraftPrs(dir, 'chain-2')).toBe(true)
+    expect(readWorkflowChainDraftPrs(dir, 'chain-3')).toBeUndefined()
+    expect(readWorkflowChainDraftPrs(dir, '../chain-2')).toBeUndefined()
   })
 
   it('refuses a chain id that is not a safe file name', async () => {
