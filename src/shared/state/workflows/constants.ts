@@ -74,7 +74,7 @@ function parseChainItem(value: unknown): WorkflowRunChainItem | null {
   }
 }
 
-function parseChainOrigin(value: unknown): WorkflowRunChainOrigin | null {
+export function parseWorkflowRunChainOrigin(value: unknown): WorkflowRunChainOrigin | null {
   const origin = asRecord(value)
   if (!origin) return null
   const { kind, number } = origin
@@ -89,7 +89,7 @@ export function parseWorkflowRunChain(value: unknown): WorkflowRunChain | null {
   if (!item) return null
   const { stackedOn } = chain
   if (stackedOn !== undefined && !isGithubNumber(stackedOn)) return null
-  const origin = chain.origin === undefined ? undefined : parseChainOrigin(chain.origin)
+  const origin = chain.origin === undefined ? undefined : parseWorkflowRunChainOrigin(chain.origin)
   if (origin === null) return null
   return {
     chainId: chain.chainId,

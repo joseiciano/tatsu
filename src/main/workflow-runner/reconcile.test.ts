@@ -108,6 +108,7 @@ interface BootOptions {
   labs?: boolean
   agentDriver?: (store: Store) => StepDriver
   timers?: Pick<WorkflowRunnerDeps, 'setTimer' | 'clearTimer'>
+  publish?: WorkflowRunnerDeps['publish']
 }
 
 function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, options: BootOptions = {}) {
@@ -148,7 +149,8 @@ function boot(onDisk: Array<WorkflowRunRecord | { file: string; raw: string }>, 
       probed.push(executionId)
       return options.alive?.has(executionId) ?? false
     },
-    ...options.timers
+    ...options.timers,
+    ...(options.publish ? { publish: options.publish } : {})
   })
   const wf = () => store.getSnapshot().state.workflows
   const lastPersisted = (runId: string): WorkflowRunRecord | undefined =>
@@ -242,6 +244,21 @@ steps:
     prompt: "Do {{item.title}}"
 `
 
+  function midPublish(): WorkflowRunRecord {
+    return record('run-p', {
+      defId: 'personal:chain-item',
+      definition: definitionOf(CHAIN_ITEM),
+      inputs: { task: 'Fix login body' },
+      steps: { plan: 'done' },
+      cursor: 1,
+      attempts: [attempt('att-p1', { status: 'done', endedAt: 8, result: { status: 'done', summary: 'ok', completedBy: 'tool' } })],
+      chain: {
+        chainId: 'chain-1',
+        item: { id: 'item-1', title: 'Fix login', value: 'Fix login body', branch: 'wf/chain-item/fix-login-0123abcd', baseBranch: 'main' }
+      }
+    })
+  }
+
   it('keeps the chain tags through hydration and re-renders item fields on the resumed step', async () => {
     const chain = {
       chainId: 'chain-1',
@@ -265,6 +282,37 @@ steps:
     expect(ctx.agent.started[0].scope.item).toEqual(chain.item)
     expect(ctx.agent.started[0].scope.inputs).toEqual({ task: 'Fix login body' })
     expect(ctx.lastPersisted('run-i')?.chain).toEqual(chain)
+  })
+
+  it('publishes a run persisted mid-publish after boot and finishes it done with its PR', async () => {
+    const pr = { number: 7, url: 'https://github.com/acme/widgets/pull/7', draft: true }
+    const published: string[] = []
+    const ctx = boot([midPublish()], {
+      publish: async ({ run }) => {
+        published.push(run.runId)
+        return { ok: true, pr }
+      }
+    })
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'running', chainId: 'chain-1' })
+
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+
+    expect(published).toEqual(['run-p'])
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'done', pr })
+    expect(ctx.lastPersisted('run-p')).toMatchObject({ status: 'done', pr })
+  })
+
+  it('pauses publish-failed when publishing a run persisted mid-publish fails after boot', async () => {
+    const error = { stage: 'pull-request', kind: 'github-http', message: 'GitHub 422: Validation Failed' } as const
+    const ctx = boot([midPublish()], { publish: async () => ({ ok: false, error }) })
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'running' })
+
+    ctx.runner.reconcile(ctx.records)
+    await flush()
+
+    expect(ctx.wf().runs['run-p']).toMatchObject({ status: 'paused', pausedReason: 'publish-failed' })
+    expect(ctx.lastPersisted('run-p')).toMatchObject({ status: 'paused', pausedReason: 'publish-failed', publishError: error })
   })
 })
 

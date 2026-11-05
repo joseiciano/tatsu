@@ -105,7 +105,13 @@ import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowChainRequestHandlers, registerWorkflowsRequestHandlers } from './workflows-transport'
-import { ChainScheduler, createWorkflowChainRecords, readWorkflowChainDraftPrs, workflowChainsDir } from './workflow-chains'
+import {
+  ChainScheduler,
+  createWorkflowChainRecords,
+  loadChainRecordsSync,
+  readWorkflowChainDraftPrs,
+  workflowChainsDir
+} from './workflow-chains'
 import { createGitExec, createRunPublisher, resolveChainBase } from './chain-publish'
 import {
   WorkflowRunner,
@@ -323,6 +329,7 @@ let config = loadConfig()
 let stopWatchingStatus: (() => void) | null = null
 
 const bootRunRecords = loadRunRecordsSync(workflowRunsDir(), log)
+const bootChainRecords = loadChainRecordsSync(workflowChainsDir(), log)
 const store = new Store(
   buildInitialAppState(config, { hasGithubToken: hasSecret('githubToken'), workflowRuns: bootRunRecords })
 )
@@ -884,9 +891,17 @@ function reconcileWorkflowRuns(): void {
   if (workflowRunsReconciled) return
   workflowRunsReconciled = true
   try {
-    workflowRunner.reconcile(bootRunRecords)
-  } catch {
-    log('workflow', 'run reconcile failed')
+    try {
+      workflowRunner.reconcile(bootRunRecords)
+    } catch {
+      log('workflow', 'run reconcile failed')
+    }
+    const bootRuns = new Map(bootRunRecords.map((record) => [record.runId, record]))
+    try {
+      workflowChainScheduler.reconcile({ records: bootChainRecords, recordedRun: (runId) => bootRuns.get(runId) })
+    } catch {
+      log('workflow', 'chain reconcile failed')
+    }
   } finally {
     workflowNotifier.arm()
   }
