@@ -31,6 +31,7 @@ export type NeedsYouActionKind =
   | 'loop-continue'
   | 'keep-waiting'
   | 'raise-budget'
+  | 'retry-publish'
   | 'resume'
   | 'retry'
   | 'retry-from-clean'
@@ -61,7 +62,10 @@ export interface RecordStepContext {
   attempt: NeedsYouAttemptInfo | null
 }
 
-export type BackendNeedsYouAction = Exclude<NeedsYouActionKind, 'jump' | 'retry-from-clean' | 'request-changes' | 'raise-budget'>
+export type BackendNeedsYouAction = Exclude<
+  NeedsYouActionKind,
+  'jump' | 'retry-from-clean' | 'request-changes' | 'raise-budget' | 'retry-publish'
+>
 
 export type NeedsYouActionsApi = Pick<
   ElectronAPI,
@@ -175,8 +179,9 @@ export function needsYouActions({ reason, step, attempt, tabExists }: NeedsYouAc
       return ['keep-waiting', 'cancel', ...jump]
     case 'budget':
       return ['raise-budget', 'cancel']
-    case 'restack-conflict':
     case 'publish-failed':
+      return ['retry-publish', 'cancel']
+    case 'restack-conflict':
       return ['cancel', ...jump]
     default: {
       const _exhaustive: never = reason

@@ -228,6 +228,9 @@ export function RunDetailContainer({
         return
       case 'raise-budget':
         return
+      case 'retry-publish':
+        void settle(() => backend.retryWorkflowPublish(runId))
+        return
       case 'mark-done':
         setMarkDoneOpen((open) => !open)
         return

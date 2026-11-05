@@ -238,6 +238,16 @@ describe('runDetailModel actions', () => {
     expect(actionsFor(rec)).toEqual(['raise-budget', 'cancel-step', 'cancel-run'])
   })
 
+  it('offers only Retry publish, Cancel run and Jump on a run whose pull request failed', () => {
+    const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
+      pausedReason: 'publish-failed',
+      cursor: 1,
+      steps: { plan: 'done', exit: 'done' }
+    })
+    expect(actionsFor(rec)).toEqual(['retry-publish', 'cancel-run'])
+    expect(actionsFor(rec, true)).toEqual(['retry-publish', 'cancel-run', 'jump'])
+  })
+
   it('offers Raise budget on a budget-paused run whose steps are all settled', () => {
     const rec = record([PLAN_DONE, attempt({ attemptId: 'a-exit', stepId: 'exit', status: 'done' })], {
       pausedReason: 'budget',

@@ -11,6 +11,7 @@ import { needsYouActions, recordStepContext, STEP_STATUS_LABELS, type NeedsYouAc
 
 export type RunDetailActionKind =
   | 'raise-budget'
+  | 'retry-publish'
   | 'approve'
   | 'request-changes'
   | 'loop-again'
@@ -54,6 +55,7 @@ export interface RunDetailModelArgs {
 
 export const RUN_DETAIL_ACTION_ORDER: readonly RunDetailActionKind[] = [
   'raise-budget',
+  'retry-publish',
   'approve',
   'request-changes',
   'loop-again',
@@ -120,6 +122,10 @@ function runActions(record: WorkflowRunRecord, run: WorkflowRun, tabExists: bool
   if (isTerminalRun(run)) return actions
   actions.add('cancel-run')
   if (run.status === 'paused' && run.pausedReason === 'budget') actions.add('raise-budget')
+  if (run.status === 'paused' && run.pausedReason === 'publish-failed') {
+    actions.add('retry-publish')
+    return actions
+  }
   const context = recordStepContext(record)
   if (!context) return actions
   const latest = record.attempts.filter((a) => a.stepId === context.stepId).at(-1) ?? null

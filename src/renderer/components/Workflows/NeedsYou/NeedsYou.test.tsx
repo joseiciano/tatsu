@@ -26,7 +26,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     requestWorkflowChanges: vi.fn(),
     resolveWorkflowLoopCap: vi.fn(),
     keepWaitingWorkflowStep: vi.fn(),
-    setWorkflowRunBudget: vi.fn()
+    setWorkflowRunBudget: vi.fn(),
+    retryWorkflowPublish: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -165,7 +166,8 @@ beforeEach(() => {
     backendApi.requestWorkflowChanges,
     backendApi.resolveWorkflowLoopCap,
     backendApi.keepWaitingWorkflowStep,
-    backendApi.setWorkflowRunBudget
+    backendApi.setWorkflowRunBudget,
+    backendApi.retryWorkflowPublish
   ]) {
     fn.mockResolvedValue({ ok: true })
   }
@@ -700,5 +702,58 @@ describe('NeedsYouGroup at the run budget', () => {
     await render()
     await click(button('Raise budget'))
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Unknown or finished run')
+  })
+})
+
+describe('NeedsYouGroup after a failed pull request', () => {
+  function publishRun(): WorkflowRun {
+    const base = pausedRun('publish-failed', ['a1'], 'pending')
+    return {
+      ...base,
+      chainId: 'c1',
+      itemId: 'i1',
+      cursorStepId: 'build',
+      steps: {
+        plan: { ...base.steps.plan, status: 'done', kind: 'shell' },
+        build: { status: 'done', attemptIds: ['a1'], kind: 'agent', agent: 'claude' }
+      }
+    }
+  }
+
+  function publishRecord(message: string): WorkflowRunRecord {
+    return {
+      ...record(BUILD_CLAUDE, [attemptRecord('a1', 'build', 'done')]),
+      publishError: { stage: 'pull-request', kind: 'github-http', message }
+    }
+  }
+
+  it('shows Pull request failed with the error and no step, and offers Retry publish and Cancel run', async () => {
+    backendApi.getWorkflowRun.mockResolvedValue(publishRecord('GitHub 422: Validation Failed'))
+    setState({ runs: { r1: publishRun() }, attempts: { a1: attempt('build', 'done') }, panes: { '/wt/feature': STEP_TAB_PANE } })
+    await render()
+    expect(container.textContent).toContain('feature · Pull request failed')
+    expect(container.textContent).not.toContain('· build')
+    expect(container.textContent).toContain('GitHub 422: Validation Failed')
+    expect(buttonLabels()).toEqual(['Retry publish', 'Cancel run'])
+    expect(button('Retry publish').getAttribute('aria-label')).toBe('Retry publish: Ship it on feature')
+    expect(button('Retry publish').disabled).toBe(false)
+  })
+
+  it('sends Retry publish for the run and Cancel run without a step', async () => {
+    setState({ runs: { r1: publishRun() }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    await click(button('Retry publish'))
+    expect(backendApi.retryWorkflowPublish).toHaveBeenCalledExactlyOnceWith('r1')
+    await click(button('Cancel run'))
+    expect(backendApi.cancelWorkflowRun).toHaveBeenCalledExactlyOnceWith('r1')
+    expect(backendApi.retryWorkflowStep).not.toHaveBeenCalled()
+  })
+
+  it('shows the refusal from a Retry publish that is already running', async () => {
+    backendApi.retryWorkflowPublish.mockResolvedValue({ error: 'Another action is still running for this run' })
+    setState({ runs: { r1: publishRun() }, attempts: { a1: attempt('build', 'done') } })
+    await render()
+    await click(button('Retry publish'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Another action is still running for this run')
   })
 })
