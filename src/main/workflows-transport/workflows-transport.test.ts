@@ -33,7 +33,7 @@ import {
 import { validateWorkflowDefinition } from '../../shared/workflow-def'
 import { takeSnapshot } from '../workflow-snapshots'
 import type { PersistedWorkflowTrust } from '../persistence'
-import type { StartChainRequest } from '../workflow-chains'
+import type { ChainItemActionResult, StartChainRequest } from '../workflow-chains'
 
 vi.mock('../perf-log', () => ({
   perfLog: vi.fn(),
@@ -1710,7 +1710,9 @@ steps:
         start: (request) => {
           starts.push(request)
           return 'chain-new'
-        }
+        },
+        retryItem: async () => ({ ok: true }),
+        skipItem: () => ({ ok: true })
       },
       store: chainStore,
       getRepoRoots: () => ['/repo'],
@@ -1747,6 +1749,12 @@ steps:
     ])
   })
 
+  it('starts a stacked chain in stacked mode', async () => {
+    const h = chainHarness()
+    expect(await h.own.call('workflows:startChain', valid({ mode: 'stacked' }))).toEqual({ chainId: 'chain-new' })
+    expect(h.starts[0].mode).toBe('stacked')
+  })
+
   it('accepts numeric item values for an issue-typed item_input', async () => {
     const h = chainHarness()
     const payload = valid({ defId: 'personal:issues', inputs: {}, items: [{ title: 'Bug', value: '42' }] })
@@ -1780,7 +1788,7 @@ steps:
     ['a non-boolean flag', valid({ draftPrs: 'yes' }), INVALID],
     ['a non-string input', valid({ inputs: { notes: 1 } }), INVALID],
     ['malformed overrides', valid({ overrides: { say: 'opus' } }), INVALID],
-    ['stacked mode', valid({ mode: 'stacked' }), { error: 'Stacked chains are not supported yet' }],
+    ['an unknown mode', valid({ mode: 'parallel' }), INVALID],
     ['an unknown repo root', valid({ repoRoot: '/repo/' }), { error: 'Unknown repository' }],
     ['an unknown definition', valid({ defId: 'personal:nope' }), { error: 'Unknown workflow definition' }],
     ['an untrusted repo definition', valid({ defId: 'repo:untrusted' }), { error: 'Trust this definition before running it' }],
@@ -1856,7 +1864,9 @@ steps:
       chains: {
         start: () => {
           throw new Error('secret failure')
-        }
+        },
+        retryItem: async () => ({ ok: true }),
+        skipItem: () => ({ ok: true })
       },
       store,
       getRepoRoots: () => ['/repo'],
@@ -1864,5 +1874,100 @@ steps:
     })
     expect(await own.call('workflows:startChain', valid())).toEqual({ error: 'internal error' })
     expect(chainLogs.join('\n')).not.toContain('secret')
+  })
+})
+
+describe('workflows:retryChainItem and workflows:skipChainItem', () => {
+  const CHAIN = '11111111-1111-4111-8111-111111111111'
+  const ITEM = '22222222-2222-4222-8222-222222222222'
+
+  function itemHarness(options: { labs?: boolean; result?: ChainItemActionResult } = {}) {
+    const own = new FakeTransport()
+    const itemStore = new Store({
+      ...initialState,
+      settings: { ...initialState.settings, labs: { ...initialState.settings.labs, workflows: options.labs ?? true } }
+    })
+    const calls: unknown[][] = []
+    const result = options.result ?? { ok: true }
+    registerWorkflowChainRequestHandlers({
+      transport: own,
+      loader: { getDefinition: () => null },
+      runner: { checkStart: () => null },
+      chains: {
+        start: () => 'chain-new',
+        retryItem: async (...args) => {
+          calls.push(['retry', ...args])
+          return result
+        },
+        skipItem: (...args) => {
+          calls.push(['skip', ...args])
+          return result
+        }
+      },
+      store: itemStore,
+      getRepoRoots: () => ['/repo'],
+      log: () => {}
+    })
+    return { own, calls }
+  }
+
+  it('passes valid ids and choices through to the scheduler', async () => {
+    const h = itemHarness()
+    expect(await h.own.call('workflows:retryChainItem', CHAIN, ITEM)).toEqual({ ok: true })
+    expect(await h.own.call('workflows:skipChainItem', CHAIN, ITEM, 'onto-previous')).toEqual({ ok: true })
+    expect(await h.own.call('workflows:skipChainItem', CHAIN, ITEM, 'cancel-rest')).toEqual({ ok: true })
+    expect(h.calls).toEqual([
+      ['retry', CHAIN, ITEM],
+      ['skip', CHAIN, ITEM, 'onto-previous'],
+      ['skip', CHAIN, ITEM, 'cancel-rest']
+    ])
+  })
+
+  it.each<[string, unknown[]]>([
+    ['a malformed chain id', ['../chain', ITEM]],
+    ['a malformed item id', [CHAIN, 'item/../x']],
+    ['a non-string chain id', [{ chainId: CHAIN }, ITEM]],
+    ['a missing item id', [CHAIN, undefined]]
+  ])('refuses %s as an invalid request', async (_name, args) => {
+    const h = itemHarness()
+    expect(await h.own.call('workflows:retryChainItem', ...args)).toEqual({ error: 'invalid request' })
+    expect(await h.own.call('workflows:skipChainItem', ...args, 'cancel-rest')).toEqual({ error: 'invalid request' })
+    expect(h.calls).toEqual([])
+  })
+
+  it.each<[string, unknown]>([
+    ['an unknown choice', 'restack'],
+    ['a missing choice', undefined],
+    ['a non-string choice', { choice: 'cancel-rest' }]
+  ])('refuses %s for skip', async (_name, choice) => {
+    const h = itemHarness()
+    expect(await h.own.call('workflows:skipChainItem', CHAIN, ITEM, choice)).toEqual({
+      error: 'Choose whether to continue the rest onto the previous item or cancel the rest'
+    })
+    expect(h.calls).toEqual([])
+  })
+
+  it('refuses both while Labs workflows is off without calling the scheduler', async () => {
+    const h = itemHarness({ labs: false })
+    expect(await h.own.call('workflows:retryChainItem', CHAIN, ITEM)).toEqual({ error: 'Workflows are turned off in Labs' })
+    expect(await h.own.call('workflows:skipChainItem', CHAIN, ITEM, 'cancel-rest')).toEqual({
+      error: 'Workflows are turned off in Labs'
+    })
+    expect(h.calls).toEqual([])
+  })
+
+  it.each<[ChainItemActionResult, string]>([
+    [{ ok: false, reason: 'unknown-chain' }, 'Unknown or finished chain'],
+    [{ ok: false, reason: 'unknown-item' }, 'Unknown chain item'],
+    [{ ok: false, reason: 'not-stacked' }, 'Only items of a stacked chain can be skipped'],
+    [{ ok: false, reason: 'not-blocking' }, 'Only the item the stack is waiting on can be skipped'],
+    [{ ok: false, reason: 'not-retryable' }, 'Only an item whose run failed or was cancelled can be retried'],
+    [{ ok: false, reason: 'item-starting' }, 'The item is still starting; try again'],
+    [{ ok: false, reason: 'busy' }, 'Another action is still running for this item'],
+    [{ ok: false, reason: 'start-refused', refusal: 'worktree-busy' }, 'A workflow is already running in this worktree']
+  ])('maps the scheduler refusal %o to its message', async (result, message) => {
+    const h = itemHarness({ result })
+    expect(await h.own.call('workflows:retryChainItem', CHAIN, ITEM)).toEqual({ error: message })
+    expect(await h.own.call('workflows:skipChainItem', CHAIN, ITEM, 'onto-previous')).toEqual({ error: message })
   })
 })

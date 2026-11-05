@@ -48,6 +48,7 @@ import type {
   WorkflowRequestChangesPayload,
   WorkflowLoopCapAction,
   WorkflowStartChainPayload,
+  WorkflowChainSkipChoice,
   WorkflowStartRunPayload,
   WorkflowSwapStepPayload
 } from '../../shared/state/workflows'
@@ -318,6 +319,9 @@ export function buildBackend(
       req('workflows:checkInputTrust', repoRoot, type, number),
     cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),
     retryWorkflowPublish: (runId: string) => req('workflows:retryPublish', runId),
+    retryWorkflowChainItem: (chainId: string, itemId: string) => req('workflows:retryChainItem', chainId, itemId),
+    skipWorkflowChainItem: (chainId: string, itemId: string, choice: WorkflowChainSkipChoice) =>
+      req('workflows:skipChainItem', chainId, itemId, choice),
     cancelWorkflowStep: (runId: string, stepId: string) => req('workflows:cancelStep', runId, stepId),
     retryWorkflowStep: (runId: string, stepId: string) => req('workflows:retryStep', runId, stepId),
     retryWorkflowStepFromClean: (runId: string, stepId: string, confirmation: { confirmed: true }) =>
