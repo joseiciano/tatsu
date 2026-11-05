@@ -127,8 +127,14 @@ function handle(method, pathname, query, body, res) {
   if (rest === '/pulls') {
     if (method === 'GET') {
       const state = query.get('state') ?? 'open'
+      const head = query.get('head')
+      const headOwner = head === null ? null : head.split(':')[0]
+      const headRef = head === null ? null : head.slice(head.indexOf(':') + 1)
       const list = [...pulls.values()].filter(
-        (pr) => pr.base.repo.full_name === `${owner}/${repo}` && (state === 'all' || pr.state === state)
+        (pr) =>
+          pr.base.repo.full_name === `${owner}/${repo}` &&
+          (state === 'all' || pr.state === state) &&
+          (head === null || (headOwner === owner && pr.head.ref === headRef))
       )
       return send(res, 200, list)
     }

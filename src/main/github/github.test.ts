@@ -31,7 +31,9 @@ import {
   listOpenPRs,
   inputAuthorTrust,
   createPullRequest,
-  updatePullRequestBase
+  updatePullRequestBase,
+  findPullRequestByHead,
+  parseRemoteUrl
 } from '.'
 import { invalidateTokenCache, resolveGitHubToken } from '../github-auth'
 
@@ -983,5 +985,58 @@ describe('updatePullRequestBase', () => {
       ok: false,
       error: { kind: 'http', status: 422, message: 'Validation Failed', errors: ['base does not exist'] }
     })
+  })
+})
+
+describe('findPullRequestByHead', () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+  const input = { owner: 'acme', repo: 'widgets', branch: 'wf/fix/a-0000abcd' }
+
+  beforeEach(() => {
+    fetchSpy.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('GETs open pulls filtered by owner:branch and returns the first match', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, [{ number: 4, html_url: 'u4', draft: true }]))
+    expect(await findPullRequestByHead(input)).toEqual({ ok: true, pr: { number: 4, url: 'u4', draft: true } })
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.github.com/repos/acme/widgets/pulls?head=acme%3Awf%2Ffix%2Fa-0000abcd&state=open&per_page=1')
+    expect(init.method).toBeUndefined()
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fake-token')
+  })
+
+  it('returns a null PR when nothing is open for the head', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, []))
+    expect(await findPullRequestByHead(input)).toEqual({ ok: true, pr: null })
+  })
+
+  it('returns no-token without any request when no token resolves', async () => {
+    vi.mocked(resolveGitHubToken).mockResolvedValueOnce(null)
+    expect(await findPullRequestByHead(input)).toEqual({ ok: false, error: { kind: 'no-token' } })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an HTTP error and a malformed body', async () => {
+    fetchSpy.mockResolvedValueOnce(mockResponse(404, { message: 'Not Found' }))
+    expect(await findPullRequestByHead(input)).toEqual({
+      ok: false,
+      error: { kind: 'http', status: 404, message: 'Not Found', errors: [] }
+    })
+    fetchSpy.mockResolvedValueOnce(mockResponse(200, { number: 1 }))
+    expect(await findPullRequestByHead(input)).toEqual({ ok: false, error: { kind: 'bad-response' } })
+  })
+})
+
+describe('parseRemoteUrl', () => {
+  it.each([
+    ['git@github.com:acme/widgets.git', { owner: 'acme', repo: 'widgets' }],
+    ['https://github.com/acme/widgets', { owner: 'acme', repo: 'widgets' }],
+    ['/tmp/scratch/remotes/acme/widgets.git', { owner: 'acme', repo: 'widgets' }]
+  ])('parses %s', (url, expected) => {
+    expect(parseRemoteUrl(url)).toEqual(expected)
   })
 })
