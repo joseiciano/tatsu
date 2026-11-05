@@ -834,6 +834,92 @@ async function scenarioPublishFailed(repoRoot, finishedRunId) {
   )
 }
 
+function bareIsAncestor(bare, ancestor, descendant) {
+  try {
+    execFileSync('git', ['--git-dir', bare, 'merge-base', '--is-ancestor', `refs/heads/${ancestor}`, `refs/heads/${descendant}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function scenarioStacked(repoRoot) {
+  const { bare, stubLog } = remoteEnv()
+  const chainId = await startChain({
+    defId: 'personal:smoke-chain',
+    repoRoot,
+    mode: 'stacked',
+    items: [
+      { title: 'Stack one', value: 'one' },
+      { title: 'Stack two', value: 'two' },
+      { title: 'Stack three', value: 'three' }
+    ],
+    inputs: {}
+  })
+  const chain = await waitFor(
+    `stacked chain ${chainId} to finish`,
+    () => {
+      const current = state.workflows.chains[chainId]
+      return current?.finishedAt !== undefined ? current : undefined
+    },
+    SCENARIO_TIMEOUT_MS * 3
+  )
+  expectThat(chain.mode === 'stacked' && chain.finishedStatus === 'done', `stacked chain finished ${chain.finishedStatus}`, chain)
+  const records = []
+  for (const [index, item] of chain.items.entries()) {
+    const previous = chain.items[index - 1]
+    expectThat(!item.failed && !item.skipped, `stacked item ${item.id} failed or was skipped`, chain)
+    expectThat(
+      previous ? item.prevItemId === previous.id && item.baseBranch === previous.branch : !item.prevItemId && item.baseBranch === 'main',
+      `stacked item ${index + 1} has base ${item.baseBranch} and previous ${item.prevItemId}`,
+      chain
+    )
+    const record = await request('workflows:getRun', chain.childRunIds[item.id])
+    expectThat(record?.status === 'done' && record.pr, `stacked child of item ${index + 1} ended ${record?.status}`, record)
+    const before = records.at(-1)
+    expectThat(!before || record.startedAt >= before.finishedAt, `stacked item ${index + 1} started before item ${index} was done`, {
+      before,
+      record
+    })
+    records.push(record)
+  }
+  const branches = chain.items.map((item) => item.branch)
+  const posts = branches.map((branch) => pullPosts(stubLog).filter((body) => body.head === branch))
+  expectThat(posts.every((list) => list.length === 1), 'the stub did not receive exactly one PR per stacked item', posts)
+  const [first, second, third] = posts.map(([body]) => body)
+  expectThat(
+    first.base === 'main' && second.base === branches[0] && third.base === branches[1],
+    `stacked PR bases are ${first.base}, ${second.base}, ${third.base}`,
+    posts
+  )
+  expectThat(
+    !first.body.includes('Stacked on') &&
+      second.body.startsWith(`Stacked on #${records[0].pr.number}\n`) &&
+      third.body.startsWith(`Stacked on #${records[1].pr.number}\n`),
+    'stacked PR bodies do not name the PR they are stacked on',
+    posts
+  )
+  expectThat(
+    bareIsAncestor(bare, branches[0], branches[1]) && bareIsAncestor(bare, branches[1], branches[2]),
+    'the pushed stacked branches do not contain their previous item commits',
+    { bare, branches }
+  )
+  const finished = await request('workflows:skipChainItem', chainId, chain.items[2].id, 'cancel-rest')
+  expectThat(finished?.error === 'Unknown or finished chain', 'skipChainItem on a finished chain was not refused', finished)
+  const retried = await request('workflows:retryChainItem', chainId, '../item')
+  expectThat(retried?.error === 'invalid request', 'retryChainItem accepted a malformed item id', retried)
+  console.log(
+    'scenario stacked OK: chain=%s done; PR bases main <- %s <- %s; %s contains %s contains %s in %s',
+    chainId,
+    branches[0],
+    branches[1],
+    branches[2],
+    branches[1],
+    branches[0],
+    bare
+  )
+}
+
 async function main() {
   await new Promise((resolve, reject) => {
     ws.once('open', resolve)
@@ -897,6 +983,7 @@ async function main() {
   const remoteRoot = await addRemoteRepo()
   const finishedChainRun = await scenarioChain(remoteRoot)
   await scenarioPublishFailed(remoteRoot, finishedChainRun)
+  await scenarioStacked(remoteRoot)
   await removeRemoteRepo(remoteRoot)
   ws.close()
   process.exit(0)
