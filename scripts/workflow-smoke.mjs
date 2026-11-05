@@ -19,10 +19,12 @@
 // complete_step, then shell settle step),
 // `smoke-retry` (one
 // `test -f flag` shell step), `smoke-full` and `smoke-chain` (shell-only,
-// item_input `name`, echoes {{item.title}}), plus the committed repo
-// definition `.harness/workflows/smoke-repo.yaml`. Adds <repoPath> as a repo,
-// runs every scenario and exits non-zero on the first failed assertion or
-// on a 60 s timeout per scenario.
+// item_input `name`, echoes {{item.title}} into chain-item.txt), plus the
+// committed repo definition `.harness/workflows/smoke-repo.yaml`. Adds
+// <repoPath> as a repo, runs every scenario and exits non-zero on the first
+// failed assertion or on a 60 s timeout per scenario. The chain scenarios run
+// on SMOKE_REMOTE_REPO (origin = the bare SMOKE_REMOTE_BARE) against the
+// GitHub stub whose request log is GITHUB_STUB_LOG.
 
 import { WebSocket } from 'ws'
 import { execFileSync } from 'child_process'
@@ -633,8 +635,68 @@ async function scenarioRepoTrust(worktreePath) {
 }
 
 const CHAIN_BRANCH = /^wf\/smoke-chain\/(alpha-task|beta-task)-[0-9a-f]{8}$/
+const STUB_PULLS_PATH = '/repos/acme/widgets/pulls'
+const UNKNOWN_RUN_ERROR = 'Unknown or finished run'
+
+function remoteEnv() {
+  const { SMOKE_REMOTE_REPO, SMOKE_REMOTE_BARE, GITHUB_STUB_LOG } = process.env
+  if (!SMOKE_REMOTE_REPO || !SMOKE_REMOTE_BARE || !GITHUB_STUB_LOG) {
+    fail('chain scenarios need SMOKE_REMOTE_REPO, SMOKE_REMOTE_BARE and GITHUB_STUB_LOG from smoke_sandbox/smoke_github_stub')
+  }
+  return { repo: SMOKE_REMOTE_REPO, bare: SMOKE_REMOTE_BARE, stubLog: GITHUB_STUB_LOG }
+}
+
+function pullPosts(stubLog) {
+  return readFileSync(stubLog, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((entry) => entry.method === 'POST' && entry.path === STUB_PULLS_PATH)
+    .map((entry) => entry.body ?? {})
+}
+
+function bareRef(bare, branch) {
+  try {
+    return execFileSync('git', ['--git-dir', bare, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { encoding: 'utf8' }).trim()
+  } catch {
+    return ''
+  }
+}
+
+async function startChain(payload) {
+  const deadline = Date.now() + SCENARIO_TIMEOUT_MS
+  for (;;) {
+    const response = await request('workflows:startChain', payload)
+    if (response && typeof response.chainId === 'string') return response.chainId
+    if (response?.error !== STARTING_ERROR || Date.now() > deadline) fail('startChain refused', response)
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+function waitForRecord(label, runId, matches) {
+  return waitFor(label, async () => {
+    const record = await request('workflows:getRun', runId)
+    return record && matches(record) ? record : undefined
+  })
+}
+
+async function addRemoteRepo() {
+  const { repo } = remoteEnv()
+  const added = await request('repo:addAtPath', repo)
+  if (added?.kind !== 'added') fail('repo:addAtPath did not add the remote-backed repo', added)
+  return added.repoRoot
+}
+
+async function removeRemoteRepo(repoRoot) {
+  const removed = await request('repo:remove', repoRoot)
+  if (removed !== true) fail('repo:remove did not remove the remote-backed repo', removed)
+  await waitFor('the remote-backed repo to leave the sidebar', () =>
+    state.worktrees.list.some((wt) => wt.repoRoot === repoRoot) ? undefined : true
+  )
+}
 
 async function scenarioChain(repoRoot) {
+  const { bare, stubLog } = remoteEnv()
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS
   const payload = {
     defId: 'personal:smoke-chain',
@@ -644,18 +706,10 @@ async function scenarioChain(repoRoot) {
       { title: 'Alpha task', value: 'alpha' },
       { title: 'Beta task', value: 'beta' }
     ],
-    inputs: {}
+    inputs: {},
+    draftPrs: true
   }
-  let chainId
-  for (;;) {
-    const response = await request('workflows:startChain', payload)
-    if (response && typeof response.chainId === 'string') {
-      chainId = response.chainId
-      break
-    }
-    if (response?.error !== STARTING_ERROR || Date.now() > deadline) fail('startChain refused', response)
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  }
+  const chainId = await startChain(payload)
   const chain = await waitFor(`chain ${chainId} to finish`, () => {
     const current = state.workflows.chains[chainId]
     return current?.finishedAt !== undefined ? current : undefined
@@ -665,19 +719,39 @@ async function scenarioChain(repoRoot) {
   for (const item of chain.items) {
     expectThat(!item.failed, `chain item ${item.id} failed`, chain)
     expectThat(CHAIN_BRANCH.test(item.branch ?? ''), `chain item branch ${item.branch} does not match ${CHAIN_BRANCH}`, chain)
+    expectThat(item.baseBranch === 'main', `chain item ${item.id} recorded base ${item.baseBranch}, expected main`, chain)
     const runId = chain.childRunIds[item.id]
     expectThat(typeof runId === 'string', `chain item ${item.id} has no child run`, chain)
     const record = await request('workflows:getRun', runId)
     expectThat(record?.status === 'done' && record.steps.say === 'done', `child run ${runId} ended ${record?.status}`, record)
     expectThat(record.chain?.chainId === chainId && record.chain.item.title === item.title, `child run ${runId} lacks its chain item`, record)
+    expectThat(record.pr && Number.isSafeInteger(record.pr.number) && record.pr.draft === true, `child run ${runId} has no draft PR`, record)
     const said = attemptsFor(record, 'say')[0]?.result?.summary ?? ''
     expectThat(said.includes(item.title), `child run ${runId} did not echo its item title`, record)
     const worktree = state.worktrees.list.find((wt) => wt.branch === item.branch)
     expectThat(worktree && worktree.path === record.worktreePath, `no worktree on ${item.branch} for run ${runId}`, state.worktrees.list)
+    const head = execFileSync('git', ['-C', record.worktreePath, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+    expectThat(bareRef(bare, item.branch) === head, `bare remote lacks ${item.branch} at ${head}`, { bare })
+    const files = execFileSync('git', ['--git-dir', bare, 'show', '--name-only', '--format=', item.branch], { encoding: 'utf8' })
+    expectThat(
+      files.split('\n').includes('chain-item.txt') && !files.includes('.harness/'),
+      `the pushed ${item.branch} tip does not hold just the step output`,
+      files
+    )
     statuses.push(record.status)
   }
   const derived = statuses.every((status) => status === 'done') ? 'done' : 'not-done'
   expectThat(chain.finishedStatus === 'done' && derived === 'done', `chain finished ${chain.finishedStatus}, derived ${derived}`, chain)
+  const branches = chain.items.map((item) => item.branch)
+  const posts = pullPosts(stubLog).filter((body) => branches.includes(body.head))
+  expectThat(
+    posts.length === 2 &&
+      branches.every((branch) => posts.filter((body) => body.head === branch).length === 1) &&
+      posts.every((body) => body.base === 'main' && body.draft === true) &&
+      chain.items.every((item) => posts.some((body) => body.head === item.branch && body.title === item.title)),
+    'the stub did not receive exactly one draft PR against main per chain item',
+    posts
+  )
   const recordPath = join(process.env.HARNESS_DATA_DIR ?? '', 'workflow-chains', `${chainId}.json`)
   if (process.env.HARNESS_DATA_DIR) {
     let persisted
@@ -688,16 +762,75 @@ async function scenarioChain(repoRoot) {
       else await new Promise((resolve) => setTimeout(resolve, 100))
     }
     expectThat(
-      persisted.status === 'done' && persisted.items.every((item) => typeof item.runId === 'string' && item.value),
+      persisted.status === 'done' &&
+        persisted.items.every((item) => typeof item.runId === 'string' && item.value && item.baseBranch === 'main'),
       'persisted chain record is incomplete',
       persisted
     )
   }
   console.log(
-    'scenario chain OK: chain=%s done; worktrees %s; record %s',
+    'scenario chain OK: chain=%s done; branches %s pushed to %s; PRs %s against main; record %s',
     chainId,
-    chain.items.map((item) => item.branch).join(', '),
+    branches.join(', '),
+    bare,
+    posts.map((body) => body.head).join(', '),
     process.env.HARNESS_DATA_DIR ? recordPath : '(no HARNESS_DATA_DIR)'
+  )
+  return chain.childRunIds[chain.items[0].id]
+}
+
+async function scenarioPublishFailed(repoRoot, finishedRunId) {
+  const { bare, stubLog } = remoteEnv()
+  const chainId = await startChain({
+    defId: 'personal:smoke-chain',
+    repoRoot,
+    mode: 'independent',
+    items: [{ title: 'Ship fail-pr widget', value: 'fail' }],
+    inputs: {}
+  })
+  const runId = await waitFor(`chain ${chainId} to link its child run`, () => {
+    const current = state.workflows.chains[chainId]
+    return current ? Object.values(current.childRunIds)[0] : undefined
+  })
+  const isPublishPaused = (record) => record.status === 'paused' && record.pausedReason === 'publish-failed'
+  const paused = await waitForRecord(`run ${runId} to pause publish-failed`, runId, isPublishPaused)
+  const branch = paused.chain.item.branch
+  expectThat(branch.includes('fail-pr'), `branch ${branch} lost the fail-pr marker`, paused)
+  expectThat(
+    paused.publishError?.stage === 'pull-request' &&
+      paused.publishError.kind === 'github-http' &&
+      paused.publishError.message.includes(`stub refused pull request for ${branch}`),
+    'publish-failed run lacks the stub 422 error',
+    paused
+  )
+  expectThat(!paused.pr, 'a failed publish recorded a PR', paused)
+  expectThat(bareRef(bare, branch) !== '', `the failed item branch ${branch} was not pushed before the PR step`, { bare })
+  const postsFor = () => pullPosts(stubLog).filter((body) => body.head === branch).length
+  expectThat(postsFor() === 1, `expected one PR attempt for ${branch}, saw ${postsFor()}`)
+
+  const retried = await request('workflows:retryPublish', runId)
+  expectThat(retried?.ok === true, 'retryPublish on a publish-failed run was refused', retried)
+  await waitForRecord(`run ${runId} to fail its retried publish`, runId, (record) => isPublishPaused(record) && postsFor() === 2)
+
+  const invalid = await request('workflows:retryPublish', '../not-a-run')
+  expectThat(invalid?.error === 'invalid request', 'retryPublish accepted a malformed run id', invalid)
+  const finished = await request('workflows:retryPublish', finishedRunId)
+  expectThat(finished?.error === UNKNOWN_RUN_ERROR, 'retryPublish on a finished run was not refused', finished)
+
+  const cancelled = await request('workflows:cancelRun', runId)
+  expectThat(cancelled?.ok === true, 'cancelRun on a publish-failed run was refused', cancelled)
+  const chain = await waitFor(`chain ${chainId} to finish cancelled`, () => {
+    const current = state.workflows.chains[chainId]
+    return current?.finishedAt !== undefined ? current : undefined
+  })
+  expectThat(chain.finishedStatus === 'cancelled', `fail-pr chain finished ${chain.finishedStatus}`, chain)
+  const after = await request('workflows:retryPublish', runId)
+  expectThat(after?.error === UNKNOWN_RUN_ERROR, 'retryPublish on a cancelled run was not refused', after)
+  expectThat(postsFor() === 2, `a cancelled run sent another PR request for ${branch}`)
+  console.log(
+    'scenario publish-failed OK: run=%s paused publish-failed on the stub 422, retry re-paused, refusals held, cancelled chain=%s',
+    runId,
+    chainId
   )
 }
 
@@ -761,7 +894,10 @@ async function main() {
   await scenarioWhen(worktreePath)
   await scenarioFailRetry(worktreePath)
   await scenarioRepoTrust(worktreePath)
-  await scenarioChain(added.repoRoot)
+  const remoteRoot = await addRemoteRepo()
+  const finishedChainRun = await scenarioChain(remoteRoot)
+  await scenarioPublishFailed(remoteRoot, finishedChainRun)
+  await removeRemoteRepo(remoteRoot)
   ws.close()
   process.exit(0)
 }

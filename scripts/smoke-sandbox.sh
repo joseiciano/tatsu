@@ -15,6 +15,14 @@
 # (`smoke-repo`, `browser-repo`) committed in the repo so they never show up
 # as untracked files in run snapshots. Sets WORKTREE, CLAUDE_SHIM, CODEX_SHIM
 # and OPENCODE_SHIM.
+#
+# <scratch>/repo has no origin (the no-origin legs rely on that). A second
+# repo at <scratch>/widgets has origin = the local bare repo
+# <scratch>/remotes/acme/widgets.git (so it parses as acme/widgets), main
+# pushed and origin/HEAD set, and a local git identity. It is not in
+# repoRoots; callers add it. Exports SMOKE_REMOTE_REPO and SMOKE_REMOTE_BARE.
+# GITHUB_TOKEN and HARNESS_GITHUB_API_URL are unset here and only exported,
+# together, by smoke_github_stub once the loopback stub answers.
 
 smoke_sandbox() {
   local scratch="$1" repo_dir="$2" add_root="$3"
@@ -33,6 +41,7 @@ smoke_sandbox() {
   export FAKE_AGENT_LOG="$scratch/fake-agent.log"
   export FAKE_AGENT_TRANSCRIPT_DIR="$HOME/.claude/projects/fake-agent"
   unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SANDBOXED OPENCODE_CONFIG_DIR OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT
+  unset GITHUB_TOKEN GH_TOKEN HARNESS_GITHUB_API_URL
   case "$CODEX_HOME" in
     "$scratch"/*) ;;
     *) echo "smoke_sandbox: CODEX_HOME $CODEX_HOME is not under $scratch" >&2; return 1 ;;
@@ -76,6 +85,21 @@ YAML
   git -C "$scratch/repo" add README.md docs .harness/workflows
   git -C "$scratch/repo" commit -q -m init
   WORKTREE="$(git -C "$scratch/repo" rev-parse --show-toplevel)"
+
+  export SMOKE_REMOTE_BARE="$scratch/remotes/acme/widgets.git"
+  mkdir -p "$scratch/remotes/acme" "$scratch/widgets"
+  git init -q --bare -b main "$SMOKE_REMOTE_BARE"
+  git -C "$scratch/widgets" init -q -b main
+  git -C "$scratch/widgets" config user.name "Tatsu Smoke"
+  git -C "$scratch/widgets" config user.email "smoke@example.invalid"
+  printf 'widgets\n' > "$scratch/widgets/README.md"
+  git -C "$scratch/widgets" add README.md
+  git -C "$scratch/widgets" commit -q -m init
+  git -C "$scratch/widgets" remote add origin "$SMOKE_REMOTE_BARE"
+  git -C "$scratch/widgets" push -q origin main
+  git -C "$scratch/widgets" remote set-head origin main
+  SMOKE_REMOTE_REPO="$(git -C "$scratch/widgets" rev-parse --show-toplevel)"
+  export SMOKE_REMOTE_REPO
 
   "$node_bin" -e '
 const fs = require("fs")
@@ -259,7 +283,7 @@ item_input: name
 steps:
   - id: say
     kind: shell
-    run: echo {{item.title}}
+    run: echo {{item.title}} | tee chain-item.txt
 YAML
   cat > "$HARNESS_DATA_DIR/workflows/browser-hang.yaml" <<'YAML'
 name: browser-hang
@@ -331,4 +355,36 @@ steps:
     kind: shell
     run: echo smoke > smoke.txt
 YAML
+}
+
+# smoke_github_stub <scratch> <repo-dir>
+#
+# Starts scripts/github-stub.mjs on a loopback port, logging requests to
+# <scratch>/github-stub.jsonl. Only once the stub prints its URL does it
+# export HARNESS_GITHUB_API_URL and GITHUB_TOKEN=stub-token together, so the
+# token never reaches api.github.com and the github-auth /user probe never
+# falls through to `gh` in a login shell. Sets GITHUB_STUB_PID and exports
+# GITHUB_STUB_LOG; the caller stops the stub.
+smoke_github_stub() {
+  local scratch="$1" repo_dir="$2" url=""
+  export GITHUB_STUB_LOG="$scratch/github-stub.jsonl"
+  : > "$GITHUB_STUB_LOG"
+  node "$repo_dir/scripts/github-stub.mjs" --log "$GITHUB_STUB_LOG" > "$scratch/github-stub.url" 2> "$scratch/github-stub.err" &
+  GITHUB_STUB_PID=$!
+  for _ in $(seq 1 50); do
+    url="$(head -n 1 "$scratch/github-stub.url" 2>/dev/null || true)"
+    case "$url" in http://127.0.0.1:*) break ;; esac
+    if ! kill -0 "$GITHUB_STUB_PID" 2>/dev/null; then break; fi
+    sleep 0.1
+  done
+  case "$url" in
+    http://127.0.0.1:*) ;;
+    *)
+      echo "smoke_github_stub: the GitHub stub did not start" >&2
+      cat "$scratch/github-stub.err" >&2 || true
+      kill "$GITHUB_STUB_PID" 2>/dev/null || true
+      return 1
+      ;;
+  esac
+  export HARNESS_GITHUB_API_URL="$url" GITHUB_TOKEN=stub-token
 }
