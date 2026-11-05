@@ -87,9 +87,16 @@ export function parseWorkflowRunChain(value: unknown): WorkflowRunChain | null {
   if (!chain || !isText(chain.chainId, WORKFLOW_CHAIN_ID_MAX_CHARS, 1)) return null
   const item = parseChainItem(chain.item)
   if (!item) return null
-  if (chain.origin === undefined) return { chainId: chain.chainId, item }
-  const origin = parseChainOrigin(chain.origin)
-  return origin ? { chainId: chain.chainId, item, origin } : null
+  const { stackedOn } = chain
+  if (stackedOn !== undefined && !isGithubNumber(stackedOn)) return null
+  const origin = chain.origin === undefined ? undefined : parseChainOrigin(chain.origin)
+  if (origin === null) return null
+  return {
+    chainId: chain.chainId,
+    item,
+    ...(origin === undefined ? {} : { origin }),
+    ...(stackedOn === undefined ? {} : { stackedOn })
+  }
 }
 
 export function isWorkflowStepModel(value: unknown): value is string {

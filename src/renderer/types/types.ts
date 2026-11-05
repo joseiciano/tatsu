@@ -8,6 +8,7 @@ import type { RepoConfig } from '../../shared/state/repo-configs'
 import type {
   WorkflowActionResponse,
   WorkflowAttemptChangedFilesResponse,
+  WorkflowChainSkipChoice,
   WorkflowAttemptFileDiffResponse,
   WorkflowAttemptRecord,
   WorkflowDefinitionDetail,
@@ -434,6 +435,8 @@ export interface ElectronAPI {
   ): Promise<WorkflowInputTrustResponse>
   cancelWorkflowRun(runId: string): Promise<WorkflowActionResponse>
   retryWorkflowPublish(runId: string): Promise<WorkflowActionResponse>
+  retryWorkflowChainItem(chainId: string, itemId: string): Promise<WorkflowActionResponse>
+  skipWorkflowChainItem(chainId: string, itemId: string, choice: WorkflowChainSkipChoice): Promise<WorkflowActionResponse>
   cancelWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   retryWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   retryWorkflowStepFromClean(

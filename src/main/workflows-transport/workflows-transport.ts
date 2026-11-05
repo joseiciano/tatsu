@@ -41,7 +41,13 @@ import {
 } from '../../shared/state/workflows'
 import type { PersistedWorkflowTrust } from '../persistence'
 import type { Store } from '../store'
-import type { ChainItemRequest, ChainScheduler, StartChainRequest } from '../workflow-chains'
+import type {
+  ChainItemActionRefusal,
+  ChainItemActionResult,
+  ChainItemRequest,
+  ChainScheduler,
+  StartChainRequest
+} from '../workflow-chains'
 
 export interface WorkflowsTransportLike {
   onRequest(name: string, handler: (ctx: unknown, ...args: unknown[]) => unknown): void
@@ -84,7 +90,7 @@ export interface RegisterWorkflowChainRequestHandlersDeps {
   transport: WorkflowsTransportLike
   loader: Pick<WorkflowDefsLoader, 'getDefinition'>
   runner: Pick<WorkflowRunner, 'checkStart'>
-  chains: Pick<ChainScheduler, 'start'>
+  chains: Pick<ChainScheduler, 'start' | 'retryItem' | 'skipItem'>
   store: Pick<Store, 'getSnapshot'>
   getRepoRoots: () => readonly string[]
   log: WorkflowLog
@@ -145,11 +151,22 @@ const START_ERRORS: Record<StartRefusal, string> = {
 }
 
 const CHAIN_ERRORS = {
-  stacked: 'Stacked chains are not supported yet',
   'unknown-repo': 'Unknown repository',
+  'invalid-choice': 'Choose whether to continue the rest onto the previous item or cancel the rest',
   'no-item-input': 'The workflow definition has no item_input, so it cannot run over a list of items',
   'invalid-items': 'Each item of this workflow must be an issue or pull request number'
 } as const
+
+const CHAIN_ITEM_ERRORS: Record<ChainItemActionRefusal, string> = {
+  'unknown-chain': 'Unknown or finished chain',
+  'unknown-item': 'Unknown chain item',
+  'labs-off': 'Workflows are turned off in Labs',
+  'not-stacked': 'Only items of a stacked chain can be skipped',
+  'not-blocking': 'Only the item the stack is waiting on can be skipped',
+  'not-retryable': 'Only an item whose run failed or was cancelled can be retried',
+  'item-starting': 'The item is still starting; try again',
+  busy: 'Another action is still running for this item'
+}
 
 const ACTION_ERRORS: Record<Exclude<StepActionResult, { ok: true }>['reason'], string> = {
   'unknown-run': 'Unknown or finished run',
@@ -435,7 +452,6 @@ export function registerWorkflowChainRequestHandlers({
     if (!store.getSnapshot().state.settings.labs.workflows) return { error: START_ERRORS['labs-off'] }
     const request = parseStartChain(payload)
     if (!request) return INVALID_REQUEST
-    if (request.mode !== 'independent') return { error: CHAIN_ERRORS.stacked }
     if (!getRepoRoots().includes(request.repoRoot)) return { error: CHAIN_ERRORS['unknown-repo'] }
     const [first] = request.items
     const firstRefusal = runner.checkStart(chainProbe(request, first))
@@ -455,9 +471,30 @@ export function registerWorkflowChainRequestHandlers({
       const refusal = runner.checkStart(chainProbe(request, item))
       if (refusal) return { error: START_ERRORS[refusal] }
     }
-    const chainId = chains.start({ ...request, mode: 'independent', definitionName: detail.summary.name })
+    const chainId = chains.start({ ...request, definitionName: detail.summary.name })
     return { chainId }
   })
+  const labsOff = (): { error: string } | null =>
+    store.getSnapshot().state.settings.labs.workflows ? null : { error: START_ERRORS['labs-off'] }
+  guarded('workflows:retryChainItem', async ([chainId, itemId]): Promise<WorkflowActionResponse> => {
+    const off = labsOff()
+    if (off) return off
+    if (!isRunId(chainId) || !isRunId(itemId)) return INVALID_REQUEST
+    return chainItemResponse(await chains.retryItem(chainId, itemId))
+  })
+  guarded('workflows:skipChainItem', ([chainId, itemId, choice]): WorkflowActionResponse => {
+    const off = labsOff()
+    if (off) return off
+    if (!isRunId(chainId) || !isRunId(itemId)) return INVALID_REQUEST
+    if (choice !== 'onto-previous' && choice !== 'cancel-rest') return { error: CHAIN_ERRORS['invalid-choice'] }
+    return chainItemResponse(chains.skipItem(chainId, itemId, choice))
+  })
+}
+
+function chainItemResponse(result: ChainItemActionResult): WorkflowActionResponse {
+  if (result.ok) return { ok: true }
+  if (result.reason === 'start-refused') return { error: START_ERRORS[result.refusal] }
+  return { error: CHAIN_ITEM_ERRORS[result.reason] }
 }
 
 export function registerWorkflowsRequestHandlers({

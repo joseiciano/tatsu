@@ -989,12 +989,15 @@ const worktreesFSM = new WorktreesFSM(store, {
 
 const workflowChainScheduler = new ChainScheduler({
   store,
-  createWorktree: async ({ repoRoot, branchName }) => {
-    const base = await resolveChainBase({
-      repoRoot,
-      mode: config.worktreeBase || DEFAULT_WORKTREE_BASE,
-      exec: chainGitExec
-    })
+  createWorktree: async ({ repoRoot, branchName, baseBranch }) => {
+    const base =
+      baseBranch === undefined
+        ? await resolveChainBase({
+            repoRoot,
+            mode: config.worktreeBase || DEFAULT_WORKTREE_BASE,
+            exec: chainGitExec
+          })
+        : { ref: baseBranch, branch: baseBranch }
     const outcome = await worktreesFSM.runPending({
       id: randomUUID(),
       repoRoot,
@@ -1006,6 +1009,7 @@ const workflowChainScheduler = new ChainScheduler({
     return { ok: false, reason: outcome.outcome === 'setup-failed' ? 'setup-failed' : 'worktree-failed' }
   },
   startRun: (request) => workflowRunner.start(request),
+  cancelRun: (runId) => workflowRunner.cancelRun(runId),
   persist: (record) => workflowChainRecords.persist(record),
   now: () => Date.now(),
   newId: () => randomUUID(),
