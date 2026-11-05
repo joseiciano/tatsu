@@ -100,7 +100,9 @@ export function pullRequestBody(record: WorkflowRunRecord, summary: string): str
     const [first = ''] = (attempt?.result?.summary ?? '').trim().split(/\r?\n/)
     return first.trim() ? `${step.id}: ${status} — ${first.trim()}` : `${step.id}: ${status}`
   })
-  return truncateCodePoints(`${summary}\n\n${lines.join('\n')}`, BODY_MAX_CHARS)
+  const stackedOn = record.chain?.stackedOn
+  const stacked = stackedOn === undefined ? '' : `Stacked on #${stackedOn}\n\n`
+  return truncateCodePoints(`${stacked}${summary}\n\n${lines.join('\n')}`, BODY_MAX_CHARS)
 }
 
 export function pullRequestTitle(title: string): string {

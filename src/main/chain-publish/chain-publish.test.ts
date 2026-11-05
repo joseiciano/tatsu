@@ -326,6 +326,26 @@ describe('createRunPublisher', () => {
     ])
   }, TIMEOUT)
 
+  it('bases a stacked item PR on the previous item branch and says which PR it is stacked on', async () => {
+    const previous = await addItemWorktree('stack-one')
+    const { path, branch } = await addItemWorktree('stack-two')
+    writeFileSync(join(path, 'stacked.ts'), 'export {}\n')
+    const publish = mod.createRunPublisher({ exec: recordingExec().exec, github: realGithub(), draftPrsFor: () => true })
+    const run = chainRun(path, branch, previous.branch)
+    const stacked = { ...run, chain: { ...run.chain, stackedOn: 41 } } as WorkflowRunRecord
+
+    expect(await publish({ run: stacked, signal: new AbortController().signal })).toMatchObject({ ok: true })
+    expect(pullPosts().filter((body) => body.head === branch)).toEqual([
+      {
+        head: branch,
+        base: previous.branch,
+        title: 'Widget',
+        body: 'Stacked on #41\n\nBuilt the widget\n\nbuild: done — Built the widget',
+        draft: true
+      }
+    ])
+  }, TIMEOUT)
+
   it('fails without a chain record or a base, and reports a cancel', async () => {
     const { path, branch } = await addItemWorktree('run-publisher-guards')
     const signal = new AbortController().signal
