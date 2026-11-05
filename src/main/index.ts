@@ -38,7 +38,7 @@ import { getWeeklyStats } from './weekly-stats'
 import type { TerminalTab, PaneNode, PaneLeaf } from '../shared/state/terminals'
 import { getLeaves, mapLeaves } from '../shared/state/terminals'
 import { listWorktrees, listBranches, continueWorktree, isWorktreeDirty, defaultWorktreeDir, getChangedFiles, getFileDiff, getBranchCommits, getCommitDiff, getCommitChangedFiles, getCommitFileDiffSides, getMainWorktreeStatus, prepareMainForMerge, mergeWorktreeLocally, getBranchSha, previewMergeConflicts, getBranchDiffStats, listAllFiles, readWorktreeFile, readWorktreeFileBinary, writeWorktreeFile, getFileDiffSides, getCurrentBranch, symlinkClaudeSettings, type MergeStrategy } from './worktree'
-import { inputAuthorTrust, listOpenPRs, listRepoIssues, testToken, starRepo, unstarRepo, isRepoStarred, mergePR, getRepoInfo, type GitHubMergeMethod, type MergePRResult } from './github'
+import { inputAuthorTrust, listOpenPRs, listRepoIssues, testToken, starRepo, unstarRepo, isRepoStarred, mergePR, getRepoInfo, findPullRequestByHead, createPullRequest, type GitHubMergeMethod, type MergePRResult } from './github'
 import { AVAILABLE_EDITORS, DEFAULT_EDITOR_ID, openInEditor } from './editor'
 import { setSecret, getSecret, hasSecret, deleteSecret } from './secrets'
 import { resolveGitHubToken, getTokenSource, invalidateTokenCache, getCachedToken } from './github-auth'
@@ -105,7 +105,8 @@ import { log, getLogFilePath } from './debug'
 import { loadCustomThemes } from './themes-loader'
 import { createWorkflowDefsLoader, workflowsDir } from './workflow-defs-loader'
 import { registerWorkflowChainRequestHandlers, registerWorkflowsRequestHandlers } from './workflows-transport'
-import { ChainScheduler, createWorkflowChainRecords, workflowChainsDir } from './workflow-chains'
+import { ChainScheduler, createWorkflowChainRecords, readWorkflowChainDraftPrs, workflowChainsDir } from './workflow-chains'
+import { createGitExec, createRunPublisher, resolveChainBase } from './chain-publish'
 import {
   WorkflowRunner,
   claudeProfile,
@@ -821,6 +822,7 @@ const agentStepDriver = createAgentStepDriver({
   newSessionId: () => randomUUID(),
   log
 })
+const chainGitExec = createGitExec()
 const workflowRunner = new WorkflowRunner({
   store,
   loader: workflowDefsLoader,
@@ -838,7 +840,15 @@ const workflowRunner = new WorkflowRunner({
   costInterest: {
     hold: (terminalId) => costTracker.holdInterest(terminalId),
     release: (terminalId) => costTracker.releaseInterest(terminalId)
-  }
+  },
+  publish: createRunPublisher({
+    exec: chainGitExec,
+    github: { findPullRequestByHead, createPullRequest },
+    draftPrsFor: (chainId) =>
+      store.getSnapshot().state.workflows.chains[chainId]?.draftPrs ??
+      readWorkflowChainDraftPrs(workflowChainsDir(), chainId)
+  }),
+  onPublished: (worktreePath) => prPoller.refreshOneIfStale(worktreePath)
 })
 registerWorkflowsRequestHandlers({
   transport,
@@ -980,8 +990,19 @@ const worktreesFSM = new WorktreesFSM(store, {
 const workflowChainScheduler = new ChainScheduler({
   store,
   createWorktree: async ({ repoRoot, branchName }) => {
-    const outcome = await worktreesFSM.runPending({ id: randomUUID(), repoRoot, branchName, workflow: true })
-    if (outcome.outcome === 'success') return { ok: true, worktreePath: outcome.createdPath }
+    const base = await resolveChainBase({
+      repoRoot,
+      mode: config.worktreeBase || DEFAULT_WORKTREE_BASE,
+      exec: chainGitExec
+    })
+    const outcome = await worktreesFSM.runPending({
+      id: randomUUID(),
+      repoRoot,
+      branchName,
+      workflow: true,
+      ...(base ? { baseBranch: base.ref } : {})
+    })
+    if (outcome.outcome === 'success') return { ok: true, worktreePath: outcome.createdPath, baseBranch: base?.branch ?? '' }
     return { ok: false, reason: outcome.outcome === 'setup-failed' ? 'setup-failed' : 'worktree-failed' }
   },
   startRun: (request) => workflowRunner.start(request),

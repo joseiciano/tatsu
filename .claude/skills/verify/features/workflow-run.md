@@ -151,6 +151,20 @@ run is live, and paused runs appear under NEEDS YOU in the sidebar.
   A run paused at a gate (`Waiting at gate · <step>`) offers `Approve`,
   `Request changes` (agent steps only) and `Cancel run`; see
   [workflow-gates.md](workflow-gates.md).
+- **Pull request failed (chain items)**: a chain child run publishes when its
+  last step completes (commit leftovers with the run summary, push the item
+  branch to `origin`, open the PR against the base recorded at launch) and
+  stays `running` meanwhile. If any stage fails it pauses `publish-failed`:
+  the NEEDS YOU row reads `<worktree> · Pull request failed` with no step,
+  then the scrubbed error from the run record's `publishError.message`
+  (e.g. `GitHub 422: Validation Failed; stub refused pull request for
+  wf/smoke-chain/ship-fail-pr-widget-<hex>`), and offers only `Retry
+  publish` (`workflows:retryPublish`, aria `Retry publish: <workflow> on
+  <worktree>`) and `Cancel run`. Run detail offers the same two. Retry
+  re-runs only what is not done (no second commit, no push when the remote
+  branch is current, PR lookup by head first). Drive it with
+  `journeys/publish-failed.mjs` (item title containing `fail-pr`). A long
+  worktree name truncates in the row; the reason and step stay visible.
 - **Step tab close**: closing a step tab whose attempt is running asks
   `Cancel step “<id>”?` (`alertdialog`); `Cancel step and close tab` cancels
   the step (run pauses step-failed, step cancelled), then closes the tab.

@@ -22,8 +22,14 @@ type ChildRun = Pick<WorkflowRun, 'status'>
 const IN_FLIGHT_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['queued', 'running'])
 const TERMINAL_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['done', 'failed', 'cancelled'])
 
-function sliceItem({ id, title, branch, failed }: WorkflowChainItemRecord): WorkflowChainItem {
-  return { id, title, ...(branch === undefined ? {} : { branch }), ...(failed === undefined ? {} : { failed: true }) }
+function sliceItem({ id, title, branch, baseBranch, failed }: WorkflowChainItemRecord): WorkflowChainItem {
+  return {
+    id,
+    title,
+    ...(branch === undefined ? {} : { branch }),
+    ...(baseBranch ? { baseBranch } : {}),
+    ...(failed === undefined ? {} : { failed: true })
+  }
 }
 
 function sliceChain(record: WorkflowChainRecord): WorkflowChain {
@@ -200,6 +206,15 @@ export class ChainScheduler {
     if (this.disposed) return null
     if (!worktree.ok) return { reason: worktree.reason }
     item.worktreePath = worktree.worktreePath
+    item.baseBranch = worktree.baseBranch
+    if (worktree.baseBranch) {
+      this.deps.store.dispatch({
+        type: 'workflows/chainItemsChanged',
+        payload: { chainId, items: [{ id: item.id, baseBranch: worktree.baseBranch }] }
+      })
+    } else {
+      this.deps.log('workflow', 'chain item base unresolved', { chainId, itemId: item.id })
+    }
     this.deps.persist(record)
     const result = await this.deps.startRun(this.runRequest(record, item, branch, worktree.worktreePath))
     if (this.disposed) return null
@@ -223,7 +238,7 @@ export class ChainScheduler {
       ...(record.autopilot ? { autopilot: true } : {}),
       chain: {
         chainId: record.chainId,
-        item: { id: item.id, title: item.title, value: item.value, branch, baseBranch: '' },
+        item: { id: item.id, title: item.title, value: item.value, branch, baseBranch: item.baseBranch ?? '' },
         ...(item.origin === undefined ? {} : { origin: item.origin })
       }
     }

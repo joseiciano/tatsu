@@ -174,3 +174,13 @@ export type GitHubApiError =
 export type PullRequestResult =
   | { ok: true; pr: PullRequestRef }
   | { ok: false; error: GitHubApiError }
+
+export interface FindPullRequestByHeadInput {
+  owner: string
+  repo: string
+  branch: string
+}
+
+export type FindPullRequestResult =
+  | { ok: true; pr: PullRequestRef | null }
+  | { ok: false; error: GitHubApiError }

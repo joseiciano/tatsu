@@ -21,10 +21,13 @@ import {
   runNeedsYouAction,
   sliceStepContext,
   stepOrderFor,
-  type NeedsYouActionKind,
-  type RecordStepContext
+  type NeedsYouActionKind
 } from '../workflow-run-helpers'
-import type { WorkflowActionResponse, WorkflowRequestChangesPayload } from '../../../../shared/state/workflows'
+import type {
+  WorkflowActionResponse,
+  WorkflowRequestChangesPayload,
+  WorkflowRunRecord
+} from '../../../../shared/state/workflows'
 import { RequestChangesDialog } from './RequestChangesDialog'
 import { RetryFromCleanDialog } from './RetryFromCleanDialog'
 import { RaiseBudgetForm } from './RaiseBudgetForm'
@@ -39,6 +42,7 @@ const ACTION_LABELS: Record<NeedsYouActionKind, string> = {
   'loop-continue': 'Continue anyway',
   'keep-waiting': 'Keep waiting',
   'raise-budget': 'Raise budget',
+  'retry-publish': 'Retry publish',
   resume: 'Resume',
   retry: 'Retry',
   'retry-from-clean': 'Retry from clean',
@@ -61,16 +65,25 @@ function actionAriaLabel(kind: NeedsYouActionKind, stepId: string | null, workfl
   return STEP_NAMED_ACTIONS.has(kind) && stepId ? `${ACTION_LABELS[kind]}: ${stepId}, ${where}` : `${ACTION_LABELS[kind]}: ${where}`
 }
 
-function useRecordStepContext(runId: string, fetchKey: string, enabled: boolean): RecordStepContext | null {
+function publishErrorMessage(record: WorkflowRunRecord): string | null {
+  return record.publishError?.message || null
+}
+
+function useRunRecordValue<T>(
+  runId: string,
+  fetchKey: string,
+  enabled: boolean,
+  select: (record: WorkflowRunRecord) => T | null
+): T | null {
   const backend = useBackend()
-  const [loaded, setLoaded] = useState<{ key: string; value: RecordStepContext | null } | null>(null)
+  const [loaded, setLoaded] = useState<{ key: string; value: T | null } | null>(null)
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
     backend
       .getWorkflowRun(runId)
       .then((record) => {
-        if (!cancelled) setLoaded({ key: fetchKey, value: record ? recordStepContext(record) : null })
+        if (!cancelled) setLoaded({ key: fetchKey, value: record ? select(record) : null })
       })
       .catch(() => {
         if (!cancelled) setLoaded({ key: fetchKey, value: null })
@@ -78,7 +91,7 @@ function useRecordStepContext(runId: string, fetchKey: string, enabled: boolean)
     return () => {
       cancelled = true
     }
-  }, [backend, runId, fetchKey, enabled])
+  }, [backend, runId, fetchKey, enabled, select])
   return enabled && loaded?.key === fetchKey ? loaded.value : null
 }
 
@@ -88,16 +101,20 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
   const summary = useWorkflowDefinition(run?.defId ?? null)
   const runAttempts = useWorkflowRunAttempts(runId)
   const budgetPaused = run?.status === 'paused' && run.pausedReason === 'budget'
-  const sliceStepId = run && !budgetPaused ? run.cursorStepId ?? currentStepId(run, stepOrderFor(run, summary)) : null
+  const publishPaused = run?.status === 'paused' && run.pausedReason === 'publish-failed'
+  const runLevelPause = budgetPaused || publishPaused
+  const sliceStepId = run && !runLevelPause ? run.cursorStepId ?? currentStepId(run, stepOrderFor(run, summary)) : null
   const lastAttemptId = (sliceStepId && run?.steps[sliceStepId]?.attemptIds.at(-1)) || null
   const lastAttempt = useWorkflowAttempt(lastAttemptId)
   const sliceContext = run ? sliceStepContext(run, lastAttempt) : null
-  const fetched = useRecordStepContext(
+  const fetched = useRunRecordValue(
     runId,
     `${run?.pausedReason}|${lastAttemptId}|${lastAttempt?.status ?? null}`,
-    run !== null && !budgetPaused && (sliceContext === null || run.pausedReason === 'step-failed')
+    run !== null && !runLevelPause && (sliceContext === null || run.pausedReason === 'step-failed'),
+    recordStepContext
   )
-  const context = budgetPaused ? null : fetched ?? sliceContext
+  const publishError = useRunRecordValue(runId, `publish|${run?.status}`, publishPaused, publishErrorMessage)
+  const context = runLevelPause ? null : fetched ?? sliceContext
   const stepId = context?.stepId ?? sliceStepId
   const tabRef = { runId, stepId: stepId ?? '', attemptId: lastAttemptId }
   const leaf = useWorkflowStepTabLeaf(run && stepId ? run.worktreePath : null, tabRef)
@@ -151,6 +168,10 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
       void settle(() => backend.cancelWorkflowRun(runId))
       return
     }
+    if (kind === 'retry-publish') {
+      void settle(() => backend.retryWorkflowPublish(runId))
+      return
+    }
     if (!stepId || kind === 'raise-budget') return
     if (kind === 'retry-from-clean') {
       setConfirming(true)
@@ -192,11 +213,16 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
           {workflowName}
         </span>
       </div>
-      <div className="text-xs text-faint truncate" title={run.worktreePath}>
-        {worktreeName} · <span className="text-warning">{pausedReasonLabel(reason, stepId ? run.steps[stepId]?.status ?? null : null)}</span>
-        {stepId ? ` · ${stepId}` : ''}
+      <div className="text-xs text-faint flex min-w-0" title={run.worktreePath}>
+        <span className="truncate min-w-0">{worktreeName}</span>
+        <span className="shrink-0 whitespace-pre">
+          {' · '}
+          <span className="text-warning">{pausedReasonLabel(reason, stepId ? run.steps[stepId]?.status ?? null : null)}</span>
+        </span>
+        {stepId && <span className="min-w-0 overflow-hidden text-ellipsis whitespace-pre">{` · ${stepId}`}</span>}
       </div>
       {spend && <div className="text-xs text-faint tabular-nums">{spend}</div>}
+      {publishError && <div className="text-xs text-faint break-words">{publishError}</div>}
       <div className="flex flex-wrap items-center gap-1">
         {actions.map((kind) =>
           kind === 'raise-budget' ? (
@@ -213,7 +239,7 @@ function NeedsYouEntry({ runId, onJumpToTab }: { runId: string; onJumpToTab?: Ju
             <button
               key={kind}
               type="button"
-              disabled={pending || (kind !== 'jump' && kind !== 'cancel' && !stepId)}
+              disabled={pending || (kind !== 'jump' && kind !== 'cancel' && kind !== 'retry-publish' && !stepId)}
               onClick={() => onAction(kind)}
               aria-label={actionAriaLabel(kind, stepId, workflowName, worktreeName)}
               aria-haspopup={kind === 'request-changes' ? 'dialog' : undefined}

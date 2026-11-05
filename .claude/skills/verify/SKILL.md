@@ -38,6 +38,13 @@ this matters:
   `exit-no-complete`, `multi-turn`; no marker = complete the step);
   `FAKE_AGENT_MODE_<KIND>=<mode>` (`CLAUDE`, `CODEX`, `OPENCODE`) applies to
   that kind only and wins over the plain marker.
+- GitHub: `launch.sh` starts `scripts/github-stub.mjs` on a loopback port
+  (`smoke_github_stub`) and only then exports `GITHUB_TOKEN=stub-token` with
+  `HARNESS_GITHUB_API_URL=<stub>`, so the token never reaches api.github.com
+  and the `/user` probe never falls through to `gh`. The stub answers 422 for
+  a PR head containing `fail-pr`; its request log is `GITHUB_STUB_LOG`
+  (copied to evidence as `github-stub.jsonl`). `doctor.sh` fails if
+  `GITHUB_TOKEN` is set without a loopback API URL. `cleanup.sh` stops it.
 - Not isolated: `/tmp/harness-status` (status NDJSON) is shared with any
   running Tatsu.
 - `home-guard.sh` fingerprints the real `~/.claude/settings.json`,
@@ -56,7 +63,11 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
   since the last build; `doctor.sh` reports a stale build. Run `pnpm install`
   once on a fresh worktree.
 - Seeds (from `smoke_sandbox`): a git repo `<scratch>/repo` on branch `main`
-  (in `repoRoots`, so it is the sidebar's only worktree), hooks consent
+  with no origin (in `repoRoots`, so it is the sidebar's only worktree), a
+  second repo `<scratch>/widgets` (`REMOTE_REPO`, not in `repoRoots`; add it
+  with `repo:addAtPath`) whose `origin` is the local bare repo
+  `<scratch>/remotes/acme/widgets.git` (`REMOTE_BARE`, parses as
+  `acme/widgets`, `main` pushed, `origin/HEAD` set, local git identity), hooks consent
   `accepted`, Labs workflows on, the smoke's personal definitions in
   `<data>/workflows/` and two untrusted repo definitions committed in
   `<scratch>/repo/.harness/workflows/`:
@@ -88,7 +99,8 @@ STATE=$(.claude/skills/verify/scripts/launch.sh --build my-run | tail -1)
 - Ready means the `[web-client] open http://127.0.0.1:<port>/?token=<hex>`
   line printed and `doctor.sh` passes. The last stdout line is the state file
   (`PID URL PORT SCRATCH SANDBOX_HOME DATA_DIR WORKTREE EVIDENCE LOG
-  FAKE_AGENT_LOG`). Every other script takes it.
+  FAKE_AGENT_LOG GITHUB_STUB_PID GITHUB_STUB_URL GITHUB_STUB_LOG REMOTE_REPO
+  REMOTE_BARE`). Every other script takes it.
 - On boot the worktree opens a default `Claude Code` tab; it runs the shim
   without a workflow, prints `FAIL: Stop hook did not return a block` and
   exits. That is expected and harmless.
@@ -197,6 +209,7 @@ Run it after every failed attempt too. Non-zero exit = the guard saw changes.
 | `scripts/cleanup.sh` | `cleanup.sh <state.env>` | Stops the run's processes, saves evidence, deletes scratch |
 | `scripts/browser.mjs` | `import { withApp, readState, launchOptions } from '../browser.mjs'` | Shared Playwright session |
 | `scripts/journeys/workflow-run.mjs` | `node workflow-run.mjs <state.env> [defName]` | Launch sheet -> strip -> run record -> step tab per agent step; exit 0 on PASS |
+| `scripts/journeys/publish-failed.mjs` | `node publish-failed.mjs <state.env>` | Adds `REMOTE_REPO`, starts a `smoke-chain` chain with item `Ship fail-pr widget` over WS, checks the NEEDS YOU row `Pull request failed` with the stub error, Retry publish (second PR request, paused again), Cancel run; exit 0 on PASS |
 | `scripts/journeys/workflow-flows.sh` | `workflow-flows.sh <state.env>` | Every browser-smoke scenario (cancel-via-close-tab, Mark done, Workflows section, run detail, diff, swap, gate, loop cap, repo trust, input pickers, launch overrides, library, definition editor, launch target); exit 0 on PASS |
 
 ## Not covered

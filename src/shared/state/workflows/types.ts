@@ -291,6 +291,16 @@ export interface WorkflowRunRecord {
   budgetUsd?: number
   continuations?: Record<string, WorkflowContinuation>
   chain?: WorkflowRunChain
+  pr?: WorkflowRunPr
+  publishError?: WorkflowPublishError
+}
+
+export type WorkflowPublishStage = 'base' | 'commit' | 'push' | 'pull-request'
+
+export interface WorkflowPublishError {
+  stage: WorkflowPublishStage
+  kind: string
+  message: string
 }
 
 export interface WorkflowContinuation {

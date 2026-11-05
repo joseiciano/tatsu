@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # End-to-end smoke test for the headless server.
 #
-# Launches dist-headless/main/index.js on an ephemeral port + localhost,
+# Starts the loopback GitHub stub (scripts/github-stub.mjs) so chain items
+# can open pull requests without touching GitHub, then
+# launches dist-headless/main/index.js on an ephemeral port + localhost,
 # parses the [web-client] URL out of stdout, then delegates to
 # scripts/web-smoke.mjs and scripts/ws-smoke.mjs for HTTP + WS
 # validation, scripts/workflow-smoke.mjs for a real workflow run
@@ -23,6 +25,7 @@ SCRATCH="$(cd "$SCRATCH" && pwd -P)"
 LOG="${HARNESS_SMOKE_LOG:-$SCRATCH/server.log}"
 EVIDENCE="${HARNESS_SMOKE_EVIDENCE:-$SCRATCH/evidence}"
 SERVER_PID=""
+GITHUB_STUB_PID=""
 
 stop_server() {
   kill "$SERVER_PID" 2>/dev/null || true
@@ -42,6 +45,10 @@ cleanup() {
   if [ -n "$SERVER_PID" ]; then
     stop_server
   fi
+  if [ -n "$GITHUB_STUB_PID" ]; then
+    kill "$GITHUB_STUB_PID" 2>/dev/null || true
+    wait "$GITHUB_STUB_PID" 2>/dev/null || true
+  fi
   if [ "$status" -ne 0 ]; then
     echo "--- server log ---" >&2
     cat "$LOG" >&2 || true
@@ -52,6 +59,10 @@ cleanup() {
     if [ -f "${FAKE_AGENT_LOG:-}" ]; then
       echo "--- fake-agent log ---" >&2
       cat "$FAKE_AGENT_LOG" >&2 || true
+    fi
+    if [ -f "${GITHUB_STUB_LOG:-}" ]; then
+      echo "--- github stub requests ---" >&2
+      cat "$GITHUB_STUB_LOG" >&2 || true
     fi
     if [ "$EVIDENCE" = "$SCRATCH/evidence" ] && [ -n "$(ls -A "$EVIDENCE" 2>/dev/null)" ]; then
       local kept
@@ -68,6 +79,8 @@ trap cleanup EXIT
 # shellcheck source=scripts/smoke-sandbox.sh
 . "$REPO_DIR/scripts/smoke-sandbox.sh"
 smoke_sandbox "$SCRATCH" "$REPO_DIR" no
+smoke_github_stub "$SCRATCH" "$REPO_DIR"
+echo "github stub up at $HARNESS_GITHUB_API_URL"
 mkdir -p "$EVIDENCE"
 
 if command -v curl >/dev/null 2>&1; then CURL=yes; else CURL=no; fi

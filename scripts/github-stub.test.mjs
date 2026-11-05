@@ -132,6 +132,23 @@ describe('github-stub with the GitHub client', () => {
     })
   }, TIMEOUT)
 
+  it('finds an open PR by owner:branch head and nothing for another head', async () => {
+    expect(await github.findPullRequestByHead({ owner: 'acme', repo: 'widgets', branch: 'chain/step-1' })).toEqual({
+      ok: true,
+      pr: { number: 1, url: 'https://github.com/acme/widgets/pull/1', draft: true }
+    })
+    expect(await github.findPullRequestByHead({ owner: 'acme', repo: 'widgets', branch: 'chain/step-2' })).toEqual({
+      ok: true,
+      pr: null
+    })
+    expect(await github.findPullRequestByHead({ owner: 'other', repo: 'widgets', branch: 'chain/step-1' })).toEqual({
+      ok: true,
+      pr: null
+    })
+    const unfiltered = await (await fetch(`${await stub.url}/repos/acme/widgets/pulls?state=open`)).json()
+    expect(unfiltered.map((pr) => pr.number)).toEqual([1])
+  }, TIMEOUT)
+
   it('answers an unknown route with a JSON 404', async () => {
     const res = await fetch(`${await stub.url}/nope`)
     expect(res.status).toBe(404)

@@ -10,6 +10,7 @@ import { AttemptTimeline } from './AttemptTimeline'
 
 export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
   'raise-budget': 'Raise budget',
+  'retry-publish': 'Retry publish',
   approve: 'Approve',
   'request-changes': 'Request changes',
   'loop-again': 'Loop again',
@@ -26,7 +27,7 @@ export const RUN_DETAIL_ACTION_LABELS: Record<RunDetailActionKind, string> = {
   jump: 'Jump to tab'
 }
 
-const RUN_LEVEL_ACTIONS: ReadonlySet<RunDetailActionKind> = new Set(['raise-budget', 'cancel-run', 'jump'])
+const RUN_LEVEL_ACTIONS: ReadonlySet<RunDetailActionKind> = new Set(['raise-budget', 'retry-publish', 'cancel-run', 'jump'])
 
 const DANGER_ACTIONS: ReadonlySet<RunDetailActionKind> = new Set(['cancel-run', 'cancel-step', 'retry-from-clean'])
 

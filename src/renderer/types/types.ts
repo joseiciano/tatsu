@@ -433,6 +433,7 @@ export interface ElectronAPI {
     number: string
   ): Promise<WorkflowInputTrustResponse>
   cancelWorkflowRun(runId: string): Promise<WorkflowActionResponse>
+  retryWorkflowPublish(runId: string): Promise<WorkflowActionResponse>
   cancelWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   retryWorkflowStep(runId: string, stepId: string): Promise<WorkflowActionResponse>
   retryWorkflowStepFromClean(

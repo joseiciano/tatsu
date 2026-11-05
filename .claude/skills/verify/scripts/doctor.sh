@@ -23,6 +23,17 @@ for v in CLAUDE_CONFIG_DIR OPENCODE_CONFIG_DIR OPENCODE_CONFIG OPENCODE_CONFIG_C
   case "$ENV_LINE" in *" $v="*) bad "$v is set in the server env; it could point outside the sandbox" ;; *) ok "$v unset" ;; esac
 done
 
+case "$ENV_LINE" in
+  *" GITHUB_TOKEN="*)
+    case "$ENV_LINE" in
+      *" HARNESS_GITHUB_API_URL=http://127.0.0.1:"*) ok "GITHUB_TOKEN goes only to the loopback GitHub stub" ;;
+      *) bad "GITHUB_TOKEN is set without a loopback HARNESS_GITHUB_API_URL; it would reach api.github.com" ;;
+    esac
+    ;;
+  *) ok "GITHUB_TOKEN unset" ;;
+esac
+if [ -n "${GITHUB_STUB_PID:-}" ] && kill -0 "$GITHUB_STUB_PID" 2>/dev/null; then ok "GitHub stub pid $GITHUB_STUB_PID alive at ${GITHUB_STUB_URL:-?}"; else bad "GitHub stub is not running"; fi
+
 CMD="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claudeCommand||"")' "$DATA_DIR/config.json" 2>/dev/null)"
 case "$CMD" in "$SCRATCH/bin/claude") ok "claudeCommand is the fake-agent shim" ;; *) bad "claudeCommand is '$CMD', not the shim" ;; esac
 CODEX_CMD="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).codexCommand||"")' "$DATA_DIR/config.json" 2>/dev/null)"

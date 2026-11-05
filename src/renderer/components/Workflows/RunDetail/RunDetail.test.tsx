@@ -32,7 +32,8 @@ const { backendApi, storeState } = vi.hoisted(() => ({
     requestWorkflowChanges: vi.fn(),
     resolveWorkflowLoopCap: vi.fn(),
     keepWaitingWorkflowStep: vi.fn(),
-    setWorkflowRunBudget: vi.fn()
+    setWorkflowRunBudget: vi.fn(),
+    retryWorkflowPublish: vi.fn()
   },
   storeState: { current: null as AppState | null }
 }))
@@ -631,6 +632,35 @@ describe('RunDetailContainer', () => {
       await click(actionButton('Raise budget'))
       expect(backendApi.setWorkflowRunBudget).toHaveBeenCalledExactlyOnceWith('r1', 3)
       expect(backendApi.cancelWorkflowStep).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('after a failed pull request', () => {
+    const EXIT_DONE = attemptRecord({ attemptId: 'a-exit', stepId: 'exit', startedAt: NOW - 40_000, endedAt: NOW - 30_000 })
+    const publishRun = () =>
+      pausedRun({
+        pausedReason: 'publish-failed',
+        cursorStepId: 'exit',
+        steps: {
+          plan: { status: 'done', attemptIds: ['a-plan'], kind: 'shell' },
+          exit: { status: 'done', attemptIds: ['a-exit'], kind: 'agent', agent: 'claude' }
+        }
+      })
+
+    beforeEach(() => {
+      backendApi.retryWorkflowPublish.mockResolvedValue({ ok: true })
+      backendApi.getWorkflowRun.mockResolvedValue(
+        record([PLAN_ATTEMPT, EXIT_DONE], { pausedReason: 'publish-failed', cursor: 2, steps: { plan: 'done', exit: 'done' } })
+      )
+      backendApi.getWorkflowAttemptResult.mockImplementation(async (id: string) => [PLAN_ATTEMPT, EXIT_DONE].find((a) => a.attemptId === id) ?? null)
+    })
+
+    it('offers Retry publish and Cancel run and retries the publish for the run', async () => {
+      setState(publishRun(), { 'a-plan': sliceAttempt('plan', 'done'), 'a-exit': sliceAttempt('exit', 'done') })
+      await render()
+      expect(actionButtons()).toEqual(['Retry publish', 'Cancel run'])
+      await click(actionButton('Retry publish'))
+      expect(backendApi.retryWorkflowPublish).toHaveBeenCalledExactlyOnceWith('r1')
     })
   })
 

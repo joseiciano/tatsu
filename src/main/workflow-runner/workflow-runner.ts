@@ -9,6 +9,7 @@ import type {
   WorkflowAttemptRecord,
   WorkflowRunRecord,
   WorkflowRunnerDeps,
+  RunPublishResult,
   StartRefusal,
   StartRunRequest,
   StartRunResult,
@@ -28,6 +29,7 @@ import {
   type StepExecution
 } from './drivers'
 import { runContextPath } from './run-artifacts'
+import { scrubCredentials } from '../scrub-credentials'
 import type { TimerHandle } from '../workflow-defs-loader'
 import {
   STEP_SUMMARY_MAX_CHARS,
@@ -84,6 +86,7 @@ const CONTINUATION_PROMPT_MAX_CHARS = 1024 * 1024
 const INPUT_TRUST_TIMEOUT_MS = 10_000
 const MAX_TIMER_MS = 2 ** 31 - 1
 const BUDGET_PAUSE = '$budget'
+const PUBLISH_PAUSE = '$publish'
 export const RUN_INPUTS_MAX = 64
 export const RUN_INPUT_VALUE_MAX_CHARS = WORKFLOW_INPUT_VALUE_MAX_CHARS
 
@@ -120,6 +123,7 @@ interface RunState {
   io: Promise<boolean>
   lastSnapshot?: string
   busy?: boolean
+  publishing?: AbortController
 }
 
 interface ActionTarget {
@@ -619,6 +623,7 @@ export class WorkflowRunner {
     const state = this.runs.get(runId)
     if (!state) return this.refuseAction('unknown-run', { runId })
     if (state.busy) return this.refuseAction('busy', { runId })
+    state.publishing?.abort()
     for (const queuedStepId of this.dequeueRun(runId)) this.setStep(state, queuedStepId, 'cancelled')
     for (const live of [...state.live.values()]) {
       this.endAttempt(state, live, 'cancelled', undefined, true)
@@ -851,7 +856,7 @@ export class WorkflowRunner {
     if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return 'unknown-run'
     if (!this.ready) return 'starting'
     if (!this.labsOn()) return 'labs-off'
-    if (state.busy) return 'busy'
+    if (state.busy || state.publishing) return 'busy'
     const step = state.record.definition.steps.find((candidate) => candidate.id === stepId)
     if (!step || !isRunnable(step)) return 'wrong-step'
     if (step.kind !== 'agent') return 'not-continuable-step'
@@ -946,7 +951,7 @@ export class WorkflowRunner {
     if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
     if (!this.ready) return this.refuseAction('starting', ids)
     if (!this.labsOn()) return this.refuseAction('labs-off', ids)
-    if (state.busy) return this.refuseAction('busy', ids)
+    if (state.busy || state.publishing) return this.refuseAction('busy', ids)
     state.record.budgetUsd = budgetUsd
     this.deps.store.dispatch({ type: 'workflows/runBudgetChanged', payload: { runId, budgetUsd } })
     this.log('run budget set', ids)
@@ -1084,6 +1089,21 @@ export class WorkflowRunner {
     else delete record.continuations
   }
 
+  retryPublish(runId: string): StepActionResult {
+    const ids = { runId }
+    const state = this.runs.get(runId)
+    if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return this.refuseAction('unknown-run', ids)
+    if (!this.ready) return this.refuseAction('starting', ids)
+    if (!this.labsOn()) return this.refuseAction('labs-off', ids)
+    if (state.busy || state.publishing) return this.refuseAction('busy', ids)
+    if (state.pauses.get(PUBLISH_PAUSE) !== 'publish-failed') return this.refuseAction('not-paused', ids)
+    this.log('run publish retried', ids)
+    this.resume(state, PUBLISH_PAUSE)
+    this.schedule(state)
+    this.settle(state)
+    return ACTION_OK
+  }
+
   reschedule(): void {
     for (const state of this.drain()) this.persist(state.record)
   }
@@ -1157,6 +1177,8 @@ export class WorkflowRunner {
     const pausedStep = steps[record.cursor] ?? steps.at(-1)
     if (record.status === 'paused' && record.pausedReason === 'budget') {
       state.pauses.set(BUDGET_PAUSE, 'budget')
+    } else if (record.status === 'paused' && record.pausedReason === 'publish-failed') {
+      state.pauses.set(PUBLISH_PAUSE, 'publish-failed')
     } else if (record.status === 'paused' && record.pausedReason !== undefined && pausedStep) {
       state.pauses.set(pausedStep.id, record.pausedReason)
     }
@@ -1409,6 +1431,61 @@ export class WorkflowRunner {
   }
 
   private finish(state: RunState): void {
+    const { chain } = state.record
+    if (chain !== undefined && this.deps.publish) this.publish(state, chain)
+    else this.finishDone(state)
+  }
+
+  private publish(state: RunState, chain: WorkflowRunChain): void {
+    const { publish } = this.deps
+    if (state.publishing || !publish) return
+    const controller = new AbortController()
+    state.publishing = controller
+    const ids = { runId: state.record.runId, chainId: chain.chainId, itemId: chain.item.id }
+    this.log('run publish started', ids)
+    void publish({ run: structuredClone(state.record), signal: controller.signal })
+      .catch((err: unknown): RunPublishResult => ({
+        ok: false,
+        error: { stage: 'pull-request', kind: 'internal', message: err instanceof Error ? err.name : 'unknown error' }
+      }))
+      .then((result) => this.onPublishSettled(state, controller, ids, result))
+  }
+
+  private onPublishSettled(
+    state: RunState,
+    controller: AbortController,
+    ids: Record<string, string>,
+    result: RunPublishResult
+  ): void {
+    if (state.publishing === controller) delete state.publishing
+    const current = this.runs.get(ids.runId) === state && !controller.signal.aborted
+    if (result.ok) {
+      state.record.pr = result.pr
+      this.deps.store.dispatch({ type: 'workflows/prRecorded', payload: { runId: ids.runId, pr: result.pr } })
+      this.log('run publish succeeded', { ...ids, prNumber: String(result.pr.number) })
+      if (!current) {
+        this.persist(state.record)
+        return
+      }
+      delete state.record.publishError
+      this.deps.onPublished?.(state.record.worktreePath)
+      if (state.record.status === 'running' && state.pauses.size === 0) this.finishDone(state)
+      else this.log('run publish succeeded while paused', ids)
+      this.persist(state.record)
+      return
+    }
+    if (!current) {
+      this.log('run publish ended after cancel', ids)
+      return
+    }
+    const error = { ...result.error, message: scrubCredentials(result.error.message) }
+    state.record.publishError = error
+    this.log('run publish failed', { ...ids, stage: error.stage, kind: error.kind, error: error.message })
+    this.pause(state, PUBLISH_PAUSE, 'publish-failed')
+    this.persist(state.record)
+  }
+
+  private finishDone(state: RunState): void {
     const { runId } = state.record
     const finishedAt = this.deps.now()
     state.record.status = 'done'
@@ -1894,6 +1971,7 @@ export class WorkflowRunner {
 
   private checkBudget(runId: string): void {
     const state = this.runs.get(runId)
+    if (state?.publishing) return
     if (!state || TERMINAL_RUN_STATUSES.has(state.record.status)) return
     if (state.pauses.has(BUDGET_PAUSE) || !overBudget(state.record)) return
     this.pause(state, BUDGET_PAUSE, 'budget')

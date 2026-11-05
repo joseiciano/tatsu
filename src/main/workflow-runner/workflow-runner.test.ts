@@ -14,6 +14,9 @@ import {
   type RunArtifacts,
   type StepAttempt,
   type StepDriver,
+  type RunPublishRequest,
+  type RunPublishResult,
+  type RunPublisher,
   type StepResult,
   type WorkflowRunnerDeps,
   type WorkflowRunRecord
@@ -4467,5 +4470,209 @@ describe('WorkflowRunner chain items', () => {
     const ctx = setup()
     const blank = { ...itemChain(), item: { ...itemChain().item, value: '  ' } }
     expect(await startChained(ctx, blank)).toEqual({ ok: false, reason: 'missing-input' })
+  })
+})
+
+describe('WorkflowRunner chain publish', () => {
+  const CHAIN: WorkflowRunChain = {
+    chainId: 'chain-9',
+    item: { id: 'item-9', title: 'Fix login', value: 'Fix login body', branch: 'wf/chain-item/fix-login-0123abcd', baseBranch: 'main' }
+  }
+  const PR = { number: 7, url: 'https://github.com/acme/widgets/pull/7', draft: true }
+  const STUB_422: RunPublishResult = {
+    ok: false,
+    error: {
+      stage: 'pull-request',
+      kind: 'github-http',
+      message: 'GitHub 422: Validation Failed; push to https://bob:hunter2@example.com/acme/widgets.git refused'
+    }
+  }
+
+  function publisher() {
+    const calls: RunPublishRequest[] = []
+    const pending: Array<(result: RunPublishResult) => void> = []
+    const publish: RunPublisher = (request) => {
+      calls.push(request)
+      return new Promise((resolve) => pending.push(resolve))
+    }
+    const settle = async (result: RunPublishResult) => {
+      const next = pending.shift()
+      if (!next) throw new Error('no publish in flight')
+      next(result)
+      await flush()
+    }
+    return { calls, publish, settle }
+  }
+
+  async function publishingRun(ctx: Ctx, chain: WorkflowRunChain | null = CHAIN): Promise<string> {
+    const result = await ctx.runner.start({
+      defId: 'personal:chain-item',
+      worktreePath: '/wt/chain-item',
+      inputs: chain ? {} : { task: 'plain' },
+      ...(chain ? { chain } : {})
+    })
+    if (!result.ok) throw new Error(result.reason)
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(result.runId, 'plan'), done('Planned the login fix'))
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(result.runId, 'echo'), done('Fix login'))
+    await flush()
+    return result.runId
+  }
+
+  it('keeps a chain run running during publish, then records the PR and finishes done', async () => {
+    const pub = publisher()
+    const onPublished = vi.fn()
+    const ctx = setup({ deps: { publish: pub.publish, onPublished } })
+    const runId = await publishingRun(ctx)
+
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    expect(pub.calls).toHaveLength(1)
+    expect(pub.calls[0].run.chain).toEqual(CHAIN)
+    expect(pub.calls[0].run.steps).toEqual({ plan: 'done', echo: 'done' })
+    expect(pub.calls[0].signal.aborted).toBe(false)
+
+    const events = await ctx.eventsSinceAsync(() => pub.settle({ ok: true, pr: PR }))
+
+    expect(events).toEqual(['prRecorded', 'runFinished'])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'done', pr: PR })
+    expect(onPublished).toHaveBeenCalledWith('/wt/chain-item')
+    expect(ctx.records.at(-1)).toMatchObject({ status: 'done', pr: PR })
+    const ids = { runId, chainId: 'chain-9', itemId: 'item-9' }
+    expect(ctx.logs).toContain(`[workflow] run publish started ${JSON.stringify(ids)}`)
+    expect(ctx.logs).toContain(`[workflow] run publish succeeded ${JSON.stringify({ ...ids, prNumber: '7' })}`)
+  })
+
+  it('pauses publish-failed on a 422 with a scrubbed error, then retryPublish finishes it', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    const runId = await publishingRun(ctx)
+
+    expect(ctx.runner.retryPublish(runId)).toEqual({ ok: false, reason: 'busy' })
+    await pub.settle(STUB_422)
+
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'publish-failed' })
+    const expected = {
+      stage: 'pull-request',
+      kind: 'github-http',
+      message: 'GitHub 422: Validation Failed; push to https://example.com/acme/widgets.git refused'
+    }
+    expect(ctx.records.at(-1)?.publishError).toEqual(expected)
+    expect(ctx.logs.join('\n')).not.toContain('hunter2')
+    expect(ctx.logData).toContainEqual({ runId, chainId: 'chain-9', itemId: 'item-9', stage: 'pull-request', kind: 'github-http', error: expected.message })
+
+    expect(ctx.runner.retryPublish(runId)).toEqual({ ok: true })
+    expect(ctx.wf().runs[runId].status).toBe('running')
+    expect(pub.calls).toHaveLength(2)
+    await pub.settle({ ok: true, pr: PR })
+
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'done', pr: PR })
+    expect(ctx.records.at(-1)).not.toHaveProperty('publishError')
+    expect(ctx.runner.retryPublish(runId)).toEqual({ ok: false, reason: 'unknown-run' })
+  })
+
+  it('refuses retryPublish for an unknown run, another pause reason, or with labs off', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    expect(ctx.runner.retryPublish('nope')).toEqual({ ok: false, reason: 'unknown-run' })
+    const result = await ctx.runner.start({ defId: 'personal:chain-item', worktreePath: '/wt/chain-item', inputs: {}, chain: CHAIN })
+    if (!result.ok) throw new Error(result.reason)
+    await flush()
+    ctx.runner.complete(ctx.attemptOf(result.runId, 'plan'), failed())
+    expect(ctx.wf().runs[result.runId].pausedReason).toBe('step-failed')
+    expect(ctx.runner.retryPublish(result.runId)).toEqual({ ok: false, reason: 'not-paused' })
+    ctx.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(ctx.runner.retryPublish(result.runId)).toEqual({ ok: false, reason: 'labs-off' })
+  })
+
+  it('refuses continueStep with busy while publishing so no attempt outlives the finish', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    const runId = await publishingRun(ctx)
+
+    expect(ctx.runner.continueStep(runId, 'plan', 'one more thing')).toEqual({ ok: false, reason: 'busy' })
+    await pub.settle({ ok: true, pr: PR })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+    expect(ctx.wf().runs[runId].steps.plan.status).toBe('done')
+  })
+
+  it('refuses setBudget with busy while publishing so a budget pause cannot land mid-publish', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    const runId = await publishingRun(ctx)
+
+    expect(ctx.runner.setBudget(runId, 0.01)).toEqual({ ok: false, reason: 'busy' })
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'running' })
+    expect(ctx.wf().runs[runId]).not.toHaveProperty('budgetUsd')
+    await pub.settle({ ok: true, pr: PR })
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('lets cancel win during publish: the signal aborts and the run never reads done', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    const runId = await publishingRun(ctx)
+
+    expect(ctx.runner.cancelRun(runId)).toEqual({ ok: true })
+    expect(pub.calls[0].signal.aborted).toBe(true)
+    const events = await ctx.eventsSinceAsync(() => pub.settle(STUB_422))
+
+    expect(events).toEqual([])
+    expect(ctx.wf().runs[runId].status).toBe('cancelled')
+  })
+
+  it('records a PR created before the cancel landed without finishing the run', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    const runId = await publishingRun(ctx)
+    ctx.runner.cancelRun(runId)
+
+    const events = await ctx.eventsSinceAsync(() => pub.settle({ ok: true, pr: PR }))
+
+    expect(events).toEqual(['prRecorded'])
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'cancelled', pr: PR })
+  })
+
+  it('turns a throwing publisher into a publish-failed pause', async () => {
+    const ctx = setup({ deps: { publish: () => Promise.reject(new TypeError('boom https://x:y@h')) } })
+    const runId = await publishingRun(ctx)
+    await flush()
+    expect(ctx.wf().runs[runId]).toMatchObject({ status: 'paused', pausedReason: 'publish-failed' })
+    expect(ctx.records.at(-1)?.publishError).toEqual({ stage: 'pull-request', kind: 'internal', message: 'TypeError' })
+  })
+
+  it('finishes a non-chain run without publishing', async () => {
+    const pub = publisher()
+    const ctx = setup({ deps: { publish: pub.publish } })
+    const runId = await publishingRun(ctx, null)
+    expect(pub.calls).toEqual([])
+    expect(ctx.wf().runs[runId].status).toBe('done')
+  })
+
+  it('publishes again after a restart mid-publish and resumes a persisted publish-failed pause', async () => {
+    const first = setup({ deps: { publish: publisher().publish } })
+    const runId = await publishingRun(first)
+    const midPublish = structuredClone(first.records.at(-1))
+    if (!midPublish) throw new Error('no record')
+    expect(midPublish.status).toBe('running')
+
+    const pub = publisher()
+    const second = setup({ deps: { publish: pub.publish } })
+    second.runner.reconcile([midPublish])
+    expect(pub.calls).toHaveLength(1)
+    expect(second.runner.getRunRecord(runId)?.status).toBe('running')
+    await pub.settle(STUB_422)
+    const paused = structuredClone(second.records.at(-1))
+    if (!paused) throw new Error('no record')
+    expect(paused).toMatchObject({ status: 'paused', pausedReason: 'publish-failed' })
+
+    const third = setup({ deps: { publish: pub.publish } })
+    third.runner.reconcile([paused])
+    expect(pub.calls).toHaveLength(1)
+    expect(third.runner.retryPublish(runId)).toEqual({ ok: true })
+    expect(pub.calls).toHaveLength(2)
+    await pub.settle({ ok: true, pr: PR })
+    expect(third.runner.getRunRecord(runId)).toBeNull()
+    expect(third.records.at(-1)).toMatchObject({ status: 'done', pr: PR })
   })
 })

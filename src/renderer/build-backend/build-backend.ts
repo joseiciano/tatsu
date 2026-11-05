@@ -317,6 +317,7 @@ export function buildBackend(
     checkWorkflowInputTrust: (repoRoot: string, type: WorkflowInputTrustType, number: string) =>
       req('workflows:checkInputTrust', repoRoot, type, number),
     cancelWorkflowRun: (runId: string) => req('workflows:cancelRun', runId),
+    retryWorkflowPublish: (runId: string) => req('workflows:retryPublish', runId),
     cancelWorkflowStep: (runId: string, stepId: string) => req('workflows:cancelStep', runId, stepId),
     retryWorkflowStep: (runId: string, stepId: string) => req('workflows:retryStep', runId, stepId),
     retryWorkflowStepFromClean: (runId: string, stepId: string, confirmation: { confirmed: true }) =>

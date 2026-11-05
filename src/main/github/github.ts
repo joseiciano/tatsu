@@ -26,7 +26,9 @@ import {
   type UpdatePullRequestBaseInput,
   type PullRequestRef,
   type GitHubApiError,
-  type PullRequestResult
+  type PullRequestResult,
+  type FindPullRequestByHeadInput,
+  type FindPullRequestResult
 } from './types'
 import { PR_FRAGMENT } from './constants'
 
@@ -34,7 +36,7 @@ export type { CheckStatus, PRReview, PRStatus, PRSummary, PRMetadata, IssueSumma
 
 const execFileAsync = promisify(execFile)
 
-function parseRemoteUrl(url: string): { owner: string; repo: string } | null {
+export function parseRemoteUrl(url: string): { owner: string; repo: string } | null {
   const sshMatch = url.match(/[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/)
   if (sshMatch) {
     return { owner: sshMatch[1], repo: sshMatch[2] }
@@ -688,6 +690,36 @@ function pullsPath(owner: string, repo: string): string {
 export async function createPullRequest(input: CreatePullRequestInput): Promise<PullRequestResult> {
   const { owner, repo, head, base, title, body, draft } = input
   return writePullRequest(githubApiUrl(pullsPath(owner, repo)), 'POST', { head, base, title, body, draft })
+}
+
+export async function findPullRequestByHead(input: FindPullRequestByHeadInput): Promise<FindPullRequestResult> {
+  const { owner, repo, branch } = input
+  const token = (await resolveGitHubToken())?.token ?? null
+  if (!token) return { ok: false, error: { kind: 'no-token' } }
+  const head = encodeURIComponent(`${owner}:${branch}`)
+  let res: Response
+  try {
+    res = await githubResponse(githubApiUrl(`${pullsPath(owner, repo)}?head=${head}&state=open&per_page=1`), token, {
+      requireToken: true
+    })
+  } catch (err) {
+    log('github', 'GET pull request by head failed', formatErr(err))
+    return { ok: false, error: { kind: 'network', message: err instanceof Error ? err.message : String(err) } }
+  }
+  if (!res.ok) {
+    log('github', `GET pull request by head returned ${res.status}`)
+    return { ok: false, error: await httpError(res) }
+  }
+  let data: unknown
+  try {
+    data = await res.json()
+  } catch {
+    return { ok: false, error: { kind: 'bad-response' } }
+  }
+  if (!Array.isArray(data)) return { ok: false, error: { kind: 'bad-response' } }
+  if (data.length === 0) return { ok: true, pr: null }
+  const pr = toPullRequestRef(data[0])
+  return pr ? { ok: true, pr } : { ok: false, error: { kind: 'bad-response' } }
 }
 
 export async function updatePullRequestBase(input: UpdatePullRequestBaseInput): Promise<PullRequestResult> {

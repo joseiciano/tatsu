@@ -200,6 +200,12 @@ export function capPermissions(definition: ResolvedDefinition): ResolvedDefiniti
   return { ...definition, steps: definition.steps.map(capStepPermissions) }
 }
 
+export function isWorkflowRunPr(value: unknown): value is WorkflowRunPr {
+  if (typeof value !== 'object' || value === null) return false
+  const { number, url, draft } = value as Partial<Record<keyof WorkflowRunPr, unknown>>
+  return typeof number === 'number' && Number.isSafeInteger(number) && number > 0 && typeof url === 'string' && typeof draft === 'boolean'
+}
+
 export function projectRunRecord(record: WorkflowRunRecord): {
   run: WorkflowRun
   attempts: Record<string, WorkflowAttempt>
@@ -240,6 +246,7 @@ export function projectRunRecord(record: WorkflowRunRecord): {
     ...(cursorStepId === undefined ? {} : { cursorStepId }),
     ...(isBudgetUsd(record.budgetUsd) ? { budgetUsd: record.budgetUsd } : {}),
     ...(record.chain === undefined ? {} : { chainId: record.chain.chainId, itemId: record.chain.item.id }),
+    ...(isWorkflowRunPr(record.pr) ? { pr: { number: record.pr.number, url: record.pr.url, draft: record.pr.draft } } : {}),
     steps
   }
   return { run, attempts }

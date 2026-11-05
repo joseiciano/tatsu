@@ -8,5 +8,7 @@ export type {
   UpdatePullRequestBaseInput,
   PullRequestRef,
   GitHubApiError,
-  PullRequestResult
+  PullRequestResult,
+  FindPullRequestByHeadInput,
+  FindPullRequestResult
 } from './types'
