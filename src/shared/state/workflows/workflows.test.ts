@@ -735,6 +735,13 @@ function runRecord(runId: string, overrides: Partial<WorkflowRunRecord> = {}): W
 }
 
 describe('projectRunRecord', () => {
+  it('projects a recorded pull request and drops a malformed one', () => {
+    const pr = { number: 7, url: 'https://github.com/acme/widgets/pull/7', draft: true }
+    expect(projectRunRecord(runRecord('run-pr', { pr })).run.pr).toEqual(pr)
+    const malformed = { number: '7', url: 'u', draft: true } as unknown as typeof pr
+    expect(projectRunRecord(runRecord('run-pr', { pr: malformed })).run).not.toHaveProperty('pr')
+  })
+
   it('projects a record into the run and attempt rows the runtime events would build', () => {
     const long = `${'a'.repeat(SUMMARY_PREVIEW_MAX - 1)}\u{1F600}tail`
     const projected = projectRunRecord(

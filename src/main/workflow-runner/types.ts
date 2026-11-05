@@ -5,7 +5,9 @@ import type {
   WorkflowInputTrustType,
   WorkflowMarkDonePayload,
   WorkflowRequestChangesPayload,
+  WorkflowPublishError,
   WorkflowRunChain,
+  WorkflowRunPr,
   WorkflowRunRecord,
   WorkflowSnapshotRef
 } from '../../shared/state/workflows'
@@ -80,7 +82,18 @@ export interface WorkflowRunnerDeps {
   setTimer?: (fn: () => void, ms: number) => TimerHandle
   clearTimer?: (handle: TimerHandle) => void
   costInterest?: CostInterest
+  publish?: RunPublisher
+  onPublished?: (worktreePath: string) => void
 }
+
+export interface RunPublishRequest {
+  run: WorkflowRunRecord
+  signal: AbortSignal
+}
+
+export type RunPublishResult = { ok: true; pr: WorkflowRunPr } | { ok: false; error: WorkflowPublishError }
+
+export type RunPublisher = (request: RunPublishRequest) => Promise<RunPublishResult>
 
 export interface CostInterest {
   hold(terminalId: string): void

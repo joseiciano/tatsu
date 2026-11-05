@@ -63,6 +63,7 @@ export type WorkflowActionsRunner = Pick<
   | 'resolveLoopCap'
   | 'keepWaiting'
   | 'setBudget'
+  | 'retryPublish'
 >
 
 export interface RegisterWorkflowsRequestHandlersDeps {
@@ -585,6 +586,12 @@ export function registerWorkflowsRequestHandlers({
   guarded('workflows:setBudget', ([runId, budgetUsd]): WorkflowActionResponse => {
     if (!isRunId(runId) || !isBudgetUsd(budgetUsd)) return INVALID_REQUEST
     return actionResponse(runner.setBudget(runId, budgetUsd))
+  })
+  guarded('workflows:retryPublish', ([runId]): WorkflowActionResponse => {
+    const off = labsOff()
+    if (off) return off
+    if (!isRunId(runId)) return INVALID_REQUEST
+    return actionResponse(runner.retryPublish(runId))
   })
   guarded('workflows:markDone', ([runId, stepId, payload]): WorkflowActionResponse => {
     const request = parseMarkDone(payload)

@@ -184,6 +184,11 @@ class FakeRunner implements WorkflowActionsRunner {
     this.record('setBudget', runId, budgetUsd)
     return this.actionResult
   }
+
+  retryPublish(runId: string): StepActionResult {
+    this.record('retryPublish', runId)
+    return this.actionResult
+  }
 }
 
 function attempt(attemptId: string, summary: string): WorkflowAttemptRecord {
@@ -579,6 +584,7 @@ describe('workflow action requests', () => {
     ['workflows:resolveLoopCap', [RUN, STEP, 'continue'], ['resolveLoopCap', RUN, STEP, 'continue']],
     ['workflows:keepWaiting', [RUN, STEP], ['keepWaiting', RUN, STEP]],
     ['workflows:setBudget', [RUN, 2.5], ['setBudget', RUN, 2.5]],
+    ['workflows:retryPublish', [RUN], ['retryPublish', RUN]],
     ['workflows:setBudget', [RUN, 10000], ['setBudget', RUN, 10000]],
     ['workflows:setBudget', [RUN, 0.01], ['setBudget', RUN, 0.01]],
     [
@@ -868,6 +874,28 @@ describe('workflow action requests', () => {
   it.each(badIds)('rejects resolveLoopCap ids %#', async (id) => {
     expect(await transport.call('workflows:resolveLoopCap', id, STEP, 'continue')).toEqual({ error: 'invalid request' })
     expect(await transport.call('workflows:resolveLoopCap', RUN, id, 'continue')).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it.each(badIds)('rejects retryPublish run ids %#', async (id) => {
+    expect(await transport.call('workflows:retryPublish', id)).toEqual({ error: 'invalid request' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('maps retryPublish refusals to fixed messages', async () => {
+    runner.actionResult = { ok: false, reason: 'unknown-run' }
+    expect(await transport.call('workflows:retryPublish', RUN)).toEqual({ error: 'Unknown or finished run' })
+    runner.actionResult = { ok: false, reason: 'not-paused' }
+    expect(await transport.call('workflows:retryPublish', RUN)).toEqual({ error: 'The run is not paused' })
+    runner.actionResult = { ok: false, reason: 'busy' }
+    expect(await transport.call('workflows:retryPublish', RUN)).toEqual({
+      error: 'Another action is still running for this run'
+    })
+  })
+
+  it('refuses retryPublish while Labs workflows are off without calling the runner', async () => {
+    store.dispatch({ type: 'settings/labsChanged', payload: { workflows: false } })
+    expect(await transport.call('workflows:retryPublish', RUN)).toEqual({ error: 'Workflows are turned off in Labs' })
     expect(runner.calls).toEqual([])
   })
 
