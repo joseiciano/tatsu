@@ -13,6 +13,7 @@ import {
   type ChainItemActionRefusal,
   type ChainItemActionResult,
   type ChainItemFailure,
+  type ChainReconcileRequest,
   type ChainSchedulerDeps,
   type ChainSkipChoice,
   type StartChainRequest,
@@ -69,6 +70,7 @@ export class ChainScheduler {
   private readonly unsubscribe: () => void
   private pumpQueued = false
   private disposed = false
+  private ready = false
 
   constructor(private readonly deps: ChainSchedulerDeps) {
     this.unsubscribe = deps.store.subscribe((event) => this.onEvent(event))
@@ -103,6 +105,19 @@ export class ChainScheduler {
     this.deps.log('workflow', 'chain started', { chainId })
     this.pump()
     return chainId
+  }
+
+  reconcile({ records, recordedRun = () => undefined }: ChainReconcileRequest): void {
+    try {
+      const known = this.deps.store.getSnapshot().state.workflows.chains
+      for (const source of records) {
+        if (this.chains.has(source.chainId) || Object.hasOwn(known, source.chainId)) continue
+        this.adoptChain(structuredClone(source), recordedRun)
+      }
+    } finally {
+      this.ready = true
+      this.pump()
+    }
   }
 
   async retryItem(chainId: string, itemId: string): Promise<ChainItemActionResult> {
@@ -196,6 +211,49 @@ export class ChainScheduler {
     }
   }
 
+  private adoptChain(record: WorkflowChainRecord, recordedRun: NonNullable<ChainReconcileRequest['recordedRun']>): void {
+    const { store, log } = this.deps
+    const { chainId } = record
+    if (record.finishedAt !== undefined) {
+      store.dispatch({ type: 'workflows/chainStarted', payload: { chain: sliceChain(record) } })
+      return
+    }
+    this.chains.set(chainId, record)
+    let changed = false
+    for (const item of record.items) changed = this.adoptItem(record, item, recordedRun) || changed
+    store.dispatch({ type: 'workflows/chainStarted', payload: { chain: sliceChain(record) } })
+    for (const { id, runId } of record.items) {
+      if (runId !== undefined) store.dispatch({ type: 'workflows/chainChildRunLinked', payload: { chainId, itemId: id, runId } })
+    }
+    if (changed) this.deps.persist(record)
+    log('workflow', 'chain reconciled', { chainId })
+  }
+
+  private adoptItem(
+    record: WorkflowChainRecord,
+    item: WorkflowChainItemRecord,
+    recordedRun: NonNullable<ChainReconcileRequest['recordedRun']>
+  ): boolean {
+    const { runId } = item
+    if (runId === undefined) {
+      if (item.branch === undefined || item.worktreePath !== undefined || item.failed !== undefined || item.skipped) return false
+      delete item.branch
+      delete item.baseBranch
+      delete item.prevItemId
+      delete item.stackedOn
+      return true
+    }
+    const { runs } = this.deps.store.getSnapshot().state.workflows
+    const run = Object.hasOwn(runs, runId) ? runs[runId] : recordedRun(runId)
+    this.runOwners.set(runId, record.chainId)
+    if (run === undefined) this.deps.log('workflow', 'chain child run missing', { chainId: record.chainId, itemId: item.id, runId })
+    this.childRuns.set(runId, { status: run?.status ?? 'cancelled' })
+    const prNumber = run?.pr?.number
+    if (item.prNumber !== undefined || prNumber === undefined) return false
+    item.prNumber = prNumber
+    return true
+  }
+
   private recordPr(runId: string, prNumber: number): void {
     const chainId = this.runOwners.get(runId)
     const record = chainId === undefined ? undefined : this.chains.get(chainId)
@@ -269,7 +327,7 @@ export class ChainScheduler {
   }
 
   private pump(): void {
-    if (this.disposed) return
+    if (this.disposed || !this.ready) return
     const { settings } = this.deps.store.getSnapshot().state
     if (settings.labs.workflows) {
       let free = settings.workflows.maxConcurrentAgents - this.inFlight()
@@ -303,6 +361,19 @@ export class ChainScheduler {
   }
 
   private async launchItem(
+    record: WorkflowChainRecord,
+    item: WorkflowChainItemRecord,
+    prev: WorkflowChainItemRecord | undefined
+  ): Promise<{ reason: ChainItemFailure; refusal?: string } | null> {
+    const { branch, worktreePath } = item
+    if (branch === undefined || worktreePath === undefined) return this.placeItem(record, item, prev)
+    const stackedOn = record.items.find(({ id }) => id === item.prevItemId)?.prNumber
+    if (item.stackedOn === undefined && stackedOn !== undefined) item.stackedOn = stackedOn
+    this.deps.log('workflow', 'chain item resumed', { chainId: record.chainId, itemId: item.id })
+    return this.startItem(record, item, branch, worktreePath)
+  }
+
+  private async placeItem(
     record: WorkflowChainRecord,
     item: WorkflowChainItemRecord,
     prev: WorkflowChainItemRecord | undefined
@@ -349,8 +420,17 @@ export class ChainScheduler {
     } else {
       this.deps.log('workflow', 'chain item base unresolved', { chainId, itemId: item.id })
     }
+    return this.startItem(record, item, branch, worktree.worktreePath)
+  }
+
+  private async startItem(
+    record: WorkflowChainRecord,
+    item: WorkflowChainItemRecord,
+    branch: string,
+    worktreePath: string
+  ): Promise<{ reason: ChainItemFailure; refusal?: string } | null> {
     this.deps.persist(record)
-    const result = await this.deps.startRun(this.runRequest(record, item, branch, worktree.worktreePath))
+    const result = await this.deps.startRun(this.runRequest(record, item, branch, worktreePath))
     if (this.disposed) return null
     if (!result.ok) return { reason: 'start-refused', refusal: result.reason }
     this.link(record, item, result.runId)

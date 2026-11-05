@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from 'fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -9,10 +9,13 @@ import type { StartRunRequest, StartRunResult } from '../workflow-runner'
 import {
   ChainScheduler,
   createWorkflowChainRecords,
+  loadChainRecordsSync,
   readWorkflowChainDraftPrs,
+  type ChainReconcileRequest,
   type ChainSchedulerDeps,
   type ChainWorktreeResult,
   type StartChainRequest,
+  type WorkflowChainItemRecord,
   type WorkflowChainRecord
 } from '.'
 
@@ -41,11 +44,25 @@ interface SetupOptions {
   labs?: boolean
   createWorktree?: ChainSchedulerDeps['createWorktree']
   startRun?: (request: StartRunRequest, started: (request: StartRunRequest) => StartRunResult) => Promise<StartRunResult>
+  runs?: Record<string, WorkflowRun>
+  records?: WorkflowChainRecord[]
+  recordedRun?: ChainReconcileRequest['recordedRun']
+  reconcile?: boolean
 }
 
-function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions = {}) {
+function setup({
+  cap = 2,
+  labs = true,
+  createWorktree,
+  startRun,
+  runs = {},
+  records = [],
+  recordedRun,
+  reconcile = true
+}: SetupOptions = {}) {
   const store = new Store({
     ...initialState,
+    workflows: { ...initialState.workflows, runs },
     settings: {
       ...initialState.settings,
       labs: { ...initialState.settings.labs, workflows: labs },
@@ -114,6 +131,7 @@ function setup({ cap = 2, labs = true, createWorktree, startRun }: SetupOptions 
     newShortId: () => (++nextShort).toString(16).padStart(8, '0'),
     log: (_category, message, data) => logs.push({ message, data })
   })
+  if (reconcile) scheduler.reconcile({ records, ...(recordedRun === undefined ? {} : { recordedRun }) })
 
   const finish = (runId: string, status: 'done' | 'failed' = 'done'): void =>
     store.dispatch({ type: 'workflows/runFinished', payload: { runId, status, finishedAt: 9 } })
@@ -753,6 +771,198 @@ describe('ChainScheduler logging and disposal', () => {
   })
 })
 
+const OLD1 = 'wf/fix-bug/item-1-aaaaaaaa'
+const OLD2 = 'wf/fix-bug/item-2-bbbbbbbb'
+
+function seededChain(
+  chainId: string,
+  mode: 'independent' | 'stacked',
+  items: Array<Partial<WorkflowChainItemRecord>>,
+  patch: Partial<WorkflowChainRecord> = {}
+): WorkflowChainRecord {
+  return {
+    version: 1,
+    chainId,
+    defId: 'personal:fix',
+    definitionName: 'Fix Bug',
+    repoRoot: '/repo',
+    mode,
+    draftPrs: false,
+    inputs: { notes: 'n' },
+    items: items.map((item, i) => ({ id: `item-${i + 1}`, title: `Item ${i + 1}`, value: `value ${i + 1}`, ...item })),
+    startedAt: 100,
+    ...patch
+  }
+}
+
+function seededRun(chainId: string, itemId: string, status: WorkflowRun['status'], prNumber?: number): WorkflowRun {
+  return {
+    defId: 'personal:fix',
+    defHash: 'h',
+    chainId,
+    itemId,
+    worktreePath: `/repo/.worktrees/${itemId}`,
+    status,
+    startedAt: 50,
+    steps: {},
+    ...(prNumber === undefined
+      ? {}
+      : { pr: { number: prNumber, url: `https://github.com/acme/widgets/pull/${prNumber}`, draft: false } })
+  }
+}
+
+function placed(branch: string, runId: string, itemId: string): Partial<WorkflowChainItemRecord> {
+  return { branch, baseBranch: 'main', worktreePath: `/repo/.worktrees/${itemId}`, runId }
+}
+
+describe('ChainScheduler reconcile', () => {
+  it('waits for reconcile: a chain started before it registers and persists but launches nothing, even on a labs event', async () => {
+    const t = setup({ reconcile: false })
+    const chainId = t.scheduler.start(request(2))
+    t.store.dispatch({ type: 'settings/labsChanged', payload: { workflows: true } })
+    await settle()
+    expect(t.chainOf(chainId)).toBeDefined()
+    expect(t.persisted).toHaveLength(1)
+    expect(t.worktreeRequests).toEqual([])
+    expect(t.startRequests).toEqual([])
+    t.scheduler.reconcile({ records: [] })
+    await settle()
+    expect(t.worktreeRequests).toHaveLength(2)
+    expect(t.runIds).toEqual(['run-1', 'run-2'])
+  })
+
+  it('starts the unstarted items of an independent chain as slots free, counting its recovered live child', async () => {
+    const chain = seededChain('chain-1', 'independent', [placed(OLD1, 'old-1', 'item-1'), {}, {}])
+    const t = setup({ cap: 2, records: [chain], runs: { 'old-1': seededRun('chain-1', 'item-1', 'running') } })
+    await settle()
+    expect(t.chainOf('chain-1')).toMatchObject({ childRunIds: { 'item-1': 'old-1' } })
+    expect(t.startRequests.map((r) => r.chain?.item.id)).toEqual(['item-2'])
+    t.finish('old-1')
+    await settle()
+    expect(t.startRequests.map((r) => r.chain?.item.id)).toEqual(['item-2', 'item-3'])
+    expect(t.chainOf('chain-1').childRunIds).toEqual({ 'item-1': 'old-1', 'item-2': 'run-1', 'item-3': 'run-2' })
+    t.finish('run-1')
+    t.finish('run-2')
+    await settle()
+    expect(t.finishedEvents()).toEqual([
+      { type: 'workflows/chainFinished', payload: { chainId: 'chain-1', status: 'done', finishedAt: 5000 } }
+    ])
+  })
+
+  it('starts the next item of a stacked chain on the branch of its last done child, stacked on that PR', async () => {
+    const chain = seededChain('chain-1', 'stacked', [placed(OLD1, 'old-1', 'item-1'), {}])
+    const t = setup({ records: [chain], runs: { 'old-1': seededRun('chain-1', 'item-1', 'done', 31) } })
+    await settle()
+    expect(t.worktreeRequests).toEqual([{ repoRoot: '/repo', branchName: 'wf/fix-bug/item-2-00000001', baseBranch: OLD1 }])
+    expect(t.startRequests[0].chain).toMatchObject({ item: { id: 'item-2', baseBranch: OLD1 }, stackedOn: 31 })
+    expect(t.chainOf('chain-1').items[0]).toMatchObject({ prNumber: 31 })
+  })
+
+  it('reads a done child evicted from the slice from the boot run records', async () => {
+    const chain = seededChain('chain-1', 'stacked', [placed(OLD1, 'old-1', 'item-1'), {}])
+    const lookups: string[] = []
+    const t = setup({
+      records: [chain],
+      recordedRun: (runId) => {
+        lookups.push(runId)
+        return runId === 'old-1' ? { status: 'done', pr: { number: 11, url: 'https://github.com/acme/widgets/pull/11', draft: true } } : undefined
+      }
+    })
+    await settle()
+    expect(lookups).toEqual(['old-1'])
+    expect(t.worktreeRequests).toEqual([{ repoRoot: '/repo', branchName: 'wf/fix-bug/item-2-00000001', baseBranch: OLD1 }])
+    expect(t.startRequests[0].chain).toMatchObject({ stackedOn: 11 })
+    expect(t.chainOf('chain-1').items[0]).toMatchObject({ prNumber: 11 })
+    expect(t.persisted[0].items[0]).toMatchObject({ prNumber: 11 })
+  })
+
+  it('starts the run of an item whose worktree exists in that worktree without creating another', async () => {
+    const chain = seededChain('chain-1', 'stacked', [
+      { ...placed(OLD1, 'old-1', 'item-1'), prNumber: 21 },
+      { branch: OLD2, baseBranch: OLD1, worktreePath: '/repo/.worktrees/item-2', prevItemId: 'item-1' }
+    ])
+    const t = setup({ records: [chain], runs: { 'old-1': seededRun('chain-1', 'item-1', 'done') } })
+    await settle()
+    expect(t.worktreeRequests).toEqual([])
+    expect(t.startRequests).toEqual([
+      {
+        defId: 'personal:fix',
+        worktreePath: '/repo/.worktrees/item-2',
+        inputs: { notes: 'n' },
+        chain: {
+          chainId: 'chain-1',
+          item: { id: 'item-2', title: 'Item 2', value: 'value 2', branch: OLD2, baseBranch: OLD1 },
+          stackedOn: 21
+        }
+      }
+    ])
+    expect(t.chainOf('chain-1').childRunIds).toEqual({ 'item-1': 'old-1', 'item-2': 'run-1' })
+    expect(t.persisted.at(-1)?.items[1]).toMatchObject({ runId: 'run-1', stackedOn: 21, prevItemId: 'item-1' })
+  })
+
+  it('relaunches an item that crashed while creating its worktree on a fresh branch from the current base', async () => {
+    const chain = seededChain('chain-1', 'stacked', [
+      placed(OLD1, 'old-1', 'item-1'),
+      { branch: OLD2, baseBranch: '', prevItemId: 'item-0', stackedOn: 99 }
+    ])
+    const t = setup({ records: [chain], runs: { 'old-1': seededRun('chain-1', 'item-1', 'done') } })
+    expect(t.events[0]).toMatchObject({ type: 'workflows/chainStarted' })
+    expect(t.persisted[0].items[1]).toEqual({ id: 'item-2', title: 'Item 2', value: 'value 2' })
+    await settle()
+    expect(t.worktreeRequests).toEqual([{ repoRoot: '/repo', branchName: 'wf/fix-bug/item-2-00000001', baseBranch: OLD1 }])
+    expect(t.startRequests[0].chain).not.toHaveProperty('stackedOn')
+    expect(t.persisted.at(-1)?.items[1]).toMatchObject({ prevItemId: 'item-1', runId: 'run-1' })
+  })
+
+  it('puts a finished chain on the board only and never reschedules it', async () => {
+    const chain = seededChain('chain-1', 'independent', [placed(OLD1, 'old-1', 'item-1'), { failed: 'setup-failed' }], {
+      finishedAt: 400,
+      status: 'failed'
+    })
+    const t = setup({ records: [chain], runs: { 'old-1': seededRun('chain-1', 'item-1', 'done') } })
+    await settle()
+    expect(t.chainOf('chain-1')).toMatchObject({ finishedAt: 400, childRunIds: { 'item-1': 'old-1' } })
+    expect(t.persisted).toEqual([])
+    expect(t.startRequests).toEqual([])
+    expect(await t.scheduler.retryItem('chain-1', 'item-2')).toEqual({ ok: false, reason: 'unknown-chain' })
+  })
+
+  it('treats a child whose run is gone everywhere as cancelled so it can be retried', async () => {
+    const chain = seededChain('chain-1', 'stacked', [placed(OLD1, 'gone-1', 'item-1'), {}])
+    const t = setup({ records: [chain] })
+    await settle()
+    expect(t.logs).toContainEqual({ message: 'chain child run missing', data: { chainId: 'chain-1', itemId: 'item-1', runId: 'gone-1' } })
+    expect(t.startRequests).toEqual([])
+    expect(deriveChainStatus(t.chainOf('chain-1'), t.store.getSnapshot().state.workflows.runs).status).not.toBe('done')
+    expect(await t.scheduler.retryItem('chain-1', 'item-1')).toEqual({ ok: true })
+    expect(t.worktreeRequests).toEqual([])
+    expect(t.startRequests[0]).toMatchObject({ worktreePath: '/repo/.worktrees/item-1', chain: { item: { branch: OLD1 } } })
+  })
+
+  it('finishes an unfinished chain whose children all ended before the restart', async () => {
+    const chain = seededChain('chain-1', 'independent', [placed(OLD1, 'old-1', 'item-1'), placed(OLD2, 'old-2', 'item-2')])
+    const t = setup({
+      records: [chain],
+      runs: { 'old-1': seededRun('chain-1', 'item-1', 'done'), 'old-2': seededRun('chain-1', 'item-2', 'failed') }
+    })
+    expect(t.finishedEvents()).toEqual([
+      { type: 'workflows/chainFinished', payload: { chainId: 'chain-1', status: 'failed', finishedAt: 5000 } }
+    ])
+    expect(t.persisted.at(-1)).toMatchObject({ finishedAt: 5000, status: 'failed' })
+    expect(t.startRequests).toEqual([])
+  })
+
+  it('skips a chain it already knows when reconciled again', async () => {
+    const chain = seededChain('chain-1', 'independent', [{}])
+    const t = setup({ records: [chain] })
+    await settle()
+    t.scheduler.reconcile({ records: [chain] })
+    await settle()
+    expect(t.startRequests).toHaveLength(1)
+    expect(t.events.filter((event) => event.type === 'workflows/chainStarted')).toHaveLength(1)
+  })
+})
+
 describe('createWorkflowChainRecords', () => {
   let dir = ''
   afterEach(async () => {
@@ -803,5 +1013,109 @@ describe('createWorkflowChainRecords', () => {
     await records.flush()
     expect(await readdir(dir)).toEqual([])
     expect(messages).toEqual(['chain record refused invalid id'])
+  })
+})
+
+describe('loadChainRecordsSync', () => {
+  let dir = ''
+  afterEach(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true })
+  })
+
+  function full(chainId: string): WorkflowChainRecord {
+    return {
+      version: 1,
+      chainId,
+      defId: 'personal:fix',
+      definitionName: 'Fix',
+      repoRoot: '/repo',
+      mode: 'stacked',
+      draftPrs: true,
+      inputs: { notes: 'n' },
+      overrides: { plan: { agent: 'codex', model: 'gpt-5' } },
+      autopilot: true,
+      allowFull: true,
+      items: [
+        {
+          id: 'i1',
+          title: TITLE_SECRET,
+          value: VALUE_SECRET,
+          origin: { kind: 'issue', number: 4 },
+          branch: 'wf/fix/one-00000001',
+          baseBranch: 'main',
+          worktreePath: '/repo/.worktrees/one',
+          runId: 'r1',
+          prNumber: 7
+        },
+        { id: 'i2', title: 't2', value: 'v2', branch: 'wf/fix/two', baseBranch: '', prevItemId: 'i1', stackedOn: 7, failed: 'setup-failed' },
+        { id: 'i3', title: 't3', value: 'v3', skipped: true }
+      ],
+      startedAt: 1
+    }
+  }
+
+  async function write(name: string, body: unknown): Promise<void> {
+    await writeFile(join(dir, name), typeof body === 'string' ? body : JSON.stringify(body), 'utf8')
+  }
+
+  function load() {
+    const logs: Array<{ message: string; data?: Record<string, string> }> = []
+    const records = loadChainRecordsSync(dir, (_category, message, data) => logs.push({ message, data }))
+    return { records, logs }
+  }
+
+  it('loads every valid record, finished or not, in file name order', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'chain-load-'))
+    const finished: WorkflowChainRecord = { ...full('chain-b'), finishedAt: 9, status: 'cancelled' }
+    await write('chain-b.json', finished)
+    await write('chain-a.json', full('chain-a'))
+    const { records, logs } = load()
+    expect(records).toEqual([full('chain-a'), finished])
+    expect(logs).toEqual([])
+  })
+
+  it('returns nothing for a missing directory', () => {
+    dir = ''
+    expect(loadChainRecordsSync(join(tmpdir(), 'chain-load-missing-dir'), () => {})).toEqual([])
+  })
+
+  it('skips and logs unreadable and invalid records by file name only, and ignores temps and unsafe names', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'chain-load-'))
+    const item = full('x').items[0]
+    const invalid: Record<string, unknown> = {
+      'unknown-version': { ...full('unknown-version'), version: 2 },
+      'id-mismatch': full('other-chain'),
+      'bad-mode': { ...full('bad-mode'), mode: 'parallel' },
+      'bad-draft': { ...full('bad-draft'), draftPrs: 'yes' },
+      'bad-inputs': { ...full('bad-inputs'), inputs: { notes: 3 } },
+      'bad-overrides': { ...full('bad-overrides'), overrides: { plan: { agent: 5 } } },
+      'bad-autopilot': { ...full('bad-autopilot'), autopilot: false },
+      'bad-started': { ...full('bad-started'), startedAt: '1' },
+      'half-finished': { ...full('half-finished'), finishedAt: 9 },
+      'bad-status': { ...full('bad-status'), finishedAt: 9, status: 'running' },
+      'no-items': { ...full('no-items'), items: [] },
+      'dup-items': { ...full('dup-items'), items: [item, item] },
+      'bad-origin': { ...full('bad-origin'), items: [{ ...item, origin: { kind: 'commit', number: 1 } }] },
+      'bad-run-id': { ...full('bad-run-id'), items: [{ ...item, runId: '../r1' }] },
+      'bad-failed': { ...full('bad-failed'), items: [{ ...item, failed: 'exploded' }] },
+      'bad-skipped': { ...full('bad-skipped'), items: [{ ...item, skipped: false }] },
+      'bad-pr': { ...full('bad-pr'), items: [{ ...item, prNumber: 0 }] },
+      'bad-stacked': { ...full('bad-stacked'), items: [{ ...item, stackedOn: 1.5 }] },
+      'bad-branch': { ...full('bad-branch'), items: [{ ...item, branch: 4 }] }
+    }
+    for (const [chainId, body] of Object.entries(invalid)) await write(`${chainId}.json`, body)
+    await write('corrupt.json', '{"version": ')
+    await write(`good.json.${'a'.repeat(8)}.tmp`, full('good'))
+    await write('.hidden.json', full('.hidden'))
+    await write('good.json', full('good'))
+
+    const { records, logs } = load()
+
+    expect(records.map(({ chainId }) => chainId)).toEqual(['good'])
+    expect(logs).toContainEqual({ message: 'chain record skipped unreadable', data: { file: 'corrupt.json' } })
+    const skipped = logs.filter(({ message }) => message === 'chain record skipped invalid').map(({ data }) => data?.file)
+    expect(skipped.sort()).toEqual(Object.keys(invalid).map((chainId) => `${chainId}.json`).sort())
+    expect(logs).toHaveLength(Object.keys(invalid).length + 1)
+    expect(JSON.stringify(logs)).not.toContain(VALUE_SECRET)
   })
 })

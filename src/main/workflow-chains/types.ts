@@ -1,6 +1,11 @@
 import type { Store } from '../store'
 import type { StartRefusal, StartRunRequest, StartRunResult, StepActionResult, StepOverrideRequest, WorkflowLog } from '../workflow-runner'
-import type { WorkflowChainMode, WorkflowChainSkipChoice, WorkflowRunChainOrigin } from '../../shared/state/workflows'
+import type {
+  WorkflowChainMode,
+  WorkflowChainSkipChoice,
+  WorkflowRunChainOrigin,
+  WorkflowRunRecord
+} from '../../shared/state/workflows'
 
 export const WORKFLOW_CHAIN_RECORD_VERSION = 1
 
@@ -70,6 +75,13 @@ export interface ChainSchedulerDeps {
   newId: () => string
   newShortId: () => string
   log: WorkflowLog
+}
+
+export type RecordedChildRun = Pick<WorkflowRunRecord, 'status' | 'pr'>
+
+export interface ChainReconcileRequest {
+  records: readonly WorkflowChainRecord[]
+  recordedRun?: (runId: string) => RecordedChildRun | undefined
 }
 
 export type ChainSkipChoice = WorkflowChainSkipChoice

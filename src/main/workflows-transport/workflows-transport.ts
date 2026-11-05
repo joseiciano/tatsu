@@ -235,7 +235,7 @@ function parseStepOverride(value: unknown): StepOverrideRequest | null {
   return { ...(agent === undefined ? {} : { agent }), ...(model === undefined ? {} : { model }) }
 }
 
-function parseOverrides(value: unknown): Record<string, StepOverrideRequest> | null {
+export function parseStepOverrides(value: unknown): Record<string, StepOverrideRequest> | null {
   if (!isPlainObject(value)) return null
   const entries = Object.entries(value)
   if (entries.length > OVERRIDES_MAX) return null
@@ -317,7 +317,7 @@ function parseStartChain(payload: unknown): ParsedStartChain | null {
     items.push(item)
   }
   const inputs = parseInputs(ownValue(payload, 'inputs', {}))
-  const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
+  const overrides = rawOverrides === undefined ? undefined : parseStepOverrides(rawOverrides)
   if (!inputs || overrides === null) return null
   return {
     defId,
@@ -359,7 +359,7 @@ function parseStartRun(payload: unknown): StartRunRequest | null {
   if (allowFull !== undefined && typeof allowFull !== 'boolean') return null
   if (autopilot !== undefined && typeof autopilot !== 'boolean') return null
   if (budgetUsd !== undefined && !isBudgetUsd(budgetUsd)) return null
-  const overrides = rawOverrides === undefined ? undefined : parseOverrides(rawOverrides)
+  const overrides = rawOverrides === undefined ? undefined : parseStepOverrides(rawOverrides)
   if (overrides === null) return null
   if (!boundedString(defId, DEF_ID_MAX_CHARS) || !boundedString(worktreePath, WORKTREE_PATH_MAX_CHARS)) return null
   const inputs = parseInputs(rawInputs)
