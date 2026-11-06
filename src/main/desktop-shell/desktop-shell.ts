@@ -17,8 +17,8 @@
 //
 // Construction split:
 //   - `applyDevModeOverride` runs synchronously before anything reads
-//     `userDataDir()`, pinning persistence/secrets/debug to the established
-//     Harness data directories. `createDesktopShell` then creates the
+//     `userDataDir()`, pinning persistence/secrets/debug to the
+//     Tatsu data directories. `createDesktopShell` then creates the
 //     BrowserManager and wires the ElectronServerTransport.
 //   - `startDesktopShell` is called after index.ts has registered all
 //     mode-agnostic IPC handlers. It registers the desktop-only
@@ -88,15 +88,14 @@ export function resolveWebClientDir(): string {
     : join(__dirname, '../web-client')
 }
 
-/** Use the established Harness userData directories despite the customer-facing
- *  product name. Dev mode uses a sibling directory so a running dev instance
- *  doesn't fight with the installed app over config.json / activity.json /
+/** Pin userData to `Tatsu`, independent of Electron's default. Dev mode
+ *  uses a sibling directory so a running dev instance doesn't fight with the installed app over config.json / activity.json /
  *  secrets.enc / etc. Must run before any module reads userDataDir() — that's
  *  `loadConfig()` in index.ts — so index.ts calls this right after requiring
  *  desktop-shell, not inside `createDesktopShell` (which only runs later, once
  *  the store + config exist). */
 export function applyDevModeOverride(): void {
-  const directoryName = app.isPackaged ? 'Harness' : 'Harness (Dev)'
+  const directoryName = app.isPackaged ? 'Tatsu' : 'Tatsu (Dev)'
   app.setPath('userData', join(app.getPath('appData'), directoryName))
 }
 

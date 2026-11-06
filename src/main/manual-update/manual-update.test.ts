@@ -3,7 +3,7 @@ import { isManualUpdateInstallType } from '.'
 
 describe('isManualUpdateInstallType', () => {
   const noFiles = () => false
-  const debInstalled = (p: string) => p === '/var/lib/dpkg/info/harness.list'
+  const debInstalled = (p: string) => p === '/var/lib/dpkg/info/tatsu.list'
 
   it('returns false on macOS', () => {
     expect(isManualUpdateInstallType({}, 'darwin', noFiles)).toBe(false)
@@ -19,14 +19,14 @@ describe('isManualUpdateInstallType', () => {
 
   it('returns false on linux AppImage', () => {
     expect(
-      isManualUpdateInstallType({ APPIMAGE: '/tmp/Harness.AppImage' }, 'linux', noFiles)
+      isManualUpdateInstallType({ APPIMAGE: '/tmp/Tatsu.AppImage' }, 'linux', noFiles)
     ).toBe(false)
   })
 
   it('AppImage env wins even if a stray .list file is present', () => {
     expect(
       isManualUpdateInstallType(
-        { APPIMAGE: '/tmp/Harness.AppImage' },
+        { APPIMAGE: '/tmp/Tatsu.AppImage' },
         'linux',
         debInstalled
       )
@@ -35,13 +35,13 @@ describe('isManualUpdateInstallType', () => {
 
   it('returns true under Flatpak', () => {
     expect(
-      isManualUpdateInstallType({ FLATPAK_ID: 'org.example.harness' }, 'linux', noFiles)
+      isManualUpdateInstallType({ FLATPAK_ID: 'org.example.tatsu' }, 'linux', noFiles)
     ).toBe(true)
   })
 
   it('returns true under Snap', () => {
     expect(
-      isManualUpdateInstallType({ SNAP: '/snap/harness/current' }, 'linux', noFiles)
+      isManualUpdateInstallType({ SNAP: '/snap/tatsu/current' }, 'linux', noFiles)
     ).toBe(true)
   })
 

@@ -5,8 +5,8 @@ import { existsSync } from 'fs'
 // the canonical signal that this build came from a .deb and therefore
 // can't auto-install (electron-updater silently no-ops because dpkg needs
 // root). The package name comes from electron-builder's deb output
-// (`harness`); update if the .deb package id changes.
-const DPKG_LIST_PATH = '/var/lib/dpkg/info/harness.list'
+// (`tatsu`); update if the .deb package id changes.
+const DPKG_LIST_PATH = '/var/lib/dpkg/info/tatsu.list'
 
 /** True when the running build can't auto-install a downloaded update and
  *  the user must fetch the new artifact themselves. */

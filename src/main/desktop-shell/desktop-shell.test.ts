@@ -3,7 +3,7 @@ import { join } from 'path'
 
 const electronApp = vi.hoisted(() => ({
   isPackaged: false,
-  getPath: vi.fn(() => '/tmp/harness-app-data'),
+  getPath: vi.fn(() => '/tmp/tatsu-app-data'),
   setPath: vi.fn()
 }))
 
@@ -12,7 +12,7 @@ vi.mock('electron-updater', () => ({ autoUpdater: {} }))
 
 import { applyDevModeOverride } from '.'
 
-const APP_DATA = '/tmp/harness-app-data'
+const APP_DATA = '/tmp/tatsu-app-data'
 
 describe('applyDevModeOverride', () => {
   beforeEach(() => {
@@ -21,19 +21,19 @@ describe('applyDevModeOverride', () => {
     electronApp.setPath.mockReset()
   })
 
-  it('uses the Harness user data directory for packaged builds', () => {
+  it('uses the Tatsu user data directory for packaged builds', () => {
     electronApp.isPackaged = true
 
     applyDevModeOverride()
 
-    expect(electronApp.setPath).toHaveBeenCalledWith('userData', join(APP_DATA, 'Harness'))
+    expect(electronApp.setPath).toHaveBeenCalledWith('userData', join(APP_DATA, 'Tatsu'))
   })
 
-  it('uses the Harness (Dev) user data directory for development builds', () => {
+  it('uses the Tatsu (Dev) user data directory for development builds', () => {
     electronApp.isPackaged = false
 
     applyDevModeOverride()
 
-    expect(electronApp.setPath).toHaveBeenCalledWith('userData', join(APP_DATA, 'Harness (Dev)'))
+    expect(electronApp.setPath).toHaveBeenCalledWith('userData', join(APP_DATA, 'Tatsu (Dev)'))
   })
 })
