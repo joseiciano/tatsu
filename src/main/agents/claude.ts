@@ -9,7 +9,7 @@ import type { AgentSpawnOpts } from './index'
 // Claude Code strips unknown fields when it normalizes settings.json,
 // so dedup recognizes our entries by the status-dir path baked into
 // the hook command instead of a sidecar marker.
-const HARNESS_HOOK_COMMAND_SIGNATURE = '/tmp/harness-status'
+const TATSU_HOOK_COMMAND_SIGNATURE = '/tmp/tatsu-status'
 
 export const defaultCommand = 'claude'
 export const assignsSessionId = true
@@ -62,7 +62,7 @@ function makeHarnessHookEntry(command: string): HookEntry {
 
 function isHarnessHookEntry(entry: HookEntry): boolean {
   return !!entry.hooks?.some(
-    (h) => typeof h.command === 'string' && h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE)
+    (h) => typeof h.command === 'string' && h.command.includes(TATSU_HOOK_COMMAND_SIGNATURE)
   )
 }
 
@@ -116,7 +116,7 @@ export function uninstallHooks(): void {
   log('hooks', `uninstalled Claude hooks from ${path}`)
 }
 
-/** Strip any legacy Harness entries from a worktree's .claude/settings.local.json.
+/** Strip any legacy Tatsu entries from a worktree's .claude/settings.local.json.
  *  Returns true if the file was modified. Leaves user-authored hooks alone. */
 export function stripHooksFromWorktree(worktreePath: string): boolean {
   const path = worktreeSettingsPath(worktreePath)
@@ -133,7 +133,7 @@ export function stripHooksFromWorktree(worktreePath: string): boolean {
   if (!changed) return false
   if (Object.keys(settings.hooks).length === 0) delete settings.hooks
   writeSettings(path, settings)
-  log('hooks', `stripped legacy Harness entries from ${path}`)
+  log('hooks', `stripped legacy Tatsu entries from ${path}`)
   return true
 }
 

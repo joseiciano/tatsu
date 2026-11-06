@@ -15,7 +15,7 @@ interface AddBackendModalProps {
   onClose: () => void
 }
 
-/** Modal for adding a remote `harness-server` to the chip strip. The
+/** Modal for adding a remote `tatsu-server` to the chip strip. The
  *  user pastes the link Settings displays on the host machine
  *  (`http://host:port/?token=...`); we parse, validate the connection
  *  by opening a WebSocket and fetching a snapshot, persist via main,
@@ -164,7 +164,7 @@ export function AddBackendModal({ isOpen, onClose }: AddBackendModalProps): JSX.
           <p className="text-xs text-dim leading-relaxed">
             Paste the connection link the host machine shows under{' '}
             <span className="text-fg">Settings → Server</span>, or the URL{' '}
-            <code className="bg-app/40 px-1 rounded text-xs">harness-server</code>{' '}
+            <code className="bg-app/40 px-1 rounded text-xs">tatsu-server</code>{' '}
             prints on startup.
           </p>
 

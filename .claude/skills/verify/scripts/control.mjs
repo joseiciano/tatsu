@@ -15,7 +15,7 @@
 //
 // TATSU_VERIFY_RUN names the run dir (default: the newest under
 // $TMPDIR/tatsu-acp-verify). Each run owns its data dir and ephemeral port, so
-// runs never touch ~/.harness or each other.
+// runs never touch ~/.tatsu or each other.
 
 import { spawn } from 'node:child_process'
 import {
@@ -117,7 +117,7 @@ async function start() {
   const out = (await import('node:fs')).openSync(logPath, 'a')
   const child = spawn(process.execPath, [bundle, '--port', '0', '--host', '127.0.0.1'], {
     cwd: repo,
-    env: { ...process.env, HARNESS_DATA_DIR: data },
+    env: { ...process.env, TATSU_DATA_DIR: data },
     stdio: ['ignore', out, out],
     detached: true
   })

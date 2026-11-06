@@ -32,7 +32,7 @@ describe('detectInProgressOp', () => {
   let repo: string
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'harness-gitops-'))
+    root = mkdtempSync(join(tmpdir(), 'tatsu-gitops-'))
     repo = join(root, 'r')
     mkdirSync(repo)
     git(repo, ['init', '-q', '-b', 'main'])

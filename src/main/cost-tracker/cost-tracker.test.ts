@@ -183,7 +183,7 @@ describe('CostTracker — JSON-mode wiring', () => {
   it('does not dispatch usageUpdated for a Stop transcript without model usage', () => {
     const terminalId = 'terminal-stop-no-model'
     const statusFilename = `${terminalId}.ndjson`
-    const statusPath = `/tmp/harness-status/${statusFilename}`
+    const statusPath = `/tmp/tatsu-status/${statusFilename}`
     const sessionId = 'sess-stop-no-model'
     const transcriptPath = '/tmp/transcript-stop-no-model.jsonl'
     readFileSyncMock.mockReturnValue(

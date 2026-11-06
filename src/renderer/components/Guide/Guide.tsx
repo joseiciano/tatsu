@@ -443,7 +443,7 @@ function CollisionDiagram(): JSX.Element {
   )
 }
 
-/** Miniature preview of the Harness sidebar with status dots and PR badges. */
+/** Miniature preview of the Tatsu sidebar with status dots and PR badges. */
 function HarnessMockup(): JSX.Element {
   const rows = [
     { name: 'feature/onboarding', status: 'needs', pr: 'open', checks: 'pass' },

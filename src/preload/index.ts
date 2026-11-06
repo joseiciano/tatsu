@@ -7,7 +7,7 @@
 //
 // Two things only get exposed via contextBridge:
 //
-//   1. `window.__harness_local_transport` — a duck-typed
+//   1. `window.__tatsu_local_transport` — a duck-typed
 //      ClientTransport for the in-process local backend. Wraps
 //      ipcRenderer (which is preload-only). The renderer's
 //      BackendsRegistry wires it to the local backend's mirrored
@@ -15,14 +15,14 @@
 //      always-local concerns (connections list, menu signals,
 //      window controls).
 //
-//   2. `window.__harness_electron_helpers` — Electron-only APIs
+//   2. `window.__tatsu_electron_helpers` — Electron-only APIs
 //      that genuinely can't live in the renderer (webUtils for
 //      drag-drop file paths, ipcRenderer.send for window controls
 //      that target the local BrowserWindow).
 //
-// Plus `window.__HARNESS_PLATFORM__` (process.platform — used by
+// Plus `window.__TATSU_PLATFORM__` (process.platform — used by
 // renderer to render Linux-only window controls) and
-// `window.__HARNESS_WEB__ = false` (legacy flag, kept until renderer
+// `window.__TATSU_WEB__ = false` (legacy flag, kept until renderer
 // boot-error UI is migrated).
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'

@@ -31,19 +31,19 @@ export function trunc(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s
 }
 
-const HARNESS_CONTROL_PREFIX = 'mcp__harness-control__'
+const TATSU_CONTROL_PREFIX = 'mcp__tatsu-control__'
 
 export function isHarnessControl(name: string | undefined): boolean {
-  return !!name && name.startsWith(HARNESS_CONTROL_PREFIX)
+  return !!name && name.startsWith(TATSU_CONTROL_PREFIX)
 }
 
-/** Strip the `mcp__harness-control__` prefix so `create_worktree` shows
+/** Strip the `mcp__tatsu-control__` prefix so `create_worktree` shows
  *  instead of the full mangled name. The brand gradient already conveys
  *  "this is a harness tool", so the prefix is redundant in the chrome. */
 export function prettyToolName(name: string | undefined): string {
   if (!name) return 'Tool'
-  if (name.startsWith(HARNESS_CONTROL_PREFIX)) {
-    return name.slice(HARNESS_CONTROL_PREFIX.length)
+  if (name.startsWith(TATSU_CONTROL_PREFIX)) {
+    return name.slice(TATSU_CONTROL_PREFIX.length)
   }
   return name
 }

@@ -73,7 +73,7 @@ async function main() {
     console.error(`[smoke-download] manifest has no ${platform} entries`)
     process.exit(1)
   }
-  const work = mkdtempSync(join(tmpdir(), 'harness-runtime-download-'))
+  const work = mkdtempSync(join(tmpdir(), 'tatsu-runtime-download-'))
   const results = []
   try {
     for (const kind of ['opencode', 'codex']) {

@@ -16,7 +16,7 @@ if kill -0 "$PID" 2>/dev/null; then ok "pid $PID alive"; else bad "pid $PID not 
 
 ENV_LINE="$(ps eww -o command= -p "$PID" 2>/dev/null || true)"
 case "$ENV_LINE" in *"HOME=$SANDBOX_HOME"*) ok "HOME is the sandbox ($SANDBOX_HOME)" ;; *) bad "process HOME is not $SANDBOX_HOME; do not drive it" ;; esac
-case "$ENV_LINE" in *"HARNESS_DATA_DIR=$DATA_DIR"*) ok "HARNESS_DATA_DIR is the sandbox" ;; *) bad "HARNESS_DATA_DIR is not $DATA_DIR" ;; esac
+case "$ENV_LINE" in *"TATSU_DATA_DIR=$DATA_DIR"*) ok "TATSU_DATA_DIR is the sandbox" ;; *) bad "TATSU_DATA_DIR is not $DATA_DIR" ;; esac
 for v in CLAUDE_CONFIG_DIR CODEX_HOME OPENCODE_CONFIG_DIR; do
   case "$ENV_LINE" in *" $v="*) bad "$v is set in the server env; it could point outside the sandbox" ;; esac
 done

@@ -8,7 +8,7 @@
 //      the original implementation, so an upgrading user's tokens
 //      decrypt as before.
 //   2. Headless + keytar available → keytar. OS keychain entries under
-//      service `harness`, account = secret key. Nothing on disk.
+//      service `tatsu`, account = secret key. Nothing on disk.
 //   3. Headless + no keytar → AES-256-GCM with a random key file at
 //      `<userData>/.secret-key` (mode 0600). The `secrets.enc` file
 //      stores `iv(12) || tag(16) || ciphertext`, base64-encoded per
@@ -97,7 +97,7 @@ class SafeStorageBackend implements SecretsBackend {
 }
 
 class KeytarBackend implements SecretsBackend {
-  private static readonly SERVICE = 'harness'
+  private static readonly SERVICE = 'tatsu'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly keytar: any
   private readonly knownKeys = new Set<string>()

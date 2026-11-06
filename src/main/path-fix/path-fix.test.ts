@@ -7,7 +7,7 @@ vi.mock('../debug', () => ({
   log: () => {}
 }))
 
-const tmpRoot = mkdtempSync(join(tmpdir(), 'harness-path-fix-'))
+const tmpRoot = mkdtempSync(join(tmpdir(), 'tatsu-path-fix-'))
 
 function fakeShell(name: string, body: string): string {
   const path = join(tmpRoot, name)
@@ -19,7 +19,7 @@ function fakeShell(name: string, body: string): string {
 describe('parseProbeOutput', () => {
   it('extracts the value between sentinels', async () => {
     const { parseProbeOutput } = await import('.')
-    const stdout = '__HARNESS_PATH_BEGIN__\n/usr/local/bin:/usr/bin\n__HARNESS_PATH_END__\n'
+    const stdout = '__TATSU_PATH_BEGIN__\n/usr/local/bin:/usr/bin\n__TATSU_PATH_END__\n'
     expect(parseProbeOutput(stdout)).toBe('/usr/local/bin:/usr/bin')
   })
 
@@ -27,7 +27,7 @@ describe('parseProbeOutput', () => {
     const { parseProbeOutput } = await import('.')
     const stdout =
       'starship init: ok\nnvm: Loading...\n' +
-      '__HARNESS_PATH_BEGIN__\n/opt/homebrew/bin:/usr/bin\n__HARNESS_PATH_END__\n' +
+      '__TATSU_PATH_BEGIN__\n/opt/homebrew/bin:/usr/bin\n__TATSU_PATH_END__\n' +
       'goodbye\n'
     expect(parseProbeOutput(stdout)).toBe('/opt/homebrew/bin:/usr/bin')
   })
@@ -35,7 +35,7 @@ describe('parseProbeOutput', () => {
   it('returns null when sentinels are missing', async () => {
     const { parseProbeOutput } = await import('.')
     expect(parseProbeOutput('no sentinels here\n')).toBeNull()
-    expect(parseProbeOutput('__HARNESS_PATH_BEGIN__\n/x:/y\n')).toBeNull()
+    expect(parseProbeOutput('__TATSU_PATH_BEGIN__\n/x:/y\n')).toBeNull()
     expect(parseProbeOutput('')).toBeNull()
   })
 })
@@ -94,7 +94,7 @@ describe('capturePath', () => {
     const { capturePath } = await import('.')
     const shell = fakeShell(
       'good.sh',
-      `printf '__HARNESS_PATH_BEGIN__\\n/fake/path:/usr/bin\\n__HARNESS_PATH_END__\\n'`
+      `printf '__TATSU_PATH_BEGIN__\\n/fake/path:/usr/bin\\n__TATSU_PATH_END__\\n'`
     )
     expect(await capturePath(shell, 2000)).toBe('/fake/path:/usr/bin')
   })

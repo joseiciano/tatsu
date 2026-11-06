@@ -111,7 +111,7 @@ export function resolveClaudeAgentSdkExecutablePath(opts: {
  *
  *  Keeps renderer contract on existing `jsonClaude:*` events while swapping
  *  subprocess/jsonl plumbing for SDK query() stream. `persistSession: false` is
- *  intentional: Harness owns visible session state in slice/store and treats
+ *  intentional: Tatsu owns visible session state in slice/store and treats
  *  reconnect as fresh runtime bootstrap, not SDK-managed transcript resume. */
 export class ClaudeAcpRuntime implements ChatRuntime {
   private store: Store
@@ -294,7 +294,7 @@ export class ClaudeAcpRuntime implements ChatRuntime {
       cwd: worktreePath,
       env: {
         ...process.env,
-        CLAUDE_AGENT_SDK_CLIENT_APP: 'harness'
+        CLAUDE_AGENT_SDK_CLIENT_APP: 'tatsu'
       },
       abortController,
       includePartialMessages: true,

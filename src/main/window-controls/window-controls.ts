@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 
 // Window control IPC handlers. These bypass the transport layer because
 // in remote-Electron mode the transport routes to the remote
-// harness-server, but the BrowserWindow being controlled is local. The
+// tatsu-server, but the BrowserWindow being controlled is local. The
 // preload calls these via ipcRenderer.send regardless of mode.
 export function registerWindowControlHandlers(): void {
   ipcMain.on('window:minimize', (event) => {

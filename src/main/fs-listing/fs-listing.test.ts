@@ -8,7 +8,7 @@ import { listDir, isGitRepoSync, resolveHome } from '.'
 let tmp: string
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'harness-fs-test-'))
+  tmp = mkdtempSync(join(tmpdir(), 'tatsu-fs-test-'))
 })
 
 afterEach(() => {

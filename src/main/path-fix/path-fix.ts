@@ -4,7 +4,7 @@
 // see homebrew/nvm/pyenv/etc. on PATH the same way they would in the
 // user's terminal. Runs in both Electron-local and headless (Node)
 // boots — headless can also start with a stripped PATH when launched
-// via `ssh host 'harness-server'` or a systemd/launchd unit.
+// via `ssh host 'tatsu-server'` or a systemd/launchd unit.
 //
 // We merge rather than replace so launcher-prepended entries (npm
 // putting `node_modules/.bin` first when running `npm run dev`, an
@@ -21,8 +21,8 @@ import { spawn } from 'child_process'
 import { resolveUserShell } from '../user-shell'
 import { log } from '../debug'
 
-const BEGIN = '__HARNESS_PATH_BEGIN__'
-const END = '__HARNESS_PATH_END__'
+const BEGIN = '__TATSU_PATH_BEGIN__'
+const END = '__TATSU_PATH_END__'
 const PROBE = `printf '${BEGIN}\\n%s\\n${END}\\n' "$PATH"`
 const DEFAULT_TIMEOUT_MS = 3000
 

@@ -20,7 +20,7 @@ function startStub(handler) {
           method: req.method,
           url: req.url,
           auth: req.headers.authorization,
-          terminalId: req.headers['x-harness-terminal-id'],
+          terminalId: req.headers['x-tatsu-terminal-id'],
           body
         })
         try {
@@ -42,9 +42,9 @@ function spawnBridge(port, token) {
   const proc = spawn(process.execPath, [BRIDGE], {
     env: {
       ...process.env,
-      HARNESS_PORT: String(port),
-      HARNESS_TOKEN: token,
-      HARNESS_TERMINAL_ID: 'test-terminal'
+      TATSU_PORT: String(port),
+      TATSU_TOKEN: token,
+      TATSU_TERMINAL_ID: 'test-terminal'
     },
     stdio: ['pipe', 'pipe', 'pipe']
   })

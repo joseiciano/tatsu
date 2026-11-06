@@ -67,7 +67,7 @@ function resolveScope(
   req: IncomingMessage,
   deps: ControlServerDeps
 ): { scope: CallerScope | null; terminalId: string } {
-  const terminalId = String(req.headers['x-harness-terminal-id'] || '')
+  const terminalId = String(req.headers['x-tatsu-terminal-id'] || '')
   if (!terminalId) return { scope: null, terminalId: '' }
   return { scope: deps.resolveCallerScope(terminalId), terminalId }
 }
@@ -216,7 +216,7 @@ async function handleRequest(
   if (path.startsWith('/browser/')) {
     const { scope, terminalId } = resolveScope(req, deps)
     if (!terminalId) {
-      return sendJson(res, 400, { error: 'X-Harness-Terminal-Id header required' })
+      return sendJson(res, 400, { error: 'X-Tatsu-Terminal-Id header required' })
     }
     if (!scope) {
       return sendJson(res, 404, {
@@ -377,7 +377,7 @@ async function handleRequest(
   if (path.startsWith('/shells')) {
     const { scope, terminalId } = resolveScope(req, deps)
     if (!terminalId) {
-      return sendJson(res, 400, { error: 'X-Harness-Terminal-Id header required' })
+      return sendJson(res, 400, { error: 'X-Tatsu-Terminal-Id header required' })
     }
     if (!scope) {
       return sendJson(res, 404, {
@@ -458,7 +458,7 @@ async function handleRequest(
   if (req.method === 'GET' && path === '/scope') {
     const { scope, terminalId } = resolveScope(req, deps)
     if (!terminalId) {
-      return sendJson(res, 400, { error: 'X-Harness-Terminal-Id header required' })
+      return sendJson(res, 400, { error: 'X-Tatsu-Terminal-Id header required' })
     }
     return sendJson(res, 200, { scope, browser: deps.getBrowserPerms() })
   }

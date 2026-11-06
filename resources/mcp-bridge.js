@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Harness MCP bridge — minimal MCP stdio server that forwards tool calls
-// to the Harness control HTTP server running inside the Electron main process.
+// Tatsu MCP bridge — minimal MCP stdio server that forwards tool calls
+// to the Tatsu control HTTP server running inside the Electron main process.
 // Spawned by Claude Code via `ELECTRON_RUN_AS_NODE=1 <electron-binary> <this>`.
 
 const http = require('http')
 const readline = require('readline')
 
-const PORT = process.env.HARNESS_PORT
-const TOKEN = process.env.HARNESS_TOKEN
-const TERMINAL_ID = process.env.HARNESS_TERMINAL_ID || ''
+const PORT = process.env.TATSU_PORT
+const TOKEN = process.env.TATSU_TOKEN
+const TERMINAL_ID = process.env.TATSU_TERMINAL_ID || ''
 const AGENT_KIND_LABELS = {
   claude: 'Claude',
   codex: 'Codex',
@@ -21,13 +21,13 @@ const AGENT_KIND_LABELS = {
 // best-effort hint used to customize the advertised tool list/descriptions
 // for feature-worktree callers. Can go stale if the session teleports.
 const SCOPE = {
-  worktreeId: process.env.HARNESS_WORKTREE_ID || '',
-  repoRoot: process.env.HARNESS_REPO_ROOT || '',
-  isMain: process.env.HARNESS_IS_MAIN === '1'
+  worktreeId: process.env.TATSU_WORKTREE_ID || '',
+  repoRoot: process.env.TATSU_REPO_ROOT || '',
+  isMain: process.env.TATSU_IS_MAIN === '1'
 }
 
 if (!PORT || !TOKEN) {
-  process.stderr.write('harness-mcp: HARNESS_PORT and HARNESS_TOKEN required\n')
+  process.stderr.write('tatsu-mcp: TATSU_PORT and TATSU_TOKEN required\n')
   process.exit(1)
 }
 
@@ -36,7 +36,7 @@ function send(msg) {
 }
 
 function logErr(...args) {
-  process.stderr.write('[harness-mcp] ' + args.join(' ') + '\n')
+  process.stderr.write('[tatsu-mcp] ' + args.join(' ') + '\n')
 }
 
 function callControl(method, path, body) {
@@ -51,7 +51,7 @@ function callControl(method, path, body) {
         headers: {
           Authorization: 'Bearer ' + TOKEN,
           'Content-Type': 'application/json',
-          'X-Harness-Terminal-Id': TERMINAL_ID,
+          'X-Tatsu-Terminal-Id': TERMINAL_ID,
           ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {})
         }
       },
@@ -63,10 +63,10 @@ function callControl(method, path, body) {
             try {
               resolve(chunks ? JSON.parse(chunks) : {})
             } catch (e) {
-              reject(new Error('bad json from harness: ' + chunks))
+              reject(new Error('bad json from tatsu: ' + chunks))
             }
           } else {
-            reject(new Error('harness HTTP ' + res.statusCode + ': ' + chunks))
+            reject(new Error('tatsu HTTP ' + res.statusCode + ': ' + chunks))
           }
         })
       }
@@ -81,7 +81,7 @@ const TOOLS = [
   {
     name: 'create_worktree',
     description:
-      "Create a new git worktree in a Harness-managed repo. Either create a brand-new branch (set branchName) OR check out an existing GitHub PR for review (set prNumber). Harness will open a new agent chat tab inside the new worktree automatically. Defaults to the caller's current repo when repoRoot is omitted.",
+      "Create a new git worktree in a Tatsu-managed repo. Either create a brand-new branch (set branchName) OR check out an existing GitHub PR for review (set prNumber). Tatsu will open a new agent chat tab inside the new worktree automatically. Defaults to the caller's current repo when repoRoot is omitted.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -94,7 +94,7 @@ const TOOLS = [
           type: 'integer',
           minimum: 1,
           description:
-            'GitHub PR number to check out for review. When set, Harness fetches refs/pull/<n>/head into a local branch named after the PR head (or `<headBranch>-pr-<n>` if taken locally) and opens a worktree against it. Useful for "review this PR" workflows.'
+            'GitHub PR number to check out for review. When set, Tatsu fetches refs/pull/<n>/head into a local branch named after the PR head (or `<headBranch>-pr-<n>` if taken locally) and opens a worktree against it. Useful for "review this PR" workflows.'
         },
         repoRoot: {
           type: 'string',
@@ -109,7 +109,7 @@ const TOOLS = [
         initialPrompt: {
           type: 'string',
           description:
-            'A prompt to automatically send to the agent chat tab when it opens in the new worktree. Useful for "review this PR for X" or "implement feature Y" prompts. When prNumber is set and this is omitted, Harness uses the configured PR review prompt (Settings → Worktrees → PR review prompt). Pass an empty string to explicitly suppress any kickoff prompt on the PR path.'
+            'A prompt to automatically send to the agent chat tab when it opens in the new worktree. Useful for "review this PR for X" or "implement feature Y" prompts. When prNumber is set and this is omitted, Tatsu uses the configured PR review prompt (Settings → Worktrees → PR review prompt). Pass an empty string to explicitly suppress any kickoff prompt on the PR path.'
         },
         agentKind: {
           type: 'string',
@@ -127,7 +127,7 @@ const TOOLS = [
   },
   {
     name: 'list_worktrees',
-    description: 'List git worktrees currently managed by Harness.',
+    description: 'List git worktrees currently managed by Tatsu.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -140,7 +140,7 @@ const TOOLS = [
   },
   {
     name: 'list_repos',
-    description: 'List the repo roots currently open in Harness.',
+    description: 'List the repo roots currently open in Tatsu.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
@@ -493,8 +493,8 @@ async function handleToolCall(name, args) {
         : AGENT_KIND_LABELS[args.agentKind]
     const modelSuffix = args.model ? ` (model: ${args.model})` : ''
     return prNumber
-      ? `Created worktree ${r.path} on branch ${r.branch} for PR #${prNumber}. Harness will open a new ${agentLabel} chat tab in it${modelSuffix}.`
-      : `Created worktree ${r.path} on branch ${r.branch}. Harness will open a new ${agentLabel} chat tab in it${modelSuffix}.`
+      ? `Created worktree ${r.path} on branch ${r.branch} for PR #${prNumber}. Tatsu will open a new ${agentLabel} chat tab in it${modelSuffix}.`
+      : `Created worktree ${r.path} on branch ${r.branch}. Tatsu will open a new ${agentLabel} chat tab in it${modelSuffix}.`
   }
   if (name === 'list_worktrees') {
     const q =
@@ -684,7 +684,7 @@ async function handle(msg) {
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'harness-control', version: '1.0.0' }
+          serverInfo: { name: 'tatsu-control', version: '1.0.0' }
         }
       }
     }

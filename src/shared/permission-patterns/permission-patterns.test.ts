@@ -157,13 +157,13 @@ describe('suggestPermissionPatterns', () => {
 
   it('MCP tool yields a single bare-name suggestion', () => {
     const out = suggestPermissionPatterns(
-      'mcp__harness-control__create_worktree',
+      'mcp__tatsu-control__create_worktree',
       { foo: 'bar' }
     )
     expect(out).toEqual([
       {
-        rule: { toolName: 'mcp__harness-control__create_worktree' },
-        label: 'mcp__harness-control__create_worktree',
+        rule: { toolName: 'mcp__tatsu-control__create_worktree' },
+        label: 'mcp__tatsu-control__create_worktree',
         scope: 'narrow'
       }
     ])

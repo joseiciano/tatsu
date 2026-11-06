@@ -1062,8 +1062,8 @@ export function JsonModeChat({ sessionId, worktreePath, mode = 'awake' }: JsonMo
   const cameFromTerminalDefault = defaultClaudeTabType === 'xterm'
   const isMac =
     typeof window !== 'undefined' &&
-    (window.__HARNESS_PLATFORM__
-      ? window.__HARNESS_PLATFORM__ === 'darwin'
+    (window.__TATSU_PLATFORM__
+      ? window.__TATSU_PLATFORM__ === 'darwin'
       : /Mac|iPhone|iPad/.test(navigator.platform || ''))
   const modKeySymbol = isMac ? '⌘' : 'Ctrl+'
   const modKeyWord = isMac ? 'Cmd' : 'Ctrl'

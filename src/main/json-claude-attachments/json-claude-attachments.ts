@@ -15,7 +15,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 
-const ATTACHMENT_DIR = join(tmpdir(), 'harness-attachments')
+const ATTACHMENT_DIR = join(tmpdir(), 'tatsu-attachments')
 
 const EXT_BY_MEDIA_TYPE: Record<string, string> = {
   'image/png': 'png',
@@ -45,7 +45,7 @@ export function readAttachmentImage(path: string): string | null {
 }
 
 /** Write a base64-encoded image to a fresh path under
- *  $TMPDIR/harness-attachments/. Returns the absolute path. Accepts the
+ *  $TMPDIR/tatsu-attachments/. Returns the absolute path. Accepts the
  *  raw base64 string (no data URL prefix). */
 export function writeAttachmentImage(
   base64Data: string,

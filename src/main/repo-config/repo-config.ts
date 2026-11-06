@@ -5,7 +5,7 @@ import { DEFAULT_HIDDEN_RIGHT_PANELS, type RepoConfig } from '../../shared/state
 
 export type { RepoConfig }
 
-const REPO_CONFIG_FILENAME = '.harness.json'
+const REPO_CONFIG_FILENAME = '.tatsu.json'
 const cache = new Map<string, RepoConfig>()
 
 function configPath(repoRoot: string): string {

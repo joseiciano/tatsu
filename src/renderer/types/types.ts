@@ -770,6 +770,6 @@ export type { LocalTransportHandle } from '../../shared/transport/transport'
 
 declare global {
   interface Window {
-    __harness_local_transport?: import('../../shared/transport/transport').LocalTransportHandle
+    __tatsu_local_transport?: import('../../shared/transport/transport').LocalTransportHandle
   }
 }

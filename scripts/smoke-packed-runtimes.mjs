@@ -46,7 +46,7 @@ function detectPlatform() {
 async function findTarball(platform) {
   const files = await readdir(releaseDir)
   const pattern = new RegExp(
-    `harness-server-.*-${platform.replace(/-/g, '\\-')}\\.tar\\.gz$`
+    `tatsu-server-.*-${platform.replace(/-/g, '\\-')}\\.tar\\.gz$`
   )
   const match = files.find((f) => pattern.test(f))
   if (!match) {
@@ -65,7 +65,7 @@ async function main() {
   }
 
   const tarball = await findTarball(platform)
-  const tmpDir = await mkdtemp(join(tmpdir(), 'harness-packed-'))
+  const tmpDir = await mkdtemp(join(tmpdir(), 'tatsu-packed-'))
   try {
     console.log(`[validate-packed] extracting ${basename(tarball)}`)
     await tar.x({ file: tarball, cwd: tmpDir })

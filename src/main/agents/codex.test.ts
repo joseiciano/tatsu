@@ -25,7 +25,7 @@ vi.mock('../debug', () => ({
 
 vi.mock('../hooks', () => ({
   makeHookCommand: (event: string) =>
-    `bash -c 'd=/tmp/harness-status; printf "${event}" >> "$d/$h.ndjson"'`
+    `bash -c 'd=/tmp/tatsu-status; printf "${event}" >> "$d/$h.ndjson"'`
 }))
 
 import { homedir } from 'os'
@@ -48,7 +48,7 @@ describe('codex hook install / dedup', () => {
               {
                 type: 'command',
                 command:
-                  "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+                  "bash -c 'd=/tmp/tatsu-status; printf hi >> \"$d/$h.ndjson\"'",
                 timeout: 5
               }
             ]
@@ -81,7 +81,7 @@ describe('codex hook install / dedup', () => {
     for (const event of hookEvents) {
       const entries = data.hooks[event]
       expect(entries).toHaveLength(1)
-      expect(entries[0].hooks[0].command).toContain('/tmp/harness-status')
+      expect(entries[0].hooks[0].command).toContain('/tmp/tatsu-status')
     }
   })
 
@@ -91,7 +91,7 @@ describe('codex hook install / dedup', () => {
         {
           type: 'command',
           command:
-            "bash -c 'd=/tmp/harness-status; printf hi >> \"$d/$h.ndjson\"'",
+            "bash -c 'd=/tmp/tatsu-status; printf hi >> \"$d/$h.ndjson\"'",
           timeout: 5
         }
       ]
@@ -128,7 +128,7 @@ describe('codex hook install / dedup', () => {
     expect(after.hooks.PreToolUse).toContainEqual(userHook)
     for (const event of hookEvents) {
       const harnessEntries = (after.hooks[event] as Array<{ hooks: { command: string }[] }>).filter(
-        (e) => e.hooks.some((h) => h.command.includes('/tmp/harness-status'))
+        (e) => e.hooks.some((h) => h.command.includes('/tmp/tatsu-status'))
       )
       expect(harnessEntries).toHaveLength(1)
     }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { resolveBundledRuntimes, spawnBounded } from './smoke-bundled-runtimes.mjs'
 
-const FAKE_ROOT = '/opt/harness'
+const FAKE_ROOT = '/opt/tatsu'
 
 function fakeResolve(id) {
   const map = {

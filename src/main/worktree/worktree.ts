@@ -276,7 +276,7 @@ export async function continueWorktree(
   const dirty = await isWorktreeDirty(worktreePath)
   let stashed = false
   if (dirty) {
-    const stashMsg = `harness-continue ${newBranchName} ${Date.now()}`
+    const stashMsg = `tatsu-continue ${newBranchName} ${Date.now()}`
     await execFileAsync('git', ['stash', 'push', '--include-untracked', '-m', stashMsg], {
       cwd: worktreePath
     })
@@ -1021,7 +1021,7 @@ export async function prepareMainForMerge(repoRoot: string): Promise<MainWorktre
     log('worktree', `stashing dirty changes in main worktree ${status.path}`)
     await execFileAsync(
       'git',
-      ['stash', 'push', '--include-untracked', '-m', 'harness: auto-stash before local merge'],
+      ['stash', 'push', '--include-untracked', '-m', 'tatsu: auto-stash before local merge'],
       { cwd: status.path }
     )
   }
@@ -1356,7 +1356,7 @@ export async function writeWorktreeFile(
 }
 
 /** Run a user-configured setup/teardown command via the user's login shell
- * so homebrew/nvm paths resolve, with cwd set to the worktree and HARNESS_*
+ * so homebrew/nvm paths resolve, with cwd set to the worktree and TATSU_*
  * env vars exposing the worktree context. */
 export async function runWorktreeScript(
   kind: 'setup' | 'teardown',
@@ -1375,9 +1375,9 @@ export async function runWorktreeScript(
         cwd: ctx.worktreePath,
         env: {
           ...process.env,
-          HARNESS_WORKTREE_PATH: ctx.worktreePath,
-          HARNESS_BRANCH: ctx.branch,
-          HARNESS_REPO_ROOT: ctx.repoRoot
+          TATSU_WORKTREE_PATH: ctx.worktreePath,
+          TATSU_BRANCH: ctx.branch,
+          TATSU_REPO_ROOT: ctx.repoRoot
         }
       })
       let stdout = ''

@@ -72,18 +72,18 @@ describe('applyConnectionDefaults', () => {
 })
 
 describe('loadConfig — harnessConfig key', () => {
-  const originalDataDir = process.env.HARNESS_DATA_DIR
+  const originalDataDir = process.env.TATSU_DATA_DIR
   let dir: string
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'harness-load-config-test-'))
-    process.env.HARNESS_DATA_DIR = dir
+    dir = mkdtempSync(join(tmpdir(), 'tatsu-load-config-test-'))
+    process.env.TATSU_DATA_DIR = dir
     resetPathsForTests()
   })
 
   afterEach(() => {
-    if (originalDataDir === undefined) delete process.env.HARNESS_DATA_DIR
-    else process.env.HARNESS_DATA_DIR = originalDataDir
+    if (originalDataDir === undefined) delete process.env.TATSU_DATA_DIR
+    else process.env.TATSU_DATA_DIR = originalDataDir
     resetPathsForTests()
     rmSync(dir, { recursive: true, force: true })
   })

@@ -471,7 +471,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
   // Per-repo scope state for scopable worktree settings. scopeRepoRoot === null
   // means the controls bind to global config; otherwise they bind to the
-  // repo-scoped .harness.json at that repoRoot. The configs map itself
+  // repo-scoped .tatsu.json at that repoRoot. The configs map itself
   // lives in the main-process store.
   const repoConfigs = useRepoConfigs()
   const repoList = useMemo(() => Object.keys(repoConfigs), [repoConfigs])
@@ -1263,12 +1263,12 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     // Brief highlight ring so the user can spot the destination after
     // the scroll lands. Toggled via a class — animation lives in
-    // styles.css (see `.harness-settings-flash`).
-    el.classList.remove('harness-settings-flash')
+    // styles.css (see `.tatsu-settings-flash`).
+    el.classList.remove('tatsu-settings-flash')
     // Force reflow so re-adding the class restarts the animation.
     void el.offsetHeight
-    el.classList.add('harness-settings-flash')
-    window.setTimeout(() => el.classList.remove('harness-settings-flash'), 1600)
+    el.classList.add('tatsu-settings-flash')
+    window.setTimeout(() => el.classList.remove('tatsu-settings-flash'), 1600)
   }, [])
 
   return (
@@ -1793,7 +1793,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <code className="bg-panel px-1 rounded">~/.codex/hooks.json</code>, and{' '}
                     <code className="bg-panel px-1 rounded">~/.config/opencode/plugins/</code> so it can
                     detect when each agent tab is processing, waiting, or awaiting approval.
-                    The hook only emits when <code className="bg-panel px-1 rounded">$HARNESS_TERMINAL_ID</code>{' '}
+                    The hook only emits when <code className="bg-panel px-1 rounded">$TATSU_TERMINAL_ID</code>{' '}
                     is set — sessions you launch outside Tatsu are untouched.
                   </p>
                   <div className="flex items-center gap-2">
@@ -1880,7 +1880,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                       <div className="flex-1">
                         <div className="text-sm text-fg-bright">Enable Tatsu MCP</div>
                         <div className="text-xs text-dim mt-0.5">
-                          Injects <code className="bg-panel px-1 rounded text-xs">harness-control</code> MCP server via <code className="bg-panel px-1 rounded text-xs">--mcp-config</code>.
+                          Injects <code className="bg-panel px-1 rounded text-xs">tatsu-control</code> MCP server via <code className="bg-panel px-1 rounded text-xs">--mcp-config</code>.
                         </div>
                       </div>
                     </label>
@@ -2515,8 +2515,8 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   </div>
                   <p className="text-xs text-faint mt-1.5">
                     {scopeRepoRoot
-                      ? <>Editing <code className="bg-panel-raised px-1 rounded">.harness.json</code> in <span className="font-mono">{repoBasename(scopeRepoRoot)}</span>. Unset fields inherit from global. You can commit this file to share settings with teammates.</>
-                      : 'Editing global settings. Individual repos can override these values via their .harness.json file.'}
+                      ? <>Editing <code className="bg-panel-raised px-1 rounded">.tatsu.json</code> in <span className="font-mono">{repoBasename(scopeRepoRoot)}</span>. Unset fields inherit from global. You can commit this file to share settings with teammates.</>
+                      : 'Editing global settings. Individual repos can override these values via their .tatsu.json file.'}
                   </p>
                 </div>
               )}
@@ -2566,9 +2566,9 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               {/*   the worktree as <code className="bg-panel-raised px-1 rounded text-xs">cwd</code>. */}
               {/*   Setup runs after a worktree is created; teardown runs before it's removed. */}
               {/*   The env vars{' '} */}
-              {/*   <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_WORKTREE_PATH</code>,{' '} */}
-              {/*   <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_BRANCH</code>, and{' '} */}
-              {/*   <code className="bg-panel-raised px-1 rounded text-xs">HARNESS_REPO_ROOT</code>{' '} */}
+              {/*   <code className="bg-panel-raised px-1 rounded text-xs">TATSU_WORKTREE_PATH</code>,{' '} */}
+              {/*   <code className="bg-panel-raised px-1 rounded text-xs">TATSU_BRANCH</code>, and{' '} */}
+              {/*   <code className="bg-panel-raised px-1 rounded text-xs">TATSU_REPO_ROOT</code>{' '} */}
               {/*   are available to the command. */}
               {/* </p> */}
 
@@ -3315,7 +3315,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                   <div className="flex-1">
                     <label htmlFor="browser-tools-enabled" className="text-sm text-fg-bright cursor-pointer">Enable browser tools</label>
                     <div className="text-xs text-dim mt-0.5 mb-2">
-                      Exposes <code className="bg-panel px-1 rounded text-xs">harness-control</code> MCP browser_* tools to the agent.
+                      Exposes <code className="bg-panel px-1 rounded text-xs">tatsu-control</code> MCP browser_* tools to the agent.
                     </div>
                     <select
                       value={browserToolsMode}

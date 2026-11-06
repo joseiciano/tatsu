@@ -3,7 +3,7 @@
 #
 # Usage: .claude/skills/verify/scripts/launch.sh [--build] [run-id]
 #
-# Creates a scratch sandbox (fake HOME + HARNESS_DATA_DIR), seeds harness
+# Creates a scratch sandbox (fake HOME + TATSU_DATA_DIR), seeds harness
 # resources into the fake HOME, starts dist-headless on an ephemeral port,
 # waits for the web-client URL, and writes a state file. Prints the state
 # file path as the last line of stdout.
@@ -44,7 +44,7 @@ git -C "$REPO" rev-parse HEAD > "$EVIDENCE/git-rev.txt"
 
 LOG="$SCRATCH/server.log"
 env -u CLAUDE_CONFIG_DIR -u CODEX_HOME -u OPENCODE_CONFIG_DIR \
-  HOME="$SANDBOX_HOME" HARNESS_DATA_DIR="$DATA_DIR" \
+  HOME="$SANDBOX_HOME" TATSU_DATA_DIR="$DATA_DIR" \
   node dist-headless/main/index.js --port 0 --host 127.0.0.1 > "$LOG" 2>&1 &
 PID=$!
 

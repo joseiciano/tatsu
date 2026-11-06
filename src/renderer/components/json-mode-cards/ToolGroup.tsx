@@ -18,7 +18,7 @@ export interface ToolGroupRow {
 export function ToolGroup({ rows }: { rows: ToolGroupRow[] }): JSX.Element {
   const hasError = rows.some((r) => r.hasError)
   const hasPending = rows.some((r) => r.hasPendingApproval)
-  // Brand styling only fires when an actual harness-control tool is in
+  // Brand styling only fires when an actual tatsu-control tool is in
   // the group — thinking rows shouldn't trigger the gold gradient.
   const anyBrand = rows.some(
     (r) => !r.isThinking && isHarnessControl(r.toolName)

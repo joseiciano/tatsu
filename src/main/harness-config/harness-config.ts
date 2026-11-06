@@ -540,7 +540,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   prepareCreate(scope: HarnessConfigScope, name: string, content: string): HarnessConfigMutationPlan {
     return this.guard('prepareCreate', () => {
       if (typeof content !== 'string') {
-        throw new HarnessConfigError('write-failed', 'Harness resource content must be text')
+        throw new HarnessConfigError('write-failed', 'Tatsu resource content must be text')
       }
       content = this.expandForWrite(content)
       const descriptor = this.getDescriptor(scope)
@@ -578,7 +578,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
   prepareUpdate(scope: HarnessConfigScope, id: string, content: string): HarnessConfigMutationPlan {
     return this.guard('prepareUpdate', () => {
       if (typeof content !== 'string') {
-        throw new HarnessConfigError('write-failed', 'Harness resource content must be text')
+        throw new HarnessConfigError('write-failed', 'Tatsu resource content must be text')
       }
       content = this.expandForWrite(content)
       const state = this.snapshot(scope)
@@ -705,7 +705,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     } catch (error) {
       this.logFailure(operation, error)
       if (error instanceof HarnessConfigError) throw error
-      throw new HarnessConfigError(fallbackCode, `Harness configuration ${operation} failed`, { cause: error })
+      throw new HarnessConfigError(fallbackCode, `Tatsu configuration ${operation} failed`, { cause: error })
     }
   }
 
@@ -719,7 +719,7 @@ export class HarnessConfigServiceImpl implements HarnessConfigService {
     } catch (error) {
       this.logFailure(operation, error)
       if (error instanceof HarnessConfigError) throw error
-      throw new HarnessConfigError(fallbackCode, `Harness configuration ${operation} failed`, { cause: error })
+      throw new HarnessConfigError(fallbackCode, `Tatsu configuration ${operation} failed`, { cause: error })
     }
   }
 

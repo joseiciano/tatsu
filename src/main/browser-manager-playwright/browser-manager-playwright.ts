@@ -13,7 +13,7 @@
 // own BrowserContext so cookies / localStorage stay isolated, matching
 // the per-worktree session-partition split the Electron impl uses.
 //
-// Browser binary resolution: try `HARNESS_PLAYWRIGHT_BROWSER` first,
+// Browser binary resolution: try `TATSU_PLAYWRIGHT_BROWSER` first,
 // then `channel: 'chrome'` (Playwright's auto-discovery of system
 // Chrome). If neither resolves, the first create call throws with a
 // message that tells the user how to fix it. We deliberately don't
@@ -131,7 +131,7 @@ const CLICKABLES_SCRIPT = `(() => {
 })()`
 
 const CURSOR_SCRIPT = (px: number, py: number, pulse: number): string => `(() => {
-  const ID = '__harness_cursor__';
+  const ID = '__tatsu_cursor__';
   let el = document.getElementById(ID);
   if (!el) {
     el = document.createElement('div');
@@ -142,7 +142,7 @@ const CURSOR_SCRIPT = (px: number, py: number, pulse: number): string => `(() =>
   }
   el.style.transform = 'translate(${px}px,${py}px)';
   if (${pulse}) {
-    const ringId = '__harness_cursor_ring__';
+    const ringId = '__tatsu_cursor_ring__';
     let ring = document.getElementById(ringId);
     if (!ring) {
       ring = document.createElement('div');
@@ -273,11 +273,11 @@ export class PlaywrightBrowserManager implements BrowserManagerLike {
 
     this.launching = (async () => {
       const { chromium } = loadPlaywright()
-      const explicit = process.env['HARNESS_PLAYWRIGHT_BROWSER']
+      const explicit = process.env['TATSU_PLAYWRIGHT_BROWSER']
       const launchErrors: string[] = []
       try {
         if (explicit && explicit.trim()) {
-          log('browser-playwright', `launching browser via HARNESS_PLAYWRIGHT_BROWSER=${explicit}`)
+          log('browser-playwright', `launching browser via TATSU_PLAYWRIGHT_BROWSER=${explicit}`)
           return await chromium.launch({ headless: true, executablePath: explicit.trim() })
         }
         log('browser-playwright', 'launching system Chrome via channel:chrome')
@@ -285,7 +285,7 @@ export class PlaywrightBrowserManager implements BrowserManagerLike {
       } catch (err) {
         launchErrors.push(err instanceof Error ? err.message : String(err))
         throw new Error(
-          'Playwright browser not found. Install Chrome or set HARNESS_PLAYWRIGHT_BROWSER ' +
+          'Playwright browser not found. Install Chrome or set TATSU_PLAYWRIGHT_BROWSER ' +
             'to a Chromium executable path. Underlying error: ' +
             launchErrors.join('; ')
         )

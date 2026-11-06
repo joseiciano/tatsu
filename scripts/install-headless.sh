@@ -1,11 +1,11 @@
 #!/bin/sh
-# Installer for harness-server: detects platform, downloads the right
+# Installer for tatsu-server: detects platform, downloads the right
 # tarball + sha256 from a GitHub Release, verifies, extracts atomically
-# to ~/.harness-server, and (if writable) drops a /usr/local/bin/ symlink.
+# to ~/.tatsu-server, and (if writable) drops a /usr/local/bin/ symlink.
 #
 # Override the source with environment variables:
-#   HARNESS_SERVER_VERSION  pinned version tag (default: latest)
-#   HARNESS_SERVER_BASE_URL base URL serving the tarball + .sha256
+#   TATSU_SERVER_VERSION  pinned version tag (default: latest)
+#   TATSU_SERVER_BASE_URL base URL serving the tarball + .sha256
 #                           (default: GitHub releases for joseiciano/tatsu)
 #
 # POSIX-only — runs under dash, ash, busybox sh in addition to bash/zsh.
@@ -14,7 +14,7 @@ set -eu
 
 OWNER="joseiciano"
 REPO="tatsu"
-INSTALL_DIR="${HARNESS_SERVER_INSTALL_DIR:-$HOME/.harness-server}"
+INSTALL_DIR="${TATSU_SERVER_INSTALL_DIR:-$HOME/.tatsu-server}"
 TMP_DIR="$INSTALL_DIR.tmp"
 
 err() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -45,9 +45,9 @@ if [ "$PLATFORM" = "darwin-x64" ]; then
 fi
 
 # --- version resolution ---
-VERSION="${HARNESS_SERVER_VERSION:-latest}"
+VERSION="${TATSU_SERVER_VERSION:-latest}"
 if [ "$VERSION" = "latest" ]; then
-  log "resolving latest harness-server release..."
+  log "resolving latest tatsu-server release..."
   if command -v curl >/dev/null 2>&1; then
     LATEST_JSON=$(curl -fsSL "https://api.github.com/repos/$OWNER/$REPO/releases/latest")
   else
@@ -63,9 +63,9 @@ fi
 VERSION="${VERSION#v}"
 
 # --- download URL ---
-TARBALL="harness-server-$VERSION-$PLATFORM.tar.gz"
+TARBALL="tatsu-server-$VERSION-$PLATFORM.tar.gz"
 DEFAULT_BASE="https://github.com/$OWNER/$REPO/releases/download/v$VERSION"
-BASE_URL="${HARNESS_SERVER_BASE_URL:-$DEFAULT_BASE}"
+BASE_URL="${TATSU_SERVER_BASE_URL:-$DEFAULT_BASE}"
 URL="$BASE_URL/$TARBALL"
 SHA_URL="$URL.sha256"
 
@@ -105,24 +105,24 @@ log "extracting to $INSTALL_DIR"
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 tar -xzf "$DL_DIR/$TARBALL" -C "$TMP_DIR"
-# Tarball's top-level dir is harness-server-<version>-<platform>/; flatten
-# it so $INSTALL_DIR/bin/harness-server is the canonical path regardless
+# Tarball's top-level dir is tatsu-server-<version>-<platform>/; flatten
+# it so $INSTALL_DIR/bin/tatsu-server is the canonical path regardless
 # of version.
-EXTRACTED="$TMP_DIR/harness-server-$VERSION-$PLATFORM"
+EXTRACTED="$TMP_DIR/tatsu-server-$VERSION-$PLATFORM"
 if [ ! -d "$EXTRACTED" ]; then
-  err "tarball did not contain expected directory: harness-server-$VERSION-$PLATFORM"
+  err "tarball did not contain expected directory: tatsu-server-$VERSION-$PLATFORM"
 fi
 rm -rf "$INSTALL_DIR"
 mv "$EXTRACTED" "$INSTALL_DIR"
 rm -rf "$TMP_DIR"
 
-BIN="$INSTALL_DIR/bin/harness-server"
+BIN="$INSTALL_DIR/bin/tatsu-server"
 if [ ! -x "$BIN" ]; then
-  err "harness-server binary not at expected path: $BIN"
+  err "tatsu-server binary not at expected path: $BIN"
 fi
 
 # --- /usr/local/bin symlink (best effort) ---
-SYMLINK="/usr/local/bin/harness-server"
+SYMLINK="/usr/local/bin/tatsu-server"
 if [ -w /usr/local/bin ] || ([ ! -e /usr/local/bin ] && [ -w /usr/local ]); then
   ln -sf "$BIN" "$SYMLINK"
   log "symlinked $SYMLINK → $BIN"
@@ -130,11 +130,11 @@ else
   log ""
   log "/usr/local/bin is not writable. Add this to your shell profile:"
   log ""
-  log "  export PATH=\"\$HOME/.harness-server/bin:\$PATH\""
+  log "  export PATH=\"\$HOME/.tatsu-server/bin:\$PATH\""
   log ""
 fi
 
 # --- smoke test ---
 INSTALLED_VERSION=$("$BIN" --version 2>/dev/null || echo "?")
-log "harness-server $INSTALLED_VERSION installed at $INSTALL_DIR"
-log "run: harness-server --port 0"
+log "tatsu-server $INSTALLED_VERSION installed at $INSTALL_DIR"
+log "run: tatsu-server --port 0"

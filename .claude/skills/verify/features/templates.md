@@ -26,7 +26,7 @@ flow (Steps 18–21).
 
 1. Open Config, then the **Templates** tab.
 2. Create or select a template, edit it, and save.
-3. Use the `Sync <Harness>` button on the resource tabs to write the rendered output.
+3. Use the `Sync <Tatsu>` button on the resource tabs to write the rendered output.
 
 ## Driving it with Playwright
 
@@ -38,7 +38,7 @@ await page.locator('#template-name').fill('greet')
 await page.locator('#template-description').fill('Greet the user.')
 // Body is a Monaco editor: click into it, then page.keyboard.type(...)
 await shot('preview')
-// save, then Skills tab -> Sync <Harness> -> Sync to disk
+// save, then Skills tab -> Sync <Tatsu> -> Sync to disk
 ```
 
 The end state that proves it works:
@@ -56,7 +56,7 @@ The end state that proves it works:
 - Run: `journeys/template-render-sync.mjs`. The template lands at
   `DATA_DIR/harness-config-source/skills/greet/TEMPLATE.md`; the rendered
   `SKILL.md` has no `tatsu-template` marker (renderer version 3); the row
-  offers `Edit template skill/greet`. Harness checkboxes are
+  offers `Edit template skill/greet`. Tatsu checkboxes are
   `#template-harness-<claude|codex|opencode>`; the create button is `Create`
   (exact). The body editor is the first `.monaco-editor` on the page.
 - Run: `journeys/template-fragments.mjs`. Fragments render after the body in

@@ -165,33 +165,33 @@ function DesktopApp(): JSX.Element {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [singleScreenMode, setSingleScreenMode] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const saved = Number(localStorage.getItem('harness:sidebarWidth'))
+    const saved = Number(localStorage.getItem('tatsu:sidebarWidth'))
     return Number.isFinite(saved) && saved > 0 ? saved : 224
   })
   const [rightPanelWidth, setRightPanelWidth] = useState<number>(() => {
-    const saved = Number(localStorage.getItem('harness:rightPanelWidth'))
+    const saved = Number(localStorage.getItem('tatsu:rightPanelWidth'))
     return Number.isFinite(saved) && saved > 0 ? saved : 256
   })
   const [rightColumnHidden, setRightColumnHidden] = useState<boolean>(() => {
-    return localStorage.getItem('harness:rightColumnHidden') === '1'
+    return localStorage.getItem('tatsu:rightColumnHidden') === '1'
   })
   useEffect(() => {
-    localStorage.setItem('harness:rightColumnHidden', rightColumnHidden ? '1' : '0')
+    localStorage.setItem('tatsu:rightColumnHidden', rightColumnHidden ? '1' : '0')
   }, [rightColumnHidden])
   useEffect(() => {
-    localStorage.setItem('harness:sidebarWidth', String(sidebarWidth))
+    localStorage.setItem('tatsu:sidebarWidth', String(sidebarWidth))
   }, [sidebarWidth])
   useEffect(() => {
-    localStorage.setItem('harness:rightPanelWidth', String(rightPanelWidth))
+    localStorage.setItem('tatsu:rightPanelWidth', String(rightPanelWidth))
   }, [rightPanelWidth])
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [collapsedRepos, setCollapsedRepos] = useState<Record<string, boolean>>({})
   const [unifiedRepos, setUnifiedRepos] = useState<boolean>(() => {
-    const saved = localStorage.getItem('harness:unifiedRepos')
+    const saved = localStorage.getItem('tatsu:unifiedRepos')
     return saved === null ? true : saved === '1'
   })
   useEffect(() => {
-    localStorage.setItem('harness:unifiedRepos', unifiedRepos ? '1' : '0')
+    localStorage.setItem('tatsu:unifiedRepos', unifiedRepos ? '1' : '0')
   }, [unifiedRepos])
   const isGroupCollapsed = useCallback(
     (scope: string, key: GroupKey): boolean => {
@@ -642,7 +642,7 @@ const setQuestStep = useCallback((next: QuestStep) => {
   }, [showNotifications, closeFullscreenViews])
 
   // All worktree + repo + pending-creation handlers. Also subscribes to
-  // external-create events from the harness-control MCP and routes focus
+  // external-create events from the tatsu-control MCP and routes focus
   // to the new path.
   const {
     handleAddRepo,
@@ -1394,10 +1394,10 @@ const setQuestStep = useCallback((next: QuestStep) => {
         </div>
       )}
 
-      {/* Hooks consent banner — one-time prompt at first launch. Harness
+      {/* Hooks consent banner — one-time prompt at first launch. Tatsu
           installs agent status hooks at ~/.claude/settings.json (+ Codex
-          equivalent). The hook command is gated on $HARNESS_TERMINAL_ID
-          so sessions spawned outside Harness are unaffected. */}
+          equivalent). The hook command is gated on $TATSU_TERMINAL_ID
+          so sessions spawned outside Tatsu are unaffected. */}
       {hooksConsent === 'pending' && (
         <div className="bg-warning/15 border-b border-warning/30 pl-20 pr-4 py-2.5 drag-region flex items-center gap-3 shrink-0">
           <span className="text-warning text-sm flex-1">

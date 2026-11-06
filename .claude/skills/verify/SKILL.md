@@ -12,7 +12,7 @@ takes an ephemeral port and an isolated data dir, so many runs can coexist,
 and Playwright drives the web client with real ARIA handles.
 
 Do not drive `pnpm dev`. Electron dev mode always uses the shared
-`Harness (Dev)` userData folder and the real HOME, so a drive would edit the
+`Tatsu (Dev)` userData folder and the real HOME, so a drive would edit the
 user's own dev session and their real harness config.
 
 All helpers live in `.claude/skills/verify/scripts/` and run from the repo
@@ -27,9 +27,9 @@ root. They are macOS scripts (`stat -f`, `dscl`, `ps eww`, `lsof`).
   on this process today. `launch.sh` unsets all three anyway, so a future
   change that honors them cannot point a run at your real folders, and
   `doctor.sh` fails if any of them reaches the server.
-- `HARNESS_DATA_DIR` holds `config.json`, auth tokens, and the template
+- `TATSU_DATA_DIR` holds `config.json`, auth tokens, and the template
   source folder (`<data>/harness-config-source` by default).
-- **Not isolated:** `/tmp/harness-status` (status-hook NDJSON) is hardcoded
+- **Not isolated:** `/tmp/tatsu-status` (status-hook NDJSON) is hardcoded
   and shared with any running Tatsu. Do not click **Install hooks** and do
   not open terminal tabs during a drive.
 - `home-guard.sh` fingerprints the real harness roots before launch and
@@ -83,7 +83,7 @@ Read-only. Run it after launch, and again whenever anything looks off. It
 checks these things:
 
 - The PID is alive.
-- The process environment has `HOME=<sandbox>` and `HARNESS_DATA_DIR=<sandbox>`.
+- The process environment has `HOME=<sandbox>` and `TATSU_DATA_DIR=<sandbox>`.
 - `lsof` shows the port owned by that PID.
 - None of `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `OPENCODE_CONFIG_DIR` is set.
 - The tokenized URL returns 200.
@@ -105,7 +105,7 @@ node .claude/skills/verify/scripts/journeys/convert-skill-to-command.mjs "$STATE
 ```
 
 - `VERIFY_HEADED=1` shows the browser.
-- `HARNESS_PLAYWRIGHT_BROWSER=/path/to/chrome` overrides the system Chrome.
+- `TATSU_PLAYWRIGHT_BROWSER=/path/to/chrome` overrides the system Chrome.
 - A journey prints `PASS` and exits 0, or prints `FAIL <reason>` and exits 1.
 
 Writing a new journey:
@@ -123,7 +123,7 @@ await withApp(process.argv[2], 'my-journey', async ({ page, state, shot, log }) 
 Prefer these stable handles; `features/` lists them per feature:
 
 - `getByRole('tab', { name })` on the `Resource type` tablist.
-- `aria-label`s such as `Sync <Harness>`, `Create in <Harness>`,
+- `aria-label`s such as `Sync <Tatsu>`, `Create in <Tatsu>`,
   `Create command from <name>`, `Edit template <ref>`, and `Open Config`.
 - Element ids such as `#config-create-name`, `#config-agent-filter`,
   `#config-folder-<rootKey>`, and `#import-folder-<key>`.
@@ -191,7 +191,7 @@ All of these are executable. Run them from the repo root.
   cannot drive, so type absolute paths into the inputs instead. The picker
   itself stays unverified.
 - Agent CLIs and terminal tabs, which need real `claude`/`codex` binaries and
-  write to `/tmp/harness-status`. OpenCode and Codex chat tabs are covered by
+  write to `/tmp/tatsu-status`. OpenCode and Codex chat tabs are covered by
   `chat-agents.md`.
 - Linux. The helper scripts are macOS-only.
 

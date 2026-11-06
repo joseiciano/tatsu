@@ -25,7 +25,7 @@ pnpm build:headless                                   # once per code change; co
 RUN=$(node .claude/skills/verify/scripts/control.mjs start)
 ```
 
-`start` launches the server with `HARNESS_DATA_DIR=$RUN/data` on `--port 0`, waits for the `[web-client] open http://127.0.0.1:<port>/?token=…` line, and records pid, port and token in `$RUN/instance.json`. Ready means the first `doctor` returns `problems: []`. Later commands find the newest run automatically; set `TATSU_VERIFY_RUN=$RUN` when two runs exist.
+`start` launches the server with `TATSU_DATA_DIR=$RUN/data` on `--port 0`, waits for the `[web-client] open http://127.0.0.1:<port>/?token=…` line, and records pid, port and token in `$RUN/instance.json`. Ready means the first `doctor` returns `problems: []`. Later commands find the newest run automatically; set `TATSU_VERIFY_RUN=$RUN` when two runs exist.
 
 A fresh data dir has no repos. Give the run its own fixture repo so no user repo is touched:
 

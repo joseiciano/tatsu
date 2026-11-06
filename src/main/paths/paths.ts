@@ -8,11 +8,11 @@
 // the runtime picks itself.
 //
 // Electron mode: delegate to `app.getPath('userData')`. The dev-mode
-// override (`Harness (Dev)` user-data dir) lives in the desktop shell's
+// override (`Tatsu (Dev)` user-data dir) lives in the desktop shell's
 // boot block — by the time anything in this module runs it has already
 // been applied.
 //
-// Headless mode: use $HARNESS_DATA_DIR, defaulting to ~/.harness. The
+// Headless mode: use $TATSU_DATA_DIR, defaulting to ~/.tatsu. The
 // directory is created on first use with mode 0700 so secrets dropped
 // alongside config can't be world-readable.
 //
@@ -58,8 +58,8 @@ export function userDataDir(): string {
   if (detectRuntime() === 'electron') {
     cachedUserDataDir = loadElectronApp().getPath('userData')
   } else {
-    const fromEnv = process.env['HARNESS_DATA_DIR']
-    const dir = fromEnv && fromEnv.trim() ? fromEnv : join(homedir(), '.harness')
+    const fromEnv = process.env['TATSU_DATA_DIR']
+    const dir = fromEnv && fromEnv.trim() ? fromEnv : join(homedir(), '.tatsu')
     cachedUserDataDir = ensureDir(dir)
   }
   return cachedUserDataDir
@@ -73,7 +73,7 @@ export function isPackaged(): boolean {
 }
 
 /** Reset the cached directory. Tests use this to get a fresh resolution
- *  after mutating $HARNESS_DATA_DIR between cases. Production code
+ *  after mutating $TATSU_DATA_DIR between cases. Production code
  *  should never need it. */
 export function resetPathsForTests(): void {
   cachedUserDataDir = null

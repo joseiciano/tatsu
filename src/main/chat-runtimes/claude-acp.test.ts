@@ -102,15 +102,15 @@ describe('resolveClaudeAgentSdkExecutablePath', () => {
       platform: 'darwin',
       arch: 'arm64',
       runtimesRoot: null,
-      resolveFromSdk: () => '/Applications/Harness.app/Contents/Resources/app.asar/node_modules/pkg/package.json'
+      resolveFromSdk: () => '/Applications/Tatsu.app/Contents/Resources/app.asar/node_modules/pkg/package.json'
     })
 
-    expect(path).toBe('/Applications/Harness.app/Contents/Resources/app.asar.unpacked/node_modules/pkg/claude')
+    expect(path).toBe('/Applications/Tatsu.app/Contents/Resources/app.asar.unpacked/node_modules/pkg/claude')
   })
 
-  const RUNTIMES = '/Applications/Harness.app/Contents/Resources/runtimes'
+  const RUNTIMES = '/Applications/Tatsu.app/Contents/Resources/runtimes'
   const STAGED = `${RUNTIMES}/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude`
-  const SDK_PKG = '/Applications/Harness.app/Contents/Resources/app.asar/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/package.json'
+  const SDK_PKG = '/Applications/Tatsu.app/Contents/Resources/app.asar/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/package.json'
 
   it('prefers the staged runtimes-root binary over SDK-relative resolution', () => {
     const path = resolveClaudeAgentSdkExecutablePath({
@@ -134,7 +134,7 @@ describe('resolveClaudeAgentSdkExecutablePath', () => {
     })
 
     expect(path).toBe(
-      '/Applications/Harness.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'
+      '/Applications/Tatsu.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude'
     )
   })
 })

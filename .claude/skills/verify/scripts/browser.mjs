@@ -26,7 +26,7 @@ export async function withApp(stateFile, journey, fn) {
   let shotN = 0
   const browser = await chromium.launch({
     channel: 'chrome',
-    executablePath: process.env.HARNESS_PLAYWRIGHT_BROWSER || undefined,
+    executablePath: process.env.TATSU_PLAYWRIGHT_BROWSER || undefined,
     headless: process.env.VERIFY_HEADED !== '1'
   })
   let page

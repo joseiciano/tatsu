@@ -7,7 +7,7 @@ sections refreshed. Sync writes the difference to disk.
 
 ## Sub-features
 
-- The `Sync <Harness>` button (for example `Sync Claude Code`) opens the sync
+- The `Sync <Tatsu>` button (for example `Sync Claude Code`) opens the sync
   dialog when the scope differs. On a scope with nothing to write it shows an
   `Already in sync` notice instead.
 - The dialog lists `Not on disk` (template output missing from disk) and

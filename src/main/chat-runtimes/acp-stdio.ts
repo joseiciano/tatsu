@@ -6,7 +6,7 @@
 //
 // Lifecycle mirrors Claude: start() boots slice state; the first send()
 // spawns the subprocess, performs `initialize`, then `session/new`, then
-// `session/prompt`. ACP transcripts are runtime bootstrap, not Harness-managed
+// `session/prompt`. ACP transcripts are runtime bootstrap, not Tatsu-managed
 // resume — persistSession-style behavior is intentionally absent.
 
 import type { ApprovalDecision, ChatRuntime } from './types'
@@ -241,7 +241,7 @@ export class AcpStdioRuntime implements ChatRuntime {
     this.command = opts.command ?? []
     this.env = opts.env
     this.launch = opts.launch ?? (() => ({ command: this.command, env: this.env }))
-    this.clientInfo = opts.clientInfo ?? { name: 'harness', version: '1.0.0' }
+    this.clientInfo = opts.clientInfo ?? { name: 'tatsu', version: '1.0.0' }
     this.createClient = opts.createClient ?? ((o) => new AcpStdioClient(o))
     this.flushIntervalMs = opts.flushIntervalMs ?? 50
     this.requestTimeoutMs = opts.requestTimeoutMs ?? 180000

@@ -12,7 +12,7 @@ function shellQuote(s: string): string {
 // Codex strips unknown fields when it normalizes hooks.json, so dedup
 // recognizes our entries by the status-dir path baked into the hook
 // command instead of a sidecar marker.
-const HARNESS_HOOK_COMMAND_SIGNATURE = '/tmp/harness-status'
+const TATSU_HOOK_COMMAND_SIGNATURE = '/tmp/tatsu-status'
 
 export const defaultCommand = 'codex'
 export const assignsSessionId = false
@@ -64,7 +64,7 @@ function makeHarnessHookEntry(command: string): CodexHookEntry {
 
 function isHarnessHookEntry(entry: CodexHookEntry): boolean {
   return !!entry.hooks?.some(
-    (h) => typeof h.command === 'string' && h.command.includes(HARNESS_HOOK_COMMAND_SIGNATURE)
+    (h) => typeof h.command === 'string' && h.command.includes(TATSU_HOOK_COMMAND_SIGNATURE)
   )
 }
 
@@ -148,7 +148,7 @@ export function stripHooksFromWorktree(worktreePath: string): boolean {
   if (!changed) return false
   if (Object.keys(data.hooks).length === 0) delete data.hooks
   writeHooksFile(path, data)
-  log('hooks', `stripped legacy Harness Codex entries from ${path}`)
+  log('hooks', `stripped legacy Tatsu Codex entries from ${path}`)
   return true
 }
 

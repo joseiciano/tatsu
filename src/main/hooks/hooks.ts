@@ -12,12 +12,12 @@ import type { PtyStatus } from '../pty-manager'
 import type { Store } from '../store'
 import { log } from '../debug'
 
-// This path is also the signature we use to recognize Harness-installed
+// This path is also the signature we use to recognize Tatsu-installed
 // hook entries when deduping at install time. If you change it, update
-// HARNESS_HOOK_COMMAND_SIGNATURE in src/main/agents/{claude,codex}.ts
+// TATSU_HOOK_COMMAND_SIGNATURE in src/main/agents/{claude,codex}.ts
 // to match, or older installed entries become unrecognizable and
 // re-installs will append duplicates.
-const STATUS_DIR = '/tmp/harness-status'
+const STATUS_DIR = '/tmp/tatsu-status'
 
 export interface PendingTool {
   name: string
@@ -25,13 +25,13 @@ export interface PendingTool {
 }
 
 // Emit a bash command that appends one NDJSON line per event to the
-// terminal's log file at /tmp/harness-status/<id>.ndjson. The line wraps
+// terminal's log file at /tmp/tatsu-status/<id>.ndjson. The line wraps
 // the full stdin payload Claude Code sends to the hook, so the main process
 // has access to the raw event and can do all classification in TypeScript.
 //
-// Gated on $HARNESS_TERMINAL_ID / $CLAUDE_HARNESS_ID — these are only set
+// Gated on $TATSU_TERMINAL_ID — it is only set
 // by PtyManager when it spawns a terminal on our behalf. Sessions started
-// outside Harness (plain `claude` in a terminal, CI, etc.) hit the exit 0
+// outside Tatsu (plain `claude` in a terminal, CI, etc.) hit the exit 0
 // on the first line and do nothing. That inert-by-default behavior is why
 // a global user-scope install is safe.
 //
@@ -41,7 +41,7 @@ export interface PendingTool {
 // guaranteed atomic vs. other O_APPEND writers on POSIX.
 export function makeHookCommand(event: string): string {
   const inner =
-    `h="${'$HARNESS_TERMINAL_ID'}"; [ -z "$h" ] && h="$CLAUDE_HARNESS_ID"; [ -z "$h" ] && exit 0; ` +
+    `h="${'$TATSU_TERMINAL_ID'}"; [ -z "$h" ] && exit 0; ` +
     `d=${STATUS_DIR}; mkdir -p "$d"; ` +
     `p=$(cat); [ -z "$p" ] && p=null; ` +
     `printf "{\\"event\\":\\"${event}\\",\\"ts\\":%s,\\"payload\\":%s}\\n" ` +

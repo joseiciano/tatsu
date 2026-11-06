@@ -9,9 +9,9 @@ export type ParseResult =
   | { kind: 'ok'; flags: CliFlags }
   | { kind: 'error'; message: string }
 
-export const USAGE = `harness-server — Tatsu headless backend
+export const USAGE = `tatsu-server — Tatsu headless backend
 
-Usage: harness-server [options]
+Usage: tatsu-server [options]
 
 Options:
   --host <addr>      Bind to address (default: 127.0.0.1)
@@ -22,15 +22,15 @@ Options:
   --help             Print this help and exit
 
 Environment:
-  HARNESS_WS_HOST    Same as --host (CLI flag wins)
-  HARNESS_WS_PORT    Same as --port (CLI flag wins)
-  HARNESS_DATA_DIR   Where config + auth tokens live (default: ~/.harness)
+  TATSU_WS_HOST    Same as --host (CLI flag wins)
+  TATSU_WS_PORT    Same as --port (CLI flag wins)
+  TATSU_DATA_DIR   Where config + auth tokens live (default: ~/.tatsu)
 
 Examples:
-  harness-server                                    # localhost only
-  harness-server --host 0.0.0.0                     # all interfaces
-  harness-server --host $(tailscale ip -4)          # tailscale only
-  harness-server --port 0                           # ephemeral port
+  tatsu-server                                    # localhost only
+  tatsu-server --host 0.0.0.0                     # all interfaces
+  tatsu-server --host $(tailscale ip -4)          # tailscale only
+  tatsu-server --port 0                           # ephemeral port
 `
 
 export function parseCliFlags(argv: string[]): ParseResult {

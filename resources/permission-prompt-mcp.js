@@ -13,7 +13,7 @@
 // Protocol boundaries:
 //   * stdio side: standard MCP JSON-RPC over NDJSON. We advertise a
 //     single tool named `approve` and handle tools/call by delegating to
-//     the Harness socket.
+//     the Tatsu socket.
 //   * socket side: NDJSON frames. We write
 //       {type: 'request', id, sessionId, tool_name, input, tool_use_id,
 //        timestamp}
@@ -26,11 +26,11 @@ const readline = require('node:readline')
 const net = require('node:net')
 const crypto = require('node:crypto')
 
-const SOCKET_PATH = process.env.HARNESS_APPROVAL_SOCKET
-const SESSION_ID = process.env.HARNESS_JSON_CLAUDE_SESSION_ID || ''
+const SOCKET_PATH = process.env.TATSU_APPROVAL_SOCKET
+const SESSION_ID = process.env.TATSU_JSON_CLAUDE_SESSION_ID || ''
 
 if (!SOCKET_PATH) {
-  process.stderr.write('[harness-approval-mcp] HARNESS_APPROVAL_SOCKET not set\n')
+  process.stderr.write('[tatsu-approval-mcp] TATSU_APPROVAL_SOCKET not set\n')
   process.exit(1)
 }
 
@@ -40,11 +40,11 @@ function send(msg) {
 
 // Claude swallows MCP-server stderr unless --mcp-debug is on, so also
 // append to a fixed log file we can tail to verify the protocol.
-//   $ tail -f /tmp/harness-permission-mcp.log
+//   $ tail -f /tmp/tatsu-permission-mcp.log
 const fs = require('node:fs')
-const LOG_PATH = process.env.HARNESS_PERMISSION_MCP_LOG || '/tmp/harness-permission-mcp.log'
+const LOG_PATH = process.env.TATSU_PERMISSION_MCP_LOG || '/tmp/tatsu-permission-mcp.log'
 function logErr(...parts) {
-  const line = '[harness-approval-mcp] ' + parts.join(' ') + '\n'
+  const line = '[tatsu-approval-mcp] ' + parts.join(' ') + '\n'
   process.stderr.write(line)
   try {
     fs.appendFileSync(LOG_PATH, new Date().toISOString() + ' ' + line)
@@ -95,7 +95,7 @@ function requestApproval(args) {
         }) + '\n')
       } catch (err) {
         logErr('write failed', err && err.message || String(err))
-        settle({ behavior: 'deny', message: 'harness write failed' })
+        settle({ behavior: 'deny', message: 'tatsu write failed' })
       }
     })
 
@@ -120,11 +120,11 @@ function requestApproval(args) {
 
     socket.on('error', (err) => {
       logErr('socket error', err.message)
-      settle({ behavior: 'deny', message: `harness socket error: ${err.message}` })
+      settle({ behavior: 'deny', message: `tatsu socket error: ${err.message}` })
     })
 
     socket.on('close', () => {
-      settle({ behavior: 'deny', message: 'harness disconnected' })
+      settle({ behavior: 'deny', message: 'tatsu disconnected' })
     })
   })
 }
@@ -155,7 +155,7 @@ rl.on('line', (line) => {
     reply(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'harness-permissions', version: '1.0.0' }
+      serverInfo: { name: 'tatsu-permissions', version: '1.0.0' }
     })
     return
   }
@@ -182,7 +182,7 @@ rl.on('line', (line) => {
     }
     // Surface the args keys so we can confirm what Claude is actually
     // sending across the MCP boundary. Logged to
-    // /tmp/harness-permission-mcp.log (tail to verify).
+    // /tmp/tatsu-permission-mcp.log (tail to verify).
     logErr('approve args keys=[' + Object.keys(args).join(',') + ']')
     const toolName = typeof args.tool_name === 'string' ? args.tool_name : ''
     const input = args.input && typeof args.input === 'object' && !Array.isArray(args.input)

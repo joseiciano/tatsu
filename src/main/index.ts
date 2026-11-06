@@ -114,7 +114,7 @@ function assertNeverAgentKind(kind: never): never {
   throw new Error(`Unsupported agent kind: ${kind}`)
 }
 
-// Boot the local backend. The HARNESS_REMOTE_URL "process-wide remote"
+// Boot the local backend. The TATSU_REMOTE_URL "process-wide remote"
 // path was removed in Tier 1 — the chip strip / add-backend modal is
 // the only way to reach a remote backend now (see
 // plans/tier-1-multi-backend-ux.md §J).
@@ -148,7 +148,7 @@ function bootLocal(): void {
 
 // Resolves the caller's MCP scope from their terminal id. Used by both
 // the control HTTP server (on every tool call, authoritative) and
-// writeMcpConfigForTerminal (to seed best-effort HARNESS_* env vars in
+// writeMcpConfigForTerminal (to seed best-effort TATSU_* env vars in
 // the spawned bridge). Closes over the local `store` constructed below.
 function resolveCallerScope(terminalId: string) {
   if (!terminalId) return null
@@ -190,15 +190,15 @@ function findShellWorktree(shellId: string): string | null {
   }
   return null
 }
-// Resolves the harness version from disk so it works in every runtime
+// Resolves the Tatsu version from disk so it works in every runtime
 // (Electron dev/packaged, headless dev, headless tarball). Electron's
 // `app.getVersion()` would do the job in two of those four, but the
 // headless server has no `app`, so we read package.json (or the
 // pack-headless VERSION sidecar) directly. Cached after first hit —
 // the file layout doesn't change while the process is alive.
-let cachedHarnessVersion: string | null = null
-function getHarnessVersion(): string {
-  if (cachedHarnessVersion) return cachedHarnessVersion
+let cachedTatsuVersion: string | null = null
+function getTatsuVersion(): string {
+  if (cachedTatsuVersion) return cachedTatsuVersion
   const candidates: Array<{ path: string; parse: (text: string) => string | null }> = [
     {
       path: join(__dirname, '..', '..', 'package.json'),
@@ -216,15 +216,15 @@ function getHarnessVersion(): string {
     try {
       const v = parse(readFileSync(path, 'utf8'))
       if (v) {
-        cachedHarnessVersion = v
+        cachedTatsuVersion = v
         return v
       }
     } catch {
       // try next candidate
     }
   }
-  cachedHarnessVersion = 'unknown'
-  return cachedHarnessVersion
+  cachedTatsuVersion = 'unknown'
+  return cachedTatsuVersion
 }
 
 // Headless-only CLI flags (--host / --port / --help / --version). Parse
@@ -238,7 +238,7 @@ const cliFlags: CliFlags = (() => {
   }
   const result = parseCliFlags(process.argv.slice(2))
   if (result.kind === 'error') {
-    process.stderr.write(`harness-server: ${result.message}\n\n`)
+    process.stderr.write(`tatsu-server: ${result.message}\n\n`)
     process.stderr.write(USAGE)
     process.exit(2)
   }
@@ -325,15 +325,15 @@ const browserManager: BrowserManagerLike =
 //
 // Headless mode always starts the WS transport (it's the ONLY way for a
 // client to reach the server). Electron mode honors the existing toggle
-// — enable via wsTransportEnabled in config.json, or HARNESS_WS_TRANSPORT=1.
+// — enable via wsTransportEnabled in config.json, or TATSU_WS_TRANSPORT=1.
 const wsEnabled =
   runtime === 'node' ||
   config.wsTransportEnabled === true ||
-  process.env['HARNESS_WS_TRANSPORT'] === '1'
+  process.env['TATSU_WS_TRANSPORT'] === '1'
 // CLI flag > env var > config > default. --port 0 picks an ephemeral
 // port (the existing wsTransport.listen path handles it). cliFlags is
 // already populated above (gated on headless runtime).
-const envPort = Number.parseInt(process.env['HARNESS_WS_PORT'] ?? '', 10)
+const envPort = Number.parseInt(process.env['TATSU_WS_PORT'] ?? '', 10)
 const wsPort =
   cliFlags.port != null && cliFlags.port >= 0
     ? cliFlags.port
@@ -342,7 +342,7 @@ const wsPort =
       : (config.wsTransportPort ?? 37291)
 const wsHost =
   cliFlags.host ||
-  process.env['HARNESS_WS_HOST'] ||
+  process.env['TATSU_WS_HOST'] ||
   config.wsTransportHost ||
   '127.0.0.1'
 
@@ -602,10 +602,10 @@ async function refreshViewerLogin(): Promise<void> {
   })
 }
 
-/** Query the harness star state, dispatch it to the slice, and auto-star
+/** Query the Tatsu repo star state, dispatch it to the slice, and auto-star
  *  exactly once per user (sticky so manual unstars survive reboots). Safe
  *  to call after any token resolution — boot, PAT save, etc. */
-async function refreshHarnessStarState(): Promise<void> {
+async function refreshTatsuStarState(): Promise<void> {
   const token = getCachedToken()
   if (!token) {
     store.dispatch({ type: 'settings/harnessStarredChanged', payload: null })
@@ -618,7 +618,7 @@ async function refreshHarnessStarState(): Promise<void> {
       config.harnessAutoStarred = true
       saveConfig(config)
       store.dispatch({ type: 'settings/harnessStarredChanged', payload: true })
-      log('app', 'auto-starred harness on first GitHub connection')
+      log('app', 'auto-starred tatsu on first GitHub connection')
       return
     }
     log('app', 'auto-star failed', result.error)
@@ -990,10 +990,10 @@ const autoSleepMonitor = new AutoSleepMonitor(store, panesFSM)
 
 /** Install agent status hooks at the user-scope settings file for both
  *  supported agents. Called once when consent flips to 'accepted'. The
- *  hook command is env-gated on $HARNESS_TERMINAL_ID, so it no-ops for
- *  sessions started outside Harness. */
+ *  hook command is env-gated on $TATSU_TERMINAL_ID, so it no-ops for
+ *  sessions started outside Tatsu. */
 function installHooksGlobally(): void {
-  // installHooks() is idempotent — it strips any existing Harness entries
+  // installHooks() is idempotent — it strips any existing Tatsu entries
   // before writing a fresh one — so calling it unconditionally also
   // collapses duplicate entries left by earlier buggy install passes.
   for (const { kind } of AGENT_REGISTRY) {
@@ -2512,7 +2512,7 @@ function registerIpcHandlers(): void {
       invalidateTokenCache()
       await resolveGitHubToken()
       store.dispatch({ type: 'settings/githubAuthSourceChanged', payload: getTokenSource() })
-      await refreshHarnessStarState()
+      await refreshTatsuStarState()
       return { ok: true }
     }
     // Validate the token first by hitting /user
@@ -2524,7 +2524,7 @@ function registerIpcHandlers(): void {
     await resolveGitHubToken()
     store.dispatch({ type: 'settings/githubAuthSourceChanged', payload: getTokenSource() })
     void refreshViewerLogin()
-    await refreshHarnessStarState()
+    await refreshTatsuStarState()
     return { ok: true, username: test.username }
   })
 
@@ -2535,7 +2535,7 @@ function registerIpcHandlers(): void {
     await resolveGitHubToken()
     store.dispatch({ type: 'settings/githubAuthSourceChanged', payload: getTokenSource() })
     void refreshViewerLogin()
-    await refreshHarnessStarState()
+    await refreshTatsuStarState()
     return true
   })
 
@@ -2555,7 +2555,7 @@ function registerIpcHandlers(): void {
   // clients (web client, multi-backend Electron remotes) ask for it.
   // Reads from package.json / VERSION rather than Electron's
   // app.getVersion() so the headless server can answer without an `app`.
-  transport.onRequest('updater:getVersion', (_ctx) => getHarnessVersion())
+  transport.onRequest('updater:getVersion', (_ctx) => getTatsuVersion())
 
   // updater:checkForUpdates / updater:quitAndInstall: the real
   // implementations live in desktop-shell.ts (they drive electron-updater
@@ -2606,8 +2606,8 @@ function registerIpcHandlers(): void {
   )
 
   // Hooks. Install/uninstall happen once at user scope — the hook command
-  // is env-gated on $HARNESS_TERMINAL_ID so sessions spawned outside
-  // Harness are unaffected.
+  // is env-gated on $TATSU_TERMINAL_ID so sessions spawned outside
+  // Tatsu are unaffected.
   transport.onRequest('hooks:accept', (_ctx) => {
     installHooksGlobally()
     config.hooksConsent = 'accepted'
@@ -3446,7 +3446,7 @@ async function runBoot(): Promise<void> {
     reconcileBrowserViews()
   })()
 
-  // Seed per-repo config slice from each repo's .harness.json file.
+  // Seed per-repo config slice from each repo's .tatsu.json file.
   const initialRepoConfigsMap: Record<string, RepoConfig> = {}
   for (const root of config.repoRoots || []) {
     initialRepoConfigsMap[root] = loadRepoConfig(root)
@@ -3471,7 +3471,7 @@ async function runBoot(): Promise<void> {
     prPoller.start()
     void prPoller.refreshAll()
 
-    await refreshHarnessStarState()
+    await refreshTatsuStarState()
   })()
 
   announcementsPoller.start()
@@ -3559,7 +3559,7 @@ async function runBoot(): Promise<void> {
   pruneTerminalHistory(keepIds)
   pruneMcpConfigs(keepIds)
 
-  // Local HTTP control server for the bundled harness-control MCP bridge.
+  // Local HTTP control server for the bundled tatsu-control MCP bridge.
   startControlServer({
     getRepoRoots: () => config.repoRoots,
     getWorktreeBase: () => config.worktreeBase || DEFAULT_WORKTREE_BASE,

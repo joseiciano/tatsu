@@ -12,7 +12,7 @@ describe('resolveRepoPath', () => {
   let plain: string
 
   beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), 'harness-repo-resolve-'))
+    root = mkdtempSync(join(tmpdir(), 'tatsu-repo-resolve-'))
     repo = join(root, 'my-repo')
     nested = join(repo, 'src')
     plain = join(root, 'just-a-folder')

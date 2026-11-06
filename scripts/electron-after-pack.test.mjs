@@ -8,13 +8,13 @@ function makeContext({ os, arch, binaries }) {
     arch,
     appOutDir: '/out/mac-arm64',
     packager: {
-      getResourcesDir: (appOutDir) => `${appOutDir}/Harness.app/Contents/Resources`,
+      getResourcesDir: (appOutDir) => `${appOutDir}/Tatsu.app/Contents/Resources`,
       platformSpecificBuildOptions
     }
   }
 }
 
-const RUNTIMES = '/out/mac-arm64/Harness.app/Contents/Resources/runtimes'
+const RUNTIMES = '/out/mac-arm64/Tatsu.app/Contents/Resources/runtimes'
 
 describe('closurePlatformForContext', () => {
   it.each([
@@ -96,7 +96,7 @@ describe('stageDesktopRuntimes', () => {
     await stageDesktopRuntimes(context, deps)
     expect(context.packager.platformSpecificBuildOptions.binaries).toEqual([
       '/pre/helper',
-      '/out/mac/Harness.app/Contents/Resources/runtimes/node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/claude'
+      '/out/mac/Tatsu.app/Contents/Resources/runtimes/node_modules/@anthropic-ai/claude-agent-sdk-darwin-x64/claude'
     ])
   })
 

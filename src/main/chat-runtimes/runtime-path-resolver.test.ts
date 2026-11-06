@@ -9,7 +9,7 @@ import {
   stagedClaudeExecutablePath
 } from './runtime-path-resolver'
 
-const APP_ASAR = '/Applications/Harness.app/Contents/Resources/app.asar'
+const APP_ASAR = '/Applications/Tatsu.app/Contents/Resources/app.asar'
 
 // Deterministic fake package resolver rooted inside app.asar so the
 // app.asar → app.asar.unpacked rewrite is exercised end-to-end.
@@ -33,7 +33,7 @@ function makeResolver(
     platform: platform as NodeJS.Platform,
     arch,
     runtimesRoot: null,
-    processExecPath: '/Applications/Harness.app/Contents/MacOS/Harness',
+    processExecPath: '/Applications/Tatsu.app/Contents/MacOS/Tatsu',
     resolvePackage: (id: string) => {
       const hit = map[id]
       if (!hit) throw new Error(`not found: ${id}`)
@@ -111,7 +111,7 @@ describe('BundledRuntimeResolver', () => {
     const r = makeResolver('linux', 'x64')
     const cfg = r.buildCodexConfig()
     expect(cfg.command).toEqual([
-      '/Applications/Harness.app/Contents/MacOS/Harness',
+      '/Applications/Tatsu.app/Contents/MacOS/Tatsu',
       `${APP_ASAR.replace('app.asar', 'app.asar.unpacked')}/node_modules/@agentclientprotocol/codex-acp/dist/index.js`
     ])
     expect(cfg.env?.ELECTRON_RUN_AS_NODE).toBe('1')
@@ -142,7 +142,7 @@ describe('BundledRuntimeResolver', () => {
 })
 
 describe('BundledRuntimeResolver with a staged runtimes root', () => {
-  const ROOT = '/Applications/Harness.app/Contents/Resources/runtimes'
+  const ROOT = '/Applications/Tatsu.app/Contents/Resources/runtimes'
   const NM = `${ROOT}/node_modules`
 
   // Node-style lookup over the flat staged node_modules: a require anchored
@@ -173,7 +173,7 @@ describe('BundledRuntimeResolver with a staged runtimes root', () => {
       platform: 'linux',
       arch: 'x64',
       runtimesRoot: ROOT,
-      processExecPath: '/opt/Harness/harness',
+      processExecPath: '/opt/Tatsu/harness',
       requireFromDir: stagedRequireFromDir,
       exists: (p) => p === STAGED_OPENCODE || p === STAGED_CODEX,
       ...opts
@@ -189,7 +189,7 @@ describe('BundledRuntimeResolver with a staged runtimes root', () => {
   it('resolves the codex-acp script and native binary through the runtimes root', () => {
     const cfg = makeStagedResolver().buildCodexConfig()
     expect(cfg.command).toEqual([
-      '/opt/Harness/harness',
+      '/opt/Tatsu/harness',
       `${NM}/@agentclientprotocol/codex-acp/dist/index.js`
     ])
     expect(cfg.env?.CODEX_PATH).toBe(
@@ -285,7 +285,7 @@ describe('BundledRuntimeResolver.bundledBinary outside a staged layout', () => {
 })
 
 describe('defaultRuntimesRoot', () => {
-  const RP = '/Applications/Harness.app/Contents/Resources'
+  const RP = '/Applications/Tatsu.app/Contents/Resources'
 
   it('returns undefined outside a packaged app', () => {
     expect(defaultRuntimesRoot(undefined, () => true)).toBeUndefined()

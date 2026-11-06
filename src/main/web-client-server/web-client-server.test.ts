@@ -68,7 +68,7 @@ describe('createWebClientServer', () => {
     expect(res.headers.get('content-type')).toMatch(/text\/html/)
     const body = await res.text()
     expect(body).toContain('<html')
-    expect(body).not.toContain('harness-ws-token')
+    expect(body).not.toContain('tatsu-ws-token')
   })
 
   it('accepts a bearer token in the Authorization header', async () => {

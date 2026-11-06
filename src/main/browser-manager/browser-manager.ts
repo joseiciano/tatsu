@@ -460,7 +460,7 @@ export class BrowserManager implements BrowserManagerLike {
     const py = Math.round(Number(y) || 0)
     const pulse = opts?.pulse ? 1 : 0
     const script = `(() => {
-      const ID = '__harness_cursor__';
+      const ID = '__tatsu_cursor__';
       let el = document.getElementById(ID);
       if (!el) {
         el = document.createElement('div');
@@ -471,7 +471,7 @@ export class BrowserManager implements BrowserManagerLike {
       }
       el.style.transform = 'translate(${px}px,${py}px)';
       if (${pulse}) {
-        const ringId = '__harness_cursor_ring__';
+        const ringId = '__tatsu_cursor_ring__';
         let ring = document.getElementById(ringId);
         if (!ring) {
           ring = document.createElement('div');

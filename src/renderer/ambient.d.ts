@@ -7,10 +7,10 @@ declare global {
   interface Window {
     /** True when the renderer is being driven by the WS-connected web
      *  client. Set by src/web-client/main.tsx before App mount. */
-    __HARNESS_WEB__?: boolean
+    __TATSU_WEB__?: boolean
     /** Local Electron host platform (process.platform). Undefined in the
      *  pure web client (no preload). Set by src/preload/index.ts. */
-    __HARNESS_PLATFORM__?: NodeJS.Platform
+    __TATSU_PLATFORM__?: NodeJS.Platform
   }
   namespace JSX {
     type Element = ReactJSX.Element
