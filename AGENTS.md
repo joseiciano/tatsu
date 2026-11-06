@@ -147,7 +147,7 @@ src/
 │   ├── onboarding/                # quest step
 │   ├── hooks/                     # consent + justInstalled
 │   ├── updater/                   # status (checking/available/downloading/…)
-│   ├── repo-configs/              # byRepo: per-repo .harness.json contents
+│   ├── repo-configs/              # byRepo: per-repo .tatsu.json contents
 │   ├── costs/                     # session usage + cost rollups
 │   ├── browser/                   # browser pane state
 │   ├── snooze/                    # snoozed worktree/session timers
@@ -200,7 +200,7 @@ src/
 │   ├── worktree/                  # git worktree CRUD primitives
 │   ├── github/                    # GitHub REST API calls
 │   ├── github-auth/               # GitHub token resolution
-│   ├── repo-config/               # Per-repo .harness.json read/write
+│   ├── repo-config/               # Per-repo .tatsu.json read/write
 │   ├── persistence/               # JSON config at userData/config.json
 │   ├── secrets/                   # safeStorage-encrypted secrets
 │   ├── control-server/            # Headless control server
@@ -467,11 +467,11 @@ event type if you're trying to find where something happens.
 
 **agent-specific hooks** (per agent in `src/main/agents/`) that we install into user-scope
 configuration (`~/.claude/settings.json` for Claude, `~/.config/opencode/plugins/` for
-Opencode, `~/.pi/agent/extensions/harness-status.ts` for Pi, `~/.codex/hooks.json` for
+Opencode, `~/.pi/agent/extensions/tatsu-status.ts` for Pi, `~/.codex/hooks.json` for
 Codex). The hooks write status events as NDJSON to
-`/tmp/harness-status/<terminal-id>.ndjson` and the main process watches that
-directory via `fs.watch`. The hook scripts use `$HARNESS_TERMINAL_ID` env var
-(set by the PtyManager) with `$CLAUDE_HARNESS_ID` as a legacy fallback.
+`/tmp/tatsu-status/<terminal-id>.ndjson` and the main process watches that
+directory via `fs.watch`. The hook scripts use `$TATSU_TERMINAL_ID` env var
+(set by the PtyManager).
 
 ## How performance debugging works
 
@@ -532,8 +532,8 @@ Token resolution lives in the `src/main/github-auth/` package and runs once at b
 (re-runs on a 401): an explicit PAT in `secrets.enc` or `GITHUB_TOKEN` wins,
 then `gh auth token` (spawned through a login zsh so Homebrew's `gh` is on
 PATH), then nothing. The `gh` CLI is an **optional** auto-detect convenience
-— if it's installed and authenticated, Harness uses its token automatically;
-if not, the PAT paste flow in Settings is still the fallback. Harness has no
+— if it's installed and authenticated, Tatsu uses its token automatically;
+if not, the PAT paste flow in Settings is still the fallback. Tatsu has no
 hard dependency on `gh`.
 
 ## Important quirks
@@ -551,10 +551,10 @@ hard dependency on `gh`.
 - **Login-shell PATH fix at boot** — at boot we run the user's login shell once
   via the `src/main/path-fix/` package to capture its PATH and **merge** into `process.env.PATH`.
   Without this, the bundled claude (spawned directly, not via shell) inherits
-  whatever stripped PATH Harness was launched with and can't find homebrew/
+  whatever stripped PATH Tatsu was launched with and can't find homebrew/
   nvm/pyenv tools. The fix runs in both Electron-local boots (Finder/Dock
   launches with `/usr/bin:/bin:/usr/sbin:/sbin`) and headless boots
-  (`ssh host 'harness-server'` / systemd / launchd run non-interactive
+  (`ssh host 'tatsu-server'` / systemd / launchd run non-interactive
   non-login = same stripped PATH). Merge order: existing entries that aren't
   already in captured come first, then the full captured list — preserves
   launcher-prepended entries like pnpm's `node_modules/.bin` in `pnpm dev`
@@ -568,7 +568,7 @@ hard dependency on `gh`.
   mode. Both implement the `BrowserManagerLike` contract so MCP tools,
   the control server, and the pane reconciler call the same surface.
   `playwright-core` is a runtime dep but **doesn't bundle Chromium** —
-  the user provides one. Resolution: `HARNESS_PLAYWRIGHT_BROWSER`
+  the user provides one. Resolution: `TATSU_PLAYWRIGHT_BROWSER`
   env var first (path to a Chromium executable), else Playwright's
   `channel: 'chrome'` (system Chrome on macOS/Win/Linux). If neither
   resolves, the first `create_browser_tab` MCP call throws a clear
@@ -576,7 +576,7 @@ hard dependency on `gh`.
   via `RemoteBrowserView` instead of a native overlay — live screencast
   is a follow-up.
 - **Multi-backend (Tier 1)** — 1 Electron instance can connect to 
-  to N backends (the in-process local one + remote `harness-server`
+  to N backends (the in-process local one + remote `tatsu-server`
   instances), with a button at the end of the sidebar to swap. 
     - Full design is at `plans/tier-1-multi-backend-ux.md`. 
 - **Terminal tabs vs ACP chat tabs** — **Terminal tabs** (internally
@@ -607,9 +607,11 @@ hard dependency on `gh`.
   (run by `pnpm run pack` and the mac/linux workflows) and
   `scripts/smoke-packed-runtimes.mjs` (headless) fail the build when a
   bundled binary is missing.
-- **External Name vs Internal Name**: Externally, the app is to be shown as "Tatsu" (External Readme, App components). 
-  Internally, there are parts that mention the old name "Harness". These parts are more critical and changing it can break things. 
-  For now, refer to these parts as Harness if you see it, but keep any customer facing parts showing the new name. 
+- **Naming**: The product is Tatsu everywhere, internal identifiers included
+  (`TATSU_*` env vars, `/tmp/tatsu-status`, `tatsu-server`, `.tatsu.json`,
+  the `Tatsu` / `Tatsu (Dev)` userData folders). "Harness" in names like
+  `HarnessConfig` or `ManagedHarnessKind` means an agent harness (Claude Code,
+  Codex, …), not the product. Don't add new product references named Harness.
 
 ## Workflow conventions
 
@@ -667,7 +669,7 @@ This is how you are to behave when working on this repo.
    with the following signature:
 
    ```
-   _Comment left on behalf of @<github-username> by <agent-name> via [Harness](https://github.com/frenchie4111/harness)._
+   _Comment left on behalf of @<github-username> by <agent-name> via [Tatsu](https://github.com/joseiciano/tatsu)._
    ```
 
    - `<github-username>` is the user's GitHub login — run
@@ -773,7 +775,7 @@ because the macos-13 runner queue is too unreliable). Each runner
 calls `pnpm pack:headless`, which downloads a pinned Node binary
 (`NODE_VERSION` in `scripts/pack-headless.mjs`), rebuilds `node-pty`
 against that ABI, and assembles a self-contained tarball at
-`release/headless/harness-server-<version>-<platform>.tar.gz` plus
+`release/headless/tatsu-server-<version>-<platform>.tar.gz` plus
 `.sha256`. The job uploads both as release assets — no extra step in
 `scripts/release.sh` is needed. Bumping `NODE_VERSION` requires
 matching the `actions/setup-node` step in the workflow.

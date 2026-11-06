@@ -57,7 +57,7 @@ Grab the latest release from the [releases page](https://github.com/frenchie4111
 4. On first launch:
    - Pick a git repository when prompted.
    - Click the ⚙ gear icon in the sidebar and paste a [GitHub personal access token](https://github.com/settings/tokens?type=beta) (fine-grained or classic, with `repo` scope). This is optional but required for the PR status panel and checks.
-   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally for supported agents: Claude (`~/.claude/settings.json`), Codex (`~/.codex/hooks.json`), Opencode (`~/.config/opencode/plugins/`), and Pi (`~/.pi/agent/extensions/harness-status.ts`). One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the status watcher) and `src/main/agents/` (where each agent's install/uninstall logic lives).
+   - When the hooks consent banner appears, click **Enable** so Tatsu can install status-tracking hooks globally for supported agents: Claude (`~/.claude/settings.json`), Codex (`~/.codex/hooks.json`), Opencode (`~/.config/opencode/plugins/`), and Pi (`~/.pi/agent/extensions/tatsu-status.ts`). One install covers every worktree and is what makes the sidebar status dots reliable. Curious what the hook actually runs? See [`src/main/hooks/hooks.ts`](src/main/hooks/hooks.ts) (the status watcher) and `src/main/agents/` (where each agent's install/uninstall logic lives).
 
 ### Linux
 
@@ -109,29 +109,29 @@ Install with one command:
 curl -fsSL https://raw.githubusercontent.com/frenchie4111/harness/main/scripts/install-headless.sh | sh
 ```
 
-This downloads the right tarball for your platform (`darwin-arm64`, `linux-x64`, or `linux-arm64`), verifies its sha256, and extracts to `~/.harness-server/`. Intel Macs are not currently shipped — GitHub's macos-13 runner queue is too unreliable to keep in CI. If `/usr/local/bin/` is writable a `harness-server` symlink is dropped there; otherwise you add `~/.harness-server/bin` to your `PATH`.
+This downloads the right tarball for your platform (`darwin-arm64`, `linux-x64`, or `linux-arm64`), verifies its sha256, and extracts to `~/.tatsu-server/`. Intel Macs are not currently shipped — GitHub's macos-13 runner queue is too unreliable to keep in CI. If `/usr/local/bin/` is writable a `tatsu-server` symlink is dropped there; otherwise you add `~/.tatsu-server/bin` to your `PATH`.
 
 Run it:
 
 ```sh
-harness-server --port 0
+tatsu-server --port 0
 ```
 
 `--port 0` picks an ephemeral port. The server prints both a `ws://` URL (for renderers) and an `http://` URL (the web client) with the auth token embedded as a query string. Pin the `http://` URL on a phone homescreen or browser bookmark — the token survives restarts. To run as a daemon, wrap with `nohup`, `tmux`, or `screen`.
 
-The tarballs are not Apple-signed. On macOS you may need to `xattr -d com.apple.quarantine ~/.harness-server/bin/harness-server` if Gatekeeper objects.
+The tarballs are not Apple-signed. On macOS you may need to `xattr -d com.apple.quarantine ~/.tatsu-server/bin/tatsu-server` if Gatekeeper objects.
 
 To pin a specific version:
 
 ```sh
-HARNESS_SERVER_VERSION=2.6.1 sh -c 'curl -fsSL https://raw.githubusercontent.com/frenchie4111/harness/main/scripts/install-headless.sh | sh'
+TATSU_SERVER_VERSION=2.6.1 sh -c 'curl -fsSL https://raw.githubusercontent.com/frenchie4111/harness/main/scripts/install-headless.sh | sh'
 ```
 
 Re-running the install script bumps the version. There's no in-place self-update yet.
 
 ### Connecting the Electron app to a remote server
 
-Once `harness-server` is running on a remote machine, you can drive it from your local Electron Tatsu alongside the local backend. Open the Tatsu sidebar's backend chip strip (or `File → Add Backend…`), paste the connection link the host's Settings shows (`http://host:port/?token=...`), and click "Test & save". The link's the same one the browser web client uses; Tatsu parses out the token, validates the connection, and persists the backend.
+Once `tatsu-server` is running on a remote machine, you can drive it from your local Electron Tatsu alongside the local backend. Open the Tatsu sidebar's backend chip strip (or `File → Add Backend…`), paste the connection link the host's Settings shows (`http://host:port/?token=...`), and click "Test & save". The link's the same one the browser web client uses; Tatsu parses out the token, validates the connection, and persists the backend.
 
 Once added, the chip appears at the bottom of the sidebar. Click to switch — `Cmd+Shift+1..9` jumps directly to the Nth backend (Local is always 1). Each backend has its own worktrees, terminals, browser tabs, and settings; switching changes which backend's UI is rendered, and inactive backends keep streaming so notifications still work. The connections list is encrypted (tokens in `secrets.enc`) and persists across restarts.
 
@@ -159,9 +159,9 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    rm -rf ~/Library/Logs/Tatsu
    ```
 
-5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove hook entries whose `command` contains `/tmp/harness-status`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/harness-status.ts`.
+5. **If you skipped step 1** and already deleted the app, you can remove the hooks by hand. Open the relevant agent config file and delete any Tatsu-managed entries: for Claude Code, open `~/.claude/settings.json` and remove hook entries whose `command` contains `/tmp/tatsu-status`; for Codex, remove from `~/.codex/hooks.json`; for Opencode, remove the plugin from `~/.config/opencode/plugins/`; for Pi, delete the extension at `~/.pi/agent/extensions/tatsu-status.ts`.
 
-6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `claude-harness-worktrees/` next to your repos. These are normal git worktrees and aren't removed automatically. To clean them up:
+6. **Optional — clean up worktrees.** Tatsu may have created git worktrees under `<repo>-worktrees/` next to each repo. These are normal git worktrees and aren't removed automatically. To clean them up:
 
    ```sh
    cd <your-repo>
@@ -169,7 +169,7 @@ Once added, the chip appears at the bottom of the sidebar. Click to switch — `
    git worktree remove <path>
    ```
 
-   Or delete the `claude-harness-worktrees/` directories from disk and run `git worktree prune` in each repo.
+   Or delete the `<repo>-worktrees/` directories from disk and run `git worktree prune` in each repo.
 
 ## Features
 
