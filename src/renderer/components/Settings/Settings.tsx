@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect, useId } from 'react'
 import { ArrowLeft, Check, X, Eye, EyeOff, Star, RefreshCw, Download, RotateCw, GitPullRequest, DownloadCloud, Keyboard, RotateCcw, Terminal as TerminalIcon, Palette, BookOpen, Code2, GitBranch, Plus, Trash2, Moon, LifeBuoy, Bug, Lightbulb, FlaskConical, Copy, CopyCheck, ExternalLink, CalendarDays, FileText, FolderOpen, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import { openReportIssue } from '../ReportIssueScreen'
-import { HARNESS_ISSUES_URL, HARNESS_RELEASES_URL, harnessReleaseNotesUrl } from '../../../shared/constants'
+import { TATSU_ISSUES_URL, TATSU_RELEASES_URL, tatsuReleaseNotesUrl } from '../../../shared/constants'
 import { useSettings, useUpdater, useRepoConfigs, useHooks } from '../../store'
 import { useBackend } from '../../backend'
 import type { UpdaterStatus, MergeStrategy, RepoConfig, WorktreeDetail, AgentKind } from '../../types'
@@ -1162,7 +1162,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             <Download className="icon-xs" />
             <span>
               <a
-                onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+                onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
                 className="underline hover:text-fg-bright cursor-pointer"
               >
                 Tatsu {updaterStatus.version}
@@ -1178,7 +1178,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
             <span>
               Downloading{' '}
               <a
-                onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+                onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
                 className="underline hover:text-fg-bright cursor-pointer"
               >
                 Tatsu {updaterStatus.version}
@@ -1194,7 +1194,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
               <Check className="icon-xs" />
               <span>
                 <a
-                  onClick={() => backend.openExternal(harnessReleaseNotesUrl(updaterStatus.version))}
+                  onClick={() => backend.openExternal(tatsuReleaseNotesUrl(updaterStatus.version))}
                   className="underline hover:text-fg-bright cursor-pointer"
                 >
                   Tatsu {updaterStatus.version}
@@ -3083,7 +3083,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                     <div className="text-xs text-dim font-mono mt-0.5">
                       {version ? (
                         <a
-                          onClick={() => backend.openExternal(harnessReleaseNotesUrl(version))}
+                          onClick={() => backend.openExternal(tatsuReleaseNotesUrl(version))}
                           className="underline hover:text-fg-bright cursor-pointer"
                         >
                           {version}
@@ -3148,7 +3148,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
 
               <div className="mt-3 text-xs text-dim">
                 <a
-                  onClick={() => backend.openExternal(HARNESS_RELEASES_URL)}
+                  onClick={() => backend.openExternal(TATSU_RELEASES_URL)}
                   className="text-muted hover:text-fg-bright underline cursor-pointer"
                 >
                   View all releases on GitHub
@@ -3250,7 +3250,7 @@ export function Settings({ onClose, onOpenGuide, onOpenMyWeek, initialSection }:
                 These features are in active development. APIs and UI may change,
                 and you should expect rough edges. Each one is opt-in below.{' '}
                 <a
-                  onClick={() => backend.openExternal(HARNESS_ISSUES_URL)}
+                  onClick={() => backend.openExternal(TATSU_ISSUES_URL)}
                   className="text-muted hover:text-fg-bright underline cursor-pointer"
                 >
                   File an issue

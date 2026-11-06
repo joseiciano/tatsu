@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bug, Lightbulb, ExternalLink, X } from 'lucide-react'
-import { HARNESS_NEW_ISSUE_URL } from '../../../shared/constants'
+import { TATSU_NEW_ISSUE_URL } from '../../../shared/constants'
 import { useBackend } from '../../backend'
 
 export type IssueKind = 'bug' | 'feature'
@@ -62,7 +62,7 @@ function buildBody(params: {
 
 function buildUrl(title: string, body: string): string {
   const qs = new URLSearchParams({ title, body }).toString()
-  return `${HARNESS_NEW_ISSUE_URL}?${qs}`
+  return `${TATSU_NEW_ISSUE_URL}?${qs}`
 }
 
 function truncateLog(log: string, approxBudget: number): string {

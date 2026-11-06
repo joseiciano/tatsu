@@ -149,8 +149,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "frenchie4111",
-      "repo": "harness"
+      "owner": "joseiciano",
+      "repo": "tatsu"
     },
     "afterPack": "scripts/electron-after-pack.mjs"
   },

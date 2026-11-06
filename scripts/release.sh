@@ -107,7 +107,7 @@ ok "gh CLI is authenticated"
 # gh needs a default repo set so the contributor lookup below resolves
 # PR numbers correctly.
 if ! gh repo set-default --view >/dev/null 2>&1; then
-  fail "gh has no default repo for this directory. Run: gh repo set-default frenchie4111/harness"
+  fail "gh has no default repo for this directory. Run: gh repo set-default joseiciano/tatsu"
 fi
 ok "gh default repo is set"
 
@@ -125,7 +125,7 @@ echo "  Tag:    $TAG"
 echo
 echo "This script will commit + push the tag. Build/sign/notarize/upload"
 echo "all happen in CI after the tag push. Watch the workflows at:"
-echo "  https://github.com/frenchie4111/harness/actions"
+echo "  https://github.com/joseiciano/tatsu/actions"
 echo
 read -r -p "Proceed? [y/N] " confirm
 if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
@@ -243,8 +243,8 @@ Rules:
 - Skip meta commits: version bumps, README updates, CI fixes, squash labels.
 - A short 1-2 sentence headline summary in the <p> tag after the download link.
 - Date format: \"${RELEASE_DATE}\".
-- Download link points to: https://github.com/frenchie4111/harness/releases/tag/${TAG}
-- For any <li> whose change corresponds to a PR listed in the contributors file, append an inline credit at the end of the <li>: <em class=\"text-neutral-500\">(thanks <a href=\"https://github.com/LOGIN\" class=\"text-amber-400/80 hover:text-amber-300\">@LOGIN</a>, <a href=\"https://github.com/frenchie4111/harness/pull/NN\" class=\"text-amber-400/80 hover:text-amber-300\">#NN</a>)</em>. Match #NN to the PR number embedded in the original commit message.
+- Download link points to: https://github.com/joseiciano/tatsu/releases/tag/${TAG}
+- For any <li> whose change corresponds to a PR listed in the contributors file, append an inline credit at the end of the <li>: <em class=\"text-neutral-500\">(thanks <a href=\"https://github.com/LOGIN\" class=\"text-amber-400/80 hover:text-amber-300\">@LOGIN</a>, <a href=\"https://github.com/joseiciano/tatsu/pull/NN\" class=\"text-amber-400/80 hover:text-amber-300\">#NN</a>)</em>. Match #NN to the PR number embedded in the original commit message.
 - If the contributors file has any entries, end the .note-body div with a trailing <p class=\"text-neutral-400 text-sm mt-6 leading-relaxed\"> that reads 'Huge thanks to @user1, @user2, and @userN for their contributions to this release.' — each @user wrapped in <a href=\"https://github.com/LOGIN\" class=\"text-amber-400/80 hover:text-amber-300\">@LOGIN</a>, ordered alphabetically, with Oxford-comma 'and' formatting.
 - Do NOT modify any existing release entries. Only add the new one." \
   --allowedTools Read,Edit --model sonnet \
@@ -320,6 +320,6 @@ ok "Pushed main and $TAG"
 
 step "Done — release.yml is now building"
 echo "  Watch the workflow at:"
-echo "    https://github.com/frenchie4111/harness/actions/workflows/release.yml"
+echo "    https://github.com/joseiciano/tatsu/actions/workflows/release.yml"
 echo "  The GitHub release will appear at:"
-echo "    https://github.com/frenchie4111/harness/releases/tag/${TAG}"
+echo "    https://github.com/joseiciano/tatsu/releases/tag/${TAG}"

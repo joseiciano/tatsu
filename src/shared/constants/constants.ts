@@ -1,19 +1,17 @@
-export const HARNESS_REPO_OWNER = 'frenchie4111'
-export const HARNESS_REPO_NAME = 'harness'
-export const HARNESS_REPO_URL = `https://github.com/${HARNESS_REPO_OWNER}/${HARNESS_REPO_NAME}`
-export const HARNESS_NEW_ISSUE_URL = `${HARNESS_REPO_URL}/issues/new`
-export const HARNESS_ISSUES_URL = `${HARNESS_REPO_URL}/issues`
-export const HARNESS_RELEASES_URL = `${HARNESS_REPO_URL}/releases`
-
-export const HARNESS_SITE_URL = 'https://harness.mikelyons.org'
-export const HARNESS_SITE_RELEASES_URL = `${HARNESS_SITE_URL}/releases.html`
+export const TATSU_REPO_OWNER = 'joseiciano'
+export const TATSU_REPO_NAME = 'tatsu'
+export const TATSU_REPO_URL = `https://github.com/${TATSU_REPO_OWNER}/${TATSU_REPO_NAME}`
+export const TATSU_NEW_ISSUE_URL = `${TATSU_REPO_URL}/issues/new`
+export const TATSU_ISSUES_URL = `${TATSU_REPO_URL}/issues`
+export const TATSU_RELEASES_URL = `${TATSU_REPO_URL}/releases`
+export const TATSU_ANNOUNCEMENTS_FEED_URL = `https://raw.githubusercontent.com/${TATSU_REPO_OWNER}/${TATSU_REPO_NAME}/main/site/public/announcements.json`
 
 export const ENABLE_COST = false
 export const ENABLE_TIMELINE = false
 export const ENABLE_MY_WEEK = false
 export const ENABLE_NOTIFICATION_CENTER = true
 
-export function harnessReleaseNotesUrl(version: string): string {
+export function tatsuReleaseNotesUrl(version: string): string {
   const v = version.startsWith('v') ? version : `v${version}`
-  return `${HARNESS_SITE_RELEASES_URL}#${v}`
+  return `${TATSU_RELEASES_URL}/tag/${v}`
 }

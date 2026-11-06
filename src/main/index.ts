@@ -89,7 +89,7 @@ import { watchStatusDir } from './hooks'
 import { getAgent, type AgentKind } from './agents'
 import { AGENT_REGISTRY } from '../shared/agent-registry'
 import { buildClaudeLaunchSettings } from './claude-launch'
-import { HARNESS_REPO_OWNER, HARNESS_REPO_NAME } from '../shared/constants'
+import { TATSU_REPO_OWNER, TATSU_REPO_NAME } from '../shared/constants'
 import { readRecentDebugLog } from './debug'
 import { CostTracker } from './cost-tracker'
 import { getAllSessionCosts } from './cost-aggregator'
@@ -611,9 +611,9 @@ async function refreshHarnessStarState(): Promise<void> {
     store.dispatch({ type: 'settings/harnessStarredChanged', payload: null })
     return
   }
-  const starred = await isRepoStarred(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
+  const starred = await isRepoStarred(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
   if (starred === false && !config.harnessAutoStarred) {
-    const result = await starRepo(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
+    const result = await starRepo(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
     if (result.ok) {
       config.harnessAutoStarred = true
       saveConfig(config)
@@ -2543,8 +2543,8 @@ function registerIpcHandlers(): void {
     const token = getCachedToken()
     if (!token) return { ok: false, error: 'No GitHub token' }
     const result = starred
-      ? await starRepo(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
-      : await unstarRepo(token, HARNESS_REPO_OWNER, HARNESS_REPO_NAME)
+      ? await starRepo(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
+      : await unstarRepo(token, TATSU_REPO_OWNER, TATSU_REPO_NAME)
     if (result.ok) {
       store.dispatch({ type: 'settings/harnessStarredChanged', payload: starred })
     }

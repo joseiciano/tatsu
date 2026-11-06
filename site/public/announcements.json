@@ -1,11 +1,3 @@
 {
-  "announcements": [
-    {
-      "id": "introducing-chat-mode-2026-05",
-      "title": "Introducing Chat mode",
-      "href": "https://harness.mikelyons.org/announcements/introducing-chat-mode.html",
-      "publishedAt": "2026-05-25",
-      "summary": "A modern chat interface for Claude Code, built into Tatsu. Same agent, same auth, same MCP setup."
-    }
-  ]
+  "announcements": []
 }
